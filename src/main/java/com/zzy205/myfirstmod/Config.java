@@ -25,6 +25,10 @@ public class Config {
             .comment("A magic number")
             .defineInRange("magicNumber", 42, 0, Integer.MAX_VALUE);
 
+    public static final ModConfigSpec.IntValue SENSOR_NBT_POLL_INTERVAL = BUILDER
+            .comment("Sensor NBT viewer poll interval in ticks (20 ticks = 1 second). Set to 0 to disable auto-refresh.")
+            .defineInRange("sensorNbtPollInterval", 20, 0, 200);
+
     public static final ModConfigSpec.ConfigValue<String> MAGIC_NUMBER_INTRODUCTION = BUILDER
             .comment("What you want the introduction message to be for the magic number")
             .define("magicNumberIntroduction", "The magic number is... ");

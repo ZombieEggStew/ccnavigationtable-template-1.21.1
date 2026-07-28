@@ -4,6 +4,8 @@ import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
+import com.zzy205.myfirstmod.network.SensorNbtPayload;
+import com.zzy205.myfirstmod.screen.MyModMenus;
 import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
@@ -19,6 +21,8 @@ import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(CCNavigationtable.MOD_ID)
@@ -38,13 +42,31 @@ public class CCNavigationtable {
         MyModCreativeModeTabs.register(modEventBus);
         MyModBlocks.register(modEventBus);
         MyModBlockEntities.register(modEventBus);
+        MyModMenus.register(modEventBus);
+
+        // 注册自定义网络包（服务端→客户端推送 NBT）
+        modEventBus.addListener(RegisterPayloadHandlersEvent.class, event -> {
+            PayloadRegistrar registrar = event.registrar(MOD_ID);
+            registrar.playToClient(
+                    SensorNbtPayload.TYPE,
+                    SensorNbtPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        // 客户端：收到 NBT 后直接更新客户端 BE
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.sensorPos());
+                        if (be instanceof com.zzy205.myfirstmod.block.MySensorBlockEntity sensorBE) {
+                            sensorBE.setCachedAttachedNBT(payload.nbt());
+                        }
+                    }
+            );
+        });
         // Register ourselves for server and other game events we are interested in.
         // Note that this is necessary if and only if we want *this* class (CCNavigationtable) to respond directly to events.
         // Do not add this line if there are no @SubscribeEvent-annotated functions in this class, like onServerStarting() below.
         NeoForge.EVENT_BUS.register(this);
 
         // Register the item to a creative tab
-        modEventBus.addListener(this::addCreative);
+        modEventBus.addListener(this::addCreative); 
 
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);

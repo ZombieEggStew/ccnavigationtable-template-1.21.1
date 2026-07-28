@@ -1,6 +1,9 @@
 {
   "item.ccnavigationtable.test_item": "Test Item",
 
+  "gui.ccnavigationtable.sensor_nbt": "Attached Block NBT",
+  "gui.ccnavigationtable.sensor_nbt.empty": "(No NBT data)",
+
   "ccnavigationtable.configuration.title": "CC Navigation table Configs",
   "ccnavigationtable.configuration.section.ccnavigationtable.common.toml": "CC Navigation table Configs",
   "ccnavigationtable.configuration.section.ccnavigationtable.common.toml.title": "CC Navigation table Configs",

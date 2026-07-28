@@ -13,9 +13,6 @@ public final class MyModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MySensorBlockEntity>> my_sensor_entity = BLOCK_ENTITY_TYPES.register("my_sensor", () -> BlockEntityType.Builder.of(MySensorBlockEntity::new, MyModBlocks.my_sensor.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MyReceiverBlockEntity>> my_receiver_entity = BLOCK_ENTITY_TYPES.register("my_receiver", () -> BlockEntityType.Builder.of(MyReceiverBlockEntity::new, MyModBlocks.my_receiver.get()).build(null));
 
-    private void ModBlockEntities() {
-    }
-
     public static void register(IEventBus bus) {
         BLOCK_ENTITY_TYPES.register(bus);
     }

@@ -4,13 +4,19 @@ import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Position;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Mirror;
@@ -26,7 +32,8 @@ import net.minecraft.world.level.block.state.properties.AttachFace;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -117,6 +124,24 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     @Override
+    public boolean canSurvive(@NonNull BlockState state, @NonNull LevelReader level, @NonNull BlockPos pos) {
+        Direction supportDirection = switch (state.getValue(FACE)) {
+            case FLOOR -> Direction.DOWN;
+            case CEILING -> Direction.UP;
+            case WALL -> state.getValue(FACING).getOpposite();
+        };
+        BlockPos supportPos = pos.relative(supportDirection);
+        return !level.getBlockState(supportPos).isAir();
+    }
+
+    @Override
+    public void neighborChanged(@NonNull BlockState state, @NonNull Level level, @NonNull BlockPos pos, @NonNull Block block, @NonNull BlockPos fromPos, boolean isMoving) {
+        if (!state.canSurvive(level, pos)) {
+            level.destroyBlock(pos, true);
+        }
+    }
+
+    @Override
     protected @NonNull VoxelShape getShape(@NonNull BlockState state, @NonNull BlockGetter worldIn, @NonNull BlockPos pos, @NonNull CollisionContext context) {
         AttachFace face = state.getValue(FACE);
         return SHAPES.get(face).get(state.getValue(FACING));
@@ -150,5 +175,108 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
             }
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
+    }
+
+    // ────────────────────────────────────────
+    //  右键 GUI：显示附着方块的 NBT
+    // ────────────────────────────────────────
+
+    private static final Component SENSOR_GUI_TITLE =
+            Component.translatable("gui.ccnavigationtable.sensor_nbt");
+
+    @Override
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
+                                               Player player, BlockHitResult hitResult) {
+        if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
+            // 读取附着方块的 NBT
+            CompoundTag attachedNBT = getAttachedBlockNBT(level, state, pos);
+
+            // 打开 NBT 查看 GUI，通过 extraData 传递位置和初始 NBT 快照
+            serverPlayer.openMenu(
+                    new SimpleMenuProvider(
+                            (containerId, inv, p) ->
+                                    new com.zzy205.myfirstmod.screen.MySensorMenu(containerId, pos, attachedNBT),
+                            SENSOR_GUI_TITLE
+                    ),
+                    buf -> {
+                        buf.writeBlockPos(pos);
+                        buf.writeNbt(attachedNBT);
+                    }
+            );
+        }
+        return InteractionResult.sidedSuccess(level.isClientSide);
+    }
+
+    /**
+     * 计算传感器所附着的方块坐标
+     */
+    private static BlockPos getAttachedPos(BlockState state, BlockPos sensorPos) {
+        Direction supportDir = switch (state.getValue(FACE)) {
+            case FLOOR -> Direction.DOWN;
+            case CEILING -> Direction.UP;
+            case WALL -> state.getValue(FACING).getOpposite();
+        };
+        return sensorPos.relative(supportDir);
+    }
+
+    /**
+     * 读取附着方块/机器的完整 NBT 数据。
+     * 如果方块在 Sable 物理子次元中（如航空学组装后的物体），
+     * 会额外写入真实世界坐标 {@code RealWorldPos}。
+     */
+    static CompoundTag getAttachedBlockNBT(Level level, BlockState state, BlockPos sensorPos) {
+        BlockPos attachedPos = getAttachedPos(state, sensorPos);
+        BlockEntity attachedBE = level.getBlockEntity(attachedPos);
+
+        if (attachedBE != null) {
+            CompoundTag nbt = attachedBE.saveWithFullMetadata(level.registryAccess());
+
+            // 尝试通过 Sable API 获取物理组装后的真实世界坐标
+            tryAddRealWorldPos(level, attachedBE, nbt);
+
+            return nbt;
+        }
+
+        // 如果没有 BlockEntity，返回附着方块的状态信息
+        CompoundTag fallback = new CompoundTag();
+        BlockState attachedState = level.getBlockState(attachedPos);
+        fallback.putString("block", attachedState.getBlock().getDescriptionId());
+        fallback.putString("note", "This block has no NBT data (no BlockEntity)");
+        return fallback;
+    }
+
+    /**
+     * 如果方块实体在 Sable 物理子次元中（航空学等 mod 的物理组装），
+     * 将 NBT 中的 x/y/z 坐标直接替换为真实世界坐标。
+     * <p>
+     * 使用反射避免 Sable 未加载时引发 {@link NoClassDefFoundError}。
+     */
+    @SuppressWarnings("CallToPrintStackTrace")
+    static void tryAddRealWorldPos(Level level, BlockEntity be, CompoundTag nbt) {
+        try {
+            Object helper = Class.forName("dev.ryanhcode.sable.Sable")
+                    .getField("HELPER").get(null);
+
+            // Sable.HELPER.getContaining(BlockEntity) -> SubLevel | null
+            Object subLevel = helper.getClass()
+                    .getMethod("getContaining", BlockEntity.class)
+                    .invoke(helper, be);
+
+            if (subLevel != null) {
+                // Sable.HELPER.projectOutOfSubLevel(Level, Position) -> Vec3
+                Vec3 realPos = (Vec3) helper.getClass()
+                        .getMethod("projectOutOfSubLevel", Level.class, Position.class)
+                        .invoke(helper, level, be.getBlockPos().getCenter());
+
+                // 直接替换 NBT 中的 x/y/z 为真实世界坐标
+                nbt.putDouble("x", realPos.x);
+                nbt.putDouble("y", realPos.y);
+                nbt.putDouble("z", realPos.z);
+            }
+        } catch (NoClassDefFoundError | ClassNotFoundException e) {
+            // Sable 未加载，无需修正坐标
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

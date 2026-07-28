@@ -5,6 +5,8 @@
   "block.ccnavigationtable.test_block": "测试方块",
   "block.ccnavigationtable.my_sensor": "传感器",
 
+  "gui.ccnavigationtable.sensor_nbt": "附着方块 NBT",
+  "gui.ccnavigationtable.sensor_nbt.empty": "（无 NBT 数据）",
 
   "ccnavigationtable.configuration.title": "CC Navigation table Configs",
   "ccnavigationtable.configuration.section.ccnavigationtable.common.toml": "CC Navigation table Configs",
