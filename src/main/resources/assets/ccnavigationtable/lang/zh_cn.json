@@ -1,0 +1,16 @@
+{
+  "item.ccnavigationtable.test_item": "测试物品",
+  "itemGroup.ccnavigationtable.my_mod_tab": "电脑导航",
+
+  "block.ccnavigationtable.test_block": "测试方块",
+  "block.ccnavigationtable.my_sensor": "传感器",
+
+
+  "ccnavigationtable.configuration.title": "CC Navigation table Configs",
+  "ccnavigationtable.configuration.section.ccnavigationtable.common.toml": "CC Navigation table Configs",
+  "ccnavigationtable.configuration.section.ccnavigationtable.common.toml.title": "CC Navigation table Configs",
+  "ccnavigationtable.configuration.items": "Item List",
+  "ccnavigationtable.configuration.logDirtBlock": "Log Dirt Block",
+  "ccnavigationtable.configuration.magicNumberIntroduction": "Magic Number Text",
+  "ccnavigationtable.configuration.magicNumber": "Magic Number"
+}

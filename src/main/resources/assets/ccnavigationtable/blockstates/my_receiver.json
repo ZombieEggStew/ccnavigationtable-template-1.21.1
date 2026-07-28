@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "ccnavigationtable:block/my_receiver"
+    }
+  }
+}

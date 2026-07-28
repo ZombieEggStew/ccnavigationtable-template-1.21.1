@@ -1,0 +1,11 @@
+{
+  "item.ccnavigationtable.test_item": "Test Item",
+
+  "ccnavigationtable.configuration.title": "CC Navigation table Configs",
+  "ccnavigationtable.configuration.section.ccnavigationtable.common.toml": "CC Navigation table Configs",
+  "ccnavigationtable.configuration.section.ccnavigationtable.common.toml.title": "CC Navigation table Configs",
+  "ccnavigationtable.configuration.items": "Item List",
+  "ccnavigationtable.configuration.logDirtBlock": "Log Dirt Block",
+  "ccnavigationtable.configuration.magicNumberIntroduction": "Magic Number Text",
+  "ccnavigationtable.configuration.magicNumber": "Magic Number"
+}

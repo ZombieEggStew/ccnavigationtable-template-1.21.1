@@ -1,0 +1,96 @@
+{
+	"format_version": "1.21.1",
+	"credit": "Made with Blockbench",
+	"parent": "block/block",
+	"render_type": "minecraft:cutout",
+	"textures": {
+		"particle": "ccnavigationtable:block/my_sensor",
+		"my_sensor": "ccnavigationtable:block/my_sensor"
+	},
+	"elements": [
+		{
+			"name": "main",
+			"from": [5, 0, 4],
+			"to": [11, 2, 12],
+			"rotation": {"angle": 0, "axis": "x", "origin": [5, 0, 4]},
+			"faces": {
+				"north": {"uv": [10, 0, 16, 2], "texture": "#my_sensor"},
+				"east": {"uv": [8, 4, 16, 6], "texture": "#my_sensor"},
+				"south": {"uv": [10, 2, 16, 4], "texture": "#my_sensor"},
+				"west": {"uv": [8, 6, 16, 8], "texture": "#my_sensor"},
+				"up": {"uv": [6, 8, 0, 0], "texture": "#my_sensor"},
+				"down": {"uv": [6, 8, 0, 16], "texture": "#my_sensor"}
+			}
+		},
+		{
+			"name": "stick",
+			"from": [9, 2, 10],
+			"to": [10, 3, 16],
+			"rotation": {"angle": 0, "axis": "x", "origin": [9, 3, 10]},
+			"faces": {
+				"north": {"uv": [12, 15, 11, 16], "rotation": 180, "texture": "#my_sensor"},
+				"east": {"uv": [11, 10, 12, 16], "rotation": 270, "texture": "#my_sensor"},
+				"south": {"uv": [12, 11, 11, 10], "texture": "#my_sensor"},
+				"west": {"uv": [11, 10, 12, 16], "rotation": 90, "texture": "#my_sensor"},
+				"up": {"uv": [11, 10, 12, 16], "rotation": 180, "texture": "#my_sensor"},
+				"down": {"uv": [11, 10, 12, 16], "texture": "#my_sensor"}
+			}
+		},
+		{
+			"name": "dish",
+			"from": [8, 1, 14],
+			"to": [11, 4, 14],
+			"rotation": {"angle": 0, "axis": "x", "origin": [8, 4, 14]},
+			"faces": {
+				"north": {"uv": [13, 13, 16, 16], "rotation": 180, "texture": "#my_sensor"},
+				"east": {"uv": [13, 13, 16, 16], "rotation": 270, "texture": "#my_sensor"},
+				"south": {"uv": [13, 13, 16, 16], "texture": "#my_sensor"},
+				"west": {"uv": [13, 13, 16, 16], "rotation": 90, "texture": "#my_sensor"},
+				"up": {"uv": [13, 13, 16, 16], "rotation": 180, "texture": "#my_sensor"},
+				"down": {"uv": [13, 13, 16, 16], "texture": "#my_sensor"}
+			}
+		},
+		{
+			"from": [7, 1, 5],
+			"to": [9, 3, 10],
+			"rotation": {"angle": 0, "axis": "x", "origin": [7, 1, 8]},
+			"faces": {
+				"north": {"uv": [8, 9, 10, 11], "texture": "#my_sensor"},
+				"east": {"uv": [8, 11, 10, 16], "rotation": 90, "texture": "#my_sensor"},
+				"south": {"uv": [8, 9, 10, 11], "texture": "#my_sensor"},
+				"west": {"uv": [8, 11, 10, 16], "rotation": 90, "texture": "#my_sensor"},
+				"up": {"uv": [8, 11, 10, 16], "texture": "#my_sensor"},
+				"down": {"uv": [8, 11, 10, 16], "texture": "#my_sensor", "cullface": "down"}
+			}
+		}
+	],
+	"display": {
+		"thirdperson_righthand": {
+			"translation": [0, 4.75, 0],
+			"scale": [0.5, 0.5, 0.5]
+		},
+		"thirdperson_lefthand": {
+			"translation": [0, 3.75, 0],
+			"scale": [0.5, 0.5, 0.5]
+		},
+		"firstperson_righthand": {
+			"translation": [0.75, 5, 0],
+			"scale": [0.5, 0.5, 0.5]
+		},
+		"firstperson_lefthand": {
+			"translation": [1.25, 4.5, 0],
+			"scale": [0.5, 0.5, 0.5]
+		},
+		"ground": {
+			"translation": [0, 5, 0]
+		},
+		"gui": {
+			"rotation": [30, 45, 0],
+			"translation": [0.75, 4.5, 0]
+		},
+		"fixed": {
+			"rotation": [-90, 0, 0],
+			"translation": [0, 0, -7.25]
+		}
+	}
+}

@@ -1,0 +1,13 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "up": "ccnavigationtable:block/my_receiver_top",
+    "down": "ccnavigationtable:block/my_receiver_top",
+    "particle": "ccnavigationtable:block/my_receiver_top",
+
+    "east": "ccnavigationtable:block/my_receiver_side",
+    "north": "ccnavigationtable:block/my_receiver_side",
+    "south": "ccnavigationtable:block/my_receiver_side",
+    "west": "ccnavigationtable:block/my_receiver_side"
+  }
+}
