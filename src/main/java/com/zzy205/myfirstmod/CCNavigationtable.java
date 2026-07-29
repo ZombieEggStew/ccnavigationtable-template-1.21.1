@@ -5,6 +5,7 @@ import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.network.SensorFilterPayload;
+import com.zzy205.myfirstmod.network.SensorItemPayload;
 import com.zzy205.myfirstmod.network.SensorNbtPayload;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import org.slf4j.Logger;
@@ -72,6 +73,23 @@ public class CCNavigationtable {
                             sensorBE.setScrolledValue(payload.scrolledValue());
                             sensorBE.setSelectIndex(payload.selectIndex());
                             // 直接发送 BE 数据包给该玩家
+                            var packet = net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket.create(sensorBE);
+                            if (packet != null) {
+                                ((net.minecraft.server.level.ServerPlayer) ctx.player()).connection.send(packet);
+                            }
+                        }
+                    }
+            );
+
+            // 客户端→服务端：同步幽灵物品槽
+            registrar.playToServer(
+                    SensorItemPayload.TYPE,
+                    SensorItemPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.sensorPos());
+                        if (be instanceof com.zzy205.myfirstmod.block.MySensorBlockEntity sensorBE) {
+                            sensorBE.setDisplayItem(payload.slotIndex(), payload.item());
                             var packet = net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket.create(sensorBE);
                             if (packet != null) {
                                 ((net.minecraft.server.level.ServerPlayer) ctx.player()).connection.send(packet);

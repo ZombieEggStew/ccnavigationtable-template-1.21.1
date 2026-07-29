@@ -55,6 +55,10 @@ repositories {
             includeGroup 'dev.ryanhcode.sable-companion'
         }
     }
+    maven {
+        name = 'JEI Maven'
+        url = 'https://maven.blamejared.com/'
+    }
 }
 
 
@@ -188,6 +192,11 @@ dependencies {
     compileOnly("dev.ryanhcode.sable-companion:sable-companion-common-${minecraft_version}:${sable_companion_version}") {
         transitive = false
     }
+
+    // ---- JEI (optional) ---------------------------------------------------
+    compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
+    compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
+    // localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
 
     // ---- Runtime mods (only present in run tasks, never in the published jar)
     // We use transitive=false to avoid Gradle trying to resolve Create's
