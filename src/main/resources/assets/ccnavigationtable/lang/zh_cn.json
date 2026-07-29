@@ -7,6 +7,11 @@
 
   "gui.ccnavigationtable.sensor_nbt": "附着方块 NBT",
   "gui.ccnavigationtable.sensor_nbt.empty": "（无 NBT 数据）",
+  "gui.ccnavigationtable.sensor_select_mode": "选择红石信号模式",  
+  "gui.ccnavigationtable.sensor_channel": "频道选择",
+  "gui.ccnavigationtable.scroll_to_change": "滚动修改",
+  "gui.ccnavigationtable.shift_scroll_faster": "按住 Shift 滚动更快",  
+  "gui.ccnavigationtable.scroll_to_select": "滚动选择",
 
   "ccnavigationtable.configuration.title": "CC Navigation table Configs",
   "ccnavigationtable.configuration.section.ccnavigationtable.common.toml": "CC Navigation table Configs",

@@ -3,6 +3,11 @@
 
   "gui.ccnavigationtable.sensor_nbt": "Attached Block NBT",
   "gui.ccnavigationtable.sensor_nbt.empty": "(No NBT data)",
+  "gui.ccnavigationtable.sensor_select_mode": "Select Mode",
+  "gui.ccnavigationtable.sensor_channel": "Channel",
+  "gui.ccnavigationtable.scroll_to_change": "Scroll to change",
+  "gui.ccnavigationtable.shift_scroll_faster": "Hold Shift to scroll faster",
+  "gui.ccnavigationtable.scroll_to_select": "Scroll to select",
 
   "ccnavigationtable.configuration.title": "CC Navigation table Configs",
   "ccnavigationtable.configuration.section.ccnavigationtable.common.toml": "CC Navigation table Configs",

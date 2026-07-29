@@ -10,6 +10,9 @@ import net.minecraft.world.level.block.state.BlockState;
 public class MySensorBlockEntity extends BlockEntity {
 
     private CompoundTag cachedAttachedNBT = new CompoundTag();
+    private int scrolledValue = 0;
+    private int selectIndex = 0;
+
 
     public MySensorBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.my_sensor_entity.get(), pos, state);
@@ -40,24 +43,43 @@ public class MySensorBlockEntity extends BlockEntity {
         this.cachedAttachedNBT = nbt;
     }
 
+    /** 文本输入框内容，持久化并同步到客户端 */
+    public int getScrolledValue() { return scrolledValue; }
+
+    public void setScrolledValue(int val) {
+        this.scrolledValue = val;
+        this.setChanged();
+    }
+
+    public int getSelectIndex() { return selectIndex; }
+
+    public void setSelectIndex(int idx) {
+        this.selectIndex = idx;
+        this.setChanged();
+    }
+
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         CompoundTag tag = super.getUpdateTag(registries);
         tag.put("AttachedNBT", cachedAttachedNBT);
+        tag.putInt("ScrolledValue", scrolledValue);
+        tag.putInt("SelectIndex", selectIndex);
         return tag;
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        if (tag.contains("AttachedNBT")) {
-            cachedAttachedNBT = tag.getCompound("AttachedNBT");
-        }
+        if (tag.contains("AttachedNBT")) cachedAttachedNBT = tag.getCompound("AttachedNBT");
+        if (tag.contains("ScrolledValue")) scrolledValue = tag.getInt("ScrolledValue");
+        if (tag.contains("SelectIndex")) selectIndex = tag.getInt("SelectIndex");
     }
 
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.put("AttachedNBT", cachedAttachedNBT);
+        tag.putInt("ScrolledValue", scrolledValue);
+        tag.putInt("SelectIndex", selectIndex);
     }
 }

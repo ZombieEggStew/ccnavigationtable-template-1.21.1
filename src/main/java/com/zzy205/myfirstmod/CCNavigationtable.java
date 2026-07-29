@@ -4,6 +4,7 @@ import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
+import com.zzy205.myfirstmod.network.SensorFilterPayload;
 import com.zzy205.myfirstmod.network.SensorNbtPayload;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import org.slf4j.Logger;
@@ -56,6 +57,25 @@ public class CCNavigationtable {
                         var be = level.getBlockEntity(payload.sensorPos());
                         if (be instanceof com.zzy205.myfirstmod.block.MySensorBlockEntity sensorBE) {
                             sensorBE.setCachedAttachedNBT(payload.nbt());
+                        }
+                    }
+            );
+
+            // 客户端→服务端：保存 filter 文本
+            registrar.playToServer(
+                    SensorFilterPayload.TYPE,
+                    SensorFilterPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.sensorPos());
+                        if (be instanceof com.zzy205.myfirstmod.block.MySensorBlockEntity sensorBE) {
+                            sensorBE.setScrolledValue(payload.scrolledValue());
+                            sensorBE.setSelectIndex(payload.selectIndex());
+                            // 直接发送 BE 数据包给该玩家
+                            var packet = net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket.create(sensorBE);
+                            if (packet != null) {
+                                ((net.minecraft.server.level.ServerPlayer) ctx.player()).connection.send(packet);
+                            }
                         }
                     }
             );

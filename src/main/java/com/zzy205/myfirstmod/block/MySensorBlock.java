@@ -195,7 +195,7 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
             serverPlayer.openMenu(
                     new SimpleMenuProvider(
                             (containerId, inv, p) ->
-                                    new com.zzy205.myfirstmod.screen.MySensorMenu(containerId, pos, attachedNBT),
+                                    new com.zzy205.myfirstmod.screen.MySensorMenu(containerId, pos, attachedNBT, inv),
                             SENSOR_GUI_TITLE
                     ),
                     buf -> {
