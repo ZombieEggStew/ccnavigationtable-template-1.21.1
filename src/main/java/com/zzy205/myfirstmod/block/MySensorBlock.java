@@ -191,7 +191,20 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
             // 读取附着方块的 NBT
             CompoundTag attachedNBT = getAttachedBlockNBT(level, state, pos);
 
-            // 打开 NBT 查看 GUI，通过 extraData 传递位置和初始 NBT 快照
+            // 获取传感器 BE 的频道信息（必须 final 才能在 lambda 中使用）
+            BlockEntity be = level.getBlockEntity(pos);
+            final int sensorChannel;
+            final int[] occupiedChannels;
+            if (be instanceof MySensorBlockEntity sensorBE) {
+                sensorChannel = sensorBE.getScrolledValue();
+                var regChannels = com.zzy205.myfirstmod.compat.cc.SensorRegistry.getOccupiedChannels();
+                occupiedChannels = regChannels.stream().mapToInt(Integer::intValue).toArray();
+            } else {
+                sensorChannel = 0;
+                occupiedChannels = new int[0];
+            }
+
+            // 打开 NBT 查看 GUI，通过 extraData 传递位置、初始 NBT 快照和频道信息
             serverPlayer.openMenu(
                     new SimpleMenuProvider(
                             (containerId, inv, p) ->
@@ -201,6 +214,11 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
                     buf -> {
                         buf.writeBlockPos(pos);
                         buf.writeNbt(attachedNBT);
+                        buf.writeVarInt(sensorChannel);
+                        buf.writeVarInt(occupiedChannels.length);
+                        for (int ch : occupiedChannels) {
+                            buf.writeVarInt(ch);
+                        }
                     }
             );
         }
@@ -224,7 +242,7 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
      * 如果方块在 Sable 物理子次元中（如航空学组装后的物体），
      * 会额外写入真实世界坐标 {@code RealWorldPos}。
      */
-    static CompoundTag getAttachedBlockNBT(Level level, BlockState state, BlockPos sensorPos) {
+    public static CompoundTag getAttachedBlockNBT(Level level, BlockState state, BlockPos sensorPos) {
         BlockPos attachedPos = getAttachedPos(state, sensorPos);
         BlockEntity attachedBE = level.getBlockEntity(attachedPos);
 

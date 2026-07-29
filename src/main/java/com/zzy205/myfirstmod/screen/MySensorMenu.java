@@ -39,19 +39,37 @@ public class MySensorMenu extends AbstractContainerMenu {
     private final CompoundTag attachedNBT;
     private final Level level;
 
+    /** 当前传感器的频道号（客户端构造时从 extraData 读取） */
+    private final int sensorChannel;
+    /** 已被占用的频道号列表（客户端构造时从 extraData 读取） */
+    private final int[] occupiedChannels;
+
     // ── 服务端构造 ──
     public MySensorMenu(int containerId, BlockPos sensorPos, CompoundTag attachedNBT, Inventory playerInv) {
         super(MyModMenus.SENSOR_MENU.get(), containerId);
         this.sensorPos = sensorPos;
         this.attachedNBT = attachedNBT;
         this.level = playerInv.player.level();
+        this.sensorChannel = -1;
+        this.occupiedChannels = new int[0];
         addGhostSlot();
         addPlayerSlots(playerInv);
     }
 
     // ── 客户端构造（由 IContainerFactory 在网络端创建时调用）──
     public MySensorMenu(int containerId, Inventory inv, RegistryFriendlyByteBuf extraData) {
-        this(containerId, extraData.readBlockPos(), extraData.readNbt(), inv);
+        super(MyModMenus.SENSOR_MENU.get(), containerId);
+        this.sensorPos = extraData.readBlockPos();
+        this.attachedNBT = extraData.readNbt();
+        this.level = inv.player.level();
+        this.sensorChannel = extraData.readVarInt();
+        int count = extraData.readVarInt();
+        this.occupiedChannels = new int[count];
+        for (int i = 0; i < count; i++) {
+            this.occupiedChannels[i] = extraData.readVarInt();
+        }
+        addGhostSlot();
+        addPlayerSlots(inv);
     }
 
     /** 添加幽灵物品槽（槽位 0 和 1）。 */
@@ -94,6 +112,16 @@ public class MySensorMenu extends AbstractContainerMenu {
 
     public CompoundTag getAttachedNBT() {
         return attachedNBT;
+    }
+
+    /** 获取当前传感器的频道号（客户端可用） */
+    public int getSensorChannel() {
+        return sensorChannel;
+    }
+
+    /** 获取已被占用的频道号数组（客户端可用） */
+    public int[] getOccupiedChannels() {
+        return occupiedChannels;
     }
 
     @Override
@@ -185,6 +213,8 @@ public class MySensorMenu extends AbstractContainerMenu {
                 CompoundTag fresh = sensorBE.refreshAndGet(serverLevel, serverLevel.getBlockState(sensorPos));
                 // 直接推送给该玩家，不依赖 sendBlockUpdated
                 PacketDistributor.sendToPlayer(serverPlayer, new SensorNbtPayload(sensorPos, fresh));
+                // 同时刷新 occupiedChannels 快照
+                sensorBE.refreshOccupiedChannels();
             }
         }
         return true;

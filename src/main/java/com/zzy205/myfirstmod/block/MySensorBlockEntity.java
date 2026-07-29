@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
+import com.zzy205.myfirstmod.compat.cc.SensorRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -18,9 +19,61 @@ public class MySensorBlockEntity extends BlockEntity {
     /** 第二个幽灵物品槽 */
     private ItemStack displayItem2 = ItemStack.EMPTY;
 
+    /** 所有已被占用的频道号快照（服务端设置，客户端通过 updateTag 同步） */
+    private int[] occupiedChannels = new int[0];
+
 
     public MySensorBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.my_sensor_entity.get(), pos, state);
+    }
+
+    // ═══════════════ 频道注册 ═══════════════
+
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        if (this.level != null && !this.level.isClientSide) {
+            int assigned = SensorRegistry.register(this.scrolledValue, this);
+            if (assigned != this.scrolledValue) {
+                this.scrolledValue = assigned;
+                this.setChanged();
+            }
+            refreshOccupiedChannels();
+        }
+    }
+
+    @Override
+    public void setRemoved() {
+        if (this.level != null && !this.level.isClientSide) {
+            SensorRegistry.unregister(this.scrolledValue, this);
+        }
+        super.setRemoved();
+    }
+
+    /** 从注册表同步 occupiedChannels 快照到本 BE，并通知客户端 */
+    public void refreshOccupiedChannels() {
+        if (this.level == null || this.level.isClientSide) return;
+        var channels = SensorRegistry.getOccupiedChannels();
+        int[] arr = new int[channels.size()];
+        int i = 0;
+        for (int ch : channels) arr[i++] = ch;
+        this.occupiedChannels = arr;
+        this.setChanged();
+        this.level.sendBlockUpdated(this.getBlockPos(), this.getBlockState(), this.getBlockState(), 3);
+    }
+
+    /** 获取被占用的频道号数组（客户端 GUI 用它跳过已占用的频道） */
+    public int[] getOccupiedChannels() {
+        return occupiedChannels;
+    }
+
+    /** 检查指定频道是否被其他传感器占用 */
+    public boolean isChannelOccupiedByOther(int channel) {
+        if (channel == this.scrolledValue) return false; // 自己占用不算
+        for (int ch : occupiedChannels) {
+            if (ch == channel) return true;
+        }
+        return false;
     }
 
     /**
@@ -107,6 +160,7 @@ public class MySensorBlockEntity extends BlockEntity {
         tag.put("AttachedNBT", cachedAttachedNBT);
         tag.putInt("ScrolledValue", scrolledValue);
         tag.putInt("SelectIndex", selectIndex);
+        tag.putIntArray("OccupiedChannels", occupiedChannels);
         if (!displayItem.isEmpty()) {
             tag.put("DisplayItem", displayItem.save(registries));
         }
@@ -122,6 +176,7 @@ public class MySensorBlockEntity extends BlockEntity {
         if (tag.contains("AttachedNBT")) cachedAttachedNBT = tag.getCompound("AttachedNBT");
         if (tag.contains("ScrolledValue")) scrolledValue = tag.getInt("ScrolledValue");
         if (tag.contains("SelectIndex")) selectIndex = tag.getInt("SelectIndex");
+        if (tag.contains("OccupiedChannels")) occupiedChannels = tag.getIntArray("OccupiedChannels");
         if (tag.contains("DisplayItem")) {
             displayItem = ItemStack.parse(registries, tag.getCompound("DisplayItem")).orElse(ItemStack.EMPTY);
         }
@@ -136,6 +191,7 @@ public class MySensorBlockEntity extends BlockEntity {
         tag.put("AttachedNBT", cachedAttachedNBT);
         tag.putInt("ScrolledValue", scrolledValue);
         tag.putInt("SelectIndex", selectIndex);
+        tag.putIntArray("OccupiedChannels", occupiedChannels);
         if (!displayItem.isEmpty()) {
             tag.put("DisplayItem", displayItem.save(registries));
         }

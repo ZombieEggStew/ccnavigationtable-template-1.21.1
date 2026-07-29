@@ -25,6 +25,7 @@ import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import net.neoforged.fml.ModList;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(CCNavigationtable.MOD_ID)
@@ -70,13 +71,14 @@ public class CCNavigationtable {
                         var level = ctx.player().level();
                         var be = level.getBlockEntity(payload.sensorPos());
                         if (be instanceof com.zzy205.myfirstmod.block.MySensorBlockEntity sensorBE) {
-                            sensorBE.setScrolledValue(payload.scrolledValue());
-                            sensorBE.setSelectIndex(payload.selectIndex());
-                            // 直接发送 BE 数据包给该玩家
-                            var packet = net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket.create(sensorBE);
-                            if (packet != null) {
-                                ((net.minecraft.server.level.ServerPlayer) ctx.player()).connection.send(packet);
+                            int newChannel = payload.scrolledValue();
+                            if (newChannel != sensorBE.getScrolledValue()) {
+                                int assigned = com.zzy205.myfirstmod.compat.cc.SensorRegistry
+                                        .register(newChannel, sensorBE);
+                                sensorBE.setScrolledValue(assigned);
                             }
+                            sensorBE.setSelectIndex(payload.selectIndex());
+                            sensorBE.refreshOccupiedChannels();
                         }
                     }
             );
@@ -121,6 +123,12 @@ public class CCNavigationtable {
         LOGGER.info("{}{}", Config.MAGIC_NUMBER_INTRODUCTION.get(), Config.MAGIC_NUMBER.getAsInt());
 
         Config.ITEM_STRINGS.get().forEach((item) -> LOGGER.info("ITEM >> {}", item));
+
+        // 注册 CC:Tweaked 传感器 Lua API
+        if (ModList.get().isLoaded("computercraft")) {
+            com.zzy205.myfirstmod.compat.cc.CCNavSensorsSetup.register();
+            LOGGER.info("CC:Tweaked sensor API registered");
+        }
     }
 
     // Add the example block item to the building blocks tab

@@ -106,10 +106,21 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
         this.pollInterval = Config.SENSOR_NBT_POLL_INTERVAL.get();
 
         // 恢复上次保存的数值和选项
-        if (this.minecraft != null && this.minecraft.level != null) {
+        // 优先使用菜单 extraData（和 GUI 打开包同一帧到达，保证最新），
+        // 客户端 BE 数据可能因同步延迟而未更新，仅作为 fallback
+        int menuChannel = menu.getSensorChannel();
+        if (menuChannel >= 0) {
+            this.scrolledValue = menuChannel;
+        } else if (this.minecraft != null && this.minecraft.level != null) {
             BlockEntity be = this.minecraft.level.getBlockEntity(menu.getSensorPos());
             if (be instanceof MySensorBlockEntity sensorBE) {
                 this.scrolledValue = sensorBE.getScrolledValue();
+            }
+        }
+
+        if (this.minecraft != null && this.minecraft.level != null) {
+            BlockEntity be = this.minecraft.level.getBlockEntity(menu.getSensorPos());
+            if (be instanceof MySensorBlockEntity sensorBE) {
                 this.selectIndex = sensorBE.getSelectIndex();
             }
         }
@@ -343,13 +354,21 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
 
         int dir = scrollY > 0 ? 1 : -1;
 
-        // 数值区域：±1，Shift=±10
+        // 数值区域：±1，Shift=±10，跳过已被其他传感器占用的频道
         if (mouseX >= valueHitX && mouseX <= valueHitX + VALUE_HIT_W) {
-            int step = hasShiftDown() ? 10 : 1;
-            scrolledValue += dir * step;
-            if (scrolledValue < 0) scrolledValue = 0;
-            if (scrolledValue > 9999) scrolledValue = 9999;
-            playScrollSound();
+            int step = hasShiftDown() ? 1 : 1;  // Shift 加速改为跳步长
+            int jump = hasShiftDown() ? 10 : 1;
+            int newValue = scrolledValue + dir * jump;
+            if (newValue < 0) newValue = 0;
+            if (newValue > 9999) newValue = 9999;
+            // 跳过已被其他传感器占用的频道
+            newValue = skipOccupiedChannels(newValue, dir);
+            if (newValue < 0) newValue = 0;
+            if (newValue > 9999) newValue = 9999;
+            if (newValue != scrolledValue) {
+                scrolledValue = newValue;
+                playScrollSound();
+            }
             return true;
         }
 
@@ -489,6 +508,59 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
             }
         }
         return null;
+    }
+
+    // ═══ 频道滚动：跳过已占用频道 ═══
+
+    /**
+     * 以当前传感器自己的频道号为基准，跳过已被其他传感器占用的频道。
+     * @param value    当前值
+     * @param dir      滚动方向：1=增大, -1=减小
+     * @return 跳过占用频道后的值
+     */
+    private int skipOccupiedChannels(int value, int dir) {
+        int myChannel = getMyChannel();
+        int safety = 0;
+        while (safety < 10000 && isOccupiedByOther(value, myChannel)) {
+            value += dir;
+            if (value < 0 || value > 9999) break;
+            safety++;
+        }
+        return value;
+    }
+
+    /** 当前传感器自己的频道号（优先菜单 extraData，fallback 客户端 BE） */
+    private int getMyChannel() {
+        int menuChannel = menu.getSensorChannel();
+        if (menuChannel >= 0) return menuChannel;
+        if (this.minecraft != null && this.minecraft.level != null) {
+            BlockEntity be = this.minecraft.level.getBlockEntity(menu.getSensorPos());
+            if (be instanceof MySensorBlockEntity sensorBE) {
+                return sensorBE.getScrolledValue();
+            }
+        }
+        return -1;
+    }
+
+    /** 检查频道是否被"其他"传感器占用（优先菜单 extraData，fallback 客户端 BE） */
+    private boolean isOccupiedByOther(int channel, int myChannel) {
+        if (channel == myChannel) return false;
+        // 优先从菜单 extraData（包含服务端同时发来的快照）
+        int[] menuOccupied = menu.getOccupiedChannels();
+        if (menuOccupied.length > 0) {
+            for (int ch : menuOccupied) {
+                if (ch == channel) return true;
+            }
+            return false;
+        }
+        // Fallback: 客户端 BE（可能由 updateTag 后续同步更新）
+        if (this.minecraft != null && this.minecraft.level != null) {
+            BlockEntity be = this.minecraft.level.getBlockEntity(menu.getSensorPos());
+            if (be instanceof MySensorBlockEntity sensorBE) {
+                return sensorBE.isChannelOccupiedByOther(channel);
+            }
+        }
+        return false;
     }
 
     // ═══ NBT 树节点 ═══
