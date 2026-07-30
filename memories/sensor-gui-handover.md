@@ -1,4 +1,4 @@
-# Sensor GUI 开发交接 — 2026-07-30 (更新)
+# CCNavigationtable 开发交接 — 2026-07-30 (完整)
 
 ## 项目
 NeoForge 1.21.1 mod: `ccnavigationtable` (Minecraft 1.21.1, JDK 21)
@@ -113,3 +113,95 @@ NBT 文本区: TEXT_START_X=40, TEXT_START_Y=70, 底部截断=165
 2. **slotId=-999 崩溃** → `clicked()` 必须加 `slotId >= 0` 检查（AbstractContainerScreen 传哨兵值）
 3. **NBT 树 tick 重置** → 每帧 `formatNBTForDisplay` 重建树，必须用 `expandedPaths` Set 恢复
 4. **滚动偏移污染总高度** → `nbtTotalLines = lineY - (TEXT_START_Y - nbtScrollOffset)` 排除偏移
+
+---
+
+## 新增：Sable 子次元 & 区块加载（2026-07-30）
+
+### SableCompat 反射兼容层
+- `compat/sable/SableCompat.java` — 全反射调用 Sable API，Sable 未加载时安全降级
+- 注册自定义 `SubLevelLoadingTicketType<BlockPos>`（`ccnavigationtable:sensor_force_load`）
+
+### 双层加载架构
+```
+onLoad()
+  ├─ Sable 子次元? → tryRegisterSableTicket()
+  │    ├─ Layer 1: Sable force-load ticket → 防止 Sable 距离卸载
+  │    ├─ Layer 2: 连接链 getConnectedChain() → 轴承连接的全部加载
+  │    └─ Layer 3: PORTAL ticket (addRegionTicket, radius=3)
+  │         └─ tick → serverTick() → 检测移动 → 动态移动 PORTAL ticket
+  │
+  └─ 普通世界 → forceLoadSurroundingChunks() (setChunkForced 3×3)
+```
+
+### MySensorBlockEntity 新增字段
+- `chunksForceLoaded` / `activeChunkLoaders` (static) — vanilla 加载追踪
+- `sableTicketRegistered` / `sableRootSubLevelId` / `connectedSubLevelIds` — Sable ticket 追踪
+- `portalTicketChunks: Map<UUID, ChunkPos>` — 每 SubLevel 最后 ticket 位置
+- `redstoneOutput` — 无线红石输出 0-15
+
+### Config 新增
+```toml
+sensorChunkLoadEnabled = true
+sensorMaxForceLoad = 32
+sensorPortalTicketRadius = 3
+```
+
+---
+
+## 新增：Lua 物理数据 API
+
+| Lua 方法 | 返回 | 说明 |
+|----------|------|------|
+| `getPhysicsPos(ch)` | `{x,y,z}` | 世界空间位置 |
+| `getPhysicsVelocity(ch)` | `{vx,vy,vz}` | 线速度 (需 velocity_sensor) |
+| `getPhysicsAngularVelocity(ch)` | `{wx,wy,wz}` | 角速度 (需 velocity_sensor) |
+| `getPhysicsOrientation(ch)` | `{x,y,z,w}` | 四元数朝向 |
+| `getPhysicsMass(ch)` | number | 质量 kg |
+| `getPhysicsCenterOfMass(ch)` | `{x,y,z}` | 质心局部坐标 |
+| `getPhysicsGravityForce(ch)` | number | 重力 N (mass×11) |
+
+数据来源：`Sable.HELPER` + `physicsSystem().getPhysicsHandle().getAngularVelocity()` + `getMassTracker()`
+
+---
+
+## 新增：无线红石系统
+
+### Lua API
+```lua
+sensors.setRedstoneOutput(ch, 15)  -- 0-15
+sensors.getRedstoneOutput(ch)      -- 读取输出
+sensors.getRedstoneInput(ch)       -- getBestNeighborSignal
+```
+
+### 方块行为
+- `MySensorBlock` 新增 `POWERED` (BooleanProperty)
+- `getSignal()` → BE.getRedstoneOutput()
+- `isSignalSource()` → POWERED
+- `updateRedstoneOutput()` → 同步方块状态 + `updateNeighborsAt()`
+
+### ⚠️ 防死锁
+- `setRemoved()` 中只清内部状态，不调 `setBlock()`
+- `updateRedstoneOutput()` 加 `level.isLoaded(pos)` + 方块类型守卫
+
+---
+
+## 新增：CC:T 外设代理
+
+```lua
+local p = sensors.getPeripheral(ch)
+if p then p.setSpeed(128) end
+```
+
+实现：
+1. `be instanceof IPeripheral` → 直接返回
+2. `level.getCapability(PeripheralCapability.get(), pos, side)` → CC:T 官方外设
+3. ⚠️ 不要用 `PeripheralLookup`（Fabric 专有）
+
+---
+
+## 新增陷阱
+5. **`setChunkForced` + Sable 子次元** → 幽灵方块 + 退出卡死 → 改 Sable ticket
+6. **`PeripheralLookup` 是 Fabric 专有** → NeoForge 用 `PeripheralCapability`
+7. **`setRemoved()` 调 `setBlock()` 卡保存** → 只清内部状态 + `isLoaded` 守卫
+8. **`PeripheralCapability.get()` 是正确 API** → 不是反射的 `PeripheralLookup`

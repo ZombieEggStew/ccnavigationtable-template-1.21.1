@@ -30,6 +30,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.AttachFace;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.BlockHitResult;
@@ -46,6 +47,7 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
     public static final MapCodec<MySensorBlock> CODEC = MySensorBlock.simpleCodec(MySensorBlock::new);
     public static final EnumProperty<AttachFace> FACE = BlockStateProperties.ATTACH_FACE;
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
+    public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
 
     private static final Map<AttachFace, Map<Direction, VoxelShape>> SHAPES;
 
@@ -87,12 +89,13 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
         registerDefaultState(stateDefinition.any()
                 .setValue(FACE, AttachFace.FLOOR)
                 .setValue(FACING, Direction.NORTH)
+                .setValue(POWERED, false)
         );
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACE, FACING);
+        builder.add(FACE, FACING, POWERED);
     }
 
     @Override
@@ -139,6 +142,36 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
         if (!state.canSurvive(level, pos)) {
             level.destroyBlock(pos, true);
         }
+    }
+
+    // ── 红石输出 ──
+
+    @Override
+    protected int getSignal(@NonNull BlockState state, @NonNull BlockGetter level, @NonNull BlockPos pos, @NonNull Direction side) {
+        if (level.getBlockEntity(pos) instanceof MySensorBlockEntity be)
+            return be.getRedstoneOutput();
+        return 0;
+    }
+
+    @Override
+    protected boolean isSignalSource(@NonNull BlockState state) {
+        return state.getValue(POWERED);
+    }
+
+    /**
+     * 更新传感器的红石输出信号并通知相邻方块。
+     * 由 {@link MySensorBlockEntity#setRedstoneOutput} 调用。
+     */
+    public static void updateRedstoneOutput(Level level, BlockPos pos, int signal) {
+        // 防止在区块卸载/世界保存期间产生 block update 死锁
+        if (level.isClientSide || !level.isLoaded(pos)) return;
+        BlockState state = level.getBlockState(pos);
+        if (!state.is(MyModBlocks.my_sensor.get())) return; // 方块已被替换则跳过
+        boolean shouldPower = signal > 0;
+        if (state.hasProperty(POWERED) && state.getValue(POWERED) != shouldPower) {
+            level.setBlock(pos, state.setValue(POWERED, shouldPower), Block.UPDATE_ALL);
+        }
+        level.updateNeighborsAt(pos, state.getBlock());
     }
 
     @Override

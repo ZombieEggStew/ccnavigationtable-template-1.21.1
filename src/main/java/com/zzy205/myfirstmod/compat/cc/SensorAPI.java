@@ -138,6 +138,50 @@ public class SensorAPI implements ILuaAPI {
         return Collections.emptyMap();
     }
 
+    /**
+     * 获取指定频道传感器当前的红石输出信号。
+     *
+     * @param channel 频道号
+     * @return 0-15 的模拟信号强度
+     */
+    @LuaFunction(mainThread = true)
+    public final int getRedstoneOutput(int channel) {
+        MySensorBlockEntity sensor = SensorRegistry.get(channel);
+        return sensor != null ? sensor.getRedstoneOutput() : 0;
+    }
+
+    /**
+     * 读取指定频道传感器位置接收到的最强红石输入信号。
+     *
+     * @param channel 频道号
+     * @return 0-15 的红石信号强度
+     */
+    @LuaFunction(mainThread = true)
+    public final int getRedstoneInput(int channel) {
+        MySensorBlockEntity sensor = SensorRegistry.get(channel);
+        return sensor != null ? sensor.getRedstoneInput() : 0;
+    }
+
+    /**
+     * 设置指定频道传感器的红石输出信号（0-15），实现无线红石控制。
+     * 传感器方块会像红石源一样向相邻方块输出该信号。
+     *
+     * <pre>{@code
+     * sensors.setRedstoneOutput(1, 15)  -- 频道 1 输出满信号
+     * sensors.setRedstoneOutput(1, 0)   -- 关闭
+     * }</pre>
+     *
+     * @param channel 频道号
+     * @param signal  0-15 的红石信号强度（自动钳位）
+     */
+    @LuaFunction(mainThread = true)
+    public final void setRedstoneOutput(int channel, int signal) {
+        MySensorBlockEntity sensor = SensorRegistry.get(channel);
+        if (sensor != null) {
+            sensor.setRedstoneOutput(Math.clamp(signal, 0, 15));
+        }
+    }
+
     // ═══════════════ Layer 2: Sable 物理数据 ═══════════════
 
     /**

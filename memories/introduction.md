@@ -16,7 +16,9 @@
 - 附着在任意方块上，读取该方块的完整 NBT 数据
 - 通过 CC:Tweaked 的 Lua API 按**频道(channel)**无线访问传感器数据
 - 支持 Sable 物理子次元（航空学）的坐标修正和物理数据读取
-- 支持强制加载附着物理结构（防止距离优化卸载）
+- 支持强制加载附着物理结构（防止距离优化卸载），动态追踪移动 + 连接链
+- **无线红石**：Lua 发送/读取 0-15 模拟信号，传感器方块作为红石源输出
+- **外设代理**：通过频道无线访问附着方块的 CC:T 外设方法
 
 ---
 
@@ -73,6 +75,11 @@ sensors.getPhysicsGravityForce(ch)-- 13579.5          重力 N (= mass × 11)
 sensors.get(ch, "Items[0].Count") -- 路径查询
 sensors.get(ch, "FuelLevel")      -- 顶层 key
 sensors.getAll(ch)                -- 全量 NBT → Lua Table
+
+-- ── 无线红石 ──
+sensors.setRedstoneOutput(ch, 15)  -- 设置频道 ch 的红石输出 0-15
+sensors.getRedstoneOutput(ch)       -- 读取当前输出值
+sensors.getRedstoneInput(ch)        -- 读取传感器位置的红石输入 (getBestNeighborSignal)
 
 -- ── 外设代理 ──
 local p = sensors.getPeripheral(ch)  -- 附着方块的 CC:T 外设对象
@@ -141,7 +148,7 @@ if sc then sc.setSpeed(256) end
 | `getConnectedChain(subLevel)` | `SubLevelHelper.getConnectedChain()` |
 | `tryAddForceLoadTicket(...)` | `ServerSubLevelContainer.addForceLoadTicket()` |
 
-### 3. 双层加载系统
+### 3. 双层加载系统（动态追踪 + 连接链）
 
 ```
 传感器 onLoad()
@@ -163,13 +170,24 @@ if sc then sc.setSpeed(256) end
        └─ vanilla setChunkForced (静态 3×3 chunks)
 ```
 
-**设计理念**：
-- Sable ticket 管"物理结构不被卸载"
-- PORTAL ticket 管"世界空间区块完整加载（实体 ticking）"
-- 连接链管"轴承连着的飞行器一起加载"
-- 只加载有传感器的物理结构（按需加载）
+### 4. 无线红石系统
 
-### 4. CC:T 外设代理（`getPeripheral`）
+```
+CC:T Computer → setRedstoneOutput(ch, 15)
+  └─ SensorAPI (mainThread=true, 服务端直接执行)
+       └─ MySensorBlockEntity.setRedstoneOutput(15)
+            ├─ 钳位 0-15 → 存储 redstoneOutput
+            └─ MySensorBlock.updateRedstoneOutput()
+                 ├─ level.isLoaded(pos) 安全检查（防止卸载时死锁）
+                 ├─ 同步 POWERED 方块状态
+                 └─ level.updateNeighborsAt() 传播红石信号
+
+传感器作为红石源：
+  MySensorBlock.getSignal() → BE.getRedstoneOutput()
+  MySensorBlock.isSignalSource() → POWERED
+```
+
+### 5. CC:T 外设代理（`getPeripheral`）
 
 ```java
 // 1. 直接实现 IPeripheral（少数方块）
@@ -206,6 +224,8 @@ sensorPortalTicketRadius = 3       # Sable 结构 PORTAL ticket 半径 (chunks)
 4. **滚动偏移污染总高度** → `nbtTotalLines = lineY - (TEXT_START_Y - nbtScrollOffset)`
 5. **Sable 子次元不能调 `setChunkForced`** → 会导致幽灵方块 + 退出卡死 → 改用 Sable ticket 系统
 6. **`PeripheralLookup` 是 Fabric 专有类** → NeoForge 用 `PeripheralCapability` + `level.getCapability()`
+7. **`setRemoved()` 中调用 `level.setBlock()` 会卡保存** → 只清内部状态，加 `level.isLoaded(pos)` 守卫
+8. **`level.getCapability(PeripheralCapability.get(), pos, side)`** — CC:T NeoForge 外设查询的唯一正确 API
 
 ---
 

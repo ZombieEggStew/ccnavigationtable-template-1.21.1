@@ -47,6 +47,9 @@ public class MySensorBlockEntity extends BlockEntity {
     /** 每个 SubLevel 最后一次 PORTAL ticket 所在的区块 */
     private final Map<UUID, ChunkPos> portalTicketChunks = new HashMap<>();
 
+    /** CC:T 无线红石输出信号 (0-15) */
+    private int redstoneOutput = 0;
+
 
     public MySensorBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.my_sensor_entity.get(), pos, state);
@@ -79,6 +82,8 @@ public class MySensorBlockEntity extends BlockEntity {
             releaseSurroundingChunks();
             releaseSableTicket();
             SensorRegistry.unregister(this.scrolledValue, this);
+            // 仅清除内部状态，不触发方块更新（避免保存/卸载时 setBlock 死锁）
+            this.redstoneOutput = 0;
         }
         super.setRemoved();
     }
@@ -414,6 +419,26 @@ public class MySensorBlockEntity extends BlockEntity {
         }
     }
 
+    // ═══════════════ 无线红石输出 ═══════════════
+
+    public int getRedstoneOutput() { return redstoneOutput; }
+
+    public void setRedstoneOutput(int signal) {
+        int clamped = Math.clamp(signal, 0, 15);
+        if (this.redstoneOutput == clamped) return;
+        this.redstoneOutput = clamped;
+        this.setChanged();
+        if (this.level != null && !this.level.isClientSide) {
+            MySensorBlock.updateRedstoneOutput(this.level, this.worldPosition, clamped);
+        }
+    }
+
+    /** 读取传感器位置接收到的最强红石信号（0-15）。 */
+    public int getRedstoneInput() {
+        if (this.level == null) return 0;
+        return this.level.getBestNeighborSignal(this.worldPosition);
+    }
+
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         CompoundTag tag = super.getUpdateTag(registries);
@@ -422,6 +447,7 @@ public class MySensorBlockEntity extends BlockEntity {
         tag.putIntArray("OccupiedChannels", occupiedChannels);
         tag.putBoolean("ChunksForceLoaded", chunksForceLoaded);
         tag.putBoolean("SableTicket", sableTicketRegistered);
+        tag.putInt("RedstoneOutput", redstoneOutput);
         if (!displayItem.isEmpty()) {
             tag.put("DisplayItem", displayItem.save(registries));
         }
@@ -439,6 +465,7 @@ public class MySensorBlockEntity extends BlockEntity {
         if (tag.contains("OccupiedChannels")) occupiedChannels = tag.getIntArray("OccupiedChannels");
         if (tag.contains("ChunksForceLoaded")) chunksForceLoaded = tag.getBoolean("ChunksForceLoaded");
         if (tag.contains("SableTicket")) sableTicketRegistered = tag.getBoolean("SableTicket");
+        if (tag.contains("RedstoneOutput")) redstoneOutput = tag.getInt("RedstoneOutput");
         if (tag.contains("DisplayItem")) {
             displayItem = ItemStack.parse(registries, tag.getCompound("DisplayItem")).orElse(ItemStack.EMPTY);
         }
@@ -455,6 +482,7 @@ public class MySensorBlockEntity extends BlockEntity {
         tag.putIntArray("OccupiedChannels", occupiedChannels);
         tag.putBoolean("ChunksForceLoaded", chunksForceLoaded);
         tag.putBoolean("SableTicket", sableTicketRegistered);
+        tag.putInt("RedstoneOutput", redstoneOutput);
         if (!displayItem.isEmpty()) {
             tag.put("DisplayItem", displayItem.save(registries));
         }
