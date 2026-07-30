@@ -10,7 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 /**
  * 客户端→服务端：保存传感器滚轮数值和选择菜单的状态。
  */
-public record SensorFilterPayload(BlockPos sensorPos, int scrolledValue, int selectIndex) implements CustomPacketPayload {
+public record SensorFilterPayload(BlockPos sensorPos, int scrolledValue) implements CustomPacketPayload {
 
     public static final Type<SensorFilterPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(CCNavigationtable.MOD_ID, "sensor_filter"));
@@ -19,7 +19,6 @@ public record SensorFilterPayload(BlockPos sensorPos, int scrolledValue, int sel
             StreamCodec.composite(
                     BlockPos.STREAM_CODEC, SensorFilterPayload::sensorPos,
                     net.minecraft.network.codec.ByteBufCodecs.INT, SensorFilterPayload::scrolledValue,
-                    net.minecraft.network.codec.ByteBufCodecs.INT, SensorFilterPayload::selectIndex,
                     SensorFilterPayload::new
             );
 

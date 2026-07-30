@@ -77,7 +77,6 @@ public class CCNavigationtable {
                                         .register(newChannel, sensorBE);
                                 sensorBE.setScrolledValue(assigned);
                             }
-                            sensorBE.setSelectIndex(payload.selectIndex());
                             sensorBE.refreshOccupiedChannels();
                         }
                     }

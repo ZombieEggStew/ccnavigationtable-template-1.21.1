@@ -3,7 +3,7 @@ package com.zzy205.myfirstmod.screen;
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.block.MySensorBlockEntity;
 import com.zzy205.myfirstmod.network.SensorFilterPayload;
-import com.zzy205.myfirstmod.network.SensorItemPayload;
+// import com.zzy205.myfirstmod.network.SensorItemPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -29,36 +29,55 @@ import java.util.Set;
 public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
 
     // ═══ 布局常量 ═══
-    // 原版玩家背包纹理（Create 提供，运行时可用）
-    private static final ResourceLocation BASE_TEXTURE =
-            ResourceLocation.parse("create:textures/gui/player_inventory.png");
+    // 原版玩家背包纹理（Create 提供）
+    // private static final ResourceLocation BASE_TEXTURE =
+    //         ResourceLocation.parse("create:textures/gui/player_inventory.png");
 
     // 自定义 NBT 窗口纹理：顶部(32,0)-192×18, 中部(32,26)-192×19可平铺, 底部(32,55)-192×8
     private static final ResourceLocation NBT_WINDOW =
             ResourceLocation.fromNamespaceAndPath("ccnavigationtable", "textures/gui/test_gui.png");
 
-    private static final int BACKPACK_WIDTH  = 175;
-    private static final int BACKPACK_HEIGHT = 108;
-    private static final int BACKPACK_TOP    = 194;
+    // private static final int BACKPACK_WIDTH  = 175;
+    // private static final int BACKPACK_HEIGHT = 108;
 
     // NBT 窗口九宫格参数
-    private static final int WIN_X      = 32;   // 窗口 X（居中: (256-192)/2=32）
-    private static final int WIN_W      = 192;  // 窗口宽度
-    private static final int WIN_TOP    = 10;   // 窗口顶部 Y
-    private static final int WIN_BOTTOM = BACKPACK_TOP - 10;  // 背包上方 10px
+    private static final int WIN_X      = 0;    // 窗口贴画布左边界
+    private static final int WIN_W      = 256;  // 窗口宽度
+    private static final int WIN_TOP    = 0;    // 窗口贴画布顶部
+    private static final int WIN_BOTTOM = 192;  // 窗口底部 = 画布高度
+    private static final int WIN_HEIGHT = WIN_BOTTOM - WIN_TOP;  // 窗口高度
 
     // 纹理切片坐标
     private static final int TEX_TOP_Y    = 0;
-    private static final int TEX_TOP_H    = 18;
-    private static final int TEX_MID_Y    = 26;
-    private static final int TEX_MID_H    = 19;
-    private static final int TEX_BOT_Y    = 55;
-    private static final int TEX_BOT_H    = 8;
+    private static final int TEX_TOP_H    = 16;
+
+    private static final int TEX_MID_Y    = 16;
+    private static final int TEX_MID_H    = 16;
+    
+    private static final int TEX_BOT_Y    = 32;
+    private static final int TEX_BOT_H    = 16;
+
+    private static final int TEX_BANNER_Y = 96;
+    private static final int TEX_BANNER_H = 30;
+    private static final int BANNER_Y_OFFSET =  TEX_TOP_H + 4;
 
     // NBT 文本（窗口内部）
+
+    private static final int TEXT_BG_TOP_OFFSET = BANNER_Y_OFFSET + TEX_BANNER_H + 4;
     private static final int TEXT_START_X = WIN_X + 8;           // 左边距 8px
-    private static final int TEXT_START_Y = WIN_TOP + 60;  // 顶边框下方 2px
+    private static final int TEXT_START_Y = TEXT_BG_TOP_OFFSET + 4;  // 顶边框下方 2px
+
     private static final int LINE_HEIGHT  = 10;
+
+    /** NBT 文本区域可视高度 */
+    private static final int TEXT_BG_BOTTOM = WIN_HEIGHT - TEX_BOT_H - 4;
+    private static final int TEXT_BG_HEIGHT = TEXT_BG_BOTTOM - TEXT_BG_TOP_OFFSET;
+
+    /** 滚动条 */
+    private static final int SCROLLBAR_X = WIN_X + WIN_W - 6;
+    private static final int SCROLLBAR_W = 4;
+    private static final int SCROLLBAR_MIN_THUMB = 8;
+
     // ═══════════════════════════════════════════════════
 
     // ═══ 可折叠 NBT 树形视图 ═══
@@ -72,32 +91,31 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
     private int tickCounter = 0;
     private int pollInterval;
 
+    /** 复制路径提示消息，非空时在窗口底部显示，倒计时结束后清空 */
+    private String copiedMessage = null;
+    private int copiedMessageTimer = 0;
+
     // 滚轮驱动数值
     private int scrolledValue = 0;
-
-    // 滚轮选择菜单
-    private final String[] selectOptions = {"关闭",  "接收" , "发送"};
-    private int selectIndex = 0;
 
     // 滚轮检测区域（X/宽度各自不同，Y/高度一致）
     private static final int OVERLAY_Y_OFFSET = 24;          // 覆盖层内 Y 偏移
     private static final int HIT_HEIGHT = 19;                 // 检测区域高度
-    private static final int VALUE_HIT_X = WIN_X + 25;       // 数值区域 X
+    private static final int VALUE_HIT_X = WIN_X + 42;       // 数值区域 X
     private static final int VALUE_HIT_W = 34;               // 数值区域宽度
-    private static final int SCROLL_HIT_X = WIN_X + 75;      // 选项区域 X
-    private static final int SCROLL_HIT_W = 52;              // 选项区域宽度
 
-    /** JEI 幽灵拖放目标区域（由 init() 根据 leftPos/topPos 计算，JEI 插件需要访问） */
-    public Rect2i ghostSlot0Bounds;
-    public Rect2i ghostSlot1Bounds;
+
+    // /** JEI 幽灵拖放目标区域 */  // 幽灵物品已注释
+    // public Rect2i ghostSlot0Bounds;
+    // public Rect2i ghostSlot1Bounds;
 
 
     public MySensorScreen(MySensorMenu menu, Inventory playerInv, Component title) {
         super(menu, playerInv, title);
-        this.imageWidth = 256;
-        this.imageHeight = BACKPACK_TOP + BACKPACK_HEIGHT + 6;  // 208
-        this.titleLabelY = 6;
-        this.inventoryLabelY = this.imageHeight - 94;  // 114
+        this.imageWidth = WIN_W;
+        this.imageHeight = WIN_BOTTOM;
+        // this.titleLabelY = 6;
+        // this.inventoryLabelY = this.imageHeight - 94; 
     }
 
     @Override
@@ -118,22 +136,15 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
             }
         }
 
-        if (this.minecraft != null && this.minecraft.level != null) {
-            BlockEntity be = this.minecraft.level.getBlockEntity(menu.getSensorPos());
-            if (be instanceof MySensorBlockEntity sensorBE) {
-                this.selectIndex = sensorBE.getSelectIndex();
-            }
-        }
-
-        // 初始化 JEI 幽灵拖放目标区域
-        this.ghostSlot0Bounds = new Rect2i(
-                leftPos + MySensorMenu.GHOST_SLOT_X,
-                topPos + MySensorMenu.GHOST_SLOT_Y,
-                16, 16);
-        this.ghostSlot1Bounds = new Rect2i(
-                leftPos + MySensorMenu.GHOST_SLOT_2_X,
-                topPos + MySensorMenu.GHOST_SLOT_Y,
-                16, 16);
+        formatNBTForDisplay();
+        // this.ghostSlot0Bounds = new Rect2i(
+        //         leftPos + MySensorMenu.GHOST_SLOT_X,
+        //         topPos + MySensorMenu.GHOST_SLOT_Y,
+        //         16, 16);
+        // this.ghostSlot1Bounds = new Rect2i(
+        //         leftPos + MySensorMenu.GHOST_SLOT_2_X,
+        //         topPos + MySensorMenu.GHOST_SLOT_Y,
+        //         16, 16);
 
         formatNBTForDisplay();
     }
@@ -141,28 +152,32 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
     /**
      * 由 JEI 拖放或中键点击触发：更新幽灵槽位物品并发送网络包。
      */
-    public void updateGhostSlot(int slotIndex, ItemStack stack) {
-        ItemStack copy = stack.copy();
-        copy.setCount(1);
-        // 本地更新（客户端 BE 缓存）
-        BlockEntity be = minecraft.level.getBlockEntity(menu.getSensorPos());
-        if (be instanceof MySensorBlockEntity sensorBE) {
-            sensorBE.setDisplayItem(slotIndex, copy);
-        }
-        // 发送网络包到服务端
-        PacketDistributor.sendToServer(new SensorItemPayload(menu.getSensorPos(), copy, slotIndex));
-    }
+    // public void updateGhostSlot(int slotIndex, ItemStack stack) {
+    //     ItemStack copy = stack.copy();
+    //     copy.setCount(1);
+    //     // 本地更新（客户端 BE 缓存）
+    //     BlockEntity be = minecraft.level.getBlockEntity(menu.getSensorPos());
+    //     if (be instanceof MySensorBlockEntity sensorBE) {
+    //         sensorBE.setDisplayItem(slotIndex, copy);
+    //     }
+    //     // 发送网络包到服务端
+    //     PacketDistributor.sendToServer(new SensorItemPayload(menu.getSensorPos(), copy, slotIndex));
+    // }
 
     @Override
     protected void containerTick() {
         super.containerTick();
-        // this.filterBox.tick();
         if (pollInterval <= 0) return;
         tickCounter++;
         if (tickCounter % pollInterval == 0) {
             if (this.minecraft != null && this.minecraft.gameMode != null) {
                 this.minecraft.gameMode.handleInventoryButtonClick(this.menu.containerId, 0);
             }
+        }
+        // 复制提示倒计时
+        if (copiedMessageTimer > 0) {
+            copiedMessageTimer--;
+            if (copiedMessageTimer == 0) copiedMessage = null;
         }
         formatNBTForDisplay();
     }
@@ -214,41 +229,49 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
         renderNbtWindow(g, x, y);
 
         // NBT 文本区域透明背景
-        int textTop = y + TEXT_START_Y - 5;
-        int textBottom = y + 170;
-        g.fill(x + WIN_X + 4, textTop, x + WIN_X + WIN_W - 4, textBottom, 0x18000000);
+        int textTop = y + TEXT_BG_TOP_OFFSET;
+        int textBottom = y + TEXT_BG_BOTTOM;
+        g.fill(x + 4, textTop, x + WIN_W - 4, textBottom, 0x18000000);
 
-        // ── 背包区域：Create 原版纹理 ──
-        int backpackX = x + (this.imageWidth - BACKPACK_WIDTH) / 2;
-        int backpackY = y + BACKPACK_TOP;
-        g.blit(BASE_TEXTURE, backpackX, backpackY, 0, 0,
-                BACKPACK_WIDTH, BACKPACK_HEIGHT, 256, 256);
+        // // ── 背包区域：Create 原版纹理 ── 
+        // int backpackX = x + (this.imageWidth - BACKPACK_WIDTH) / 2;
+        // int backpackY = y + BACKPACK_TOP;
+        // g.blit(BASE_TEXTURE, backpackX, backpackY, 0, 0,
+        //         BACKPACK_WIDTH, BACKPACK_HEIGHT, 256, 256);
+
     }
 
-
+    // g.blit(
+    //     texture,    // ① 纹理文件
+    //     x,          // ② 屏幕 X（画到哪里）
+    //     y,          // ③ 屏幕 Y
+    //     u,          // ④ 纹理 U（从纹理哪里开始取）
+    //     v,          // ⑤ 纹理 V
+    //     width,      // ⑥ 画多宽
+    //     height,     // ⑦ 画多高
+    //     texW,       // ⑧ 纹理文件总宽（用于 UV 归一化）
+    //     texH        // ⑨ 纹理文件总高
+    // );
     /** 绘制 NBT 九宫格窗口：顶部→平铺中部→底部 */
-    private void renderNbtWindow(GuiGraphics g, int x, int y) {
-        int winY = y + WIN_TOP;
-        int winEnd = y + WIN_BOTTOM;
+    private void renderNbtWindow(GuiGraphics g, int winX, int winY) {
+        // int winEnd = y + WIN_BOTTOM;
 
         // 顶部
-        g.blit(NBT_WINDOW, x + WIN_X, winY, WIN_X, TEX_TOP_Y, WIN_W, TEX_TOP_H, 256, 256);
+        g.blit(NBT_WINDOW, winX , winY, 0, TEX_TOP_Y, WIN_W, TEX_TOP_H, 256, 256);
 
         // 中部（纵向平铺）
         int midY = winY + TEX_TOP_H;
-        int midEnd = winEnd - TEX_BOT_H;
+        int midEnd = winY + WIN_HEIGHT - TEX_BOT_H;
         while (midY < midEnd) {
-            int h = Math.min(TEX_MID_H, midEnd - midY);
-            g.blit(NBT_WINDOW, x + WIN_X, midY, WIN_X, TEX_MID_Y, WIN_W, h, 256, 256);
-            midY += h;
+            g.blit(NBT_WINDOW, winX, midY, 0, TEX_MID_Y, WIN_W, TEX_MID_H, 256, 256);
+            midY += TEX_MID_H;
         }
 
         // 底部
-        g.blit(NBT_WINDOW, x + WIN_X, winEnd - TEX_BOT_H, WIN_X, TEX_BOT_Y, WIN_W, TEX_BOT_H, 256, 256);
+        g.blit(NBT_WINDOW, winX, winY + WIN_HEIGHT - TEX_BOT_H, 0, TEX_BOT_Y, WIN_W, TEX_BOT_H, 256, 256);
 
-        // 小窗口
-        winY += 20;
-        g.blit(NBT_WINDOW, x + WIN_X, winY, WIN_X, 92, WIN_W, 30, 256, 256);
+        // Banner
+        g.blit(NBT_WINDOW, winX, winY + BANNER_Y_OFFSET, 0, TEX_BANNER_Y, WIN_W, TEX_BANNER_H, 256, 256);
     }
 
     @Override
@@ -256,7 +279,6 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
         super.render(g, mouseX, mouseY, partialTick);
         this.renderTooltip(g, mouseX, mouseY);
         renderValueTooltip(g, mouseX, mouseY);
-        renderSelectionTooltip(g, mouseX, mouseY);
     }
 
     /** 数值区域悬浮提示：标题 频道选择、滚动修改（斜体）、Shift 加速（斜体） */
@@ -276,58 +298,45 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
         g.renderComponentTooltip(this.font, lines, mouseX, mouseY);
     }
 
-    /** 鼠标悬浮在选中项上时显示 Create 风格的滚轮选择提示 */
-    private void renderSelectionTooltip(GuiGraphics g, int mouseX, int mouseY) {
-        int overlayY = this.topPos + WIN_TOP + OVERLAY_Y_OFFSET;
-        int hitX = this.leftPos + SCROLL_HIT_X;
-        if (mouseX < hitX || mouseX > hitX + SCROLL_HIT_W
-                || mouseY < overlayY || mouseY > overlayY + HIT_HEIGHT) return;
-
-        List<Component> lines = new ArrayList<>();
-        // 标题 0xFF528FDE
-        lines.add(Component.translatable("gui.ccnavigationtable.sensor_select_mode")
-                .withStyle(Style.EMPTY.withColor(0x528FDE)));
-        for (int i = 0; i < selectOptions.length; i++) {
-            boolean sel = i == selectIndex;
-            // -> 选中 0xFFFCFCFC, > 未选 0xFFA8A8A8
-            lines.add(Component.literal((sel ? "-> " : "> ") + selectOptions[i])
-                    .withStyle(Style.EMPTY.withColor(sel ? 0xFCFCFC : 0xA8A8A8)));
-        }
-        // 底部提示 0xFF545454 斜体
-        lines.add(Component.translatable("gui.ccnavigationtable.scroll_to_select")
-                .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
-        g.renderComponentTooltip(this.font, lines, mouseX, mouseY);
-    }
-
     @Override
     protected void renderLabels(GuiGraphics g, int mouseX, int mouseY) {
         // 标题（窗口内居中）
         int titleWidth = this.font.width(this.title);
         int titleX = WIN_X + (WIN_W - titleWidth) / 2;
         g.drawString(this.font, this.title, titleX, WIN_TOP + 4, 0xFFFFFFFF, false);
-        // 背包标签（与 Create Redstone Link 一致的灰色）
-        g.drawString(this.font, this.playerInventoryTitle, this.inventoryLabelX, this.inventoryLabelY, 0xFF3C3B47, false);
+        // 背包标签  // 玩家物品栏已注释
+        // g.drawString(this.font, this.playerInventoryTitle, this.inventoryLabelX, this.inventoryLabelY, 0xFF3C3B47, false);
 
-        // NBT 树形视图（窗口内部，支持滚轮滚动）
+        // NBT 树形视图（scissor 裁剪 + 滚轮滚动）
+        g.enableScissor(this.leftPos + 4, this.topPos + TEXT_BG_TOP_OFFSET,
+                this.leftPos + WIN_W - 4, this.topPos + TEXT_BG_BOTTOM);
+
         int[] lineY = {TEXT_START_Y - nbtScrollOffset};
-        int maxLines = (WIN_BOTTOM - WIN_TOP - TEX_TOP_H - TEX_BOT_H) / LINE_HEIGHT;
-        int[] rendered = {0};
+        int relY = mouseY - this.topPos;  // 转相对坐标，对齐绘制坐标系
         if (nbtRoots.isEmpty()) {
             String empty = Component.translatable("gui.ccnavigationtable.sensor_nbt.empty").getString();
             g.drawString(this.font, empty, TEXT_START_X, TEXT_START_Y, 0xFFE0E0E0, false);
         } else {
             for (NbtTreeNode root : nbtRoots) {
-                renderTreeNode(g, root, lineY, maxLines, rendered);
+                renderTreeNode(g, root, lineY, relY);
             }
         }
-        nbtTotalLines = lineY[0] - (TEXT_START_Y - nbtScrollOffset);  // 原始内容总像素高
+        nbtTotalLines = lineY[0] - (TEXT_START_Y - nbtScrollOffset);
+
+        g.disableScissor();
+
+        // 滚动条
+        renderScrollbar(g, nbtTotalLines);
+
+        // 底部复制提示
+        if (copiedMessage != null) {
+            int msgX = WIN_X + 5;
+            int msgY = WIN_HEIGHT - TEX_BOT_H + 5;
+            g.drawString(this.font, copiedMessage, msgX, msgY, 0xFF55FF55, false);
+        }
 
         // 滚轮驱动数值（覆盖层左侧，与 VALUE_HIT_X 对齐）
         g.drawString(this.font, String.valueOf(scrolledValue), VALUE_HIT_X + 5, WIN_TOP + 30, 0xfcfceb, true);
-
-        // 滚轮选择菜单（覆盖层右侧）
-        String selected = selectOptions[selectIndex];
-        g.drawString(this.font, selected, WIN_X + 80, WIN_TOP + 30, 0xfcfceb, true);
     }
 
     @Override
@@ -335,17 +344,19 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
         // NBT 文本区域：滚轮驱动树形视图上下滚动（与背景区域一致）
         int scrollLeft = this.leftPos + WIN_X + 4;
         int scrollRight = this.leftPos + WIN_X + WIN_W - 4;
-        int scrollTop = this.topPos + TEXT_START_Y - 5;
-        int scrollBottom = this.topPos + 170;
+        int scrollTop = this.topPos + TEXT_BG_TOP_OFFSET;
+        int scrollBottom = this.topPos + TEXT_BG_BOTTOM;
         if (mouseX >= scrollLeft && mouseX <= scrollRight
                 && mouseY >= scrollTop && mouseY <= scrollBottom
                 && scrollY != 0) {
             nbtScrollOffset -= scrollY > 0 ? LINE_HEIGHT : -LINE_HEIGHT;
             if (nbtScrollOffset < 0) nbtScrollOffset = 0;
+            int visibleHeight = TEXT_BG_BOTTOM - TEXT_START_Y;
+            int maxScroll = Math.max(0, nbtTotalLines - visibleHeight);
+            if (nbtScrollOffset > maxScroll) nbtScrollOffset = maxScroll;
             return true;
         }
         int valueHitX = this.leftPos + VALUE_HIT_X;
-        int selectHitX = this.leftPos + SCROLL_HIT_X;
         int overlayY = this.topPos + WIN_TOP + OVERLAY_Y_OFFSET;
         if (mouseY < overlayY || mouseY > overlayY + HIT_HEIGHT) {
             return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
@@ -372,13 +383,6 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
             return true;
         }
 
-        // 选项区域：循环切换
-        if (mouseX >= selectHitX && mouseX <= selectHitX + SCROLL_HIT_W) {
-            selectIndex = (selectIndex + dir + selectOptions.length) % selectOptions.length;
-            playScrollSound();
-            return true;
-        }
-
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
@@ -390,27 +394,18 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
     @Override
     public void onClose() {
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(
-                new SensorFilterPayload(menu.getSensorPos(), scrolledValue, selectIndex));
+                new SensorFilterPayload(menu.getSensorPos(), scrolledValue));
         super.onClose();
     }
 
-    /** 递归渲染树节点 */
-    private void renderTreeNode(GuiGraphics g, NbtTreeNode node, int[] lineY, int maxLines, int[] rendered) {
-        // 底部裁剪：超过窗口底部停止
-        if (lineY[0] >= 165) return;
-        // 顶部裁剪：在可见区域上方则只计数不绘制
-        boolean above = lineY[0] + LINE_HEIGHT <= TEXT_START_Y;
-
+    /** 递归渲染树节点（scissor 裁剪，无需手动边界检查） */
+    private void renderTreeNode(GuiGraphics g, NbtTreeNode node, int[] lineY, int mouseY) {
         int depth = node.depth;
         int x = TEXT_START_X + depth * 8;
 
-        // 前缀符号
         String prefix = node.isLeaf() ? "   " : (node.expanded ? "▼ " : "▶ ");
-
-        // 键名颜色：数字类型用金色，字符串用绿色，化合物用白色
         int keyColor = getKeyColor(node.tag);
 
-        // 构建显示文本
         String text;
         if (node.isLeaf()) {
             text = prefix + node.key + ": " + node.getValueString();
@@ -420,25 +415,43 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
             text = prefix + node.key + " {...}";
         }
 
-        int maxW = WIN_W - 16 - depth * 8;
-        if (!above) {
-            // 截断过长文本
-            while (this.font.width(text) > maxW && text.length() > 4) {
-                text = text.substring(0, text.length() - 4) + "...";
-            }
-            node.screenY = lineY[0];
-            g.drawString(this.font, text, x, lineY[0], keyColor, false);
+        int maxW = WIN_W - 20 - depth * 8;
+        // 鼠标悬浮高亮背景
+        if (mouseY >= lineY[0] && mouseY < lineY[0] + LINE_HEIGHT) {
+            g.fill(TEXT_START_X, lineY[0] - 1, WIN_X + WIN_W - 8, lineY[0] + LINE_HEIGHT - 1, 0x30FFFFFF);
         }
+        // 截断过长文本
+        while (this.font.width(text) > maxW && text.length() > 4) {
+            text = text.substring(0, text.length() - 4) + "...";
+        }
+        node.screenY = lineY[0];
+        g.drawString(this.font, text, x, lineY[0], keyColor, false);
 
         lineY[0] += LINE_HEIGHT;
-        rendered[0]++;
 
-        // 递归渲染子节点
         if (node.expanded) {
             for (NbtTreeNode child : node.children) {
-                renderTreeNode(g, child, lineY, maxLines, rendered);
+                renderTreeNode(g, child, lineY, mouseY);
             }
         }
+    }
+
+    /** 绘制滚动条（右侧 4px 宽） */
+    private void renderScrollbar(GuiGraphics g, int totalContentHeight) {
+        int visibleH = TEXT_BG_BOTTOM - TEXT_START_Y;
+        if (totalContentHeight <= visibleH) return;
+
+        int trackTop = TEXT_BG_TOP_OFFSET;
+        int trackH = TEXT_BG_HEIGHT;
+
+        // 轨道背景
+        g.fill(SCROLLBAR_X, trackTop, SCROLLBAR_X + SCROLLBAR_W, trackTop + trackH, 0x20FFFFFF);
+
+        // 滑块
+        int thumbH = Math.max(SCROLLBAR_MIN_THUMB, trackH * trackH / totalContentHeight);
+        int maxScroll = totalContentHeight - visibleH;
+        int thumbY = trackTop + (trackH - thumbH) * nbtScrollOffset / Math.max(1, maxScroll);
+        g.fill(SCROLLBAR_X, thumbY, SCROLLBAR_X + SCROLLBAR_W, thumbY + thumbH, 0x80AAAAAA);
     }
 
     /** 根据 NBT 类型返回键名颜色 */
@@ -455,28 +468,69 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0) {
+        // 左键或右键：在 NBT 窗口内
+        if (button == 0 || button == 1) {
             int relX = (int) mouseX - this.leftPos;
             int relY = (int) mouseY - this.topPos;
             if (relX >= WIN_X && relX <= WIN_X + WIN_W
                     && relY >= WIN_TOP && relY <= WIN_BOTTOM) {
                 NbtTreeNode clicked = findNodeAtY(nbtRoots, relY);
-                if (clicked != null && !clicked.isLeaf()) {
-                    // 切换展开/折叠并记录到持久集合
-                    String path = getNodePath(clicked);
-                    if (clicked.expanded) {
-                        expandedPaths.remove(path);
-                        clicked.expanded = false;
+                if (clicked != null) {
+                    if (clicked.isLeaf()) {
+                        // 叶子节点 → 复制 Lua 路径到剪贴板
+                        copyLuaPathToClipboard(clicked);
+                        return true;
                     } else {
-                        expandedPaths.add(path);
-                        clicked.expanded = true;
+                        // 非叶子节点 → 展开/折叠（仅左键）
+                        if (button == 0) {
+                            String path = getNodePath(clicked);
+                            if (clicked.expanded) {
+                                expandedPaths.remove(path);
+                                clicked.expanded = false;
+                            } else {
+                                expandedPaths.add(path);
+                                clicked.expanded = true;
+                            }
+                            playScrollSound();
+                        }
+                        return true;
                     }
-                    playScrollSound();
-                    return true;
                 }
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    /** 将叶子节点的 Lua 路径复制到剪贴板 */
+    private void copyLuaPathToClipboard(NbtTreeNode leaf) {
+        String internalPath = getNodePath(leaf);
+        if (internalPath == null) return;
+
+        String luaPath = internalToLuaPath(internalPath);
+        int channel = getMyChannel();
+        String code = "sensors.get(" + channel + ",\"" + luaPath + "\")";
+
+        Minecraft.getInstance().keyboardHandler.setClipboard(code);
+        copiedMessage = "copied: " + code;
+        copiedMessageTimer = 60; // 3 秒 @20tps
+        playScrollSound();
+    }
+
+    /** 将内部路径 "Items/[0]/Count" 转为 Lua 路径 "Items[0].Count" */
+    static String internalToLuaPath(String internal) {
+        StringBuilder sb = new StringBuilder();
+        String[] parts = internal.split("/");
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            if (i > 0) {
+                // 如果当前段是 [n] 则不加点，否则加点
+                if (!part.startsWith("[")) {
+                    sb.append(".");
+                }
+            }
+            sb.append(part);
+        }
+        return sb.toString();
     }
 
     /** 向上追溯父节点构造完整路径 */

@@ -33,58 +33,17 @@ public class AddonJEIPlugin implements IModPlugin {
 
     @Override
     public void registerGuiHandlers(IGuiHandlerRegistration registration) {
-        registration.addGhostIngredientHandler(MySensorScreen.class, new SensorGhostHandler());
+        // 幽灵物品已注释
+        // registration.addGhostIngredientHandler(MySensorScreen.class, new SensorGhostHandler());
     }
 
-    /**
-     * 幽灵物品槽拖放处理器。
-     * 将 JEI 面板中拖出的物品放入传感器 GUI 的幽灵槽位。
-     */
-    private static class SensorGhostHandler implements IGhostIngredientHandler<MySensorScreen> {
-
-        @Override
-        public <I> List<Target<I>> getTargetsTyped(MySensorScreen screen, ITypedIngredient<I> typed, boolean start) {
-            var stack = typed.getIngredient(VanillaTypes.ITEM_STACK);
-            if (stack.isEmpty()) return List.of();
-
-            ItemStack item = stack.get();
-            List<Target<I>> targets = new ArrayList<>(2);
-
-            // 槽位 0
-            if (screen.ghostSlot0Bounds != null) {
-                targets.add(new Target<>() {
-                    @Override
-                    public Rect2i getArea() {
-                        return screen.ghostSlot0Bounds;
-                    }
-
-                    @Override
-                    public void accept(I ingredient) {
-                        screen.updateGhostSlot(0, item);
-                    }
-                });
-            }
-
-            // 槽位 1
-            if (screen.ghostSlot1Bounds != null) {
-                targets.add(new Target<>() {
-                    @Override
-                    public Rect2i getArea() {
-                        return screen.ghostSlot1Bounds;
-                    }
-
-                    @Override
-                    public void accept(I ingredient) {
-                        screen.updateGhostSlot(1, item);
-                    }
-                });
-            }
-
-            return targets;
-        }
-
-        @Override
-        public void onComplete() {
-        }
-    }
+    // /** 幽灵物品槽拖放处理器。 */  // 幽灵物品已注释
+    // private static class SensorGhostHandler implements IGhostIngredientHandler<MySensorScreen> {
+    //     @Override
+    //     public <I> List<Target<I>> getTargetsTyped(MySensorScreen screen, ITypedIngredient<I> typed, boolean start) {
+    //         ...  // 已注释
+    //     }
+    //     @Override
+    //     public void onComplete() {}
+    // }
 }

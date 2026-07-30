@@ -13,7 +13,6 @@ public class MySensorBlockEntity extends BlockEntity {
 
     private CompoundTag cachedAttachedNBT = new CompoundTag();
     private int scrolledValue = 0;
-    private int selectIndex = 0;
     /** 幽灵物品槽中展示的物品 */
     private ItemStack displayItem = ItemStack.EMPTY;
     /** 第二个幽灵物品槽 */
@@ -109,13 +108,6 @@ public class MySensorBlockEntity extends BlockEntity {
         this.setChanged();
     }
 
-    public int getSelectIndex() { return selectIndex; }
-
-    public void setSelectIndex(int idx) {
-        this.selectIndex = idx;
-        this.setChanged();
-    }
-
     public ItemStack getDisplayItem() {
         return displayItem;
     }
@@ -159,7 +151,6 @@ public class MySensorBlockEntity extends BlockEntity {
         CompoundTag tag = super.getUpdateTag(registries);
         tag.put("AttachedNBT", cachedAttachedNBT);
         tag.putInt("ScrolledValue", scrolledValue);
-        tag.putInt("SelectIndex", selectIndex);
         tag.putIntArray("OccupiedChannels", occupiedChannels);
         if (!displayItem.isEmpty()) {
             tag.put("DisplayItem", displayItem.save(registries));
@@ -175,7 +166,6 @@ public class MySensorBlockEntity extends BlockEntity {
         super.loadAdditional(tag, registries);
         if (tag.contains("AttachedNBT")) cachedAttachedNBT = tag.getCompound("AttachedNBT");
         if (tag.contains("ScrolledValue")) scrolledValue = tag.getInt("ScrolledValue");
-        if (tag.contains("SelectIndex")) selectIndex = tag.getInt("SelectIndex");
         if (tag.contains("OccupiedChannels")) occupiedChannels = tag.getIntArray("OccupiedChannels");
         if (tag.contains("DisplayItem")) {
             displayItem = ItemStack.parse(registries, tag.getCompound("DisplayItem")).orElse(ItemStack.EMPTY);
@@ -190,7 +180,6 @@ public class MySensorBlockEntity extends BlockEntity {
         super.saveAdditional(tag, registries);
         tag.put("AttachedNBT", cachedAttachedNBT);
         tag.putInt("ScrolledValue", scrolledValue);
-        tag.putInt("SelectIndex", selectIndex);
         tag.putIntArray("OccupiedChannels", occupiedChannels);
         if (!displayItem.isEmpty()) {
             tag.put("DisplayItem", displayItem.save(registries));
