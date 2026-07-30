@@ -1,4 +1,4 @@
-# Sensor GUI 开发交接 — 2026-07-29
+# Sensor GUI 开发交接 — 2026-07-30 (更新)
 
 ## 项目
 NeoForge 1.21.1 mod: `ccnavigationtable` (Minecraft 1.21.1, JDK 21)
@@ -6,8 +6,27 @@ NeoForge 1.21.1 mod: `ccnavigationtable` (Minecraft 1.21.1, JDK 21)
 ## 关键文件清单
 
 ### Screen/GUI 层
-- `screen/MySensorScreen.java` — 主 GUI，包含：
-  - 九宫格 NBT 窗口（`renderNbtWindow`），纹理 `test_gui.png`
+- `screen/MySensorScreen.java` — 主 GUI：
+  - 九宫格 NBT 窗口，可折叠树形视图，scissor 裁剪
+  - 【频道注册】放置时自动分配最小未占用频道，滚轮跳过已占用频道
+  - 【复制路径】左/右键叶子 → 复制 `sensors.get(频道,"路径")` 到剪贴板
+  - 【复制路径】右键非叶子 → 复制路径
+  - 复制提示底部居中绿色，3秒消失
+- `screen/MySensorMenu.java` — extraData 含 `sensorChannel` + `occupiedChannels`
+
+### CC:Tweaked 集成（新增）
+- `compat/cc/SensorRegistry.java` — 频道注册表，auto-assign，冲突/僵尸清理
+- `compat/cc/SensorAPI.java` — `ILuaAPI`，三层 Lua API + tick 级 NBT 缓存
+- `compat/cc/CCNavSensorsSetup.java` — API 工厂注册
+
+### BlockEntity
+- `block/MySensorBlockEntity.java`:
+  - `scrolledValue`(频道号) + `occupiedChannels`(占用快照)
+  - `onLoad()`→`register()`, `setRemoved()`→`unregister()`
+  - `refreshOccupiedChannels()` — 同步快照到客户端
+
+### 网络包
+- `SensorFilterPayload` 处理器走 `SensorRegistry.register()` 验证频道变更
   - **可折叠 NBT 树形视图**（`NbtTreeNode` 内部类）：
     - 递归构建树，默认全部收起，点击 `▶ key` 展开/折叠
     - 叶子节点同行显示 `key: value`（数字=金色，字符串=绿色，数组=橙色，化合物=白色）

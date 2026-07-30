@@ -481,7 +481,7 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
                         copyLuaPathToClipboard(clicked);
                         return true;
                     } else {
-                        // 非叶子节点 → 展开/折叠（仅左键）
+                        // 非叶子节点：左键展开/折叠，右键复制路径
                         if (button == 0) {
                             String path = getNodePath(clicked);
                             if (clicked.expanded) {
@@ -492,6 +492,8 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
                                 clicked.expanded = true;
                             }
                             playScrollSound();
+                        } else {
+                            copyLuaPathToClipboard(clicked);
                         }
                         return true;
                     }

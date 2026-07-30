@@ -159,7 +159,12 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NonNull Level level, @NonNull BlockState state, @NonNull BlockEntityType<T> type) {
-        return null;
+        if (level.isClientSide) return null;
+        return (lvl, pos, st, be) -> {
+            if (be instanceof MySensorBlockEntity sensorBE) {
+                MySensorBlockEntity.serverTick(lvl, pos, st, sensorBE);
+            }
+        };
     }
 
     @Override
@@ -228,7 +233,7 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
     /**
      * 计算传感器所附着的方块坐标
      */
-    private static BlockPos getAttachedPos(BlockState state, BlockPos sensorPos) {
+    public static BlockPos getAttachedPos(BlockState state, BlockPos sensorPos) {
         Direction supportDir = switch (state.getValue(FACE)) {
             case FLOOR -> Direction.DOWN;
             case CEILING -> Direction.UP;
