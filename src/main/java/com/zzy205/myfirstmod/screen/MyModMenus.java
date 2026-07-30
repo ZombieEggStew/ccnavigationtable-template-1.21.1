@@ -15,6 +15,9 @@ public class MyModMenus {
     public static final DeferredHolder<MenuType<?>, MenuType<MySensorMenu>> SENSOR_MENU =
             MENUS.register("sensor_menu", () -> IMenuTypeExtension.create(MySensorMenu::new));
 
+    public static final DeferredHolder<MenuType<?>, MenuType<MyReceiverMenu>> RECEIVER_MENU =
+            MENUS.register("receiver_menu", () -> IMenuTypeExtension.create(MyReceiverMenu::new));
+
     public static void register(IEventBus bus) {
         MENUS.register(bus);
     }

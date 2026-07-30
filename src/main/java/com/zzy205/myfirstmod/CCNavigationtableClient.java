@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod;
 
 import com.zzy205.myfirstmod.screen.MyModMenus;
+import com.zzy205.myfirstmod.screen.MyReceiverScreen;
 import com.zzy205.myfirstmod.screen.MySensorScreen;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
@@ -31,5 +32,6 @@ public class CCNavigationtableClient {
     @SubscribeEvent
     static void registerScreens(RegisterMenuScreensEvent event) {
         event.register(MyModMenus.SENSOR_MENU.get(), MySensorScreen::new);
+        event.register(MyModMenus.RECEIVER_MENU.get(), MyReceiverScreen::new);
     }
 }

@@ -388,7 +388,7 @@ public class MySensorScreen extends AbstractContainerScreen<MySensorMenu> {
 
     private void playScrollSound() {
         Minecraft.getInstance().getSoundManager()
-                .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.5f));
+                .play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_HAT.value(), 1.25f, 0.3f));
     }
 
     @Override

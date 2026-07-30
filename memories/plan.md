@@ -65,3 +65,6 @@
 
 ### neighborChanged
 - `MySensorBlock.neighborChanged` 检测附着方块变化 → `refreshAttachedBE()`
+
+### 区块加载开关
+### 方块命名 窗口标题 问题

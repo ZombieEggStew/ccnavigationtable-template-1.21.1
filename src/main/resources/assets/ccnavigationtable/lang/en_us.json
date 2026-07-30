@@ -1,6 +1,11 @@
 {
   "item.ccnavigationtable.test_item": "Test Item",
 
+  "block.ccnavigationtable.my_receiver": "Receiver",
+
+  "gui.ccnavigationtable.receiver": "Receiver",
+  "gui.ccnavigationtable.receiver.hold_to_delete": "Hold left click 1s to delete",
+
   "gui.ccnavigationtable.sensor_nbt": "Attached Block NBT",
   "gui.ccnavigationtable.sensor_nbt.empty": "(No NBT data)",
   "gui.ccnavigationtable.sensor_select_mode": "Select Mode",

@@ -4,6 +4,10 @@
 
   "block.ccnavigationtable.test_block": "测试方块",
   "block.ccnavigationtable.my_sensor": "传感器",
+  "block.ccnavigationtable.my_receiver": "接收器",
+
+  "gui.ccnavigationtable.receiver": "接收器",
+  "gui.ccnavigationtable.receiver.hold_to_delete": "按住鼠标左键1秒删除此条",
 
   "gui.ccnavigationtable.sensor_nbt": "附着方块 NBT",
   "gui.ccnavigationtable.sensor_nbt.empty": "（无 NBT 数据）",
