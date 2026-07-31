@@ -2,12 +2,16 @@ package com.zzy205.myfirstmod.screen;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -18,10 +22,16 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
     private static final ResourceLocation GUI_TEXTURE =
             ResourceLocation.fromNamespaceAndPath("ccnavigationtable", "textures/gui/test_gui.png");
 
+    /** Create 模组提供的玩家背包贴图 */
+    private static final ResourceLocation PLAYER_INV_TEXTURE =
+            ResourceLocation.fromNamespaceAndPath("create", "textures/gui/player_inventory.png");
+    private static final int BACKPACK_W = 175;
+    private static final int BACKPACK_H = 108;
+
     // 窗口布局常量
     private static final int WIN_X = 0;
     private static final int WIN_W = 192;
-    private static final int WIN_HEIGHT = 192;
+    private static final int WIN_HEIGHT = 160;
 
     // 九宫格纹理坐标
     private static final int TEX_TOP_Y = 48;
@@ -53,6 +63,16 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
     /** banner 之间的间距 */
     private static final int BANNER_GAP = 2;
 
+    // ── 玩家物品栏 ──
+    /** 窗口与物品栏间距 */
+    private static final int INV_GAP = 5;
+    /** 物品栏标题 Y（窗口相对坐标） */
+    private static final int INV_LABEL_Y = WIN_HEIGHT + INV_GAP;
+    /** 物品栏区域高度 */
+    private static final int INV_AREA_H = 100;
+    /** 整体 GUI 高度 */
+    private static final int IMAGE_HEIGHT = WIN_HEIGHT + INV_GAP + INV_AREA_H;
+
     /** 滚动条 */
     private static final int SCROLLBAR_X = WIN_X + WIN_W - 6;
     private static final int SCROLLBAR_W = 4;
@@ -66,14 +86,44 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
     private static final Component DELETE_HINT =
             Component.translatable("gui.ccnavigationtable.receiver.hold_to_delete");
 
+    // ── 频道选择 ──
+    /** 频道数字区域 X（窗口相对坐标，banner 左侧） */
+    private static final int CHANNEL_ZONE_X = 42;
+    /** 频道数字区域宽度 */
+    private static final int CHANNEL_ZONE_W = 34;
+    /** 频道文字在 banner 内的 Y 偏移 */
+    private static final int CHANNEL_TEXT_Y_OFFSET = 10;
+    /** 频道文字 X 偏移（相对于 CHANNEL_ZONE_X） */
+    private static final int CHANNEL_TEXT_X_OFFSET = 5;
+    /** 频道号范围 */
+    private static final int CHANNEL_MIN = 0;
+    private static final int CHANNEL_MAX = 9999;
+
+    // ── 幽灵物品槽 ──
+    /** 幽灵槽 0 在 banner 内的 X（右侧第一格） */
+    private static final int GHOST_SLOT_X = BANNER_W - 91;
+    /** 幽灵槽 1 在 banner 内的 X（右侧第二格） */
+    private static final int GHOST_SLOT_2_X = GHOST_SLOT_X + 18 + 3;
+    /** 幽灵槽在 banner 内的 Y 偏移 */
+    private static final int GHOST_SLOT_Y_OFFSET = 6;
+
     // ── 状态 ──
-    /** 当前 banner 数量 */
-    private int bannerCount = 0;
+    /** 每个 banner 的频道号列表 */
+    private final List<Integer> bannerChannels = new ArrayList<>();
+    /** 每个 banner 的幽灵物品槽 0 */
+    private final List<ItemStack> ghostItem0 = new ArrayList<>();
+    /** 每个 banner 的幽灵物品槽 1 */
+    private final List<ItemStack> ghostItem1 = new ArrayList<>();
     /** 滚动偏移（像素，>=0，越大内容越往上滚） */
     private int scrollOffset = 0;
 
+    /** 当前鼠标悬停的 banner 频道区索引（-1=无） */
+    private int hoveredChannelBanner = -1;
     /** 当前鼠标悬停的 banner 删除区索引（-1=无） */
     private int hoveredDeleteBanner = -1;
+    /** 当前鼠标悬停的幽灵槽 [banner, slot]，-1=无 */
+    private int hoveredGhostBanner = -1;
+    private int hoveredGhostSlot = -1;
     /** 正在长按删除的 banner 索引（-1=无） */
     private int deleteHoldBanner = -1;
     /** 长按计时器（tick） */
@@ -84,7 +134,9 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
     public MyReceiverScreen(MyReceiverMenu menu, Inventory playerInv, Component title) {
         super(menu, playerInv, title);
         this.imageWidth = WIN_W;
-        this.imageHeight = WIN_HEIGHT;
+        this.imageHeight = IMAGE_HEIGHT;
+        this.inventoryLabelY = INV_LABEL_Y;
+        this.titleLabelY = 3;
     }
 
     // ═══════════════════════════════════════════
@@ -110,6 +162,12 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
 
         // ── 内容区透明背景 ──
         g.fill(x + 4, y + CONTENT_TOP, x + WIN_W - 4, y + CONTENT_BOTTOM, 0x18000000);
+
+        // ── 玩家物品栏（Create 背包贴图） ──
+        int backpackX = x + (WIN_W - BACKPACK_W) / 2;
+        int backpackY = y + WIN_HEIGHT + INV_GAP;
+        g.blit(PLAYER_INV_TEXTURE, backpackX, backpackY, 0, 0,
+                BACKPACK_W, BACKPACK_H, 256, 256);
     }
 
     @Override
@@ -117,7 +175,7 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
         // 标题居中
         int titleWidth = this.font.width(this.title);
         int titleX = WIN_X + (WIN_W - titleWidth) / 2;
-        g.drawString(this.font, this.title, titleX, 6, 0xFFFFFFFF, false);
+        g.drawString(this.font, this.title, titleX, 3, 0xFFFFFFFF, false);
 
         // ── Scissor 裁剪内容区 ──
         g.enableScissor(
@@ -130,20 +188,44 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
         // ── 绘制 banner 队列（滚动偏移） ──
         int deleteZoneScreenX1 = this.leftPos + BANNER_W - 32;
         int deleteZoneScreenX2 = this.leftPos + BANNER_W - 16;
+        int channelZoneScreenX1 = this.leftPos + CHANNEL_ZONE_X;
+        int channelZoneScreenX2 = this.leftPos + CHANNEL_ZONE_X + CHANNEL_ZONE_W;
         int bannerY = CONTENT_TOP - scrollOffset;
-        hoveredDeleteBanner = -1; // 每帧重置
+        hoveredChannelBanner = -1; // 每帧重置
+        hoveredDeleteBanner = -1;
+        hoveredGhostBanner = -1;
+        hoveredGhostSlot = -1;
 
-        for (int i = 0; i < bannerCount; i++) {
+        for (int i = 0; i < bannerChannels.size(); i++) {
             g.blit(GUI_TEXTURE, 0, bannerY, BANNER_U, BANNER_V, BANNER_W, BANNER_H, 256, 256);
 
-            // 检测鼠标是否在删除区（mouseX/Y 是屏幕坐标）
+            // ── 频道号 ──
+            int ch = bannerChannels.get(i);
+            g.drawString(this.font, String.valueOf(ch),
+                    CHANNEL_ZONE_X + CHANNEL_TEXT_X_OFFSET, bannerY + CHANNEL_TEXT_Y_OFFSET, 0xFCFCEB, true);
+
             int bannerScreenY = this.topPos + bannerY;
+
+            // ── 幽灵物品槽 ──
+            boolean hoverG0 = isGhostSlotHovered(mouseX, mouseY, bannerScreenY, GHOST_SLOT_X);
+            boolean hoverG1 = isGhostSlotHovered(mouseX, mouseY, bannerScreenY, GHOST_SLOT_2_X);
+            if (hoverG0) { hoveredGhostBanner = i; hoveredGhostSlot = 0; }
+            if (hoverG1) { hoveredGhostBanner = i; hoveredGhostSlot = 1; }
+            renderGhostSlot(g, i, 0, GHOST_SLOT_X, bannerY + GHOST_SLOT_Y_OFFSET, hoverG0);
+            renderGhostSlot(g, i, 1, GHOST_SLOT_2_X, bannerY + GHOST_SLOT_Y_OFFSET, hoverG1);
+
+            // 检测鼠标是否在频道区
+            if (mouseX >= channelZoneScreenX1 && mouseX <= channelZoneScreenX2
+                    && mouseY >= bannerScreenY + 4 && mouseY < bannerScreenY + BANNER_H - 5) {
+                hoveredChannelBanner = i;
+            }
+            // 检测鼠标是否在删除区
             if (mouseX >= deleteZoneScreenX1 && mouseX <= deleteZoneScreenX2
                     && mouseY >= bannerScreenY && mouseY < bannerScreenY + BANNER_H) {
                 hoveredDeleteBanner = i;
             }
 
-            // 长按进度条：从下到上填满整个 banner 的透明红色
+            // 长按进度条
             if (i == deleteHoldBanner) {
                 float progress = (float) deleteHoldTimer / DELETE_HOLD_TICKS;
                 int filledH = (int) (BANNER_H * progress);
@@ -162,18 +244,33 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
         // ── 滚动条 ──
         int totalH = getTotalContentHeight();
         renderScrollbar(g, totalH);
+
+        // ── 玩家物品栏标题 ──
+        g.drawString(this.font, this.playerInventoryTitle, this.inventoryLabelX, this.inventoryLabelY, 0xFF3C3B47, false);
     }
 
     /** 计算内容总高度（banner + 按钮）。渲染循环中每个 banner 后都加了 BANNER_H+BANNER_GAP，
      *  按钮紧接在最后一个 banner 的 BANNER_GAP 之后，因此总高 = n*(H+G) + BTN_H */
     private int getTotalContentHeight() {
-        return bannerCount * (BANNER_H + BANNER_GAP) + BTN_H;
+        return bannerChannels.size() * (BANNER_H + BANNER_GAP) + BTN_H;
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
         this.renderTooltip(g, mouseX, mouseY);
+
+        // 频道区悬停提示
+        if (hoveredChannelBanner >= 0) {
+            List<Component> lines = new ArrayList<>();
+            lines.add(Component.translatable("gui.ccnavigationtable.sensor_channel")
+                    .withStyle(Style.EMPTY.withColor(0x528FDE)));
+            lines.add(Component.translatable("gui.ccnavigationtable.scroll_to_change")
+                    .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
+            lines.add(Component.translatable("gui.ccnavigationtable.shift_scroll_faster")
+                    .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
+            g.renderComponentTooltip(this.font, lines, (int) trackedMouseX, (int) trackedMouseY);
+        }
 
         // 删除区悬停提示
         if (hoveredDeleteBanner >= 0) {
@@ -187,13 +284,35 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (scrollY == 0) return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+
+        // 1) 频道区滚轮 → 调整该 banner 的频道号
+        int chIdx = getChannelBannerAt(mouseX, mouseY);
+        if (chIdx >= 0) {
+            int dir = scrollY > 0 ? 1 : -1;
+            int step = hasShiftDown() ? 10 : 1;
+            int oldVal = bannerChannels.get(chIdx);
+            int newVal = oldVal + dir * step;
+            if (newVal < CHANNEL_MIN) newVal = CHANNEL_MIN;
+            if (newVal > CHANNEL_MAX) newVal = CHANNEL_MAX;
+            // 跳过已被占用的频道
+            newVal = skipOccupiedChannels(newVal, dir, oldVal);
+            if (newVal < CHANNEL_MIN) newVal = CHANNEL_MIN;
+            if (newVal > CHANNEL_MAX) newVal = CHANNEL_MAX;
+            if (newVal != oldVal) {
+                bannerChannels.set(chIdx, newVal);
+                playClickSound();
+            }
+            return true;
+        }
+
+        // 2) 内容区滚轮 → 滚动列表
         int scrollLeft = this.leftPos + WIN_X + 4;
         int scrollRight = this.leftPos + WIN_X + WIN_W - 4;
         int scrollTop = this.topPos + CONTENT_TOP;
         int scrollBottom = this.topPos + CONTENT_BOTTOM;
         if (mouseX >= scrollLeft && mouseX <= scrollRight
-                && mouseY >= scrollTop && mouseY <= scrollBottom
-                && scrollY != 0) {
+                && mouseY >= scrollTop && mouseY <= scrollBottom) {
             scrollOffset -= scrollY > 0 ? 10 : -10;
             clampScroll();
             return true;
@@ -244,9 +363,15 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
         if (button == 0) {
             // 添加按钮
             if (isMouseOverAddButton(mouseX, mouseY)) {
-                bannerCount++;
+                bannerChannels.add(CHANNEL_MIN);  // 默认频道 0
+                ghostItem0.add(ItemStack.EMPTY);
+                ghostItem1.add(ItemStack.EMPTY);
                 clampScroll();
                 playClickSound();
+                return true;
+            }
+            // 幽灵槽左键：持物则放入，空手则清空
+            if (handleGhostSlotClick(mouseX, mouseY, false)) {
                 return true;
             }
             // 删除区 → 开始长按计时
@@ -254,6 +379,12 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
             if (delIdx >= 0) {
                 deleteHoldBanner = delIdx;
                 deleteHoldTimer = 0;
+                return true;
+            }
+        }
+        if (button == 1) {
+            // 幽灵槽右键：清空
+            if (handleGhostSlotClick(mouseX, mouseY, true)) {
                 return true;
             }
         }
@@ -310,7 +441,7 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
     /** 计算按钮的 Y 坐标（窗口相对坐标，不含滚动偏移）。
      *  与渲染循环对齐：buttonY = CONTENT_TOP + n*(BANNER_H + BANNER_GAP) */
     private int getButtonY() {
-        return CONTENT_TOP + bannerCount * (BANNER_H + BANNER_GAP);
+        return CONTENT_TOP + bannerChannels.size() * (BANNER_H + BANNER_GAP);
     }
 
     /** 返回鼠标所在 banner 的删除区索引（考虑滚动偏移），-1=不在任何删除区 */
@@ -321,8 +452,22 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
         int deleteZoneX2 = BANNER_W - 16;
         if (relX < deleteZoneX1 || relX > deleteZoneX2) return -1;
 
+        return getBannerAtY(relY);
+    }
+
+    /** 返回鼠标所在 banner 的频道区索引，-1=不在任何频道区 */
+    private int getChannelBannerAt(double mouseX, double mouseY) {
+        int relX = (int) mouseX - this.leftPos;
+        int relY = (int) mouseY - this.topPos;
+        if (relX < CHANNEL_ZONE_X || relX > CHANNEL_ZONE_X + CHANNEL_ZONE_W) return -1;
+
+        return getBannerAtY(relY);
+    }
+
+    /** 按 Y 坐标查找 banner 索引（相对坐标，考虑滚动偏移） */
+    private int getBannerAtY(int relY) {
         int bannerY = CONTENT_TOP - scrollOffset;
-        for (int i = 0; i < bannerCount; i++) {
+        for (int i = 0; i < bannerChannels.size(); i++) {
             if (relY >= bannerY && relY < bannerY + BANNER_H) return i;
             bannerY += BANNER_H + BANNER_GAP;
         }
@@ -331,10 +476,111 @@ public class MyReceiverScreen extends AbstractContainerScreen<MyReceiverMenu> {
 
     /** 删除指定索引的 banner，重新钳位滚动 */
     private void removeBanner(int index) {
-        bannerCount--;
+        bannerChannels.remove(index);
+        ghostItem0.remove(index);
+        ghostItem1.remove(index);
         clampScroll();
         playClickSound();
     }
+
+    /** 跳过已被其他传感器占用的频道 */
+    private int skipOccupiedChannels(int value, int dir, int myChannel) {
+        int[] occupied = com.zzy205.myfirstmod.compat.cc.SensorRegistry.getOccupiedChannels()
+                .stream().mapToInt(Integer::intValue).toArray();
+        int safety = 0;
+        while (safety < 10000) {
+            boolean blocked = false;
+            for (int ch : occupied) {
+                if (ch == value && ch != myChannel) { blocked = true; break; }
+            }
+            if (!blocked) break;
+            value += dir;
+            if (value < CHANNEL_MIN || value > CHANNEL_MAX) break;
+            safety++;
+        }
+        return value;
+    }
+
+    // ── 幽灵物品槽 ──
+
+    /** 检测幽灵槽是否被鼠标悬停 */
+    private boolean isGhostSlotHovered(int mouseX, int mouseY, int bannerScreenY, int slotX) {
+        return mouseX >= this.leftPos + slotX && mouseX < this.leftPos + slotX + 16
+                && mouseY >= bannerScreenY + GHOST_SLOT_Y_OFFSET
+                && mouseY < bannerScreenY + GHOST_SLOT_Y_OFFSET + 16;
+    }
+
+    /** 渲染单个幽灵槽（默认全透明，hover 时半透明背景） */
+    private void renderGhostSlot(GuiGraphics g, int bannerIdx, int slot, int x, int y, boolean hovered) {
+        ItemStack stack = slot == 0 ? ghostItem0.get(bannerIdx) : ghostItem1.get(bannerIdx);
+        // hover 背景
+        if (hovered) {
+            g.fill(x, y, x + 16, y + 16, 0x40AAAAAA);
+        }
+        if (!stack.isEmpty()) {
+            g.renderItem(stack, x, y);
+            g.renderItemDecorations(this.font, stack, x, y);
+        }
+    }
+
+    /** 处理幽灵槽点击：左键空手/右键 → 清空；左键持物 → 放入副本 */
+    private boolean handleGhostSlotClick(double mouseX, double mouseY, boolean rightClick) {
+        int[] info = getGhostSlotAt(mouseX, mouseY);
+        if (info == null) return false;
+        int bannerIdx = info[0];
+        int slot = info[1];
+
+        ItemStack carried = this.minecraft.player.containerMenu.getCarried();
+        if (rightClick || carried.isEmpty()) {
+            setGhostItem(bannerIdx, slot, ItemStack.EMPTY);
+        } else {
+            ItemStack copy = carried.copy();
+            copy.setCount(1);
+            setGhostItem(bannerIdx, slot, copy);
+        }
+        playClickSound();
+        return true;
+    }
+
+    /** 返回鼠标所在的幽灵槽 [bannerIdx, slot]，null=不在任何幽灵槽 */
+    private int[] getGhostSlotAt(double mouseX, double mouseY) {
+        int relX = (int) mouseX - this.leftPos;
+        int relY = (int) mouseY - this.topPos;
+
+        int bannerY = CONTENT_TOP - scrollOffset;
+        for (int i = 0; i < bannerChannels.size(); i++) {
+            int slotY = bannerY + GHOST_SLOT_Y_OFFSET;
+            if (relY >= slotY && relY < slotY + 16) {
+                if (relX >= GHOST_SLOT_X && relX < GHOST_SLOT_X + 16) return new int[]{i, 0};
+                if (relX >= GHOST_SLOT_2_X && relX < GHOST_SLOT_2_X + 16) return new int[]{i, 1};
+            }
+            bannerY += BANNER_H + BANNER_GAP;
+        }
+        return null;
+    }
+
+    /** 供 JEI 拖放调用：设置幽灵槽物品 */
+    public void updateGhostSlot(int bannerIdx, int slot, ItemStack stack) {
+        setGhostItem(bannerIdx, slot, stack);
+    }
+
+    /** 供 JEI 获取幽灵槽区域 */
+    public Rect2i getGhostSlotBounds(int bannerIdx, int slot) {
+        int bannerY = CONTENT_TOP - scrollOffset + bannerIdx * (BANNER_H + BANNER_GAP);
+        int sx = this.leftPos + (slot == 0 ? GHOST_SLOT_X : GHOST_SLOT_2_X);
+        int sy = this.topPos + bannerY + GHOST_SLOT_Y_OFFSET;
+        return new Rect2i(sx, sy, 16, 16);
+    }
+
+    /** 供 JEI 获取当前 banner 数 */
+    public int getBannerCount() { return bannerChannels.size(); }
+
+    private void setGhostItem(int bannerIdx, int slot, ItemStack stack) {
+        if (slot == 0) ghostItem0.set(bannerIdx, stack);
+        else ghostItem1.set(bannerIdx, stack);
+    }
+
+    // ── 音效 ──
 
     private void playClickSound() {
         if (this.minecraft != null) {

@@ -1,11 +1,9 @@
 package com.zzy205.myfirstmod.compat.jei;
 
 import com.zzy205.myfirstmod.CCNavigationtable;
-import com.zzy205.myfirstmod.screen.MySensorMenu;
-import com.zzy205.myfirstmod.screen.MySensorScreen;
+import com.zzy205.myfirstmod.screen.MyReceiverScreen;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
-import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.handlers.IGhostIngredientHandler;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
@@ -17,8 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * JEI 集成插件：支持从 JEI 面板拖动物品到传感器 GUI 的幽灵物品槽。
- * 仅在 JEI 存在时由 JEI 加载。
+ * JEI 集成插件：支持从 JEI 面板拖动物品到传感器 / 接收器 GUI 的幽灵物品槽。
  */
 @JeiPlugin
 public class AddonJEIPlugin implements IModPlugin {
@@ -33,17 +30,35 @@ public class AddonJEIPlugin implements IModPlugin {
 
     @Override
     public void registerGuiHandlers(IGuiHandlerRegistration registration) {
-        // 幽灵物品已注释
-        // registration.addGhostIngredientHandler(MySensorScreen.class, new SensorGhostHandler());
+        registration.addGhostIngredientHandler(MyReceiverScreen.class, new ReceiverGhostHandler());
     }
 
-    // /** 幽灵物品槽拖放处理器。 */  // 幽灵物品已注释
-    // private static class SensorGhostHandler implements IGhostIngredientHandler<MySensorScreen> {
-    //     @Override
-    //     public <I> List<Target<I>> getTargetsTyped(MySensorScreen screen, ITypedIngredient<I> typed, boolean start) {
-    //         ...  // 已注释
-    //     }
-    //     @Override
-    //     public void onComplete() {}
-    // }
+    /** 接收器 banner 幽灵物品槽拖放处理器 */
+    private static class ReceiverGhostHandler implements IGhostIngredientHandler<MyReceiverScreen> {
+        @Override
+        public <I> List<Target<I>> getTargetsTyped(MyReceiverScreen screen, ITypedIngredient<I> typed, boolean start) {
+            List<Target<I>> targets = new ArrayList<>();
+            for (int i = 0; i < screen.getBannerCount(); i++) {
+                for (int s = 0; s < 2; s++) {
+                    final int bannerIdx = i;
+                    final int slotIdx = s;
+                    Rect2i area = screen.getGhostSlotBounds(bannerIdx, slotIdx);
+                    targets.add(new Target<I>() {
+                        @Override
+                        public Rect2i getArea() { return area; }
+                        @Override
+                        public void accept(I ingredient) {
+                            if (ingredient instanceof ItemStack stack) {
+                                screen.updateGhostSlot(bannerIdx, slotIdx, stack);
+                            }
+                        }
+                    });
+                }
+            }
+            return targets;
+        }
+
+        @Override
+        public void onComplete() {}
+    }
 }
