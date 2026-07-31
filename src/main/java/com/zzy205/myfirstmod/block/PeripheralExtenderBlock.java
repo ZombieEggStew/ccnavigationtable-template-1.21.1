@@ -2,6 +2,9 @@ package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
+import com.zzy205.myfirstmod.compat.cc.SensorRegistry;
+import com.zzy205.myfirstmod.compat.sable.SableCompat;
+import com.zzy205.myfirstmod.screen.PeripheralExtenderMenu;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
@@ -239,7 +242,7 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
             final boolean onPhysicsBody;
             if (be instanceof PeripheralExtenderBlockEntity sensorBE) {
                 sensorChannel = sensorBE.getScrolledValue();
-                var regChannels = com.zzy205.myfirstmod.compat.cc.SensorRegistry.getOccupiedChannels();
+                var regChannels = SensorRegistry.getOccupiedChannels();
                 occupiedChannels = regChannels.stream().mapToInt(Integer::intValue).toArray();
                 loadMode = sensorBE.getLoadMode();
                 onPhysicsBody = sensorBE.isOnPhysicsBody();
@@ -254,7 +257,7 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
             serverPlayer.openMenu(
                     new SimpleMenuProvider(
                             (containerId, inv, p) ->
-                                    new com.zzy205.myfirstmod.screen.PeripheralExtenderMenu(containerId, pos, attachedNBT, inv),
+                                    new PeripheralExtenderMenu(containerId, pos, attachedNBT, inv),
                             SENSOR_GUI_TITLE
                     ),
                     buf -> {
@@ -318,10 +321,10 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
     @SuppressWarnings("CallToPrintStackTrace")
     static void tryAddRealWorldPos(Level level, BlockEntity be, CompoundTag nbt) {
         try {
-            var subLevel = com.zzy205.myfirstmod.compat.sable.SableCompat.getContainingSubLevel(be);
+            var subLevel = SableCompat.getContainingSubLevel(be);
 
             if (subLevel != null) {
-                Vec3 realPos = com.zzy205.myfirstmod.compat.sable.SableCompat.projectOutOfSubLevel(
+                Vec3 realPos = SableCompat.projectOutOfSubLevel(
                         level, be.getBlockPos());
 
                 if (realPos != null) {

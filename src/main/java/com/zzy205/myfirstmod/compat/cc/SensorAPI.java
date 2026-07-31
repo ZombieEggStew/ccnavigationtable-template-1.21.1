@@ -8,6 +8,10 @@ import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.peripheral.PeripheralCapability;
 import dev.ryanhcode.sable.sublevel.SubLevel;
+import dev.simulated_team.simulated.content.blocks.nav_table.NavTableBlock;
+import dev.simulated_team.simulated.content.blocks.nav_table.NavTableBlockEntity;
+import dev.simulated_team.simulated.util.SimMathUtils;
+import net.createmod.catnip.math.AngleHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.*;
@@ -16,6 +20,8 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.AttachFace;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaterniond;
+import org.joml.Quaternionf;
 import org.jspecify.annotations.Nullable;
 
 import java.util.*;
@@ -118,25 +124,190 @@ public class SensorAPI implements ILuaAPI {
 
     /**
      * 获取导航桌（simulated:navigation_table）的当前导航目标坐标。
-     * 从 NBT {@code CurrentTarget} 字段读取，返回 {@code {x, y, z}}。
+     * 直接调用 {@link NavTableBlockEntity} 公开 API，不经过 NBT 序列化。
      *
      * @param channel 频道号
      * @return {@code {x=100.5, y=64.0, z=200.0}}，不存在时返回空 table
      */
     @LuaFunction(mainThread = true)
     public final Map<String, Double> getNavTargetPos(int channel) {
-        CompoundTag nbt = getOrLoadNBT(channel);
-        if (nbt == null) return Collections.emptyMap();
+        NavTableBlockEntity navTable = getNavTableBE(channel);
+        if (navTable == null) return Collections.emptyMap();
 
-        Tag target = resolvePathDirect(nbt, "CurrentTarget");
-        if (target instanceof ListTag list && list.size() >= 3) {
-            Map<String, Double> pos = new LinkedHashMap<>();
-            pos.put("x", getDoubleSafe(list.get(0)));
-            pos.put("y", getDoubleSafe(list.get(1)));
-            pos.put("z", getDoubleSafe(list.get(2)));
-            return pos;
-        }
-        return Collections.emptyMap();
+        // 从 NavTableBlockEntity 直接读取投影后的目标位置（含 Sable 子次元坐标修正）
+        Vec3 target = navTable.getTargetPosition(true);
+        if (target == null) return Collections.emptyMap();
+
+        Map<String, Double> pos = new LinkedHashMap<>();
+        pos.put("x", target.x);
+        pos.put("y", target.y);
+        pos.put("z", target.z);
+        return pos;
+    }
+
+    /**
+     * 获取导航桌（simulated:navigation_table）当前指针的相对角度。
+     * 直接调用 {@link NavTableBlockEntity} 公开 API 实时计算，
+     * 与 {@code NavTableBlockEntity.updateCurrentAngle()} 使用相同公式。
+     * <p>
+     * 角度是导航桌指针相对于方块朝向的偏转角度（0-360°），
+     * 融合了子次元姿态和方块朝向的修正。
+     *
+     * @param channel 频道号
+     * @return 角度（度），不存在或非导航桌时返回 nil
+     */
+    @LuaFunction(mainThread = true)
+    public final @Nullable Double getNavRelativeAngle(int channel) {
+        NavTableBlockEntity navTable = getNavTableBE(channel);
+        if (navTable == null) return null;
+
+        Vec3 targetPos = navTable.getTargetPosition(true);
+        if (targetPos == null) return null;
+
+        // 以下计算逻辑与 NavTableBlockEntity.updateCurrentAngle() 一致
+        Vec3 originPos = navTable.getProjectedSelfPos();
+        Vec3 directionToTarget = targetPos.subtract(originPos).normalize();
+
+        Quaterniond sublevelRot = navTable.getSublevelRot();
+        Quaternionf rotation = navTable.getBlockState().getValue(NavTableBlock.FACING).getRotation();
+
+        directionToTarget = SimMathUtils.rotateQuat(directionToTarget, sublevelRot);
+        directionToTarget = SimMathUtils.rotateQuat(directionToTarget, rotation);
+        directionToTarget = new Vec3(directionToTarget.x, 0, directionToTarget.z);
+
+        return (360.0 + AngleHelper.deg(Math.atan2(directionToTarget.z, directionToTarget.x))) % 360.0;
+    }
+
+    // ═══════════════ 导航桌制导数据 ═══════════════
+
+    /**
+     * 获取导航桌自身在世界空间中的投影坐标（发射点参考）。
+     *
+     * @param channel 频道号
+     * @return {@code {x, y, z}}，非导航桌时返回空 table
+     */
+    @LuaFunction(mainThread = true)
+    public final Map<String, Double> getNavSelfPos(int channel) {
+        NavTableBlockEntity navTable = getNavTableBE(channel);
+        if (navTable == null) return Collections.emptyMap();
+
+        Vec3 self = navTable.getProjectedSelfPos();
+        Map<String, Double> pos = new LinkedHashMap<>();
+        pos.put("x", self.x);
+        pos.put("y", self.y);
+        pos.put("z", self.z);
+        return pos;
+    }
+
+    /**
+     * 获取导航桌到目标的直线距离（米）。
+     *
+     * @param channel 频道号
+     * @return 距离（米），不存在或非导航桌时返回 nil
+     */
+    @LuaFunction(mainThread = true)
+    public final @Nullable Double getNavDistance(int channel) {
+        NavTableBlockEntity navTable = getNavTableBE(channel);
+        if (navTable == null) return null;
+
+        Vec3 target = navTable.getTargetPosition(true);
+        if (target == null) return null;
+
+        return navTable.getProjectedSelfPos().distanceTo(target);
+    }
+
+    /**
+     * 获取导航桌到目标的水平距离（XZ 平面，忽略 Y 轴，米）。
+     *
+     * @param channel 频道号
+     * @return 水平距离（米），不存在或非导航桌时返回 nil
+     */
+    @LuaFunction(mainThread = true)
+    public final @Nullable Double getNavHorizontalDistance(int channel) {
+        NavTableBlockEntity navTable = getNavTableBE(channel);
+        if (navTable == null) return null;
+
+        Vec3 target = navTable.getTargetPosition(true);
+        if (target == null) return null;
+
+        Vec3 self = navTable.getProjectedSelfPos();
+        double dx = target.x - self.x;
+        double dz = target.z - self.z;
+        return Math.sqrt(dx * dx + dz * dz);
+    }
+
+    /**
+     * 获取导航桌指向目标的世界坐标系归一化方向向量。
+     * <p>
+     * 未经过子次元旋转和方块朝向修正，直接是全局坐标系下的方向。
+     * 适合用于导弹的全局制导向量。
+     *
+     * @param channel 频道号
+     * @return {@code {dx, dy, dz}}，不存在或非导航桌时返回空 table
+     */
+    @LuaFunction(mainThread = true)
+    public final Map<String, Double> getNavDirection(int channel) {
+        NavTableBlockEntity navTable = getNavTableBE(channel);
+        if (navTable == null) return Collections.emptyMap();
+
+        Vec3 target = navTable.getTargetPosition(true);
+        if (target == null) return Collections.emptyMap();
+
+        Vec3 dir = target.subtract(navTable.getProjectedSelfPos()).normalize();
+        Map<String, Double> result = new LinkedHashMap<>();
+        result.put("dx", dir.x);
+        result.put("dy", dir.y);
+        result.put("dz", dir.z);
+        return result;
+    }
+
+    /**
+     * 获取导航桌到目标的水平方位角（世界坐标系，度）。
+     * <p>
+     * 从导航桌正上方俯视：0° = +Z（南），90° = -X（西），180° = -Z（北），270° = +X（东）。
+     * 适合导弹水平转向制导。
+     *
+     * @param channel 频道号
+     * @return 方位角（0-360°），不存在或非导航桌时返回 nil
+     */
+    @LuaFunction(mainThread = true)
+    public final @Nullable Double getNavBearing(int channel) {
+        NavTableBlockEntity navTable = getNavTableBE(channel);
+        if (navTable == null) return null;
+
+        Vec3 target = navTable.getTargetPosition(true);
+        if (target == null) return null;
+
+        Vec3 self = navTable.getProjectedSelfPos();
+        double dx = target.x - self.x;
+        double dz = target.z - self.z;
+        // atan2(dx, dz): 0° = +Z, CW
+        return (360.0 + Math.toDegrees(Math.atan2(dx, dz))) % 360.0;
+    }
+
+    /**
+     * 获取导航桌到目标的仰角（度）。
+     * <p>
+     * 水平面以上为正（+90° = 正上方），水平面以下为负（-90° = 正下方）。
+     * 适合导弹俯仰制导。
+     *
+     * @param channel 频道号
+     * @return 仰角（-90°~+90°），不存在或非导航桌时返回 nil
+     */
+    @LuaFunction(mainThread = true)
+    public final @Nullable Double getNavElevation(int channel) {
+        NavTableBlockEntity navTable = getNavTableBE(channel);
+        if (navTable == null) return null;
+
+        Vec3 target = navTable.getTargetPosition(true);
+        if (target == null) return null;
+
+        Vec3 self = navTable.getProjectedSelfPos();
+        double dx = target.x - self.x;
+        double dy = target.y - self.y;
+        double dz = target.z - self.z;
+        double horizontalDist = Math.sqrt(dx * dx + dz * dz);
+        return Math.toDegrees(Math.atan2(dy, horizontalDist));
     }
 
     /**
@@ -527,6 +698,16 @@ public class SensorAPI implements ILuaAPI {
     }
 
     // ═══════════════ 辅助方法 ═══════════════
+
+    /**
+     * 获取传感器附着的导航桌 BlockEntity（仅在附着方块为 navigation_table 时返回）。
+     */
+    private @Nullable NavTableBlockEntity getNavTableBE(int channel) {
+        var ctx = getSensorContext(channel);
+        if (ctx == null || ctx.attachedBE == null) return null;
+        if (ctx.attachedBE instanceof NavTableBlockEntity navTable) return navTable;
+        return null;
+    }
 
     /**
      * 检查指定频道传感器附着的方块是否为给定的注册 ID。

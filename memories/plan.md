@@ -25,7 +25,14 @@
 |-------|----------|------|
 | 1 | `sensors.getBlockPos(ch)` | `{x, y, z}`，含 Sable 坐标修正 |
 | 1 | `sensors.getBlockId(ch)` | 方块注册 ID 字符串 |
-| 1 | `sensors.getNavTargetPos(ch)` | `CurrentTarget` → `{x, y, z}`（导航桌专用） |
+| 1 | `sensors.getNavTargetPos(ch)` | 目标世界坐标 `{x, y, z}`（导航桌专用，直接 API） |
+| 1 | `sensors.getNavRelativeAngle(ch)` | 指针偏角 0-360°（导航桌专用，直接 API） |
+| 1 | `sensors.getNavSelfPos(ch)` | 导航桌自身投影坐标 `{x, y, z}`（发射点参考） |
+| 1 | `sensors.getNavDistance(ch)` | 直线距离（米） |
+| 1 | `sensors.getNavHorizontalDistance(ch)` | 水平距离 XZ（米） |
+| 1 | `sensors.getNavDirection(ch)` | 世界系归一化方向 `{dx, dy, dz}` |
+| 1 | `sensors.getNavBearing(ch)` | 水平方位角 0-360°（世界系，atan2(dx,dz)） |
+| 1 | `sensors.getNavElevation(ch)` | 仰角 -90°~+90°（水平面上为正） |
 | 2 | `sensors.get(ch, path)` | 路径查询，语法: `"id"` / `"a.b.c"` / `"Items[0].Count"` |
 | 3 | `sensors.getAll(ch)` | 全量 NBT → Lua Table |
 

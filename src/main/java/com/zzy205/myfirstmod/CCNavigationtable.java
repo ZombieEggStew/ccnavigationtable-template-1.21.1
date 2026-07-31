@@ -2,6 +2,12 @@ package com.zzy205.myfirstmod;
 
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
+import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
+import com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity;
+import com.zzy205.myfirstmod.compat.cc.CCNavSensorsSetup;
+import com.zzy205.myfirstmod.compat.cc.ReceiverPeripheral;
+import com.zzy205.myfirstmod.compat.cc.ReceiverRegistry;
+import com.zzy205.myfirstmod.compat.cc.SensorRegistry;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.network.ReceiverSyncPayload;
@@ -59,7 +65,7 @@ public class CCNavigationtable {
                         // 客户端：收到 NBT 后直接更新客户端 BE
                         var level = ctx.player().level();
                         var be = level.getBlockEntity(payload.sensorPos());
-                        if (be instanceof com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity sensorBE) {
+                        if (be instanceof PeripheralExtenderBlockEntity sensorBE) {
                             sensorBE.setCachedAttachedNBT(payload.nbt());
                         }
                     }
@@ -72,10 +78,10 @@ public class CCNavigationtable {
                     (payload, ctx) -> {
                         var level = ctx.player().level();
                         var be = level.getBlockEntity(payload.sensorPos());
-                        if (be instanceof com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity sensorBE) {
+                        if (be instanceof PeripheralExtenderBlockEntity sensorBE) {
                             int newChannel = payload.scrolledValue();
                             if (newChannel != sensorBE.getScrolledValue()) {
-                                int assigned = com.zzy205.myfirstmod.compat.cc.SensorRegistry
+                                int assigned = SensorRegistry
                                         .register(newChannel, sensorBE);
                                 sensorBE.setScrolledValue(assigned);
                             }
@@ -92,10 +98,10 @@ public class CCNavigationtable {
                     (payload, ctx) -> {
                         var level = ctx.player().level();
                         var be = level.getBlockEntity(payload.pos());
-                        if (be instanceof com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity receiverBE) {
+                        if (be instanceof RedstoneTransceiverBlockEntity receiverBE) {
                             receiverBE.setBannerData(payload.data());
                             receiverBE.setLoadMode(payload.loadMode());
-                            com.zzy205.myfirstmod.compat.cc.ReceiverRegistry.updateChannels(receiverBE, payload.data());
+                            ReceiverRegistry.updateChannels(receiverBE, payload.data());
                         }
                     }
             );
@@ -106,9 +112,9 @@ public class CCNavigationtable {
             if (ModList.get().isLoaded("computercraft")) {
                 event.registerBlockEntity(
                         PeripheralCapability.get(),
-                        com.zzy205.myfirstmod.block.MyModBlockEntities.redstone_transceiver_entity.get(),
-                        (be, side) -> new com.zzy205.myfirstmod.compat.cc.ReceiverPeripheral(
-                                (com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity) be)
+                        MyModBlockEntities.redstone_transceiver_entity.get(),
+                        (be, side) -> new ReceiverPeripheral(
+                                (RedstoneTransceiverBlockEntity) be)
                 );
             }
         });
@@ -139,7 +145,7 @@ public class CCNavigationtable {
 
         // 注册 CC:Tweaked 传感器 Lua API
         if (ModList.get().isLoaded("computercraft")) {
-            com.zzy205.myfirstmod.compat.cc.CCNavSensorsSetup.register();
+            CCNavSensorsSetup.register();
             LOGGER.info("CC:Tweaked sensor API registered");
         }
     }

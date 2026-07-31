@@ -1,6 +1,8 @@
 package com.zzy205.myfirstmod.block;
 
 import com.zzy205.myfirstmod.compat.cc.ReceiverRegistry;
+import com.zzy205.myfirstmod.compat.create.CreateRedstoneCompat;
+import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -30,7 +32,7 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity {
 
     /** 获取当前所有 receiver 占用的频道号数组 */
     public int[] getOccupiedChannels() {
-        return com.zzy205.myfirstmod.compat.cc.ReceiverRegistry.getOccupiedChannels()
+        return ReceiverRegistry.getOccupiedChannels()
                 .stream().mapToInt(Integer::intValue).toArray();
     }
 
@@ -47,7 +49,7 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity {
         if (level != null && !level.isClientSide) {
             ReceiverRegistry.unregisterBE(this);
             // 清理此 Receiver 创建的所有虚拟 Create 红石发送端
-            com.zzy205.myfirstmod.compat.create.CreateRedstoneCompat.cleanupFor(worldPosition);
+            CreateRedstoneCompat.cleanupFor(worldPosition);
         }
         super.setRemoved();
     }
@@ -93,6 +95,6 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity {
     /** 检查 receiver 是否在 Sable 物理体上 */
     public boolean isOnPhysicsBody() {
         if (level == null || level.isClientSide) return false;
-        return com.zzy205.myfirstmod.compat.sable.SableCompat.getContainingSubLevel(this) != null;
+        return SableCompat.getContainingSubLevel(this) != null;
     }
 }

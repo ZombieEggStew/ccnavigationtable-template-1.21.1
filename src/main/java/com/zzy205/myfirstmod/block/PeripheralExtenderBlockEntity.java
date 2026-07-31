@@ -474,10 +474,10 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     /** 检测传感器是否在 Sable 物理体上 */
     public boolean isOnPhysicsBody() {
         if (level == null || level.isClientSide) return false;
-        if (com.zzy205.myfirstmod.compat.sable.SableCompat.getContainingSubLevel(this) != null)
+        if (SableCompat.getContainingSubLevel(this) != null)
             return true;
         BlockPos attached = PeripheralExtenderBlock.getAttachedPos(this.getBlockState(), this.worldPosition);
-        return com.zzy205.myfirstmod.compat.sable.SableCompat.getContainingSubLevel(level, attached) != null;
+        return SableCompat.getContainingSubLevel(level, attached) != null;
     }
 
     // 兼容旧方法（菜单 extra data 使用）

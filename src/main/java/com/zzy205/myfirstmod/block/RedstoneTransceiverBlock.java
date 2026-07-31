@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
+import com.zzy205.myfirstmod.screen.RedstoneTransceiverMenu;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -89,7 +90,7 @@ implements IWrenchable {
             serverPlayer.openMenu(
                     new SimpleMenuProvider(
                             (containerId, inv, p) ->
-                                    new com.zzy205.myfirstmod.screen.RedstoneTransceiverMenu(
+                                    new RedstoneTransceiverMenu(
                                             containerId, pos, bannerData, occupiedChannels, loadMode, onPhysicsBody, inv),
                             RECEIVER_GUI_TITLE
                     ),
