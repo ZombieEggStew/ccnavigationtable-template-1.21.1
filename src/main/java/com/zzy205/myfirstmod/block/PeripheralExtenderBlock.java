@@ -189,14 +189,22 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
         return new PeripheralExtenderBlockEntity(pos, state);
     }
 
+    /**
+     * serverTick 的方法引用，每个方块类型只分配一次，避免每个方块实例创建新 lambda。
+     */
+    private static final BlockEntityTicker<PeripheralExtenderBlockEntity> SERVER_TICKER =
+            PeripheralExtenderBlockEntity::serverTick;
+
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NonNull Level level, @NonNull BlockState state, @NonNull BlockEntityType<T> type) {
         if (level.isClientSide) return null;
-        return (lvl, pos, st, be) -> {
-            if (be instanceof PeripheralExtenderBlockEntity sensorBE) {
-                PeripheralExtenderBlockEntity.serverTick(lvl, pos, st, sensorBE);
-            }
-        };
+        // 通过类型检查后安全转型，避免每 tick 执行 instanceof
+        if (type == MyModBlockEntities.micro_peripheral_extender_entity.get()) {
+            @SuppressWarnings("unchecked")
+            BlockEntityTicker<T> ticker = (BlockEntityTicker<T>) (BlockEntityTicker<?>) SERVER_TICKER;
+            return ticker;
+        }
+        return null;
     }
 
     @Override
