@@ -41,3 +41,6 @@ repo/
 
 reference/
 sources/
+
+### Local Maven dependencies (manually downloaded jars) ###
+libs/
