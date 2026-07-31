@@ -9,7 +9,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 鏈嶅姟绔啋瀹㈡埛绔細鎺ㄩ€佷紶鎰熷櫒闄勭潃鏂瑰潡鐨勬渶锟?NBT 鏁版嵁锟?
+ * 服务端→客户端：推送传感器附着方块的最新 NBT 数据
  */
 public record SensorNbtPayload(BlockPos sensorPos, CompoundTag nbt) implements CustomPacketPayload {
 

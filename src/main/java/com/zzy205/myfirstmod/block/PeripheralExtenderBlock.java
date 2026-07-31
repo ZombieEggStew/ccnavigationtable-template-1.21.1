@@ -4,7 +4,6 @@ import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.Position;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -38,7 +37,6 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-import org.checkerframework.checker.nullness.qual.NonNull;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.EnumMap;
@@ -113,22 +111,17 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
     }
 
     @Override
-    public @NonNull BlockState rotate(BlockState state, Rotation rotation) {
+    public @NotNull BlockState rotate(BlockState state, Rotation rotation) {
         return state.setValue(FACING, rotation.rotate(state.getValue(FACING)));
     }
 
-//    @Override
-//    public @NonNull BlockState mirror(BlockState state, Mirror mirror) {
-//        return state.rotate(mirror.getRotation(state.getValue(FACING)));
-//    }
-
     @Override
-    public @NonNull RenderShape getRenderShape(@NonNull BlockState state) {
+    public @NotNull RenderShape getRenderShape(@NotNull BlockState state) {
         return RenderShape.MODEL;
     }
 
     @Override
-    public boolean canSurvive(@NonNull BlockState state, @NonNull LevelReader level, @NonNull BlockPos pos) {
+    public boolean canSurvive(@NotNull BlockState state, @NotNull LevelReader level, @NotNull BlockPos pos) {
         Direction supportDirection = switch (state.getValue(FACE)) {
             case FLOOR -> Direction.DOWN;
             case CEILING -> Direction.UP;
@@ -139,7 +132,7 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
     }
 
     @Override
-    public void neighborChanged(@NonNull BlockState state, @NonNull Level level, @NonNull BlockPos pos, @NonNull Block block, @NonNull BlockPos fromPos, boolean isMoving) {
+    public void neighborChanged(@NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos, @NotNull Block block, @NotNull BlockPos fromPos, boolean isMoving) {
         if (!state.canSurvive(level, pos)) {
             level.destroyBlock(pos, true);
         }
@@ -148,14 +141,14 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
     // ── 红石输出 ──
 
     @Override
-    protected int getSignal(@NonNull BlockState state, @NonNull BlockGetter level, @NonNull BlockPos pos, @NonNull Direction side) {
+    protected int getSignal(@NotNull BlockState state, @NotNull BlockGetter level, @NotNull BlockPos pos, @NotNull Direction side) {
         if (level.getBlockEntity(pos) instanceof PeripheralExtenderBlockEntity be)
             return be.getRedstoneOutput();
         return 0;
     }
 
     @Override
-    protected boolean isSignalSource(@NonNull BlockState state) {
+    protected boolean isSignalSource(@NotNull BlockState state) {
         return state.getValue(POWERED);
     }
 
@@ -176,18 +169,18 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
     }
 
     @Override
-    protected @NonNull VoxelShape getShape(@NonNull BlockState state, @NonNull BlockGetter worldIn, @NonNull BlockPos pos, @NonNull CollisionContext context) {
+    protected @NotNull VoxelShape getShape(@NotNull BlockState state, @NotNull BlockGetter worldIn, @NotNull BlockPos pos, @NotNull CollisionContext context) {
         AttachFace face = state.getValue(FACE);
         return SHAPES.get(face).get(state.getValue(FACING));
     }
 
     @Override
-    protected @NonNull MapCodec<? extends BaseEntityBlock> codec() {
+    protected @NotNull MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
     }
 
     @Override
-    public BlockEntity newBlockEntity(@NonNull BlockPos pos, @NonNull BlockState state) {
+    public BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
         return new PeripheralExtenderBlockEntity(pos, state);
     }
 
@@ -198,7 +191,7 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
             PeripheralExtenderBlockEntity::serverTick;
 
     @Override
-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NonNull Level level, @NonNull BlockState state, @NonNull BlockEntityType<T> type) {
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state, @NotNull BlockEntityType<T> type) {
         if (level.isClientSide) return null;
         // 通过类型检查后安全转型，避免每 tick 执行 instanceof
         if (type == MyModBlockEntities.micro_peripheral_extender_entity.get()) {
@@ -321,33 +314,22 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
     /**
      * 如果方块实体在 Sable 物理子次元中（航空学 mod 的物理组装），
      * 将 NBT 中的 x/y/z 坐标直接替换为真实世界坐标。
-     * <p>
-     * 使用反射避免 Sable 未加载时引发 {@link NoClassDefFoundError}。
      */
     @SuppressWarnings("CallToPrintStackTrace")
     static void tryAddRealWorldPos(Level level, BlockEntity be, CompoundTag nbt) {
         try {
-            Object helper = Class.forName("dev.ryanhcode.sable.Sable")
-                    .getField("HELPER").get(null);
-
-            // Sable.HELPER.getContaining(BlockEntity) -> SubLevel | null
-            Object subLevel = helper.getClass()
-                    .getMethod("getContaining", BlockEntity.class)
-                    .invoke(helper, be);
+            var subLevel = com.zzy205.myfirstmod.compat.sable.SableCompat.getContainingSubLevel(be);
 
             if (subLevel != null) {
-                // Sable.HELPER.projectOutOfSubLevel(Level, Position) -> Vec3
-                Vec3 realPos = (Vec3) helper.getClass()
-                        .getMethod("projectOutOfSubLevel", Level.class, Position.class)
-                        .invoke(helper, level, be.getBlockPos().getCenter());
+                Vec3 realPos = com.zzy205.myfirstmod.compat.sable.SableCompat.projectOutOfSubLevel(
+                        level, be.getBlockPos());
 
-                // 直接替换 NBT 中的 x/y/z 为真实世界坐标
-                nbt.putDouble("x", realPos.x);
-                nbt.putDouble("y", realPos.y);
-                nbt.putDouble("z", realPos.z);
+                if (realPos != null) {
+                    nbt.putDouble("x", realPos.x);
+                    nbt.putDouble("y", realPos.y);
+                    nbt.putDouble("z", realPos.z);
+                }
             }
-        } catch (NoClassDefFoundError | ClassNotFoundException e) {
-            // Sable 未加载，无需修正坐标
         } catch (Exception e) {
             e.printStackTrace();
         }

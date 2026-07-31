@@ -15,7 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * JEI 闆嗘垚鎻掍欢锛氭敮鎸佷粠 JEI 闈㈡澘鎷栧姩鐗╁搧鍒颁紶鎰熷櫒 / 鎺ユ敹锟?GUI 鐨勫菇鐏电墿鍝佹Ы锟?
+ * JEI 集成插件：支持从 JEI 面板拖动物品到传感器 / 接收器 GUI 的幽灵物品槽
  */
 @JeiPlugin
 public class AddonJEIPlugin implements IModPlugin {
@@ -33,7 +33,7 @@ public class AddonJEIPlugin implements IModPlugin {
         registration.addGhostIngredientHandler(RedstoneTransceiverScreen.class, new ReceiverGhostHandler());
     }
 
-    /** 鎺ユ敹锟?banner 骞界伒鐗╁搧妲芥嫋鏀惧鐞嗗櫒 */
+    /** 接收器 banner 幽灵物品槽拖放处理器 */
     private static class ReceiverGhostHandler implements IGhostIngredientHandler<RedstoneTransceiverScreen> {
         @Override
         public <I> List<Target<I>> getTargetsTyped(RedstoneTransceiverScreen screen, ITypedIngredient<I> typed, boolean start) {

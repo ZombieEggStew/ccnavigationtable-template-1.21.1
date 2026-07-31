@@ -7,6 +7,7 @@ import dan200.computercraft.api.lua.ILuaAPI;
 import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.peripheral.PeripheralCapability;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.*;
@@ -243,7 +244,7 @@ public class SensorAPI implements ILuaAPI {
         var ctx = getSensorContext(channel);
         if (ctx == null || ctx.attachedBE == null) return Collections.emptyMap();
 
-        Object subLevel = SableCompat.getContainingSubLevel(ctx.attachedBE);
+        SubLevel subLevel = SableCompat.getContainingSubLevel(ctx.attachedBE);
         if (subLevel == null) return Collections.emptyMap();
 
         Vec3 angVel = SableCompat.getAngularVelocity(ctx.level, subLevel);
@@ -267,7 +268,7 @@ public class SensorAPI implements ILuaAPI {
         var ctx = getSensorContext(channel);
         if (ctx == null || ctx.attachedBE == null) return Collections.emptyMap();
 
-        Object subLevel = SableCompat.getContainingSubLevel(ctx.attachedBE);
+        SubLevel subLevel = SableCompat.getContainingSubLevel(ctx.attachedBE);
         if (subLevel == null) return Collections.emptyMap();
 
         double[] quat = SableCompat.getSubLevelOrientation(subLevel);
@@ -292,7 +293,7 @@ public class SensorAPI implements ILuaAPI {
         var ctx = getSensorContext(channel);
         if (ctx == null || ctx.attachedBE == null) return null;
 
-        Object subLevel = SableCompat.getContainingSubLevel(ctx.attachedBE);
+        SubLevel subLevel = SableCompat.getContainingSubLevel(ctx.attachedBE);
         if (subLevel == null) return null;
 
         return SableCompat.getMass(subLevel);
@@ -309,7 +310,7 @@ public class SensorAPI implements ILuaAPI {
         var ctx = getSensorContext(channel);
         if (ctx == null || ctx.attachedBE == null) return Collections.emptyMap();
 
-        Object subLevel = SableCompat.getContainingSubLevel(ctx.attachedBE);
+        SubLevel subLevel = SableCompat.getContainingSubLevel(ctx.attachedBE);
         if (subLevel == null) return Collections.emptyMap();
 
         Vec3 com = SableCompat.getCenterOfMass(subLevel);

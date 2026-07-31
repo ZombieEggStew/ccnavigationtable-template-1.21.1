@@ -8,7 +8,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 瀹㈡埛绔啋鏈嶅姟绔細淇濆瓨浼犳劅鍣ㄦ粴杞暟鍊煎拰鍔犺浇妯″紡锟?
+ * 客户端→服务端：保存传感器滚动数值和加载模式
  */
 public record SensorFilterPayload(BlockPos sensorPos, int scrolledValue, int loadMode) implements CustomPacketPayload {
 

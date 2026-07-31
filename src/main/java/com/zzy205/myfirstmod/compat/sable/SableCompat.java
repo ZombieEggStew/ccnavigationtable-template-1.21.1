@@ -1,16 +1,29 @@
 package com.zzy205.myfirstmod.compat.sable;
 
 import com.mojang.serialization.Codec;
+import dev.ryanhcode.sable.Sable;
+import dev.ryanhcode.sable.api.SubLevelHelper;
+import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
+import dev.ryanhcode.sable.api.physics.mass.MassData;
+import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
+import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
+import dev.ryanhcode.sable.api.sublevel.ticket.SubLevelLoadingTicketType;
+import dev.ryanhcode.sable.companion.math.Pose3dc;
+import dev.ryanhcode.sable.sublevel.ServerSubLevel;
+import dev.ryanhcode.sable.sublevel.SubLevel;
+import dev.ryanhcode.sable.sublevel.system.SubLevelPhysicsSystem;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaterniondc;
+import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -19,113 +32,39 @@ import java.util.UUID;
 /**
  * Sable 物理子次元兼容层。
  * <p>
- * 通过反射与 Sable 的 {@code SubLevelLoadingTicket} 系统交互，
+ * 直接调用 Sable API，不再使用反射。
  * 使放置了传感器的物理结构绕过 Sable 的距离优化卸载机制。
- * <p>
- * Sable 未加载时，所有方法安全返回 null/false，无副作用。
  */
 public final class SableCompat {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("ccnavigationtable:SableCompat");
 
-    // ═══════════════ 反射缓存 ═══════════════
-    private static boolean sableAvailable;
-    private static boolean initialized;
-
-    private static Object sableHelper;              // Sable.HELPER
-    private static Method getContainingBeMethod;    // getContaining(BlockEntity)
-    private static Method getContainingPosMethod;   // getContaining(Level, Position)
-    private static Method getContainerMethod;       // SubLevelContainer.getContainer(Level)
-    private static Method addForceLoadTicketMethod; // ServerSubLevelContainer.addForceLoadTicket
-    private static Method removeForceLoadTicketMethod;
-    private static Method subLevelGetUniqueId;      // SubLevel.getUniqueId()
-    private static Method subLevelLogicalPose;      // SubLevel.logicalPose()
-    private static Method subLevelIsRemoved;        // SubLevel.isRemoved()
-    private static Method connectedChainMethod;     // SubLevelHelper.getConnectedChain(SubLevel)
-    private static Object sensorTicketType;         // SubLevelLoadingTicketType<BlockPos>
-
-    private SableCompat() {}
-
-    // ═══════════════ 初始化 ═══════════════
-
-    private static synchronized void init() {
-        if (initialized) return;
-        initialized = true;
-
-        try {
-            Class<?> sableClass = Class.forName("dev.ryanhcode.sable.Sable");
-            sableHelper = sableClass.getField("HELPER").get(null);
-
-            Class<?> helperClass = sableHelper.getClass();
-            getContainingBeMethod = helperClass.getMethod("getContaining", BlockEntity.class);
-            getContainingPosMethod = helperClass.getMethod("getContaining", Level.class, net.minecraft.core.Position.class);
-
-            // 容器
-            Class<?> containerClass = Class.forName("dev.ryanhcode.sable.api.sublevel.SubLevelContainer");
-            getContainerMethod = containerClass.getMethod("getContainer", Level.class);
-
-            // Ticket 系统
-            Class<?> serverContainerClass = Class.forName("dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer");
-            Class<?> ticketTypeClass = Class.forName("dev.ryanhcode.sable.api.sublevel.ticket.SubLevelLoadingTicketType");
-            Class<?> serverSubLevelClass = Class.forName("dev.ryanhcode.sable.sublevel.ServerSubLevel");
-
-            addForceLoadTicketMethod = serverContainerClass.getMethod(
-                    "addForceLoadTicket", serverSubLevelClass, ticketTypeClass, Object.class);
-            removeForceLoadTicketMethod = serverContainerClass.getMethod(
-                    "removeForceLoadTicket", serverSubLevelClass, ticketTypeClass, Object.class);
-
-            subLevelGetUniqueId = Class.forName("dev.ryanhcode.sable.sublevel.SubLevel")
-                    .getMethod("getUniqueId");
-
-            // SubLevel 位置 & 状态
-            Class<?> subLevelClass = Class.forName("dev.ryanhcode.sable.sublevel.SubLevel");
-            subLevelLogicalPose = subLevelClass.getMethod("logicalPose");
-            subLevelIsRemoved = subLevelClass.getMethod("isRemoved");
-
-            // 连接链
-            Class<?> subLevelHelperClass = Class.forName("dev.ryanhcode.sable.api.SubLevelHelper");
-            connectedChainMethod = subLevelHelperClass.getMethod("getConnectedChain", subLevelClass);
-
-            // 注册自定义 TicketType
-            Method createMethod = ticketTypeClass.getMethod("create", ResourceLocation.class, Codec.class);
-            sensorTicketType = createMethod.invoke(null,
+    /** 传感器强制加载 Ticket 类型 */
+    private static final SubLevelLoadingTicketType<BlockPos> SENSOR_TICKET_TYPE =
+            SubLevelLoadingTicketType.create(
                     ResourceLocation.fromNamespaceAndPath("ccnavigationtable", "sensor_force_load"),
                     BlockPos.CODEC);
 
-            sableAvailable = true;
-            LOGGER.info("Sable compat initialized — sensor sub-level force-load tickets enabled.");
-        } catch (NoClassDefFoundError | ClassNotFoundException e) {
-            LOGGER.debug("Sable not loaded, sub-level ticket support disabled.");
-        } catch (Exception e) {
-            LOGGER.warn("Failed to initialize Sable compat: {}", e.toString());
-        }
-    }
-
-    /** 确保已初始化 */
-    private static void ensureInit() {
-        if (!initialized) init();
-    }
+    private SableCompat() {}
 
     // ═══════════════ 公开 API ═══════════════
 
     /**
-     * @return Sable 是否已加载且兼容层初始化成功
+     * @return Sable 是否已加载（始终为 true，因为 Sable 是必需的编译依赖）
      */
     public static boolean isAvailable() {
-        ensureInit();
-        return sableAvailable;
+        return true;
     }
 
     /**
      * 获取包含指定 BlockEntity 的 Sable SubLevel。
      *
-     * @return SubLevel 对象（反射），不在子次元中则返回 null
+     * @return SubLevel，不在子次元中则返回 null
      */
-    public static Object getContainingSubLevel(BlockEntity be) {
-        ensureInit();
-        if (!sableAvailable || be == null || be.getLevel() == null) return null;
+    public static SubLevel getContainingSubLevel(BlockEntity be) {
+        if (be == null || be.getLevel() == null) return null;
         try {
-            return getContainingBeMethod.invoke(sableHelper, be);
+            return Sable.HELPER.getContaining(be);
         } catch (Exception e) {
             return null;
         }
@@ -134,11 +73,10 @@ public final class SableCompat {
     /**
      * 获取指定位置所在的 Sable SubLevel。
      */
-    public static Object getContainingSubLevel(Level level, BlockPos pos) {
-        ensureInit();
-        if (!sableAvailable || level == null) return null;
+    public static SubLevel getContainingSubLevel(Level level, BlockPos pos) {
+        if (level == null) return null;
         try {
-            return getContainingPosMethod.invoke(sableHelper, level, pos.getCenter());
+            return Sable.HELPER.getContaining(level, pos.getCenter());
         } catch (Exception e) {
             return null;
         }
@@ -146,20 +84,19 @@ public final class SableCompat {
 
     /**
      * 为 SubLevel 添加传感器强制加载 ticket。
-     * 如果 subLevel 或 container 不可用，静默失败。
      *
-     * @param level       传感器所在的 Level
-     * @param subLevel    Sable SubLevel 对象（反射）
-     * @param sensorPos   传感器坐标（作为 ticket key）
+     * @param level     传感器所在的 Level
+     * @param subLevel  Sable SubLevel
+     * @param sensorPos 传感器坐标（作为 ticket key）
      * @return 是否成功添加
      */
-    public static boolean tryAddForceLoadTicket(Level level, Object subLevel, BlockPos sensorPos) {
-        ensureInit();
-        if (!sableAvailable || !(level instanceof ServerLevel) || subLevel == null) return false;
+    public static boolean tryAddForceLoadTicket(Level level, SubLevel subLevel, BlockPos sensorPos) {
+        if (!(level instanceof ServerLevel) || subLevel == null) return false;
+        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return false;
         try {
-            Object container = getContainerMethod.invoke(null, level);
-            if (container == null) return false;
-            return (boolean) addForceLoadTicketMethod.invoke(container, subLevel, sensorTicketType, sensorPos);
+            SubLevelContainer container = SubLevelContainer.getContainer(level);
+            if (!(container instanceof ServerSubLevelContainer serverContainer)) return false;
+            return serverContainer.addForceLoadTicket(serverSubLevel, SENSOR_TICKET_TYPE, sensorPos);
         } catch (Exception e) {
             LOGGER.debug("Failed to add Sable force-load ticket: {}", e.toString());
             return false;
@@ -171,13 +108,13 @@ public final class SableCompat {
      *
      * @return 是否成功移除
      */
-    public static boolean tryRemoveForceLoadTicket(Level level, Object subLevel, BlockPos sensorPos) {
-        ensureInit();
-        if (!sableAvailable || !(level instanceof ServerLevel) || subLevel == null) return false;
+    public static boolean tryRemoveForceLoadTicket(Level level, SubLevel subLevel, BlockPos sensorPos) {
+        if (!(level instanceof ServerLevel) || subLevel == null) return false;
+        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return false;
         try {
-            Object container = getContainerMethod.invoke(null, level);
-            if (container == null) return false;
-            return (boolean) removeForceLoadTicketMethod.invoke(container, subLevel, sensorTicketType, sensorPos);
+            SubLevelContainer container = SubLevelContainer.getContainer(level);
+            if (!(container instanceof ServerSubLevelContainer serverContainer)) return false;
+            return serverContainer.removeForceLoadTicket(serverSubLevel, SENSOR_TICKET_TYPE, sensorPos);
         } catch (Exception e) {
             LOGGER.debug("Failed to remove Sable force-load ticket: {}", e.toString());
             return false;
@@ -187,11 +124,10 @@ public final class SableCompat {
     /**
      * 获取 SubLevel 的 UUID 字符串（用于日志/调试）。
      */
-    public static String getSubLevelId(Object subLevel) {
-        ensureInit();
-        if (!sableAvailable || subLevel == null) return "null";
+    public static String getSubLevelId(SubLevel subLevel) {
+        if (subLevel == null) return "null";
         try {
-            return String.valueOf(subLevelGetUniqueId.invoke(subLevel));
+            return String.valueOf(subLevel.getUniqueId());
         } catch (Exception e) {
             return "?";
         }
@@ -200,11 +136,10 @@ public final class SableCompat {
     /**
      * 获取 SubLevel 的 UUID。
      */
-    public static UUID getSubLevelUUID(Object subLevel) {
-        ensureInit();
-        if (!sableAvailable || subLevel == null) return null;
+    public static UUID getSubLevelUUID(SubLevel subLevel) {
+        if (subLevel == null) return null;
         try {
-            return (UUID) subLevelGetUniqueId.invoke(subLevel);
+            return subLevel.getUniqueId();
         } catch (Exception e) {
             return null;
         }
@@ -215,17 +150,12 @@ public final class SableCompat {
      *
      * @return 世界坐标 Vec3，失败返回 null
      */
-    public static Vec3 getSubLevelWorldPos(Object subLevel) {
-        ensureInit();
-        if (!sableAvailable || subLevel == null) return null;
+    public static Vec3 getSubLevelWorldPos(SubLevel subLevel) {
+        if (subLevel == null) return null;
         try {
-            Object pose = subLevelLogicalPose.invoke(subLevel);
-            // Pose3dc.position() → Vector3dc
-            Object vec = pose.getClass().getMethod("position").invoke(pose);
-            double x = (double) vec.getClass().getMethod("x").invoke(vec);
-            double y = (double) vec.getClass().getMethod("y").invoke(vec);
-            double z = (double) vec.getClass().getMethod("z").invoke(vec);
-            return new Vec3(x, y, z);
+            Pose3dc pose = subLevel.logicalPose();
+            Vector3dc pos = pose.position();
+            return new Vec3(pos.x(), pos.y(), pos.z());
         } catch (Exception e) {
             return null;
         }
@@ -234,11 +164,10 @@ public final class SableCompat {
     /**
      * 检查 SubLevel 是否已被移除。
      */
-    public static boolean isSubLevelRemoved(Object subLevel) {
-        ensureInit();
-        if (!sableAvailable || subLevel == null) return true;
+    public static boolean isSubLevelRemoved(SubLevel subLevel) {
+        if (subLevel == null) return true;
         try {
-            return (boolean) subLevelIsRemoved.invoke(subLevel);
+            return subLevel.isRemoved();
         } catch (Exception e) {
             return true;
         }
@@ -248,28 +177,26 @@ public final class SableCompat {
      * 获取与指定 SubLevel 通过约束（轴承等）连接的所有 SubLevel。
      * 始终至少包含自身。
      *
-     * @return SubLevel 列表（反射对象），失败返回空列表
+     * @return SubLevel 列表，失败返回空列表
      */
-    @SuppressWarnings("unchecked")
-    public static List<Object> getConnectedChain(Object subLevel) {
-        ensureInit();
-        if (!sableAvailable || subLevel == null) return Collections.emptyList();
+    public static List<SubLevel> getConnectedChain(SubLevel subLevel) {
+        if (subLevel == null) return Collections.emptyList();
         try {
-            List<Object> chain = (List<Object>) connectedChainMethod.invoke(null, subLevel);
-            return chain != null ? new ArrayList<>(chain) : Collections.emptyList();
+            List<SubLevel> chain = SubLevelHelper.getConnectedChain(subLevel);
+            return chain != null ? new ArrayList<>(chain) : Collections.singletonList(subLevel);
         } catch (Exception e) {
-            return Collections.singletonList(subLevel); // 至少返回自身
+            return Collections.singletonList(subLevel);
         }
     }
 
     /**
-     * 尝试通过反射获取 ServerSubLevelContainer 对象。
+     * 获取 ServerSubLevelContainer 对象。
      */
-    public static Object getServerContainer(Level level) {
-        ensureInit();
-        if (!sableAvailable || !(level instanceof ServerLevel)) return null;
+    public static ServerSubLevelContainer getServerContainer(Level level) {
+        if (!(level instanceof ServerLevel)) return null;
         try {
-            return getContainerMethod.invoke(null, level);
+            SubLevelContainer container = SubLevelContainer.getContainer(level);
+            return container instanceof ServerSubLevelContainer sc ? sc : null;
         } catch (Exception e) {
             return null;
         }
@@ -279,15 +206,11 @@ public final class SableCompat {
 
     /**
      * 将 SubLevel 内的局部坐标投影到世界空间。
-     * 等效于 {@code Sable.HELPER.projectOutOfSubLevel(level, pos)}。
      */
     public static Vec3 projectOutOfSubLevel(Level level, BlockPos pos) {
-        ensureInit();
-        if (!sableAvailable || level == null || pos == null) return null;
+        if (level == null || pos == null) return null;
         try {
-            return (Vec3) sableHelper.getClass()
-                    .getMethod("projectOutOfSubLevel", Level.class, net.minecraft.core.Position.class)
-                    .invoke(sableHelper, level, pos.getCenter());
+            return Sable.HELPER.projectOutOfSubLevel(level, pos.getCenter());
         } catch (Exception e) {
             return null;
         }
@@ -295,15 +218,11 @@ public final class SableCompat {
 
     /**
      * 获取指定位置所在物理结构的世界空间线速度。
-     * 等效于 {@code Sable.HELPER.getVelocity(level, pos)}。
      */
     public static Vec3 getVelocity(Level level, BlockPos pos) {
-        ensureInit();
-        if (!sableAvailable || level == null || pos == null) return null;
+        if (level == null || pos == null) return null;
         try {
-            return (Vec3) sableHelper.getClass()
-                    .getMethod("getVelocity", Level.class, net.minecraft.core.Position.class)
-                    .invoke(sableHelper, level, pos.getCenter());
+            return Sable.HELPER.getVelocity(level, pos.getCenter());
         } catch (Exception e) {
             return null;
         }
@@ -314,17 +233,12 @@ public final class SableCompat {
      *
      * @return {@code {x, y, z, w}}，失败返回 null
      */
-    public static double[] getSubLevelOrientation(Object subLevel) {
-        ensureInit();
-        if (!sableAvailable || subLevel == null) return null;
+    public static double[] getSubLevelOrientation(SubLevel subLevel) {
+        if (subLevel == null) return null;
         try {
-            Object pose = subLevelLogicalPose.invoke(subLevel);
-            Object quat = pose.getClass().getMethod("orientation").invoke(pose);
-            double x = (double) quat.getClass().getMethod("x").invoke(quat);
-            double y = (double) quat.getClass().getMethod("y").invoke(quat);
-            double z = (double) quat.getClass().getMethod("z").invoke(quat);
-            double w = (double) quat.getClass().getMethod("w").invoke(quat);
-            return new double[]{x, y, z, w};
+            Pose3dc pose = subLevel.logicalPose();
+            Quaterniondc quat = pose.orientation();
+            return new double[]{quat.x(), quat.y(), quat.z(), quat.w()};
         } catch (Exception e) {
             return null;
         }
@@ -333,32 +247,21 @@ public final class SableCompat {
     /**
      * 获取 SubLevel 物理刚体的角速度。
      *
-     * @return {@code {wx, wy, wz}}，失败返回 null
+     * @return 角速度 Vec3，失败返回 null
      */
-    public static Vec3 getAngularVelocity(Level level, Object subLevel) {
-        ensureInit();
-        if (!sableAvailable || !(level instanceof ServerLevel) || subLevel == null) return null;
+    public static Vec3 getAngularVelocity(Level level, SubLevel subLevel) {
+        if (!(level instanceof ServerLevel) || subLevel == null) return null;
+        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
         try {
-            Object container = getContainerMethod.invoke(null, level);
-            if (container == null) return null;
+            SubLevelContainer container = SubLevelContainer.getContainer(level);
+            if (!(container instanceof ServerSubLevelContainer serverContainer)) return null;
 
-            // container.physicsSystem()
-            Object physicsSystem = container.getClass().getMethod("physicsSystem").invoke(container);
-            if (physicsSystem == null) return null;
-
-            // physicsSystem.getPhysicsHandle(ServerSubLevel)
-            Object handle = physicsSystem.getClass()
-                    .getMethod("getPhysicsHandle",
-                            Class.forName("dev.ryanhcode.sable.sublevel.ServerSubLevel"))
-                    .invoke(physicsSystem, subLevel);
+            SubLevelPhysicsSystem physicsSystem = serverContainer.physicsSystem();
+            RigidBodyHandle handle = physicsSystem.getPhysicsHandle(serverSubLevel);
             if (handle == null) return null;
 
-            // handle.getAngularVelocity() → Vector3dc
-            Object angVel = handle.getClass().getMethod("getAngularVelocity").invoke(handle);
-            double x = (double) angVel.getClass().getMethod("x").invoke(angVel);
-            double y = (double) angVel.getClass().getMethod("y").invoke(angVel);
-            double z = (double) angVel.getClass().getMethod("z").invoke(angVel);
-            return new Vec3(x, y, z);
+            Vector3dc angVel = handle.getAngularVelocity(new Vector3d());
+            return new Vec3(angVel.x(), angVel.y(), angVel.z());
         } catch (Exception e) {
             return null;
         }
@@ -366,21 +269,15 @@ public final class SableCompat {
 
     /**
      * 获取 SubLevel 物理刚体的总质量。
-     * {@code ServerSubLevel} 实现了 {@code PhysicsPipelineBody}，
-     * 可直接调用 {@code getMassTracker().getMass()}。
      *
      * @return 质量（kg），失败返回 null
      */
-    public static Double getMass(Object subLevel) {
-        ensureInit();
-        if (!sableAvailable || subLevel == null) return null;
+    public static Double getMass(SubLevel subLevel) {
+        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
         try {
-            // subLevel.getMassTracker() → MassData
-            Object massTracker = subLevel.getClass()
-                    .getMethod("getMassTracker").invoke(subLevel);
+            MassData massTracker = serverSubLevel.getMassTracker();
             if (massTracker == null) return null;
-            // massTracker.getMass() → double
-            return (double) massTracker.getClass().getMethod("getMass").invoke(massTracker);
+            return massTracker.getMass();
         } catch (Exception e) {
             return null;
         }
@@ -389,23 +286,16 @@ public final class SableCompat {
     /**
      * 获取 SubLevel 物理刚体的质心位置（局部坐标）。
      *
-     * @return 质心 {@code Vec3}，失败或不存在时返回 null
+     * @return 质心 Vec3，失败或不存在时返回 null
      */
-    public static Vec3 getCenterOfMass(Object subLevel) {
-        ensureInit();
-        if (!sableAvailable || subLevel == null) return null;
+    public static Vec3 getCenterOfMass(SubLevel subLevel) {
+        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
         try {
-            // subLevel.getMassTracker() → MassData
-            Object massTracker = subLevel.getClass()
-                    .getMethod("getMassTracker").invoke(subLevel);
+            MassData massTracker = serverSubLevel.getMassTracker();
             if (massTracker == null) return null;
-            // massTracker.getCenterOfMass() → @Nullable Vector3dc
-            Object com = massTracker.getClass().getMethod("getCenterOfMass").invoke(massTracker);
+            Vector3dc com = massTracker.getCenterOfMass();
             if (com == null) return null;
-            double x = (double) com.getClass().getMethod("x").invoke(com);
-            double y = (double) com.getClass().getMethod("y").invoke(com);
-            double z = (double) com.getClass().getMethod("z").invoke(com);
-            return new Vec3(x, y, z);
+            return new Vec3(com.x(), com.y(), com.z());
         } catch (Exception e) {
             return null;
         }

@@ -149,10 +149,10 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         if (sableTicketRegistered) return true;
 
         // 检查传感器自身或附着方块是否在 Sable 子次元中
-        SubLevel rootSubLevel = (SubLevel) SableCompat.getContainingSubLevel(this);
+        SubLevel rootSubLevel = SableCompat.getContainingSubLevel(this);
         if (rootSubLevel == null && this.level != null) {
             BlockPos attachedPos = PeripheralExtenderBlock.getAttachedPos(this.getBlockState(), this.worldPosition);
-            rootSubLevel = (SubLevel) SableCompat.getContainingSubLevel(this.level, attachedPos);
+            rootSubLevel = SableCompat.getContainingSubLevel(this.level, attachedPos);
         }
         if (rootSubLevel == null) return false;
 
@@ -160,7 +160,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         if (rootId == null) return false;
 
         // 获取连接链（自身 + 轴承连接的所有 SubLevel）
-        List<SubLevel> chain = (List<SubLevel>)(List<?>) SableCompat.getConnectedChain(rootSubLevel);
+        List<SubLevel> chain = SableCompat.getConnectedChain(rootSubLevel);
         if (chain.isEmpty()) chain = Collections.singletonList(rootSubLevel);
 
         boolean allOk = true;
@@ -210,7 +210,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
             portalTicketChunks.clear();
 
             // 尝试移除 Sable force-load ticket
-            SubLevel subLevel = (SubLevel) SableCompat.getContainingSubLevel(this);
+            SubLevel subLevel = SableCompat.getContainingSubLevel(this);
             if (subLevel != null) {
                 for (UUID id : connectedSubLevelIds) {
                     SableCompat.tryRemoveForceLoadTicket(this.level, subLevel, this.worldPosition);
@@ -236,14 +236,14 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         boolean fiveSecRefresh = serverLevel.getServer().getTickCount() % 100 == 0;
 
         // 重新获取连接链（物理结构可能在 tick 间新建/断开轴承连接）
-        SubLevel rootSubLevel = (SubLevel) SableCompat.getContainingSubLevel(be);
+        SubLevel rootSubLevel = SableCompat.getContainingSubLevel(be);
         if (rootSubLevel == null || SableCompat.isSubLevelRemoved(rootSubLevel)) {
             // 物理结构已被移除，清理
             be.releaseSableTicket();
             return;
         }
 
-        List<SubLevel> chain = (List<SubLevel>)(List<?>) SableCompat.getConnectedChain(rootSubLevel);
+        List<SubLevel> chain = SableCompat.getConnectedChain(rootSubLevel);
         if (chain.isEmpty()) chain = Collections.singletonList(rootSubLevel);
 
         // 同步 connectedSubLevelIds（处理新建/断开的连接）

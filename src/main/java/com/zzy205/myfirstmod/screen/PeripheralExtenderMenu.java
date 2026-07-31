@@ -1,7 +1,6 @@
 package com.zzy205.myfirstmod.screen;
 
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
-import com.zzy205.myfirstmod.network.SensorItemPayload;  // 幽灵物品已注释
 import com.zzy205.myfirstmod.network.SensorNbtPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -11,9 +10,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ClickType;  // 幽灵物品已注释
-import net.minecraft.world.inventory.Slot;  // 玩家物品栏已注释
-import net.minecraft.world.item.ItemStack;  // 玩家物品栏已注释
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -22,18 +19,6 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * 传感器 NBT 查看菜单。上方显示 NBT 数据，下方显示玩家背包。
  */
 public class PeripheralExtenderMenu extends AbstractContainerMenu {
-
-    // ════════════════ 槽位布局（与 Create Redstone Link GUI 一致） ════════════════
-    // static final int SLOT_X = 48;
-    // static final int SLOT_STEP = 18;
-    // static final int INV_Y = 212;
-    // static final int HOTBAR_Y = 270;
-
-    // /** 幽灵物品槽位置（覆盖层窗口内右侧） */ 
-    // static final int GHOST_SLOT_X = 167;
-    // static final int GHOST_SLOT_2_X = 188;
-    // static final int GHOST_SLOT_Y = 36;
-    // ════════════════════════════════════════════════
 
     private final BlockPos sensorPos;
     private final CompoundTag attachedNBT;
@@ -57,8 +42,6 @@ public class PeripheralExtenderMenu extends AbstractContainerMenu {
         this.occupiedChannels = new int[0];
         this.loadMode = 0;
         this.onPhysicsBody = false;
-        // addGhostSlot();
-        // addPlayerSlots(playerInv);
     }
 
     // ── 客户端构造（由 IContainerFactory 在网络端创建时调用）──
@@ -75,30 +58,8 @@ public class PeripheralExtenderMenu extends AbstractContainerMenu {
         }
         this.loadMode = extraData.readVarInt();
         this.onPhysicsBody = extraData.readBoolean();
-        // addGhostSlot();  // 幽灵物品已注释
-        // addPlayerSlots(inv);  // 玩家物品栏已注释
     }
 
-    // /** 添加幽灵物品槽（槽位 0 和 1） */  
-    // private void addGhostSlot() {
-    //     // 槽位 0
-    //     this.addSlot(new GhostItemSlot(0, GHOST_SLOT_X, GHOST_SLOT_Y,
-    //             () -> getBE() != null ? getBE().getDisplayItem(0) : ItemStack.EMPTY,
-    //             (id, stack) -> { if (getBE() != null) getBE().setDisplayItem(id, stack); }
-    //     ));
-    //     // 槽位 1（右侧 3px 间隔）
-    //     this.addSlot(new GhostItemSlot(1, GHOST_SLOT_2_X, GHOST_SLOT_Y,
-    //             () -> getBE() != null ? getBE().getDisplayItem(1) : ItemStack.EMPTY,
-    //             (id, stack) -> { if (getBE() != null) getBE().setDisplayItem(id, stack); }
-    //     ));
-    // }
-
-    // private PeripheralExtenderBlockEntity getBE() {  // 幽灵物品已注释
-    //     BlockEntity be = level.getBlockEntity(sensorPos);
-    //     return be instanceof PeripheralExtenderBlockEntity sensorBE ? sensorBE : null;
-    // }
-
-    // private void addPlayerSlots(Inventory playerInv) { ... }  // 玩家物品栏已注释
 
     public BlockPos getSensorPos() {
         return sensorPos;
@@ -121,24 +82,6 @@ public class PeripheralExtenderMenu extends AbstractContainerMenu {
     public int getLoadMode() { return loadMode; }
     public boolean isOnPhysicsBody() { return onPhysicsBody; }
 
-    // @Override
-    // public ItemStack quickMoveStack(Player player, int index) {
-    //     return ItemStack.EMPTY;
-    // }
-
-    // /** 拦截幽灵物品槽的左键/右键点击 */  // 幽灵物品已注释
-    // @Override
-    // public void clicked(int slotId, int button, ClickType clickType, Player player) {
-    //     if (slotId >= 0 && slotId < 2 && (clickType == ClickType.PICKUP || clickType == ClickType.THROW)) {
-    //         handleGhostSlotClick(slotId, button, clickType, player);
-    //         return;
-    //     }
-    //     super.clicked(slotId, button, clickType, player);
-    // }
-
-    // private void handleGhostSlotClick(int slotId, int button, ClickType clickType, Player player) { ... }  // 幽灵物品已注释
-
-    // private void sendItemUpdate(int slotIndex, ItemStack stack) { ... }  // 幽灵物品已注释
 
     @Override
     public boolean stillValid(Player player) {

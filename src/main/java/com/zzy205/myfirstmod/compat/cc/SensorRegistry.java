@@ -8,9 +8,9 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 浼犳劅鍣ㄩ閬撴敞鍐岃〃 鈥旓拷?缁存姢 棰戦亾 锟?PeripheralExtenderBlockEntity 鐨勪竴瀵逛竴鏄犲皠锟?
+ * 传感器频道注册表 —— 维护 频道 → PeripheralExtenderBlockEntity 的一对一映射
  * <p>
- * 姣忎釜浼犳劅鍣ㄥ崰鐢ㄤ竴涓閬撳彿锛堢鍙ｆā鍨嬶級銆傛斁缃紶鎰熷櫒鏃惰嚜鍔ㄥ垎閰嶆渶灏忔湭琚崰鐢ㄧ殑棰戦亾鍙凤拷?
+ * 每个传感器占用一个频道号（端口模型）。放置传感器时自动分配最小未被占用的频道号。
  */
 public final class SensorRegistry {
     private static final Logger LOGGER = LoggerFactory.getLogger(SensorRegistry.class);
@@ -21,8 +21,8 @@ public final class SensorRegistry {
     private SensorRegistry() {}
 
     /**
-     * 鑷姩鍒嗛厤鏈€灏忕殑鏈鍗犵敤鐨勯閬撳彿锛屽苟娉ㄥ唽浼犳劅鍣拷?
-     * 浼氳烦锟?removed=true 鐨勫兊灏告潯鐩拷?
+     * 自动分配最小的未被占用的频道号，并注册传感器。
+     * 会跳过 removed=true 的僵尸条目。
      */
     public static int assignChannel(PeripheralExtenderBlockEntity be) {
         cleanupZombies();
@@ -36,21 +36,21 @@ public final class SensorRegistry {
     }
 
     /**
-     * 浠ユ寚瀹氶閬撳彿娉ㄥ唽浼犳劅鍣拷?
+     * 以指定频道号注册传感器。
      * <p>
-     * 鑷姩澶勭悊涓夌鎯呭喌锟?
+     * 自动处理三种情况：
      * <ol>
-     *   <li>锟?BE 宸插湪鍏朵粬棰戦亾鏈夋棫鏉＄洰 锟?鍏堟竻闄ゆ棫鏉＄洰锛坈hunk 閲嶈浇瀵艰嚧鐨勫棰戦亾娈嬬暀锟?/li>
-     *   <li>鐩爣棰戦亾锟?removed=true 鐨勫兊锟?锟?娓呴櫎鍍靛案鍚庢敞锟?/li>
-     *   <li>鐩爣棰戦亾琚叾浠栨椿锟?BE 鍗犵敤 锟?鎵句笅涓€涓彲鐢ㄩ锟?/li>
+     *   <li>该 BE 已在其他频道有旧条目 → 先清除旧条目（chunk 重载导致的多频道残留）</li>
+     *   <li>目标频道有 removed=true 的僵尸 → 清除僵尸后注册</li>
+     *   <li>目标频道被其他活跃 BE 占用 → 找下一个可用频道</li>
      * </ol>
      *
-     * @param channel 鏈熸湜鐨勯閬撳彿
-     * @param be      浼犳劅鍣ㄦ柟鍧楀疄锟?
-     * @return 瀹為檯鍒嗛厤鐨勯閬撳彿
+     * @param channel 期望的频道号
+     * @param be      传感器方块实体
+     * @return 实际分配的频道号
      */
     public static int register(int channel, PeripheralExtenderBlockEntity be) {
-        // 娓呴櫎锟?BE 鍦ㄥ叾浠栭閬撲笂鐨勬棫鏉＄洰锛坈hunk 閲嶈浇瀵艰嚧鍚屼竴 BE 澶氶閬撴畫鐣欙級
+        // 清除该 BE 在其他频道上的旧条目（chunk 重载导致同一 BE 多频道残留）
         removeExistingEntryFor(be, channel);
 
         // 目标频道上的现有条目检查

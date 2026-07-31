@@ -11,8 +11,6 @@ import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,7 +23,6 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>{@link #getNetworkSignal(Level, ItemStack, ItemStack)} — 读取红石信号</li>
  *   <li>{@link #setNetworkSignal(Level, BlockPos, ItemStack, ItemStack, int)} — 写入红石信号（虚拟发送端）</li>
  * </ul>
- * 使用 {@code Proxy} 动态创建 {@link IRedstoneLinkable} 发送端注册到 Create 红石网络。
  */
 public final class CreateRedstoneCompat {
 
@@ -105,6 +102,10 @@ public final class CreateRedstoneCompat {
 
         if (existing != null) {
             existing.signal = signal;
+            // 同步更新虚拟发送端的实际信号值，确保 getTransmittedStrength() 反映最新值
+            if (existing.proxy instanceof VirtualRedstoneLinkable vrl) {
+                vrl.signal = signal;
+            }
         } else {
             IRedstoneLinkable proxy = makeVirtualLinkable(pos, couple, signal);
             VirtualLinkableEntry entry = new VirtualLinkableEntry(proxy, signal);
@@ -142,42 +143,44 @@ public final class CreateRedstoneCompat {
                 Frequency.of(second != null ? second : ItemStack.EMPTY));
     }
 
-    /** 动态实现 IRedstoneLinkable 的代理 */
+    /** 直接实现 IRedstoneLinkable */
     private static IRedstoneLinkable makeVirtualLinkable(BlockPos pos, Couple<Frequency> couple, int signal) {
-        return (IRedstoneLinkable) Proxy.newProxyInstance(
-                IRedstoneLinkable.class.getClassLoader(),
-                new Class<?>[]{IRedstoneLinkable.class},
-                new VirtualLinkableHandler(pos, couple, signal));
+        return new VirtualRedstoneLinkable(pos, couple, signal);
     }
 
     /**
-     * IRedstoneLinkable 的动态代理处理器。行为为发送端（isListening=false），持有可变信号值。
+     * IRedstoneLinkable 的虚拟实现，行为为发送端（isListening=false），持有可变信号值。
      */
-    private static class VirtualLinkableHandler implements InvocationHandler {
+    private static class VirtualRedstoneLinkable implements IRedstoneLinkable {
         private final BlockPos pos;
         private final Couple<Frequency> couple;
         private int signal;
 
-        VirtualLinkableHandler(BlockPos pos, Couple<Frequency> couple, int signal) {
+        VirtualRedstoneLinkable(BlockPos pos, Couple<Frequency> couple, int signal) {
             this.pos = pos;
             this.couple = couple;
             this.signal = signal;
         }
 
         @Override
-        public Object invoke(Object proxy, java.lang.reflect.Method method, Object[] args) {
-            return switch (method.getName()) {
-                case "getTransmittedStrength" -> signal;
-                case "setReceivedStrength" -> null;
-                case "isListening" -> false;
-                case "isAlive" -> true;
-                case "getNetworkKey" -> couple;
-                case "getLocation" -> pos;
-                case "equals" -> proxy == args[0];
-                case "hashCode" -> System.identityHashCode(proxy);
-                case "toString" -> "VirtualLinkable[pos=" + pos + "]";
-                default -> null;
-            };
-        }
+        public int getTransmittedStrength() { return signal; }
+
+        @Override
+        public void setReceivedStrength(int strength) { }
+
+        @Override
+        public boolean isListening() { return false; }
+
+        @Override
+        public boolean isAlive() { return true; }
+
+        @Override
+        public Couple<Frequency> getNetworkKey() { return couple; }
+
+        @Override
+        public BlockPos getLocation() { return pos; }
+
+        @Override
+        public String toString() { return "VirtualLinkable[pos=" + pos + "]"; }
     }
 }
