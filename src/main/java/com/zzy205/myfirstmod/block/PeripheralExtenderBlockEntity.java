@@ -20,39 +20,39 @@ import java.util.*;
 
 public class PeripheralExtenderBlockEntity extends BlockEntity {
 
-    /** 褰撳墠娲昏穬鐨勫己鍒跺姞杞戒紶鎰熷櫒鏁伴噺 */
+    /** 当前活跃的强制加载传感器数量 */
     private static int activeChunkLoaders = 0;
 
     private CompoundTag cachedAttachedNBT = new CompoundTag();
     private int scrolledValue = 0;
-    /** 骞界伒鐗╁搧妲戒腑灞曠ず鐨勭墿锟?*/
+    /** 幽灵物品槽中展示的物品 */
     private ItemStack displayItem = ItemStack.EMPTY;
-    /** 绗簩涓菇鐏电墿鍝佹Ы */
+    /** 第二个幽灵物品槽 */
     private ItemStack displayItem2 = ItemStack.EMPTY;
 
-    /** 鎵€鏈夊凡琚崰鐢ㄧ殑棰戦亾鍙峰揩鐓э紙鏈嶅姟绔缃紝瀹㈡埛绔€氳繃 updateTag 鍚屾锟?*/
+    /** 所有已被占用的频道号快照（服务端设置，客户端通过 updateTag 同步） */
     private int[] occupiedChannels = new int[0];
 
-    /** 鏄惁宸插鏈紶鎰熷櫒鍛ㄥ洿 3x3 鍖哄潡鎵ц寮哄埗鍔犺浇 */
+    /** 是否已对本传感器周围 3x3 区块执行强制加载 */
     private boolean chunksForceLoaded = false;
 
-    /** 鏄惁宸插浼犳劅鍣ㄩ檮鐫€锟?Sable 鐗╃悊缁撴瀯娉ㄥ唽锟?force-load ticket */
+    /** 是否已对传感器附着的 Sable 物理结构注册了 force-load ticket */
     private boolean sableTicketRegistered = false;
 
-    // 鈺愨晲锟?GUI 鍔犺浇妯″紡 鈺愨晲锟?
-    /** 0=鍏抽棴, 1=鍔犺浇鍖哄潡, 2=鍔犺浇鐗╃悊锟?*/
+    // ════════════════ GUI 加载模式 ════════════════
+    /** 0=关闭, 1=加载区块, 2=加载物理体 */
     private int loadMode = 0;
 
-    /** 浼犳劅鍣ㄧ殑 Sable SubLevel UUID锛堢敤锟?PORTAL ticket 杩借釜锟?*/
+    /** 传感器的 Sable SubLevel UUID（用于 PORTAL ticket 追踪） */
     private UUID sableRootSubLevelId = null;
 
-    /** 鎵€鏈夐€氳繃绾︽潫杩炴帴锟?SubLevel UUID锛堝惈鑷韩锛夛紝鐢ㄤ簬 PORTAL ticket 绠＄悊 */
+    /** 所有通过约束连接的 SubLevel UUID（含自身），用于 PORTAL ticket 管理 */
     private final Set<UUID> connectedSubLevelIds = new HashSet<>();
 
-    /** 姣忎釜 SubLevel 鏈€鍚庝竴锟?PORTAL ticket 鎵€鍦ㄧ殑鍖哄潡 */
+    /** 每个 SubLevel 最后一个 PORTAL ticket 所在的区块 */
     private final Map<UUID, ChunkPos> portalTicketChunks = new HashMap<>();
 
-    /** CC:T 鏃犵嚎绾㈢煶杈撳嚭淇″彿 (0-15) */
+    /** CC:T 无线红石输出信号 (0-15) */
     private int redstoneOutput = 0;
 
 
@@ -60,7 +60,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         super(MyModBlockEntities.micro_peripheral_extender_entity.get(), pos, state);
     }
 
-    // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?棰戦亾娉ㄥ唽 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?
+    // ════════════════════ 频道注册 ════════════════════
 
     @Override
     public void onLoad() {
@@ -73,7 +73,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
             }
             refreshOccupiedChannels();
 
-            // 鏍规嵁 GUI 鍔犺浇妯″紡鍐冲畾鍚敤鍝鍔犺浇
+            // 根据 GUI 加载模式决定启用哪种加载
             applyLoadMode();
         }
     }
@@ -84,17 +84,17 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
             releaseSurroundingChunks();
             releaseSableTicket();
             SensorRegistry.unregister(this.scrolledValue, this);
-            // 浠呮竻闄ゅ唴閮ㄧ姸鎬侊紝涓嶈Е鍙戞柟鍧楁洿鏂帮紙閬垮厤淇濆瓨/鍗歌浇锟?setBlock 姝婚攣锟?
+            // 仅清除内部状态，不触发方块更新（避免保存/卸载时 setBlock 死锁）
             this.redstoneOutput = 0;
         }
         super.setRemoved();
     }
 
-    // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?鍖哄潡寮哄埗鍔犺浇 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?
+    // ════════════════════ 区块强制加载 ════════════════════
 
     /**
-     * 瀵规湰浼犳劅鍣ㄥ懆锟?3x3 鍖哄潡鎵ц vanilla 寮哄埗鍔犺浇锛堝叡 9 涓尯鍧楋級锟?
-     * 浠呭湪浼犳劅鍣ㄤ笉锟?Sable 瀛愭鍏冧腑鏃惰皟鐢拷?
+     * 对本传感器周围 3x3 区块执行 vanilla 强制加载（共 9 个区块）。
+     * 仅在传感器不在 Sable 子次元中时调用。
      */
     private void forceLoadSurroundingChunks() {
         if (chunksForceLoaded) return;
@@ -113,11 +113,11 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     }
 
     /**
-     * 閲婃斁鏈紶鎰熷櫒涔嬪墠閫氳繃 vanilla 寮哄埗鍔犺浇锟?3x3 鍖哄潡锟?
+     * 释放本传感器之前通过 vanilla 强制加载的 3x3 区块。
      */
     private void releaseSurroundingChunks() {
         if (!chunksForceLoaded) return;
-        // 鍏虫湇/鍗歌浇鏃舵柟鍧楀潗鏍囧彲鑳藉凡澶辨晥锛岃烦杩囦互閬垮厤璁块棶宸插叧闂殑绯荤粺
+        // 关服/卸载时方块坐标可能已失效，跳过以避免访问已关闭的系统
         if (level == null || !level.isLoaded(worldPosition)) {
             chunksForceLoaded = false;
             return;
@@ -132,23 +132,23 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         }
     }
 
-    // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?Sable 瀛愭锟?Ticket 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?
+    // ════════════════════ Sable 子次元 Ticket ════════════════════
 
     /**
-     * 灏濊瘯涓轰紶鎰熷櫒闄勭潃锟?Sable 鐗╃悊缁撴瀯娉ㄥ唽 force-load ticket锟?
-     * 鎴愬姛鏃朵細鍚屾椂锟?
+     * 尝试为传感器附着的 Sable 物理结构注册 force-load ticket。
+     * 成功时会同时：
      * <ul>
-     *   <li>娉ㄥ唽 Sable SubLevel force-load ticket锛堥槻锟?Sable 璺濈浼樺寲鍗歌浇锟?/li>
-     *   <li>瀵圭墿鐞嗙粨鏋勫綋鍓嶄笘鐣屼綅缃坊锟?PORTAL ticket锛堝姩鎬佽拷韪Щ鍔級</li>
-     *   <li>瀵硅酱鎵跨瓑绾︽潫杩炴帴鐨勫瓙鐗╃悊缁撴瀯涔熸坊锟?ticket</li>
+     *   <li>注册 Sable SubLevel force-load ticket（防止 Sable 距离优化卸载）</li>
+     *   <li>对物理结构当前世界位置添加 PORTAL ticket（动态追踪移动）</li>
+     *   <li>对轴承等约束连接的子物理结构也添加 ticket</li>
      * </ul>
      *
-     * @return true 琛ㄧず浼犳劅鍣ㄥ湪 Sable 瀛愭鍏冧腑涓旀墍锟?ticket 宸叉敞锟?
+     * @return true 表示传感器在 Sable 子次元中且所有 ticket 已注册
      */
     private boolean tryRegisterSableTicket() {
         if (sableTicketRegistered) return true;
 
-        // 妫€鏌ヤ紶鎰熷櫒鑷韩鎴栭檮鐫€鏂瑰潡鏄惁锟?Sable 瀛愭鍏冧腑
+        // 检查传感器自身或附着方块是否在 Sable 子次元中
         SubLevel rootSubLevel = (SubLevel) SableCompat.getContainingSubLevel(this);
         if (rootSubLevel == null && this.level != null) {
             BlockPos attachedPos = PeripheralExtenderBlock.getAttachedPos(this.getBlockState(), this.worldPosition);
@@ -159,14 +159,14 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         UUID rootId = SableCompat.getSubLevelUUID(rootSubLevel);
         if (rootId == null) return false;
 
-        // 鑾峰彇杩炴帴閾撅紙鑷韩 + 杞存壙杩炴帴鐨勬墍锟?SubLevel锟?
+        // 获取连接链（自身 + 轴承连接的所有 SubLevel）
         List<SubLevel> chain = (List<SubLevel>)(List<?>) SableCompat.getConnectedChain(rootSubLevel);
         if (chain.isEmpty()) chain = Collections.singletonList(rootSubLevel);
 
         boolean allOk = true;
         if (!(level instanceof ServerLevel serverLevel)) return false;
 
-        // Layer 1: 瀵规墍鏈夐摼涓殑 SubLevel 娉ㄥ唽 Sable force-load ticket
+        // Layer 1: 对所有链中的 SubLevel 注册 Sable force-load ticket
         for (SubLevel subLevel : chain) {
             if (SableCompat.isSubLevelRemoved(subLevel)) continue;
             UUID id = SableCompat.getSubLevelUUID(subLevel);
@@ -176,7 +176,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
             connectedSubLevelIds.add(id);
         }
 
-        // Layer 2: 涓烘瘡锟?SubLevel 娣诲姞 PORTAL ticket
+        // Layer 2: 为每个 SubLevel 添加 PORTAL ticket
         refreshPortalTickets(serverLevel, chain);
 
         sableRootSubLevelId = rootId;
@@ -186,13 +186,13 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     }
 
     /**
-     * 閲婃斁涔嬪墠娉ㄥ唽鐨勬墍锟?Sable force-load ticket 锟?PORTAL ticket锟?
+     * 释放之前注册的所有 Sable force-load ticket 和 PORTAL ticket。
      */
     private void releaseSableTicket() {
         if (!sableTicketRegistered) return;
         sableTicketRegistered = false;
 
-        // 鍏虫湇/鍗歌浇鏃惰烦杩囦笌 Sable 鐨勪氦浜掞紝閬垮厤璁块棶宸插叧闂殑绯荤粺瀵艰嚧姝婚攣
+        // 关服/卸载时跳过与 Sable 的交互，避免访问已关闭的系统导致死锁
         if (level == null || !level.isLoaded(worldPosition)) {
             portalTicketChunks.clear();
             connectedSubLevelIds.clear();
@@ -201,7 +201,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         }
 
         if (level instanceof ServerLevel serverLevel) {
-            // 绉婚櫎鎵€锟?PORTAL ticket
+            // 移除所有 PORTAL ticket
             for (var entry : portalTicketChunks.entrySet()) {
                 serverLevel.getChunkSource().removeRegionTicket(
                         TicketType.PORTAL, entry.getValue(),
@@ -209,7 +209,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
             }
             portalTicketChunks.clear();
 
-            // 灏濊瘯绉婚櫎 Sable force-load ticket
+            // 尝试移除 Sable force-load ticket
             SubLevel subLevel = (SubLevel) SableCompat.getContainingSubLevel(this);
             if (subLevel != null) {
                 for (UUID id : connectedSubLevelIds) {
@@ -221,24 +221,24 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         sableRootSubLevelId = null;
     }
 
-    // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?鍔拷?PORTAL Ticket 杩借釜 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?
+    // ════════════════════ 动态 PORTAL Ticket 追踪 ════════════════════
 
     /**
-     * 鏈嶅姟锟?tick锛氬綋 Sable 鐗╃悊缁撴瀯绉诲姩鏃讹紝鑷姩锟?PORTAL ticket 绉诲姩鍒版柊浣嶇疆锟?
-     * 锟?{@link PeripheralExtenderBlock#getTicker} 锟?tick 璋冪敤锟?
+     * 服务端 tick：当 Sable 物理结构移动时，自动将 PORTAL ticket 移动到新位置。
+     * 由 {@link PeripheralExtenderBlock#getTicker} 的 tick 调用。
      */
     public static void serverTick(Level level, BlockPos pos, BlockState state, PeripheralExtenderBlockEntity be) {
         if (!(level instanceof ServerLevel serverLevel)) return;
-        if (!level.isLoaded(pos)) return;  // 鍏虫湇/鍗歌浇涓烦锟?
+        if (!level.isLoaded(pos)) return;  // 关服/卸载中跳过
         if (!be.sableTicketRegistered || be.sableRootSubLevelId == null) return;
 
-        // 锟?5 绉掑己鍒跺埛鏂伴槻姝㈣秴锟?
+        // 每 5 秒强制刷新防止超时
         boolean fiveSecRefresh = serverLevel.getServer().getTickCount() % 100 == 0;
 
-        // 閲嶆柊鑾峰彇杩炴帴閾撅紙鐗╃悊缁撴瀯鍙兘锟?tick 闂存柊锟?鏂紑杞存壙杩炴帴锟?
+        // 重新获取连接链（物理结构可能在 tick 间新建/断开轴承连接）
         SubLevel rootSubLevel = (SubLevel) SableCompat.getContainingSubLevel(be);
         if (rootSubLevel == null || SableCompat.isSubLevelRemoved(rootSubLevel)) {
-            // 鐗╃悊缁撴瀯宸茶绉婚櫎 锟?娓呯悊
+            // 物理结构已被移除，清理
             be.releaseSableTicket();
             return;
         }
@@ -246,14 +246,14 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         List<SubLevel> chain = (List<SubLevel>)(List<?>) SableCompat.getConnectedChain(rootSubLevel);
         if (chain.isEmpty()) chain = Collections.singletonList(rootSubLevel);
 
-        // 鍚屾 connectedSubLevelIds锛堝鐞嗘柊锟?鏂紑鐨勮繛鎺ワ級
+        // 同步 connectedSubLevelIds（处理新建/断开的连接）
         Set<UUID> currentIds = new HashSet<>();
         for (SubLevel sl : chain) {
             UUID id = SableCompat.getSubLevelUUID(sl);
             if (id != null) currentIds.add(id);
         }
 
-        // 娓呯悊宸叉柇寮€杩炴帴锟?SubLevel 锟?PORTAL ticket
+        // 清理已断开连接的 SubLevel 的 PORTAL ticket
         for (UUID oldId : new HashSet<>(be.connectedSubLevelIds)) {
             if (!currentIds.contains(oldId)) {
                 ChunkPos oldChunk = be.portalTicketChunks.remove(oldId);
@@ -267,20 +267,20 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         be.connectedSubLevelIds.clear();
         be.connectedSubLevelIds.addAll(currentIds);
 
-        // 纭繚鎵€鏈夐摼锟?SubLevel 閮芥湁 Sable ticket
+        // 确保所有链中的 SubLevel 都有 Sable ticket
         for (SubLevel sl : chain) {
             if (SableCompat.isSubLevelRemoved(sl)) continue;
             SableCompat.tryAddForceLoadTicket(level, sl, be.worldPosition);
         }
 
-        // 鍒锋柊 PORTAL ticket锛堢Щ鍔ㄨ拷韪級
+        // 刷新 PORTAL ticket（移动追踪）
         if (fiveSecRefresh || needsPortalTicketRefresh(serverLevel, chain, be)) {
             be.refreshPortalTickets(serverLevel, chain);
         }
     }
 
     /**
-     * 妫€鏌ユ槸鍚︽湁 SubLevel 绉诲姩鍒颁簡锟?chunk锛岄渶瑕佸埛锟?PORTAL ticket锟?
+     * 检查是否有 SubLevel 移动到了新 chunk，需要刷新 PORTAL ticket。
      */
     private static boolean needsPortalTicketRefresh(ServerLevel level, List<SubLevel> chain, PeripheralExtenderBlockEntity be) {
         for (SubLevel sl : chain) {
@@ -299,7 +299,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     }
 
     /**
-     * 涓烘墍鏈夐摼涓殑 SubLevel 鏀剧疆/绉诲姩 PORTAL ticket锟?
+     * 为所有链中的 SubLevel 放置/移动 PORTAL ticket。
      */
     private void refreshPortalTickets(ServerLevel serverLevel, List<SubLevel> chain) {
         int radius = Config.SENSOR_PORTAL_TICKET_RADIUS.get();
@@ -315,21 +315,21 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
                     (int) Math.floor(worldPos.z / 16.0));
             ChunkPos lastChunk = portalTicketChunks.get(id);
 
-            if (lastChunk != null && lastChunk.equals(curChunk)) continue; // 鏈Щ锟?
+            if (lastChunk != null && lastChunk.equals(curChunk)) continue; // 未移动
 
-            // 绉婚櫎锟?ticket
+            // 移除旧 ticket
             if (lastChunk != null) {
                 serverLevel.getChunkSource().removeRegionTicket(
                         TicketType.PORTAL, lastChunk, radius, this.worldPosition);
             }
-            // 娣诲姞锟?ticket
+            // 添加新 ticket
             serverLevel.getChunkSource().addRegionTicket(
                     TicketType.PORTAL, curChunk, radius, this.worldPosition);
             portalTicketChunks.put(id, curChunk);
         }
     }
 
-    /** 浠庢敞鍐岃〃鍚屾 occupiedChannels 蹇収鍒版湰 BE锛屽苟閫氱煡瀹㈡埛锟?*/
+    /** 从注册表同步 occupiedChannels 快照到本 BE，并通知客户端 */
     public void refreshOccupiedChannels() {
         if (this.level == null || this.level.isClientSide) return;
         var channels = SensorRegistry.getOccupiedChannels();
@@ -341,14 +341,14 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         this.level.sendBlockUpdated(this.getBlockPos(), this.getBlockState(), this.getBlockState(), 3);
     }
 
-    /** 鑾峰彇琚崰鐢ㄧ殑棰戦亾鍙锋暟缁勶紙瀹㈡埛锟?GUI 鐢ㄥ畠璺宠繃宸插崰鐢ㄧ殑棰戦亾锟?*/
+    /** 获取被占用的频道号数组（客户端 GUI 用它跳过已占用的频道） */
     public int[] getOccupiedChannels() {
         return occupiedChannels;
     }
 
-    /** 妫€鏌ユ寚瀹氶閬撴槸鍚﹁鍏朵粬浼犳劅鍣ㄥ崰锟?*/
+    /** 检查指定频道是否被其他传感器占用 */
     public boolean isChannelOccupiedByOther(int channel) {
-        if (channel == this.scrolledValue) return false; // 鑷繁鍗犵敤涓嶇畻
+        if (channel == this.scrolledValue) return false; // 自己占用不算
         for (int ch : occupiedChannels) {
             if (ch == channel) return true;
         }
@@ -356,8 +356,8 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     }
 
     /**
-     * 瀵瑰鏆撮湶鐨勮鍙栨帴鍙ｏ細鍒锋柊骞惰繑鍥為檮鐫€鏂瑰潡鐨勬渶锟?NBT锟?
-     * 浠呭湪璋冪敤鏃惰鍙栵紝涓嶄細鍚庡彴鑷姩 tick锟?
+     * 对外暴露的读取接口：刷新并返回附着方块的最新 NBT。
+     * 仅在调用时读取，不会后台自动 tick。
      */
     public CompoundTag refreshAndGet(Level level, BlockState state) {
         this.cachedAttachedNBT = PeripheralExtenderBlock.getAttachedBlockNBT(level, state, this.getBlockPos());
@@ -367,20 +367,20 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     }
 
     /**
-     * 鑾峰彇涓婃缂撳瓨锟?NBT锛堜笉瑙﹀彂鍒锋柊锛夛拷?
+     * 获取上次缓存的 NBT（不触发刷新）。
      */
     public CompoundTag getCachedAttachedNBT() {
         return cachedAttachedNBT;
     }
 
     /**
-     * 鐢辩綉缁滃寘澶勭悊鏃惰缃紦瀛橈紙浠呭鎴风璋冪敤锛夛拷?
+     * 由网络包处理时设置缓存（仅客户端调用）。
      */
     public void setCachedAttachedNBT(CompoundTag nbt) {
         this.cachedAttachedNBT = nbt;
     }
 
-    /** 鏂囨湰杈撳叆妗嗗唴瀹癸紝鎸佷箙鍖栧苟鍚屾鍒板鎴风 */
+    /** 文本输入框内容，持久化并同步到客户端 */
     public int getScrolledValue() { return scrolledValue; }
 
     public void setScrolledValue(int val) {
@@ -412,12 +412,12 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         this.setChanged();
     }
 
-    /** 鎸夌储寮曡幏鍙栧菇鐏电墿鍝佹Ы锟?锟?锟?*/
+    /** 按索引获取幽灵物品槽（0 或 1） */
     public ItemStack getDisplayItem(int slot) {
         return slot == 1 ? displayItem2 : displayItem;
     }
 
-    /** 鎸夌储寮曡缃菇鐏电墿鍝佹Ы锟?锟?锟?*/
+    /** 按索引设置幽灵物品槽（0 或 1） */
     public void setDisplayItem(int slot, ItemStack stack) {
         if (slot == 1) {
             setDisplayItem2(stack);
@@ -426,7 +426,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         }
     }
 
-    // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?鏃犵嚎绾㈢煶杈撳嚭 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?
+    // ════════════════════ 无线红石输出 ════════════════════
 
     public int getRedstoneOutput() { return redstoneOutput; }
 
@@ -440,20 +440,20 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         }
     }
 
-    /** 璇诲彇浼犳劅鍣ㄤ綅缃帴鏀跺埌鐨勬渶寮虹孩鐭充俊鍙凤紙0-15锛夛拷?*/
+    /** 读取传感器位置接收到的最强红石信号（0-15） */
     public int getRedstoneInput() {
         if (this.level == null) return 0;
         return this.level.getBestNeighborSignal(this.worldPosition);
     }
 
-    // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?GUI 鍔犺浇妯″紡 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?
+    // ════════════════════ GUI 加载模式 ════════════════════
 
     public int getLoadMode() { return loadMode; }
 
     public void setLoadMode(int mode) {
         int clamped = Math.clamp(mode, 0, 2);
         if (this.loadMode == clamped) return;
-        // 鍏堥噴鏀炬棫妯″紡
+        // 先释放旧模式
         releaseSurroundingChunks();
         releaseSableTicket();
         this.loadMode = clamped;
@@ -463,7 +463,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         }
     }
 
-    /** 鏍规嵁褰撳墠 loadMode 鍚敤瀵瑰簲鐨勫姞杞芥柟锟?*/
+    /** 根据当前 loadMode 启用对应的加载方式 */
     private void applyLoadMode() {
         switch (loadMode) {
             case 1 -> forceLoadSurroundingChunks();
@@ -471,7 +471,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         }
     }
 
-    /** 妫€娴嬩紶鎰熷櫒鏄惁锟?Sable 鐗╃悊浣撲笂 */
+    /** 检测传感器是否在 Sable 物理体上 */
     public boolean isOnPhysicsBody() {
         if (level == null || level.isClientSide) return false;
         if (com.zzy205.myfirstmod.compat.sable.SableCompat.getContainingSubLevel(this) != null)
@@ -480,7 +480,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         return com.zzy205.myfirstmod.compat.sable.SableCompat.getContainingSubLevel(level, attached) != null;
     }
 
-    // 鍏煎鏃ф柟娉曪紙鑿滃崟 extra data 浣跨敤锟?
+    // 兼容旧方法（菜单 extra data 使用）
     public boolean isChunkLoadEnabled() { return loadMode == 1; }
     public boolean isSableLoadEnabled() { return loadMode == 2; }
 
@@ -507,11 +507,11 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         if (tag.contains("AttachedNBT")) cachedAttachedNBT = tag.getCompound("AttachedNBT");
         if (tag.contains("ScrolledValue")) scrolledValue = tag.getInt("ScrolledValue");
         if (tag.contains("OccupiedChannels")) occupiedChannels = tag.getIntArray("OccupiedChannels");
-        // chunksForceLoaded / sableTicketRegistered 涓嶆寔涔呭寲鈥斺€斾笘鐣岄噸杞藉悗闇€閲嶆柊娉ㄥ唽
+        // chunksForceLoaded / sableTicketRegistered 不持久化——世界重载后需重新注册
         if (tag.contains("LoadMode")) {
             loadMode = Math.clamp(tag.getInt("LoadMode"), 0, 2);
         } else {
-            // 鍏煎鏃х増鏁版嵁
+            // 兼容旧版数据
             if (tag.contains("ChunkLoadEnabled") && tag.getBoolean("ChunkLoadEnabled")) loadMode = 1;
             if (tag.contains("SableLoadEnabled") && tag.getBoolean("SableLoadEnabled")) loadMode = 2;
         }

@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 加载模式滚动选择器的复用逻辑，供 Sensor 和 Receiver 屏幕共用。
+ * 加载模式滚动选择的辅助逻辑，供 Sensor 和 Receiver 屏幕共用。
  * <p>
  * 在物理体上时：0=关闭, 2=加载物理体；不在物理体上时：0=关闭, 1=加载区块
  */
@@ -23,12 +23,12 @@ public final class LoadModeHelper {
 
     /** 选择器宽度（像素） */
     public static final int HIT_W = 72;
-    /** 选择器高度（像素，用于点击/悬浮检测） */
+    /** 选择器高度（像素），用于点击/滚轮检测 */
     public static final int HIT_H = 10;
 
     private LoadModeHelper() {}
 
-    // ═══════════════ 模式值转换 ═══════════════
+    // ════════════════════ 模式值转换 ════════════════════
 
     /** 将 loadMode (0/1/2) 映射为显示索引 (0/1) */
     private static int toIndex(int loadMode) { return loadMode == 0 ? 0 : 1; }
@@ -38,12 +38,12 @@ public final class LoadModeHelper {
         return index == 0 ? 0 : (onPhysicsBody ? 2 : 1);
     }
 
-    /** 获取有效模式值数组（用于 tooltip 遍历） */
+    /** 获取有效模式值数组（用于 tooltip 渲染） */
     private static int[] getModeValues(boolean onPhysicsBody) {
         return onPhysicsBody ? new int[]{0, 2} : new int[]{0, 1};
     }
 
-    // ═══════════════ 渲染 ═══════════════
+    // ════════════════════ 渲染 ════════════════════
 
     /**
      * 渲染"加载: xxx"标签。
@@ -56,7 +56,7 @@ public final class LoadModeHelper {
     }
 
     /**
-     * 渲染悬浮 tooltip——只显示当前上下文中有效的两个选项。
+     * 渲染悬浮 tooltip，只显示当前环境下有效的两个选项。
      */
     public static void renderTooltip(GuiGraphics g, Font font,
                                       int screenX, int screenY,
@@ -83,10 +83,10 @@ public final class LoadModeHelper {
         g.renderComponentTooltip(font, lines, mouseX, mouseY);
     }
 
-    // ═══════════════ 滚动 ═══════════════
+    // ════════════════════ 交互 ════════════════════
 
     /**
-     * 处理滚轮事件。在两个有效选项之间切换。
+     * 处理滚轮事件，在两个有效选项之间切换。
      *
      * @return 新的 loadMode 值，不匹配时返回 -1
      */
@@ -98,7 +98,7 @@ public final class LoadModeHelper {
                 || scrollY == 0) return -1;
 
         int idx = toIndex(loadMode);
-        idx = (idx + 1) % 2;  // 两个选项之间切换，忽略方向
+        idx = (idx + 1) % 2;  // 两个选项之间切换，双向均可
         return toMode(idx, onPhysicsBody);
     }
 }

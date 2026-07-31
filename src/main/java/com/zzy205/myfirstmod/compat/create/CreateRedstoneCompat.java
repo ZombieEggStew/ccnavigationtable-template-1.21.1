@@ -20,12 +20,12 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Create Redstone Link 兼容层。
  * <p>
- * 直接使用 Create API（编译期依赖）。
+ * 直接使用 Create API，无需 Mixin。
  * <ul>
- *   <li>{@link #getNetworkSignal(Level, ItemStack, ItemStack)} — 读取网络信号</li>
- *   <li>{@link #setNetworkSignal(Level, BlockPos, ItemStack, ItemStack, int)} — 写入网络信号（虚拟发送端）</li>
+ *   <li>{@link #getNetworkSignal(Level, ItemStack, ItemStack)} — 读取红石信号</li>
+ *   <li>{@link #setNetworkSignal(Level, BlockPos, ItemStack, ItemStack, int)} — 写入红石信号（虚拟发送端）</li>
  * </ul>
- * 使用 {@code Proxy} 创建虚拟 {@link IRedstoneLinkable} 发送端注册到 Create 红石网络。
+ * 使用 {@code Proxy} 动态创建 {@link IRedstoneLinkable} 发送端注册到 Create 红石网络。
  */
 public final class CreateRedstoneCompat {
 
@@ -33,8 +33,8 @@ public final class CreateRedstoneCompat {
 
     private static final RedstoneLinkNetworkHandler HANDLER = Create.REDSTONE_LINK_NETWORK_HANDLER;
 
-    // ═══════════════ 虚拟发送端追踪 ═══════════════
-    /** BlockPos → (FrequencyCouple → VirtualLinkableEntry) */
+    // ════════════════════ 虚拟发送端追踪 ════════════════════
+    /** BlockPos -> (FrequencyCouple -> VirtualLinkableEntry) */
     private static final Map<BlockPos, Map<Couple<Frequency>, VirtualLinkableEntry>> activeLinkables =
             new ConcurrentHashMap<>();
 
@@ -50,10 +50,10 @@ public final class CreateRedstoneCompat {
 
     private CreateRedstoneCompat() {}
 
-    // ═══════════════ 读取 ═══════════════
+    // ════════════════════ 读取 ════════════════════
 
     /**
-     * 查询指定物品对（幽灵槽）对应的 Create 红石网络当前信号强度。
+     * 查询指定物品对（频率键）对应的 Create 红石网络当前信号强度。
      */
     public static int getNetworkSignal(Level level, ItemStack first, ItemStack second) {
         if (level == null || level.isClientSide) return 0;
@@ -73,15 +73,15 @@ public final class CreateRedstoneCompat {
         return maxPower;
     }
 
-    // ═══════════════ 写入（虚拟发送端） ═══════════════
+    // ════════════════════ 写入（虚拟发送端） ════════════════════
 
     /**
      * 向指定物品对对应的 Create 红石网络发送信号。
      * <p>
      * 通过 {@code Proxy} 创建一个虚拟 {@link IRedstoneLinkable} 发送端注册到网络中。
-     * 该虚拟发送端会参与同频网络的信号最大值计算。
+     * 网络中的信号值取所有发送端的最大值。
      *
-     * @param signal 0-15（0 表示从网络中移除）
+     * @param signal 0-15，0 表示关闭并移除虚拟发送端
      */
     public static void setNetworkSignal(Level level, BlockPos pos, ItemStack first, ItemStack second, int signal) {
         if (level == null || level.isClientSide) return;
@@ -128,13 +128,13 @@ public final class CreateRedstoneCompat {
 
         for (VirtualLinkableEntry entry : posEntries.values()) {
             try {
-                // removeFromNetwork 内部查 connections map，level 为 null 也可跨维度清理
+                // removeFromNetwork 内部操作 connections map，level 为 null 也可维护
                 HANDLER.removeFromNetwork(null, entry.proxy);
             } catch (Exception ignored) {}
         }
     }
 
-    // ═══════════════ 内部工具 ═══════════════
+    // ════════════════════ 内部工具 ════════════════════
 
     private static Couple<Frequency> makeFrequencyCouple(ItemStack first, ItemStack second) {
         return Couple.create(
@@ -142,7 +142,7 @@ public final class CreateRedstoneCompat {
                 Frequency.of(second != null ? second : ItemStack.EMPTY));
     }
 
-    /** 创建实现 IRedstoneLinkable 的动态代理 */
+    /** 动态实现 IRedstoneLinkable 的代理 */
     private static IRedstoneLinkable makeVirtualLinkable(BlockPos pos, Couple<Frequency> couple, int signal) {
         return (IRedstoneLinkable) Proxy.newProxyInstance(
                 IRedstoneLinkable.class.getClassLoader(),
@@ -151,7 +151,7 @@ public final class CreateRedstoneCompat {
     }
 
     /**
-     * IRedstoneLinkable 的动态代理处理器——作为发送端（isListening=false），持有可变的信号值。
+     * IRedstoneLinkable 的动态代理处理器。行为为发送端（isListening=false），持有可变信号值。
      */
     private static class VirtualLinkableHandler implements InvocationHandler {
         private final BlockPos pos;

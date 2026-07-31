@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class SensorRegistry {
     private static final Logger LOGGER = LoggerFactory.getLogger(SensorRegistry.class);
 
-    /** 棰戦亾 锟?浼犳劅鍣ㄦ柟鍧楀疄锟?*/
+    /** 频道号 → 传感器方块实体 */
     private static final Map<Integer, PeripheralExtenderBlockEntity> registry = new ConcurrentHashMap<>();
 
     private SensorRegistry() {}
@@ -53,19 +53,19 @@ public final class SensorRegistry {
         // 娓呴櫎锟?BE 鍦ㄥ叾浠栭閬撲笂鐨勬棫鏉＄洰锛坈hunk 閲嶈浇瀵艰嚧鍚屼竴 BE 澶氶閬撴畫鐣欙級
         removeExistingEntryFor(be, channel);
 
-        // 鐩爣棰戦亾涓婄殑鐜版湁鏉＄洰妫€锟?
+        // 目标频道上的现有条目检查
         PeripheralExtenderBlockEntity existing = registry.get(channel);
 
-        // 鍍靛案娓呯悊锛氬凡鏍囪 removed 锟?BE 瑙嗕负涓嶅瓨锟?
+        // 僵尸清理：已标记 removed 的 BE 视为不存在
         if (existing != null && existing.isRemoved()) {
             registry.remove(channel);
             existing = null;
         }
 
-        // 棰戦亾鍐茬獊锛氬彟涓€涓椿锟?BE 鍗犵敤
+        // 频道冲突：另一个活跃 BE 占用
         if (existing != null && existing != be) {
             int newChannel = findNextAvailable(channel);
-            LOGGER.warn("Channel {} occupied 锟?reassigning {} to channel {}",
+            LOGGER.warn("Channel {} occupied — reassigning {} to channel {}",
                     channel, be.getBlockPos(), newChannel);
             registry.put(newChannel, be);
             return newChannel;
@@ -105,7 +105,7 @@ public final class SensorRegistry {
     }
 
     /**
-     * 娉ㄩ攢浼犳劅鍣ㄣ€備粎褰撴寚瀹氶閬撲笂纭疄鏄 BE 鏃舵墠绉婚櫎锟?
+     * 注销传感器。仅当指定频道上确实是该 BE 时才移除。
      */
     public static void unregister(int channel, PeripheralExtenderBlockEntity be) {
         PeripheralExtenderBlockEntity existing = registry.get(channel);

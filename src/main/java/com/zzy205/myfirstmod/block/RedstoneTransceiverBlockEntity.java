@@ -9,10 +9,10 @@ import net.minecraft.world.level.block.state.BlockState;
 
 public class RedstoneTransceiverBlockEntity extends BlockEntity {
 
-    /** 鎵€锟?banner 鐨勬暟鎹紙棰戦亾锟?+ 骞界伒鐗╁搧锛夛紝锟?CompoundTag 鏁翠綋瀛樺偍 */
+    /** 所有 banner 的数据（频道号 + 幽灵物品），以 CompoundTag 整体存储 */
     private CompoundTag bannerData = new CompoundTag();
 
-    /** 鍔犺浇妯″紡锟?=鍏抽棴, 1=鍔犺浇鍖哄潡, 2=鍔犺浇鐗╃悊锟?*/
+    /** 加载模式：0=关闭, 1=加载区块, 2=加载物理体 */
     private int loadMode = 0;
 
     public RedstoneTransceiverBlockEntity(BlockPos pos, BlockState state) {
@@ -28,7 +28,7 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity {
         setChanged();
     }
 
-    /** 鑾峰彇褰撳墠鎵€锟?receiver 鍗犵敤鐨勯閬撳彿鏁扮粍 */
+    /** 获取当前所有 receiver 占用的频道号数组 */
     public int[] getOccupiedChannels() {
         return com.zzy205.myfirstmod.compat.cc.ReceiverRegistry.getOccupiedChannels()
                 .stream().mapToInt(Integer::intValue).toArray();
@@ -44,12 +44,12 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity {
 
     @Override
     public void setRemoved() {
-        super.setRemoved();
         if (level != null && !level.isClientSide) {
             ReceiverRegistry.unregisterBE(this);
-            // 娓呯悊锟?Receiver 鍒涘缓鐨勬墍鏈夎櫄锟?Create 绾㈢煶鍙戦€佺
+            // 清理此 Receiver 创建的所有虚拟 Create 红石发送端
             com.zzy205.myfirstmod.compat.create.CreateRedstoneCompat.cleanupFor(worldPosition);
         }
+        super.setRemoved();
     }
 
     @Override
@@ -79,7 +79,7 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity {
         return tag;
     }
 
-    // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?鍔犺浇妯″紡 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?
+    // ════════════════════ 加载模式 ════════════════════
 
     public int getLoadMode() { return loadMode; }
 
@@ -90,7 +90,7 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity {
         this.setChanged();
     }
 
-    /** 妫€锟?receiver 鏄惁锟?Sable 鐗╃悊浣撲笂 */
+    /** 检查 receiver 是否在 Sable 物理体上 */
     public boolean isOnPhysicsBody() {
         if (level == null || level.isClientSide) return false;
         return com.zzy205.myfirstmod.compat.sable.SableCompat.getContainingSubLevel(this) != null;

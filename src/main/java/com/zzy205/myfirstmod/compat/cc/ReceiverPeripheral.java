@@ -14,10 +14,10 @@ import javax.annotation.Nullable;
 import java.util.*;
 
 /**
- * Receiver 锟?CC:Tweaked 澶栬瀹炵幇锟?
+ * Receiver 的 CC:Tweaked 外设实现。
  * <p>
- * 鏀寔 {@code peripheral.wrap("right")} 锟?{@code peripheral.find("ccnavigation:receiver")}锟?
- * Lua 绔彲璇诲彇 Receiver 锟?banner 棰戦亾閰嶇疆鍜屽菇鐏电墿鍝侊拷?
+ * 支持 {@code peripheral.wrap("right")} 和 {@code peripheral.find("ccnavigation:receiver")}。
+ * Lua 端可读取 Receiver 的 banner 频道配置和幽灵物品。
  */
 public class ReceiverPeripheral implements IPeripheral {
 
@@ -45,10 +45,10 @@ public class ReceiverPeripheral implements IPeripheral {
         return be;
     }
 
-    // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?Lua API 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?
+    // ════════════════════ Lua API ════════════════════
 
     /**
-     * 鑾峰彇 receiver 褰撳墠锟?banner 鏁伴噺锟?
+     * 获取 receiver 当前的 banner 数量。
      */
     @LuaFunction(mainThread = true)
     public final int getBannerCount() {
@@ -57,10 +57,10 @@ public class ReceiverPeripheral implements IPeripheral {
     }
 
     /**
-     * 鑾峰彇鎸囧畾绱㈠紩 banner 鐨勯閬撳彿锟?
+     * 获取指定索引 banner 的频道号。
      *
-     * @param index banner 绱㈠紩锟?-based锛屼笌 GUI 淇濇寔涓€鑷达級
-     * @return 棰戦亾鍙凤紝绱㈠紩瓒婄晫杩斿洖 nil
+     * @param index banner 索引（1-based，与 GUI 保持一致）
+     * @return 频道号，索引越界返回 nil
      */
     @LuaFunction(mainThread = true)
     public final @Nullable Integer getBannerChannel(int index) {
@@ -72,11 +72,11 @@ public class ReceiverPeripheral implements IPeripheral {
     }
 
     /**
-     * 鑾峰彇鎸囧畾 banner 鐨勫菇鐏垫Ы鐗╁搧淇℃伅锟?
+     * 获取指定 banner 的幽灵槽物品信息。
      *
-     * @param bannerIndex banner 绱㈠紩锟?-based锟?
-     * @param slotIndex   骞界伒妲界储寮曪紙1-based锟? 锟?2锟?
-     * @return 鐗╁搧淇℃伅 table {@code {id="minecraft:stone", count=1}}锛岀┖妲借繑鍥炵┖ table
+     * @param bannerIndex banner 索引（1-based）
+     * @param slotIndex   幽灵槽索引（1-based，1 或 2）
+     * @return 物品信息 table {@code {id="minecraft:stone", count=1}}，空槽返回空 table
      */
     @LuaFunction(mainThread = true)
     public final Map<String, Object> getBannerItem(int bannerIndex, int slotIndex) {
@@ -103,9 +103,9 @@ public class ReceiverPeripheral implements IPeripheral {
     }
 
     /**
-     * 鑾峰彇 receiver 鎵€鏈夐閬撶殑鍒楄〃锛堟寜绱㈠紩椤哄簭锛夛拷?
+     * 获取 receiver 所有频道的列表（按索引顺序）。
      *
-     * @return 棰戦亾鍙锋暟缁勮〃锛屽 {@code {1, 5, 7}}
+     * @return 频道号数组表，如 {@code {1, 5, 7}}
      */
     @LuaFunction(mainThread = true)
     public final List<Integer> getChannels() {
@@ -118,50 +118,50 @@ public class ReceiverPeripheral implements IPeripheral {
         return result;
     }
 
-    // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?Create 绾㈢煶淇″彿鏌ヨ 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲锟?
+    // ════════════════════ Create 红石信号查询 ════════════════════
 
     /**
-     * 鏍规嵁棰戦亾鍙锋壘鍒板搴旂殑 banner锛岃鍙栧叾骞界伒妲界墿鍝侊紝
-     * 浠ヨ繖涓や釜鐗╁搧浣滀负 Create Redstone Link 鐨勯鐜囬敭锛屾煡璇㈣棰戠巼缃戠粶鐨勫綋鍓嶇孩鐭充俊鍙峰己搴︼拷?
+     * 根据频道号找到对应的 banner，读取其幽灵槽物品，
+     * 以这两个物品作为 Create Redstone Link 的频率键，查询该频率网络的当前红石信号强度。
      *
      * <pre>{@code
-     * -- 鏌ヨ棰戦亾 7 瀵瑰簲锟?Create 绾㈢煶淇″彿
+     * -- 查询频道 7 对应的 Create 红石信号
      * local signal = receiver.getRedstoneSignal(7)
-     * print("棰戦亾 7 锟?Create 绾㈢煶淇″彿: " .. signal)
+     * print("频道 7 的 Create 红石信号: " .. signal)
      * }</pre>
      *
-     * @param channel 棰戦亾锟?
-     * @return 0-15 鐨勭孩鐭充俊鍙峰己搴︼紝棰戦亾涓嶅瓨鍦ㄦ垨 Create 鏈姞杞芥椂杩斿洖 0
+     * @param channel 频道号
+     * @return 0-15 的红石信号强度，频道不存在或 Create 未加载时返回 0
      */
     @LuaFunction(mainThread = true)
     public final int getRedstoneSignal(int channel) {
         if (be.getLevel() == null || be.getLevel().isClientSide) return 0;
 
-        // 1. 鏍规嵁棰戦亾鍙锋壘鍒板锟?banner 鐨勫菇鐏电墿锟?
+        // 1. 根据频道号找到对应 banner 的幽灵物品
         ItemStack[] ghosts = getGhostItemsByChannel(channel);
         if (ghosts == null) return 0;
 
-        // 2. 鏌ヨ Create 绾㈢煶缃戠粶
+        // 2. 查询 Create 红石网络
         return CreateRedstoneCompat.getNetworkSignal(be.getLevel(), ghosts[0], ghosts[1]);
     }
 
     /**
-     * 鍚戞寚瀹氶閬撳搴旂殑 Create Redstone Link 缃戠粶鍙戦€佺孩鐭充俊鍙凤拷?
+     * 向指定频道对应的 Create Redstone Link 网络发送红石信号。
      * <p>
-     * 鏍规嵁棰戦亾鍙锋壘鍒板搴旂殑 banner锛岃鍙栧叾骞界伒妲戒腑鐨勪袱涓墿鍝佷綔涓洪鐜囬敭锟?
-     * 鍒涘缓涓€涓櫄鎷熷彂閫佺鍔犲叆璇ラ鐜囩殑 Create 绾㈢煶缃戠粶锟?
-     * 鍚岄缃戠粶涓殑鍏朵粬鎺ユ敹绔紙Redstone Link Receiver 妯″紡锛夊皢鏀跺埌姝や俊鍙凤拷?
+     * 根据频道号找到对应的 banner，读取其幽灵槽中的两个物品作为频率键，
+     * 创建一个虚拟发送端加入该频率的 Create 红石网络。
+     * 同频网络中的其他接收端（Redstone Link Receiver 模式）将收到此信号。
      *
      * <pre>{@code
-     * -- 鍚戦锟?7 瀵瑰簲锟?Create 绾㈢煶缃戠粶鍙戦€佹弧淇″彿
+     * -- 向频道 7 对应的 Create 红石网络发送满信号
      * receiver.setRedstoneSignal(7, 15)
      *
-     * -- 鍏抽棴淇″彿
+     * -- 关闭信号
      * receiver.setRedstoneSignal(7, 0)
      * }</pre>
      *
-     * @param channel 棰戦亾锟?
-     * @param signal  0-15 鐨勭孩鐭充俊鍙峰己搴︼紙鑷姩閽充綅锟?
+     * @param channel 频道号
+     * @param signal  0-15 的红石信号强度（自动钳位）
      */
     @LuaFunction(mainThread = true)
     public final void setRedstoneSignal(int channel, int signal) {
@@ -175,9 +175,9 @@ public class ReceiverPeripheral implements IPeripheral {
     }
 
     /**
-     * 鏍规嵁棰戦亾鍙疯幏锟?banner 鐨勪袱涓菇鐏电墿鍝侊拷?
+     * 根据频道号获取 banner 的两个幽灵物品。
      *
-     * @return ItemStack[2]锛屾壘涓嶅埌鏃惰繑锟?null
+     * @return ItemStack[2]，找不到时返回 null
      */
     private @Nullable ItemStack[] getGhostItemsByChannel(int channel) {
         CompoundTag data = be.getBannerData();
@@ -186,7 +186,7 @@ public class ReceiverPeripheral implements IPeripheral {
         ListTag channels = data.getList("Channels", Tag.TAG_INT);
         ListTag ghosts = data.getList("Ghosts", Tag.TAG_COMPOUND);
 
-        // 鏌ユ壘鍖归厤棰戦亾锟?banner 绱㈠紩
+        // 查找匹配频道号的 banner 索引
         int bannerIndex = -1;
         for (int i = 0; i < channels.size(); i++) {
             if (((net.minecraft.nbt.IntTag) channels.get(i)).getAsInt() == channel) {
@@ -196,7 +196,7 @@ public class ReceiverPeripheral implements IPeripheral {
         }
         if (bannerIndex < 0 || bannerIndex >= ghosts.size()) return null;
 
-        // 瑙ｆ瀽涓や釜骞界伒妲界殑鐗╁搧
+        // 解析两个幽灵槽的物品
         HolderLookup.Provider registries = be.getLevel().registryAccess();
         CompoundTag itemData = ghosts.getCompound(bannerIndex);
         ItemStack slot0 = ItemStack.parseOptional(registries, itemData.getCompound("G0"));

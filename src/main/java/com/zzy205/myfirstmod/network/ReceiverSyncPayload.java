@@ -10,7 +10,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 瀹㈡埛绔啋鏈嶅姟绔細淇濆瓨 receiver 鐨勫叏锟?banner 鏁版嵁锛堥锟?+ 骞界伒鐗╁搧锛夊拰鍔犺浇妯″紡锟?
+ * 客户端→服务端：保存 receiver 的全部 banner 数据（频道 + 幽灵物品）和加载模式。
  */
 public record ReceiverSyncPayload(BlockPos pos, CompoundTag data, int loadMode) implements CustomPacketPayload {
 

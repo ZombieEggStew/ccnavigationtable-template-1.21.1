@@ -9,16 +9,16 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Receiver 棰戦亾娉ㄥ唽锟?鈥旓拷?杩借釜姣忎釜 receiver 锟?banner 棰戦亾鍗犵敤锟?
- * 锟?SensorRegistry 瀹屽叏鐙珛锛屼袱濂楅閬撲簰涓嶅共鎵帮拷?
+ * Receiver 频道注册表 —— 追踪每个 receiver 的 banner 频道占用。
+ * 与 SensorRegistry 完全独立，两套频道互不干扰。
  */
 public final class ReceiverRegistry {
-    /** BE 锟?锟?BE 褰撳墠鍗犵敤鐨勯閬撳彿闆嗗悎 */
+    /** BE -> BE 当前占用的频道号集合 */
     private static final Map<RedstoneTransceiverBlockEntity, Set<Integer>> beChannels = new ConcurrentHashMap<>();
 
     private ReceiverRegistry() {}
 
-    /** BE 鍔犺浇鏃舵敞鍐岋紝锟?bannerData 璇诲彇鎵€鏈夐锟?*/
+    /** BE 加载时注册，从 bannerData 读取所有频道 */
     public static void registerBE(RedstoneTransceiverBlockEntity be) {
         Set<Integer> channels = getChannelsFromData(be.getBannerData());
         if (!channels.isEmpty()) {
@@ -26,12 +26,12 @@ public final class ReceiverRegistry {
         }
     }
 
-    /** BE 鍗歌浇鏃剁Щ锟?*/
+    /** BE 卸载时移除 */
     public static void unregisterBE(RedstoneTransceiverBlockEntity be) {
         beChannels.remove(be);
     }
 
-    /** 鏇存柊鎸囧畾 BE 鐨勯閬撳崰鐢紙鏁版嵁鍚屾鏃惰皟鐢級 */
+    /** 更新指定 BE 的频道占用（数据同步时调用） */
     public static void updateChannels(RedstoneTransceiverBlockEntity be, CompoundTag data) {
         Set<Integer> channels = getChannelsFromData(data);
         if (channels.isEmpty()) {
@@ -41,7 +41,7 @@ public final class ReceiverRegistry {
         }
     }
 
-    /** 鑾峰彇褰撳墠鎵€鏈夊凡琚崰鐢ㄧ殑棰戦亾锟?*/
+    /** 获取当前所有已被占用的频道号 */
     public static Set<Integer> getOccupiedChannels() {
         beChannels.entrySet().removeIf(e -> e.getKey().isRemoved());
         Set<Integer> all = new HashSet<>();
