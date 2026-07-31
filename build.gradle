@@ -22,6 +22,12 @@ sourceSets.main.resources {
 }
 
 repositories {
+    // 本地手动下载的依赖，优先从 libs/ 解析
+    maven {
+        name = 'LocalLibs'
+        url = file('libs')
+    }
+    mavenLocal() // 也可用 %USERPROFILE%\.m2\repository
     maven {
         name = 'Create Maven'
         url = 'https://maven.createmod.net'

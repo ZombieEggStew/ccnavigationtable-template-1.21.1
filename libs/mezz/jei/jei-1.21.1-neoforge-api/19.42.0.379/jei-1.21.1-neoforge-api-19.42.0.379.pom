@@ -1,0 +1,13 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<modelVersion>4.0.0</modelVersion>
+<groupId>mezz.jei</groupId>
+<artifactId>jei-1.21.1-neoforge-api</artifactId>
+<version>19.42.0.379</version>
+<dependencies>
+<dependency>
+<groupId>mezz.jei</groupId>
+<artifactId>jei-1.21.1-common-api</artifactId>
+<version>19.42.0.379</version>
+</dependency>
+</dependencies>
+</project>

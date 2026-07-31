@@ -6,7 +6,6 @@ import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.network.ReceiverSyncPayload;
 import com.zzy205.myfirstmod.network.SensorFilterPayload;
-import com.zzy205.myfirstmod.network.SensorItemPayload;
 import com.zzy205.myfirstmod.network.SensorNbtPayload;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import dan200.computercraft.api.peripheral.PeripheralCapability;

@@ -19,8 +19,8 @@
 
   "gui.ccnavigationtable.load_mode": "加载模式",
   "gui.ccnavigationtable.load_mode.off": "关闭",
-  "gui.ccnavigationtable.load_mode.chunk": "加载区块",
-  "gui.ccnavigationtable.load_mode.physics": "加载物理体",
+  "gui.ccnavigationtable.load_mode.chunk": "区块",
+  "gui.ccnavigationtable.load_mode.physics": "物理体",
   "gui.ccnavigationtable.load_mode.off.desc": "不进行任何加载",
   "gui.ccnavigationtable.load_mode.chunk.desc": "强制加载所在区块",
   "gui.ccnavigationtable.load_mode.physics.desc": "Sable 物理结构防卸载",

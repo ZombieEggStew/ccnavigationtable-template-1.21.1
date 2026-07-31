@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <!-- This module was also published with a richer model, Gradle metadata,  -->
+  <!-- which should be used instead. Do not delete the following line which  -->
+  <!-- is to indicate to Gradle or any Gradle module metadata file consumer  -->
+  <!-- that they should prefer consuming it instead. -->
+  <!-- do_not_remove: published-with-gradle-metadata -->
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>cc.tweaked</groupId>
+  <artifactId>cc-tweaked-1.21.1-core-api</artifactId>
+  <version>1.118.0</version>
+  <name>CC: Tweaked</name>
+  <description>CC: Tweaked is a fork of ComputerCraft, adding programmable computers, turtles and more to Minecraft.</description>
+  <url>https://github.com/cc-tweaked/CC-Tweaked</url>
+  <licenses>
+    <license>
+      <name>ComputerCraft Public License, Version 1.0</name>
+      <url>https://github.com/cc-tweaked/CC-Tweaked/blob/HEAD/LICENSE</url>
+    </license>
+  </licenses>
+  <scm>
+    <url>https://github.com/cc-tweaked/CC-Tweaked.git</url>
+  </scm>
+  <issueManagement>
+    <system>github</system>
+    <url>https://github.com/cc-tweaked/CC-Tweaked/issues</url>
+  </issueManagement>
+  <dependencies>
+    <dependency>
+      <groupId>org.checkerframework</groupId>
+      <artifactId>checker-qual</artifactId>
+      <version>3.51.1</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains</groupId>
+      <artifactId>annotations</artifactId>
+      <version>26.0.2-1</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+      <version>1.0.0</version>
+      <scope>compile</scope>
+    </dependency>
+  </dependencies>
+</project>

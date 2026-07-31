@@ -19,8 +19,8 @@
 
   "gui.ccnavigationtable.load_mode": "Load Mode",
   "gui.ccnavigationtable.load_mode.off": "Off",
-  "gui.ccnavigationtable.load_mode.chunk": "Chunk Load",
-  "gui.ccnavigationtable.load_mode.physics": "Physics Load",
+  "gui.ccnavigationtable.load_mode.chunk": "Chunk",
+  "gui.ccnavigationtable.load_mode.physics": "Physics",
   "gui.ccnavigationtable.load_mode.off.desc": "No loading",
   "gui.ccnavigationtable.load_mode.chunk.desc": "Force-load the chunk",
   "gui.ccnavigationtable.load_mode.physics.desc": "Sable physics anti-unload",

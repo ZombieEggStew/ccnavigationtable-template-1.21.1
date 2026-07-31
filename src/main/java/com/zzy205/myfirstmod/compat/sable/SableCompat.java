@@ -25,6 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -182,7 +183,7 @@ public final class SableCompat {
     public static List<SubLevel> getConnectedChain(SubLevel subLevel) {
         if (subLevel == null) return Collections.emptyList();
         try {
-            List<SubLevel> chain = SubLevelHelper.getConnectedChain(subLevel);
+            Collection<SubLevel> chain = SubLevelHelper.getConnectedChain(subLevel);
             return chain != null ? new ArrayList<>(chain) : Collections.singletonList(subLevel);
         } catch (Exception e) {
             return Collections.singletonList(subLevel);
