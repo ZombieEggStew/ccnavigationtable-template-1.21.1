@@ -9,12 +9,12 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 服务端→客户端：推送传感器附着方块的最新 NBT 数据。
+ * 鏈嶅姟绔啋瀹㈡埛绔細鎺ㄩ€佷紶鎰熷櫒闄勭潃鏂瑰潡鐨勬渶锟?NBT 鏁版嵁锟?
  */
 public record SensorNbtPayload(BlockPos sensorPos, CompoundTag nbt) implements CustomPacketPayload {
 
     public static final Type<SensorNbtPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(CCNavigationtable.MOD_ID, "sensor_nbt"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(CCNavigationtable.MOD_ID, "peripheral_extender_nbt"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SensorNbtPayload> STREAM_CODEC =
             StreamCodec.of(

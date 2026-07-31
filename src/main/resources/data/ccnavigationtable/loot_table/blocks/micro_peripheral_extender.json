@@ -11,11 +11,11 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "ccnavigationtable:my_sensor"
+          "name": "ccnavigationtable:micro_peripheral_extender"
         }
       ],
       "rolls": 1.0
     }
   ],
-  "random_sequence": "ccnavigationtable:blocks/my_sensor"
+  "random_sequence": "ccnavigationtable:blocks/micro_peripheral_extender"
 }

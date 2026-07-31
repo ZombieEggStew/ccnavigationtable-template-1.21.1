@@ -1,8 +1,8 @@
 package com.zzy205.myfirstmod;
 
 import com.zzy205.myfirstmod.screen.MyModMenus;
-import com.zzy205.myfirstmod.screen.MyReceiverScreen;
-import com.zzy205.myfirstmod.screen.MySensorScreen;
+import com.zzy205.myfirstmod.screen.RedstoneTransceiverScreen;
+import com.zzy205.myfirstmod.screen.PeripheralExtenderScreen;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -31,7 +31,7 @@ public class CCNavigationtableClient {
 
     @SubscribeEvent
     static void registerScreens(RegisterMenuScreensEvent event) {
-        event.register(MyModMenus.SENSOR_MENU.get(), MySensorScreen::new);
-        event.register(MyModMenus.RECEIVER_MENU.get(), MyReceiverScreen::new);
+        event.register(MyModMenus.PERIPHERAL_EXTENDER_MENU.get(), PeripheralExtenderScreen::new);
+        event.register(MyModMenus.REDSTONE_TRANSCEIVER_MENU.get(), RedstoneTransceiverScreen::new);
     }
 }

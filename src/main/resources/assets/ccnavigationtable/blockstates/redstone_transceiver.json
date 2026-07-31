@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "ccnavigationtable:block/redstone_transceiver"
+    }
+  }
+}

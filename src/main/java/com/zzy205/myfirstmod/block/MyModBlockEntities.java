@@ -10,8 +10,8 @@ import static com.zzy205.myfirstmod.CCNavigationtable.MOD_ID;
 
 public final class MyModBlockEntities {
     static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID);
-    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MySensorBlockEntity>> my_sensor_entity = BLOCK_ENTITY_TYPES.register("my_sensor", () -> BlockEntityType.Builder.of(MySensorBlockEntity::new, MyModBlocks.my_sensor.get()).build(null));
-    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MyReceiverBlockEntity>> my_receiver_entity = BLOCK_ENTITY_TYPES.register("my_receiver", () -> BlockEntityType.Builder.of(MyReceiverBlockEntity::new, MyModBlocks.my_receiver.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PeripheralExtenderBlockEntity>> micro_peripheral_extender_entity = BLOCK_ENTITY_TYPES.register("micro_peripheral_extender", () -> BlockEntityType.Builder.of(PeripheralExtenderBlockEntity::new, MyModBlocks.micro_peripheral_extender.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<RedstoneTransceiverBlockEntity>> redstone_transceiver_entity = BLOCK_ENTITY_TYPES.register("redstone_transceiver", () -> BlockEntityType.Builder.of(RedstoneTransceiverBlockEntity::new, MyModBlocks.redstone_transceiver.get()).build(null));
 
     public static void register(IEventBus bus) {
         BLOCK_ENTITY_TYPES.register(bus);

@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.block;
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.compat.cc.SensorRegistry;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -17,45 +18,49 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
 
-public class MySensorBlockEntity extends BlockEntity {
+public class PeripheralExtenderBlockEntity extends BlockEntity {
 
     /** 当前活跃的强制加载传感器数量 */
     private static int activeChunkLoaders = 0;
 
     private CompoundTag cachedAttachedNBT = new CompoundTag();
     private int scrolledValue = 0;
-    /** 幽灵物品槽中展示的物品 */
+    /** 幽灵物品槽中展示的物�?*/
     private ItemStack displayItem = ItemStack.EMPTY;
     /** 第二个幽灵物品槽 */
     private ItemStack displayItem2 = ItemStack.EMPTY;
 
-    /** 所有已被占用的频道号快照（服务端设置，客户端通过 updateTag 同步） */
+    /** 所有已被占用的频道号快照（服务端设置，客户端通过 updateTag 同步�?*/
     private int[] occupiedChannels = new int[0];
 
     /** 是否已对本传感器周围 3x3 区块执行强制加载 */
     private boolean chunksForceLoaded = false;
 
-    /** 是否已对传感器附着的 Sable 物理结构注册了 force-load ticket */
+    /** 是否已对传感器附着�?Sable 物理结构注册�?force-load ticket */
     private boolean sableTicketRegistered = false;
 
-    /** 传感器的 Sable SubLevel UUID（用于 PORTAL ticket 追踪） */
+    // ══�?GUI 加载模式 ══�?
+    /** 0=关闭, 1=加载区块, 2=加载物理�?*/
+    private int loadMode = 0;
+
+    /** 传感器的 Sable SubLevel UUID（用�?PORTAL ticket 追踪�?*/
     private UUID sableRootSubLevelId = null;
 
-    /** 所有通过约束连接的 SubLevel UUID（含自身），用于 PORTAL ticket 管理 */
+    /** 所有通过约束连接�?SubLevel UUID（含自身），用于 PORTAL ticket 管理 */
     private final Set<UUID> connectedSubLevelIds = new HashSet<>();
 
-    /** 每个 SubLevel 最后一次 PORTAL ticket 所在的区块 */
+    /** 每个 SubLevel 最后一�?PORTAL ticket 所在的区块 */
     private final Map<UUID, ChunkPos> portalTicketChunks = new HashMap<>();
 
     /** CC:T 无线红石输出信号 (0-15) */
     private int redstoneOutput = 0;
 
 
-    public MySensorBlockEntity(BlockPos pos, BlockState state) {
-        super(MyModBlockEntities.my_sensor_entity.get(), pos, state);
+    public PeripheralExtenderBlockEntity(BlockPos pos, BlockState state) {
+        super(MyModBlockEntities.micro_peripheral_extender_entity.get(), pos, state);
     }
 
-    // ═══════════════ 频道注册 ═══════════════
+    // ══════════════�?频道注册 ══════════════�?
 
     @Override
     public void onLoad() {
@@ -68,11 +73,8 @@ public class MySensorBlockEntity extends BlockEntity {
             }
             refreshOccupiedChannels();
 
-            // 优先尝试 Sable 子次元 force-load ticket（防止物理结构被距离优化卸载）
-            if (!tryRegisterSableTicket()) {
-                // 不在 Sable 子次元中 → 使用 vanilla 3x3 区块强制加载
-                forceLoadSurroundingChunks();
-            }
+            // 根据 GUI 加载模式决定启用哪种加载
+            applyLoadMode();
         }
     }
 
@@ -82,17 +84,17 @@ public class MySensorBlockEntity extends BlockEntity {
             releaseSurroundingChunks();
             releaseSableTicket();
             SensorRegistry.unregister(this.scrolledValue, this);
-            // 仅清除内部状态，不触发方块更新（避免保存/卸载时 setBlock 死锁）
+            // 仅清除内部状态，不触发方块更新（避免保存/卸载�?setBlock 死锁�?
             this.redstoneOutput = 0;
         }
         super.setRemoved();
     }
 
-    // ═══════════════ 区块强制加载 ═══════════════
+    // ══════════════�?区块强制加载 ══════════════�?
 
     /**
-     * 对本传感器周围 3x3 区块执行 vanilla 强制加载（共 9 个区块）。
-     * 仅在传感器不在 Sable 子次元中时调用。
+     * 对本传感器周�?3x3 区块执行 vanilla 强制加载（共 9 个区块）�?
+     * 仅在传感器不�?Sable 子次元中时调用�?
      */
     private void forceLoadSurroundingChunks() {
         if (chunksForceLoaded) return;
@@ -104,72 +106,68 @@ public class MySensorBlockEntity extends BlockEntity {
         if (level instanceof ServerLevel serverLevel) {
             int cx = worldPosition.getX() >> 4;
             int cz = worldPosition.getZ() >> 4;
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    serverLevel.setChunkForced(cx + dx, cz + dz, true);
-                }
-            }
+            serverLevel.setChunkForced(cx, cz, true);
             chunksForceLoaded = true;
             activeChunkLoaders++;
         }
     }
 
     /**
-     * 释放本传感器之前通过 vanilla 强制加载的 3x3 区块。
+     * 释放本传感器之前通过 vanilla 强制加载�?3x3 区块�?
      */
     private void releaseSurroundingChunks() {
         if (!chunksForceLoaded) return;
+        // 关服/卸载时方块坐标可能已失效，跳过以避免访问已关闭的系统
+        if (level == null || !level.isLoaded(worldPosition)) {
+            chunksForceLoaded = false;
+            return;
+        }
 
         if (level instanceof ServerLevel serverLevel) {
             int cx = worldPosition.getX() >> 4;
             int cz = worldPosition.getZ() >> 4;
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    serverLevel.setChunkForced(cx + dx, cz + dz, false);
-                }
-            }
+            serverLevel.setChunkForced(cx, cz, false);
             chunksForceLoaded = false;
             activeChunkLoaders--;
         }
     }
 
-    // ═══════════════ Sable 子次元 Ticket ═══════════════
+    // ══════════════�?Sable 子次�?Ticket ══════════════�?
 
     /**
-     * 尝试为传感器附着的 Sable 物理结构注册 force-load ticket。
-     * 成功时会同时：
+     * 尝试为传感器附着�?Sable 物理结构注册 force-load ticket�?
+     * 成功时会同时�?
      * <ul>
-     *   <li>注册 Sable SubLevel force-load ticket（防止 Sable 距离优化卸载）</li>
-     *   <li>对物理结构当前世界位置添加 PORTAL ticket（动态追踪移动）</li>
-     *   <li>对轴承等约束连接的子物理结构也添加 ticket</li>
+     *   <li>注册 Sable SubLevel force-load ticket（防�?Sable 距离优化卸载�?/li>
+     *   <li>对物理结构当前世界位置添�?PORTAL ticket（动态追踪移动）</li>
+     *   <li>对轴承等约束连接的子物理结构也添�?ticket</li>
      * </ul>
      *
-     * @return true 表示传感器在 Sable 子次元中且所有 ticket 已注册
+     * @return true 表示传感器在 Sable 子次元中且所�?ticket 已注�?
      */
     private boolean tryRegisterSableTicket() {
         if (sableTicketRegistered) return true;
-        if (!SableCompat.isAvailable()) return false;
 
-        // 检查传感器自身或附着方块是否在 Sable 子次元中
-        Object rootSubLevel = SableCompat.getContainingSubLevel(this);
+        // 检查传感器自身或附着方块是否�?Sable 子次元中
+        SubLevel rootSubLevel = (SubLevel) SableCompat.getContainingSubLevel(this);
         if (rootSubLevel == null && this.level != null) {
-            BlockPos attachedPos = MySensorBlock.getAttachedPos(this.getBlockState(), this.worldPosition);
-            rootSubLevel = SableCompat.getContainingSubLevel(this.level, attachedPos);
+            BlockPos attachedPos = PeripheralExtenderBlock.getAttachedPos(this.getBlockState(), this.worldPosition);
+            rootSubLevel = (SubLevel) SableCompat.getContainingSubLevel(this.level, attachedPos);
         }
         if (rootSubLevel == null) return false;
 
         UUID rootId = SableCompat.getSubLevelUUID(rootSubLevel);
         if (rootId == null) return false;
 
-        // 获取连接链（自身 + 轴承连接的所有 SubLevel）
-        List<Object> chain = SableCompat.getConnectedChain(rootSubLevel);
+        // 获取连接链（自身 + 轴承连接的所�?SubLevel�?
+        List<SubLevel> chain = (List<SubLevel>)(List<?>) SableCompat.getConnectedChain(rootSubLevel);
         if (chain.isEmpty()) chain = Collections.singletonList(rootSubLevel);
 
         boolean allOk = true;
         if (!(level instanceof ServerLevel serverLevel)) return false;
 
         // Layer 1: 对所有链中的 SubLevel 注册 Sable force-load ticket
-        for (Object subLevel : chain) {
+        for (SubLevel subLevel : chain) {
             if (SableCompat.isSubLevelRemoved(subLevel)) continue;
             UUID id = SableCompat.getSubLevelUUID(subLevel);
             if (id == null) continue;
@@ -178,7 +176,7 @@ public class MySensorBlockEntity extends BlockEntity {
             connectedSubLevelIds.add(id);
         }
 
-        // Layer 2: 为每个 SubLevel 添加 PORTAL ticket
+        // Layer 2: 为每�?SubLevel 添加 PORTAL ticket
         refreshPortalTickets(serverLevel, chain);
 
         sableRootSubLevelId = rootId;
@@ -188,14 +186,22 @@ public class MySensorBlockEntity extends BlockEntity {
     }
 
     /**
-     * 释放之前注册的所有 Sable force-load ticket 和 PORTAL ticket。
+     * 释放之前注册的所�?Sable force-load ticket �?PORTAL ticket�?
      */
     private void releaseSableTicket() {
         if (!sableTicketRegistered) return;
         sableTicketRegistered = false;
 
+        // 关服/卸载时跳过与 Sable 的交互，避免访问已关闭的系统导致死锁
+        if (level == null || !level.isLoaded(worldPosition)) {
+            portalTicketChunks.clear();
+            connectedSubLevelIds.clear();
+            sableRootSubLevelId = null;
+            return;
+        }
+
         if (level instanceof ServerLevel serverLevel) {
-            // 移除所有 PORTAL ticket
+            // 移除所�?PORTAL ticket
             for (var entry : portalTicketChunks.entrySet()) {
                 serverLevel.getChunkSource().removeRegionTicket(
                         TicketType.PORTAL, entry.getValue(),
@@ -204,7 +210,7 @@ public class MySensorBlockEntity extends BlockEntity {
             portalTicketChunks.clear();
 
             // 尝试移除 Sable force-load ticket
-            Object subLevel = SableCompat.getContainingSubLevel(this);
+            SubLevel subLevel = (SubLevel) SableCompat.getContainingSubLevel(this);
             if (subLevel != null) {
                 for (UUID id : connectedSubLevelIds) {
                     SableCompat.tryRemoveForceLoadTicket(this.level, subLevel, this.worldPosition);
@@ -215,38 +221,39 @@ public class MySensorBlockEntity extends BlockEntity {
         sableRootSubLevelId = null;
     }
 
-    // ═══════════════ 动态 PORTAL Ticket 追踪 ═══════════════
+    // ══════════════�?动�?PORTAL Ticket 追踪 ══════════════�?
 
     /**
-     * 服务器 tick：当 Sable 物理结构移动时，自动将 PORTAL ticket 移动到新位置。
-     * 由 {@link MySensorBlock#getTicker} 每 tick 调用。
+     * 服务�?tick：当 Sable 物理结构移动时，自动�?PORTAL ticket 移动到新位置�?
+     * �?{@link PeripheralExtenderBlock#getTicker} �?tick 调用�?
      */
-    public static void serverTick(Level level, BlockPos pos, BlockState state, MySensorBlockEntity be) {
+    public static void serverTick(Level level, BlockPos pos, BlockState state, PeripheralExtenderBlockEntity be) {
         if (!(level instanceof ServerLevel serverLevel)) return;
+        if (!level.isLoaded(pos)) return;  // 关服/卸载中跳�?
         if (!be.sableTicketRegistered || be.sableRootSubLevelId == null) return;
 
-        // 每 5 秒强制刷新防止超时
+        // �?5 秒强制刷新防止超�?
         boolean fiveSecRefresh = serverLevel.getServer().getTickCount() % 100 == 0;
 
-        // 重新获取连接链（物理结构可能在 tick 间新增/断开轴承连接）
-        Object rootSubLevel = SableCompat.getContainingSubLevel(be);
+        // 重新获取连接链（物理结构可能�?tick 间新�?断开轴承连接�?
+        SubLevel rootSubLevel = (SubLevel) SableCompat.getContainingSubLevel(be);
         if (rootSubLevel == null || SableCompat.isSubLevelRemoved(rootSubLevel)) {
-            // 物理结构已被移除 → 清理
+            // 物理结构已被移除 �?清理
             be.releaseSableTicket();
             return;
         }
 
-        List<Object> chain = SableCompat.getConnectedChain(rootSubLevel);
+        List<SubLevel> chain = (List<SubLevel>)(List<?>) SableCompat.getConnectedChain(rootSubLevel);
         if (chain.isEmpty()) chain = Collections.singletonList(rootSubLevel);
 
-        // 同步 connectedSubLevelIds（处理新增/断开的连接）
+        // 同步 connectedSubLevelIds（处理新�?断开的连接）
         Set<UUID> currentIds = new HashSet<>();
-        for (Object sl : chain) {
+        for (SubLevel sl : chain) {
             UUID id = SableCompat.getSubLevelUUID(sl);
             if (id != null) currentIds.add(id);
         }
 
-        // 清理已断开连接的 SubLevel 的 PORTAL ticket
+        // 清理已断开连接�?SubLevel �?PORTAL ticket
         for (UUID oldId : new HashSet<>(be.connectedSubLevelIds)) {
             if (!currentIds.contains(oldId)) {
                 ChunkPos oldChunk = be.portalTicketChunks.remove(oldId);
@@ -260,8 +267,8 @@ public class MySensorBlockEntity extends BlockEntity {
         be.connectedSubLevelIds.clear();
         be.connectedSubLevelIds.addAll(currentIds);
 
-        // 确保所有链中 SubLevel 都有 Sable ticket
-        for (Object sl : chain) {
+        // 确保所有链�?SubLevel 都有 Sable ticket
+        for (SubLevel sl : chain) {
             if (SableCompat.isSubLevelRemoved(sl)) continue;
             SableCompat.tryAddForceLoadTicket(level, sl, be.worldPosition);
         }
@@ -273,10 +280,10 @@ public class MySensorBlockEntity extends BlockEntity {
     }
 
     /**
-     * 检查是否有 SubLevel 移动到了新 chunk，需要刷新 PORTAL ticket。
+     * 检查是否有 SubLevel 移动到了�?chunk，需要刷�?PORTAL ticket�?
      */
-    private static boolean needsPortalTicketRefresh(ServerLevel level, List<Object> chain, MySensorBlockEntity be) {
-        for (Object sl : chain) {
+    private static boolean needsPortalTicketRefresh(ServerLevel level, List<SubLevel> chain, PeripheralExtenderBlockEntity be) {
+        for (SubLevel sl : chain) {
             if (SableCompat.isSubLevelRemoved(sl)) continue;
             Vec3 worldPos = SableCompat.getSubLevelWorldPos(sl);
             if (worldPos == null) continue;
@@ -292,11 +299,11 @@ public class MySensorBlockEntity extends BlockEntity {
     }
 
     /**
-     * 为所有链中的 SubLevel 放置/移动 PORTAL ticket。
+     * 为所有链中的 SubLevel 放置/移动 PORTAL ticket�?
      */
-    private void refreshPortalTickets(ServerLevel serverLevel, List<Object> chain) {
+    private void refreshPortalTickets(ServerLevel serverLevel, List<SubLevel> chain) {
         int radius = Config.SENSOR_PORTAL_TICKET_RADIUS.get();
-        for (Object sl : chain) {
+        for (SubLevel sl : chain) {
             if (SableCompat.isSubLevelRemoved(sl)) continue;
             Vec3 worldPos = SableCompat.getSubLevelWorldPos(sl);
             if (worldPos == null) continue;
@@ -308,21 +315,21 @@ public class MySensorBlockEntity extends BlockEntity {
                     (int) Math.floor(worldPos.z / 16.0));
             ChunkPos lastChunk = portalTicketChunks.get(id);
 
-            if (lastChunk != null && lastChunk.equals(curChunk)) continue; // 未移动
+            if (lastChunk != null && lastChunk.equals(curChunk)) continue; // 未移�?
 
-            // 移除旧 ticket
+            // 移除�?ticket
             if (lastChunk != null) {
                 serverLevel.getChunkSource().removeRegionTicket(
                         TicketType.PORTAL, lastChunk, radius, this.worldPosition);
             }
-            // 添加新 ticket
+            // 添加�?ticket
             serverLevel.getChunkSource().addRegionTicket(
                     TicketType.PORTAL, curChunk, radius, this.worldPosition);
             portalTicketChunks.put(id, curChunk);
         }
     }
 
-    /** 从注册表同步 occupiedChannels 快照到本 BE，并通知客户端 */
+    /** 从注册表同步 occupiedChannels 快照到本 BE，并通知客户�?*/
     public void refreshOccupiedChannels() {
         if (this.level == null || this.level.isClientSide) return;
         var channels = SensorRegistry.getOccupiedChannels();
@@ -334,12 +341,12 @@ public class MySensorBlockEntity extends BlockEntity {
         this.level.sendBlockUpdated(this.getBlockPos(), this.getBlockState(), this.getBlockState(), 3);
     }
 
-    /** 获取被占用的频道号数组（客户端 GUI 用它跳过已占用的频道） */
+    /** 获取被占用的频道号数组（客户�?GUI 用它跳过已占用的频道�?*/
     public int[] getOccupiedChannels() {
         return occupiedChannels;
     }
 
-    /** 检查指定频道是否被其他传感器占用 */
+    /** 检查指定频道是否被其他传感器占�?*/
     public boolean isChannelOccupiedByOther(int channel) {
         if (channel == this.scrolledValue) return false; // 自己占用不算
         for (int ch : occupiedChannels) {
@@ -349,25 +356,25 @@ public class MySensorBlockEntity extends BlockEntity {
     }
 
     /**
-     * 对外暴露的读取接口：刷新并返回附着方块的最新 NBT。
-     * 仅在调用时读取，不会后台自动 tick。
+     * 对外暴露的读取接口：刷新并返回附着方块的最�?NBT�?
+     * 仅在调用时读取，不会后台自动 tick�?
      */
     public CompoundTag refreshAndGet(Level level, BlockState state) {
-        this.cachedAttachedNBT = MySensorBlock.getAttachedBlockNBT(level, state, this.getBlockPos());
+        this.cachedAttachedNBT = PeripheralExtenderBlock.getAttachedBlockNBT(level, state, this.getBlockPos());
         this.setChanged();
         level.sendBlockUpdated(this.getBlockPos(), state, state, 3);
         return this.cachedAttachedNBT;
     }
 
     /**
-     * 获取上次缓存的 NBT（不触发刷新）。
+     * 获取上次缓存�?NBT（不触发刷新）�?
      */
     public CompoundTag getCachedAttachedNBT() {
         return cachedAttachedNBT;
     }
 
     /**
-     * 由网络包处理时设置缓存（仅客户端调用）。
+     * 由网络包处理时设置缓存（仅客户端调用）�?
      */
     public void setCachedAttachedNBT(CompoundTag nbt) {
         this.cachedAttachedNBT = nbt;
@@ -405,12 +412,12 @@ public class MySensorBlockEntity extends BlockEntity {
         this.setChanged();
     }
 
-    /** 按索引获取幽灵物品槽（0或1） */
+    /** 按索引获取幽灵物品槽�?�?�?*/
     public ItemStack getDisplayItem(int slot) {
         return slot == 1 ? displayItem2 : displayItem;
     }
 
-    /** 按索引设置幽灵物品槽（0或1） */
+    /** 按索引设置幽灵物品槽�?�?�?*/
     public void setDisplayItem(int slot, ItemStack stack) {
         if (slot == 1) {
             setDisplayItem2(stack);
@@ -419,7 +426,7 @@ public class MySensorBlockEntity extends BlockEntity {
         }
     }
 
-    // ═══════════════ 无线红石输出 ═══════════════
+    // ══════════════�?无线红石输出 ══════════════�?
 
     public int getRedstoneOutput() { return redstoneOutput; }
 
@@ -429,15 +436,53 @@ public class MySensorBlockEntity extends BlockEntity {
         this.redstoneOutput = clamped;
         this.setChanged();
         if (this.level != null && !this.level.isClientSide) {
-            MySensorBlock.updateRedstoneOutput(this.level, this.worldPosition, clamped);
+            PeripheralExtenderBlock.updateRedstoneOutput(this.level, this.worldPosition, clamped);
         }
     }
 
-    /** 读取传感器位置接收到的最强红石信号（0-15）。 */
+    /** 读取传感器位置接收到的最强红石信号（0-15）�?*/
     public int getRedstoneInput() {
         if (this.level == null) return 0;
         return this.level.getBestNeighborSignal(this.worldPosition);
     }
+
+    // ══════════════�?GUI 加载模式 ══════════════�?
+
+    public int getLoadMode() { return loadMode; }
+
+    public void setLoadMode(int mode) {
+        int clamped = Math.clamp(mode, 0, 2);
+        if (this.loadMode == clamped) return;
+        // 先释放旧模式
+        releaseSurroundingChunks();
+        releaseSableTicket();
+        this.loadMode = clamped;
+        this.setChanged();
+        if (level != null && !level.isClientSide) {
+            applyLoadMode();
+        }
+    }
+
+    /** 根据当前 loadMode 启用对应的加载方�?*/
+    private void applyLoadMode() {
+        switch (loadMode) {
+            case 1 -> forceLoadSurroundingChunks();
+            case 2 -> tryRegisterSableTicket();
+        }
+    }
+
+    /** 检测传感器是否�?Sable 物理体上 */
+    public boolean isOnPhysicsBody() {
+        if (level == null || level.isClientSide) return false;
+        if (com.zzy205.myfirstmod.compat.sable.SableCompat.getContainingSubLevel(this) != null)
+            return true;
+        BlockPos attached = PeripheralExtenderBlock.getAttachedPos(this.getBlockState(), this.worldPosition);
+        return com.zzy205.myfirstmod.compat.sable.SableCompat.getContainingSubLevel(level, attached) != null;
+    }
+
+    // 兼容旧方法（菜单 extra data 使用�?
+    public boolean isChunkLoadEnabled() { return loadMode == 1; }
+    public boolean isSableLoadEnabled() { return loadMode == 2; }
 
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
@@ -445,8 +490,7 @@ public class MySensorBlockEntity extends BlockEntity {
         tag.put("AttachedNBT", cachedAttachedNBT);
         tag.putInt("ScrolledValue", scrolledValue);
         tag.putIntArray("OccupiedChannels", occupiedChannels);
-        tag.putBoolean("ChunksForceLoaded", chunksForceLoaded);
-        tag.putBoolean("SableTicket", sableTicketRegistered);
+        tag.putInt("LoadMode", loadMode);
         tag.putInt("RedstoneOutput", redstoneOutput);
         if (!displayItem.isEmpty()) {
             tag.put("DisplayItem", displayItem.save(registries));
@@ -463,8 +507,14 @@ public class MySensorBlockEntity extends BlockEntity {
         if (tag.contains("AttachedNBT")) cachedAttachedNBT = tag.getCompound("AttachedNBT");
         if (tag.contains("ScrolledValue")) scrolledValue = tag.getInt("ScrolledValue");
         if (tag.contains("OccupiedChannels")) occupiedChannels = tag.getIntArray("OccupiedChannels");
-        if (tag.contains("ChunksForceLoaded")) chunksForceLoaded = tag.getBoolean("ChunksForceLoaded");
-        if (tag.contains("SableTicket")) sableTicketRegistered = tag.getBoolean("SableTicket");
+        // chunksForceLoaded / sableTicketRegistered 不持久化——世界重载后需重新注册
+        if (tag.contains("LoadMode")) {
+            loadMode = Math.clamp(tag.getInt("LoadMode"), 0, 2);
+        } else {
+            // 兼容旧版数据
+            if (tag.contains("ChunkLoadEnabled") && tag.getBoolean("ChunkLoadEnabled")) loadMode = 1;
+            if (tag.contains("SableLoadEnabled") && tag.getBoolean("SableLoadEnabled")) loadMode = 2;
+        }
         if (tag.contains("RedstoneOutput")) redstoneOutput = tag.getInt("RedstoneOutput");
         if (tag.contains("DisplayItem")) {
             displayItem = ItemStack.parse(registries, tag.getCompound("DisplayItem")).orElse(ItemStack.EMPTY);
@@ -480,8 +530,7 @@ public class MySensorBlockEntity extends BlockEntity {
         tag.put("AttachedNBT", cachedAttachedNBT);
         tag.putInt("ScrolledValue", scrolledValue);
         tag.putIntArray("OccupiedChannels", occupiedChannels);
-        tag.putBoolean("ChunksForceLoaded", chunksForceLoaded);
-        tag.putBoolean("SableTicket", sableTicketRegistered);
+        tag.putInt("LoadMode", loadMode);
         tag.putInt("RedstoneOutput", redstoneOutput);
         if (!displayItem.isEmpty()) {
             tag.put("DisplayItem", displayItem.save(registries));

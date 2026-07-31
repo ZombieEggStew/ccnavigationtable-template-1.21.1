@@ -43,8 +43,8 @@ import org.jspecify.annotations.NonNull;
 import java.util.EnumMap;
 import java.util.Map;
 
-public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
-    public static final MapCodec<MySensorBlock> CODEC = MySensorBlock.simpleCodec(MySensorBlock::new);
+public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrenchable {
+    public static final MapCodec<PeripheralExtenderBlock> CODEC = PeripheralExtenderBlock.simpleCodec(PeripheralExtenderBlock::new);
     public static final EnumProperty<AttachFace> FACE = BlockStateProperties.ATTACH_FACE;
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
     public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
@@ -84,7 +84,7 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
         return result[0].optimize();
     }
 
-    public MySensorBlock(BlockBehaviour.Properties properties) {
+    public PeripheralExtenderBlock(BlockBehaviour.Properties properties) {
         super(properties);
         registerDefaultState(stateDefinition.any()
                 .setValue(FACE, AttachFace.FLOOR)
@@ -144,11 +144,11 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
         }
     }
 
-    // ── 红石输出 ──
+    // 鈹€鈹€ 绾㈢煶杈撳嚭 鈹€鈹€
 
     @Override
     protected int getSignal(@NonNull BlockState state, @NonNull BlockGetter level, @NonNull BlockPos pos, @NonNull Direction side) {
-        if (level.getBlockEntity(pos) instanceof MySensorBlockEntity be)
+        if (level.getBlockEntity(pos) instanceof PeripheralExtenderBlockEntity be)
             return be.getRedstoneOutput();
         return 0;
     }
@@ -159,14 +159,14 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 更新传感器的红石输出信号并通知相邻方块。
-     * 由 {@link MySensorBlockEntity#setRedstoneOutput} 调用。
+     * 鏇存柊浼犳劅鍣ㄧ殑绾㈢煶杈撳嚭淇″彿骞堕€氱煡鐩搁偦鏂瑰潡锟?
+     * 锟?{@link PeripheralExtenderBlockEntity#setRedstoneOutput} 璋冪敤锟?
      */
     public static void updateRedstoneOutput(Level level, BlockPos pos, int signal) {
-        // 防止在区块卸载/世界保存期间产生 block update 死锁
+        // 闃叉鍦ㄥ尯鍧楀嵏锟?涓栫晫淇濆瓨鏈熼棿浜х敓 block update 姝婚攣
         if (level.isClientSide || !level.isLoaded(pos)) return;
         BlockState state = level.getBlockState(pos);
-        if (!state.is(MyModBlocks.my_sensor.get())) return; // 方块已被替换则跳过
+        if (!state.is(MyModBlocks.micro_peripheral_extender.get())) return; // 鏂瑰潡宸茶鏇挎崲鍒欒烦锟?
         boolean shouldPower = signal > 0;
         if (state.hasProperty(POWERED) && state.getValue(POWERED) != shouldPower) {
             level.setBlock(pos, state.setValue(POWERED, shouldPower), Block.UPDATE_ALL);
@@ -187,15 +187,15 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     public BlockEntity newBlockEntity(@NonNull BlockPos pos, @NonNull BlockState state) {
-        return new MySensorBlockEntity(pos, state);
+        return new PeripheralExtenderBlockEntity(pos, state);
     }
 
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NonNull Level level, @NonNull BlockState state, @NonNull BlockEntityType<T> type) {
         if (level.isClientSide) return null;
         return (lvl, pos, st, be) -> {
-            if (be instanceof MySensorBlockEntity sensorBE) {
-                MySensorBlockEntity.serverTick(lvl, pos, st, sensorBE);
+            if (be instanceof PeripheralExtenderBlockEntity sensorBE) {
+                PeripheralExtenderBlockEntity.serverTick(lvl, pos, st, sensorBE);
             }
         };
     }
@@ -215,9 +215,9 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
 
-    // ────────────────────────────────────────
-    //  右键 GUI：显示附着方块的 NBT
-    // ────────────────────────────────────────
+    // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    //  鍙抽敭 GUI锛氭樉绀洪檮鐫€鏂瑰潡锟?NBT
+    // 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     private static final Component SENSOR_GUI_TITLE =
             Component.translatable("gui.ccnavigationtable.sensor_nbt");
@@ -226,27 +226,33 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hitResult) {
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
-            // 读取附着方块的 NBT
+            // 璇诲彇闄勭潃鏂瑰潡锟?NBT
             CompoundTag attachedNBT = getAttachedBlockNBT(level, state, pos);
 
-            // 获取传感器 BE 的频道信息（必须 final 才能在 lambda 中使用）
+            // 鑾峰彇浼犳劅锟?BE 鐨勯閬撲俊鎭紙蹇呴』 final 鎵嶈兘锟?lambda 涓娇鐢級
             BlockEntity be = level.getBlockEntity(pos);
             final int sensorChannel;
             final int[] occupiedChannels;
-            if (be instanceof MySensorBlockEntity sensorBE) {
+            final int loadMode;
+            final boolean onPhysicsBody;
+            if (be instanceof PeripheralExtenderBlockEntity sensorBE) {
                 sensorChannel = sensorBE.getScrolledValue();
                 var regChannels = com.zzy205.myfirstmod.compat.cc.SensorRegistry.getOccupiedChannels();
                 occupiedChannels = regChannels.stream().mapToInt(Integer::intValue).toArray();
+                loadMode = sensorBE.getLoadMode();
+                onPhysicsBody = sensorBE.isOnPhysicsBody();
             } else {
                 sensorChannel = 0;
                 occupiedChannels = new int[0];
+                loadMode = 0;
+                onPhysicsBody = false;
             }
 
-            // 打开 NBT 查看 GUI，通过 extraData 传递位置、初始 NBT 快照和频道信息
+            // 鎵撳紑 NBT 鏌ョ湅 GUI锛岄€氳繃 extraData 浼犻€掍綅缃€佸垵锟?NBT 蹇収鍜岄閬撲俊锟?
             serverPlayer.openMenu(
                     new SimpleMenuProvider(
                             (containerId, inv, p) ->
-                                    new com.zzy205.myfirstmod.screen.MySensorMenu(containerId, pos, attachedNBT, inv),
+                                    new com.zzy205.myfirstmod.screen.PeripheralExtenderMenu(containerId, pos, attachedNBT, inv),
                             SENSOR_GUI_TITLE
                     ),
                     buf -> {
@@ -257,6 +263,8 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
                         for (int ch : occupiedChannels) {
                             buf.writeVarInt(ch);
                         }
+                        buf.writeVarInt(loadMode);
+                        buf.writeBoolean(onPhysicsBody);
                     }
             );
         }
@@ -264,7 +272,7 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 计算传感器所附着的方块坐标
+     * 璁＄畻浼犳劅鍣ㄦ墍闄勭潃鐨勬柟鍧楀潗锟?
      */
     public static BlockPos getAttachedPos(BlockState state, BlockPos sensorPos) {
         Direction supportDir = switch (state.getValue(FACE)) {
@@ -276,9 +284,9 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 读取附着方块/机器的完整 NBT 数据。
-     * 如果方块在 Sable 物理子次元中（如航空学组装后的物体），
-     * 会额外写入真实世界坐标 {@code RealWorldPos}。
+     * 璇诲彇闄勭潃鏂瑰潡/鏈哄櫒鐨勫畬锟?NBT 鏁版嵁锟?
+     * 濡傛灉鏂瑰潡锟?Sable 鐗╃悊瀛愭鍏冧腑锛堝鑸┖瀛︾粍瑁呭悗鐨勭墿浣擄級锟?
+     * 浼氶澶栧啓鍏ョ湡瀹炰笘鐣屽潗锟?{@code RealWorldPos}锟?
      */
     public static CompoundTag getAttachedBlockNBT(Level level, BlockState state, BlockPos sensorPos) {
         BlockPos attachedPos = getAttachedPos(state, sensorPos);
@@ -287,13 +295,13 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
         if (attachedBE != null) {
             CompoundTag nbt = attachedBE.saveWithFullMetadata(level.registryAccess());
 
-            // 尝试通过 Sable API 获取物理组装后的真实世界坐标
+            // 灏濊瘯閫氳繃 Sable API 鑾峰彇鐗╃悊缁勮鍚庣殑鐪熷疄涓栫晫鍧愭爣
             tryAddRealWorldPos(level, attachedBE, nbt);
 
             return nbt;
         }
 
-        // 如果没有 BlockEntity，返回附着方块的状态信息
+        // 濡傛灉娌℃湁 BlockEntity锛岃繑鍥為檮鐫€鏂瑰潡鐨勭姸鎬佷俊锟?
         CompoundTag fallback = new CompoundTag();
         BlockState attachedState = level.getBlockState(attachedPos);
         fallback.putString("block", attachedState.getBlock().getDescriptionId());
@@ -302,10 +310,10 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 如果方块实体在 Sable 物理子次元中（航空学等 mod 的物理组装），
-     * 将 NBT 中的 x/y/z 坐标直接替换为真实世界坐标。
+     * 濡傛灉鏂瑰潡瀹炰綋锟?Sable 鐗╃悊瀛愭鍏冧腑锛堣埅绌哄锟?mod 鐨勭墿鐞嗙粍瑁咃級锟?
+     * 锟?NBT 涓殑 x/y/z 鍧愭爣鐩存帴鏇挎崲涓虹湡瀹炰笘鐣屽潗鏍囷拷?
      * <p>
-     * 使用反射避免 Sable 未加载时引发 {@link NoClassDefFoundError}。
+     * 浣跨敤鍙嶅皠閬垮厤 Sable 鏈姞杞芥椂寮曞彂 {@link NoClassDefFoundError}锟?
      */
     @SuppressWarnings("CallToPrintStackTrace")
     static void tryAddRealWorldPos(Level level, BlockEntity be, CompoundTag nbt) {
@@ -324,13 +332,13 @@ public class MySensorBlock extends BaseEntityBlock implements IWrenchable {
                         .getMethod("projectOutOfSubLevel", Level.class, Position.class)
                         .invoke(helper, level, be.getBlockPos().getCenter());
 
-                // 直接替换 NBT 中的 x/y/z 为真实世界坐标
+                // 鐩存帴鏇挎崲 NBT 涓殑 x/y/z 涓虹湡瀹炰笘鐣屽潗锟?
                 nbt.putDouble("x", realPos.x);
                 nbt.putDouble("y", realPos.y);
                 nbt.putDouble("z", realPos.z);
             }
         } catch (NoClassDefFoundError | ClassNotFoundException e) {
-            // Sable 未加载，无需修正坐标
+            // Sable 鏈姞杞斤紝鏃犻渶淇鍧愭爣
         } catch (Exception e) {
             e.printStackTrace();
         }

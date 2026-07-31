@@ -3,19 +3,27 @@
   "itemGroup.ccnavigationtable.my_mod_tab": "电脑导航",
 
   "block.ccnavigationtable.test_block": "测试方块",
-  "block.ccnavigationtable.my_sensor": "传感器",
-  "block.ccnavigationtable.my_receiver": "接收器",
+  "block.ccnavigationtable.micro_peripheral_extender": "微型外设扩展器",
+  "block.ccnavigationtable.redstone_transceiver": "红石收发器",
 
-  "gui.ccnavigationtable.receiver": "接收器",
-  "gui.ccnavigationtable.receiver.hold_to_delete": "按住鼠标左键1秒删除此条",
+  "gui.ccnavigationtable.redstone_transceiver": "红石收发器",
+  "gui.ccnavigationtable.redstone_transceiver.hold_to_delete": "按住鼠标左键删除此条",
 
   "gui.ccnavigationtable.sensor_nbt": "附着方块 NBT",
   "gui.ccnavigationtable.sensor_nbt.empty": "（无 NBT 数据）",
-  "gui.ccnavigationtable.sensor_select_mode": "选择红石信号模式",  
+  "gui.ccnavigationtable.sensor_select_mode": "选择红石信号模式",
   "gui.ccnavigationtable.sensor_channel": "频道选择",
   "gui.ccnavigationtable.scroll_to_change": "滚动修改",
-  "gui.ccnavigationtable.shift_scroll_faster": "按住 Shift 滚动更快",  
+  "gui.ccnavigationtable.shift_scroll_faster": "按住 Shift 滚动更快",
   "gui.ccnavigationtable.scroll_to_select": "滚动选择",
+
+  "gui.ccnavigationtable.load_mode": "加载模式",
+  "gui.ccnavigationtable.load_mode.off": "关闭",
+  "gui.ccnavigationtable.load_mode.chunk": "加载区块",
+  "gui.ccnavigationtable.load_mode.physics": "加载物理体",
+  "gui.ccnavigationtable.load_mode.off.desc": "不进行任何加载",
+  "gui.ccnavigationtable.load_mode.chunk.desc": "强制加载所在区块",
+  "gui.ccnavigationtable.load_mode.physics.desc": "Sable 物理结构防卸载",
 
   "ccnavigationtable.configuration.title": "CC Navigation table Configs",
   "ccnavigationtable.configuration.section.ccnavigationtable.common.toml": "CC Navigation table Configs",

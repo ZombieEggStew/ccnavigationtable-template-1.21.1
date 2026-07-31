@@ -8,17 +8,18 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 客户端→服务端：保存传感器滚轮数值和选择菜单的状态。
+ * 瀹㈡埛绔啋鏈嶅姟绔細淇濆瓨浼犳劅鍣ㄦ粴杞暟鍊煎拰鍔犺浇妯″紡锟?
  */
-public record SensorFilterPayload(BlockPos sensorPos, int scrolledValue) implements CustomPacketPayload {
+public record SensorFilterPayload(BlockPos sensorPos, int scrolledValue, int loadMode) implements CustomPacketPayload {
 
     public static final Type<SensorFilterPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(CCNavigationtable.MOD_ID, "sensor_filter"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(CCNavigationtable.MOD_ID, "peripheral_extender_filter"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SensorFilterPayload> STREAM_CODEC =
             StreamCodec.composite(
                     BlockPos.STREAM_CODEC, SensorFilterPayload::sensorPos,
                     net.minecraft.network.codec.ByteBufCodecs.INT, SensorFilterPayload::scrolledValue,
+                    net.minecraft.network.codec.ByteBufCodecs.INT, SensorFilterPayload::loadMode,
                     SensorFilterPayload::new
             );
 

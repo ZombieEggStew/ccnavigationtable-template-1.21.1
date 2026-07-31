@@ -22,8 +22,8 @@ public class MyModCreativeModeTabs {
             .displayItems((parameters, output) -> {
                 output.accept(MyModItems.test_item);
                 output.accept(MyModBlocks.test_block);
-                output.accept(MyModBlocks.my_sensor);
-                output.accept(MyModBlocks.my_receiver);
+                output.accept(MyModBlocks.micro_peripheral_extender);
+                output.accept(MyModBlocks.redstone_transceiver);
             })
             .build());
     public static void register(IEventBus modEventBus) {

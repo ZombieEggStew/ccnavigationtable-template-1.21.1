@@ -2,10 +2,7 @@ package com.zzy205.myfirstmod.block;
 
 import com.zzy205.myfirstmod.CCNavigationtable;
 import com.zzy205.myfirstmod.item.MyModItems;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.bus.api.IEventBus;
@@ -23,15 +20,15 @@ public class MyModBlocks {
                     strength(1.0f , 6.0f)
             ));
 
-    public static final DeferredBlock<Block> my_sensor =
-            registerBlocks("my_sensor" , () -> new MySensorBlock(BlockBehaviour.Properties.of().
+    public static final DeferredBlock<Block> micro_peripheral_extender =
+            registerBlocks("micro_peripheral_extender" , () -> new PeripheralExtenderBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.WOOD).
                     strength(1.0f , 6.0f).
                     noOcclusion()
             ));
 
-    public static final DeferredBlock<Block> my_receiver =
-            registerBlocks("my_receiver" , () -> new MyReceiverBlock(BlockBehaviour.Properties.of().
+    public static final DeferredBlock<Block> redstone_transceiver =
+            registerBlocks("redstone_transceiver" , () -> new RedstoneTransceiverBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.WOOD).
                     strength(1.0f , 6.0f)
             ));

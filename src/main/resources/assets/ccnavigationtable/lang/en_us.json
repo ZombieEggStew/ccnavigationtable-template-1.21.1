@@ -1,10 +1,13 @@
 {
   "item.ccnavigationtable.test_item": "Test Item",
+  "itemGroup.ccnavigationtable.my_mod_tab": "CC Navigation",
 
-  "block.ccnavigationtable.my_receiver": "Receiver",
+  "block.ccnavigationtable.test_block": "Test Block",
+  "block.ccnavigationtable.micro_peripheral_extender": "Micro Peripheral Extender",
+  "block.ccnavigationtable.redstone_transceiver": "Redstone Transceiver",
 
-  "gui.ccnavigationtable.receiver": "Receiver",
-  "gui.ccnavigationtable.receiver.hold_to_delete": "Hold left click 1s to delete",
+  "gui.ccnavigationtable.redstone_transceiver": "Redstone Transceiver",
+  "gui.ccnavigationtable.redstone_transceiver.hold_to_delete": "Hold left click to delete",
 
   "gui.ccnavigationtable.sensor_nbt": "Attached Block NBT",
   "gui.ccnavigationtable.sensor_nbt.empty": "(No NBT data)",
@@ -13,6 +16,14 @@
   "gui.ccnavigationtable.scroll_to_change": "Scroll to change",
   "gui.ccnavigationtable.shift_scroll_faster": "Hold Shift to scroll faster",
   "gui.ccnavigationtable.scroll_to_select": "Scroll to select",
+
+  "gui.ccnavigationtable.load_mode": "Load Mode",
+  "gui.ccnavigationtable.load_mode.off": "Off",
+  "gui.ccnavigationtable.load_mode.chunk": "Chunk Load",
+  "gui.ccnavigationtable.load_mode.physics": "Physics Load",
+  "gui.ccnavigationtable.load_mode.off.desc": "No loading",
+  "gui.ccnavigationtable.load_mode.chunk.desc": "Force-load the chunk",
+  "gui.ccnavigationtable.load_mode.physics.desc": "Sable physics anti-unload",
 
   "ccnavigationtable.configuration.title": "CC Navigation table Configs",
   "ccnavigationtable.configuration.section.ccnavigationtable.common.toml": "CC Navigation table Configs",

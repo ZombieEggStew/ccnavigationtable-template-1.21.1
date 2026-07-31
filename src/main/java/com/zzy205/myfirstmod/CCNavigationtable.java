@@ -4,10 +4,12 @@ import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
+import com.zzy205.myfirstmod.network.ReceiverSyncPayload;
 import com.zzy205.myfirstmod.network.SensorFilterPayload;
 import com.zzy205.myfirstmod.network.SensorItemPayload;
 import com.zzy205.myfirstmod.network.SensorNbtPayload;
 import com.zzy205.myfirstmod.screen.MyModMenus;
+import dan200.computercraft.api.peripheral.PeripheralCapability;
 import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
@@ -25,6 +27,7 @@ import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.fml.ModList;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
@@ -57,7 +60,7 @@ public class CCNavigationtable {
                         // 客户端：收到 NBT 后直接更新客户端 BE
                         var level = ctx.player().level();
                         var be = level.getBlockEntity(payload.sensorPos());
-                        if (be instanceof com.zzy205.myfirstmod.block.MySensorBlockEntity sensorBE) {
+                        if (be instanceof com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity sensorBE) {
                             sensorBE.setCachedAttachedNBT(payload.nbt());
                         }
                     }
@@ -70,35 +73,47 @@ public class CCNavigationtable {
                     (payload, ctx) -> {
                         var level = ctx.player().level();
                         var be = level.getBlockEntity(payload.sensorPos());
-                        if (be instanceof com.zzy205.myfirstmod.block.MySensorBlockEntity sensorBE) {
+                        if (be instanceof com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity sensorBE) {
                             int newChannel = payload.scrolledValue();
                             if (newChannel != sensorBE.getScrolledValue()) {
                                 int assigned = com.zzy205.myfirstmod.compat.cc.SensorRegistry
                                         .register(newChannel, sensorBE);
                                 sensorBE.setScrolledValue(assigned);
                             }
+                            sensorBE.setLoadMode(payload.loadMode());
                             sensorBE.refreshOccupiedChannels();
                         }
                     }
             );
 
-            // 客户端→服务端：同步幽灵物品槽
+            // 客户端→服务端：Receiver 完整数据同步
             registrar.playToServer(
-                    SensorItemPayload.TYPE,
-                    SensorItemPayload.STREAM_CODEC,
+                    ReceiverSyncPayload.TYPE,
+                    ReceiverSyncPayload.STREAM_CODEC,
                     (payload, ctx) -> {
                         var level = ctx.player().level();
-                        var be = level.getBlockEntity(payload.sensorPos());
-                        if (be instanceof com.zzy205.myfirstmod.block.MySensorBlockEntity sensorBE) {
-                            sensorBE.setDisplayItem(payload.slotIndex(), payload.item());
-                            var packet = net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket.create(sensorBE);
-                            if (packet != null) {
-                                ((net.minecraft.server.level.ServerPlayer) ctx.player()).connection.send(packet);
-                            }
+                        var be = level.getBlockEntity(payload.pos());
+                        if (be instanceof com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity receiverBE) {
+                            receiverBE.setBannerData(payload.data());
+                            receiverBE.setLoadMode(payload.loadMode());
+                            com.zzy205.myfirstmod.compat.cc.ReceiverRegistry.updateChannels(receiverBE, payload.data());
                         }
                     }
             );
         });
+
+        // 注册 Receiver BlockEntity 为 CC:T 外设（支持 peripheral.wrap / peripheral.find）
+        modEventBus.addListener(RegisterCapabilitiesEvent.class, event -> {
+            if (ModList.get().isLoaded("computercraft")) {
+                event.registerBlockEntity(
+                        PeripheralCapability.get(),
+                        com.zzy205.myfirstmod.block.MyModBlockEntities.redstone_transceiver_entity.get(),
+                        (be, side) -> new com.zzy205.myfirstmod.compat.cc.ReceiverPeripheral(
+                                (com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity) be)
+                );
+            }
+        });
+
         // Register ourselves for server and other game events we are interested in.
         // Note that this is necessary if and only if we want *this* class (CCNavigationtable) to respond directly to events.
         // Do not add this line if there are no @SubscribeEvent-annotated functions in this class, like onServerStarting() below.

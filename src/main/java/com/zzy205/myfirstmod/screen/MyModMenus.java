@@ -12,11 +12,11 @@ public class MyModMenus {
     public static final DeferredRegister<MenuType<?>> MENUS =
             DeferredRegister.create(Registries.MENU, CCNavigationtable.MOD_ID);
 
-    public static final DeferredHolder<MenuType<?>, MenuType<MySensorMenu>> SENSOR_MENU =
-            MENUS.register("sensor_menu", () -> IMenuTypeExtension.create(MySensorMenu::new));
+    public static final DeferredHolder<MenuType<?>, MenuType<PeripheralExtenderMenu>> PERIPHERAL_EXTENDER_MENU =
+            MENUS.register("peripheral_extender_menu", () -> IMenuTypeExtension.create(PeripheralExtenderMenu::new));
 
-    public static final DeferredHolder<MenuType<?>, MenuType<MyReceiverMenu>> RECEIVER_MENU =
-            MENUS.register("receiver_menu", () -> IMenuTypeExtension.create(MyReceiverMenu::new));
+    public static final DeferredHolder<MenuType<?>, MenuType<RedstoneTransceiverMenu>> REDSTONE_TRANSCEIVER_MENU =
+            MENUS.register("redstone_transceiver_menu", () -> IMenuTypeExtension.create(RedstoneTransceiverMenu::new));
 
     public static void register(IEventBus bus) {
         MENUS.register(bus);

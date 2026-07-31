@@ -1,7 +1,7 @@
 package com.zzy205.myfirstmod.compat.cc;
 
-import com.zzy205.myfirstmod.block.MySensorBlockEntity;
-import com.zzy205.myfirstmod.block.MySensorBlock;
+import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
+import com.zzy205.myfirstmod.block.PeripheralExtenderBlock;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dan200.computercraft.api.lua.ILuaAPI;
 import dan200.computercraft.api.lua.LuaFunction;
@@ -146,7 +146,7 @@ public class SensorAPI implements ILuaAPI {
      */
     @LuaFunction(mainThread = true)
     public final int getRedstoneOutput(int channel) {
-        MySensorBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
         return sensor != null ? sensor.getRedstoneOutput() : 0;
     }
 
@@ -158,7 +158,7 @@ public class SensorAPI implements ILuaAPI {
      */
     @LuaFunction(mainThread = true)
     public final int getRedstoneInput(int channel) {
-        MySensorBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
         return sensor != null ? sensor.getRedstoneInput() : 0;
     }
 
@@ -176,7 +176,7 @@ public class SensorAPI implements ILuaAPI {
      */
     @LuaFunction(mainThread = true)
     public final void setRedstoneOutput(int channel, int signal) {
-        MySensorBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
         if (sensor != null) {
             sensor.setRedstoneOutput(Math.clamp(signal, 0, 15));
         }
@@ -353,14 +353,14 @@ public class SensorAPI implements ILuaAPI {
      */
     @LuaFunction(mainThread = true)
     public final @Nullable Object getPeripheral(int channel) {
-        MySensorBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
         if (sensor == null) return null;
 
         Level level = sensor.getLevel();
         if (level == null || level.isClientSide) return null;
 
         BlockState state = sensor.getBlockState();
-        BlockPos attachedPos = MySensorBlock.getAttachedPos(state, sensor.getBlockPos());
+        BlockPos attachedPos = PeripheralExtenderBlock.getAttachedPos(state, sensor.getBlockPos());
         BlockEntity be = level.getBlockEntity(attachedPos);
         if (be == null) return null;
 
@@ -379,11 +379,11 @@ public class SensorAPI implements ILuaAPI {
      * 计算传感器在附着方块上的"面"（从附着方块的视角）。
      */
     private static Direction getSensorSide(BlockState state) {
-        AttachFace face = state.getValue(MySensorBlock.FACE);
+        AttachFace face = state.getValue(PeripheralExtenderBlock.FACE);
         return switch (face) {
             case FLOOR -> Direction.UP;      // 传感器在地面 → 附着方块的下方 → 从方块看是 UP
             case CEILING -> Direction.DOWN;   // 传感器在天花板 → 附着方块的上方 → 从方块看是 DOWN
-            case WALL -> state.getValue(MySensorBlock.FACING); // 传感器在墙上 → FACING 就是传感器的朝向，也是从方块看的方向
+            case WALL -> state.getValue(PeripheralExtenderBlock.FACING); // 传感器在墙上 → FACING 就是传感器的朝向，也是从方块看的方向
         };
     }
 
@@ -393,14 +393,14 @@ public class SensorAPI implements ILuaAPI {
      * 获取传感器上下文：Level、附着方块位置、附着方块 BE。
      */
     private SensorContext getSensorContext(int channel) {
-        MySensorBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
         if (sensor == null) return null;
 
         Level level = sensor.getLevel();
         if (level == null || level.isClientSide) return null;
 
         BlockState state = sensor.getBlockState();
-        BlockPos attachedPos = MySensorBlock.getAttachedPos(state, sensor.getBlockPos());
+        BlockPos attachedPos = PeripheralExtenderBlock.getAttachedPos(state, sensor.getBlockPos());
         BlockEntity attachedBE = level.getBlockEntity(attachedPos);
 
         return new SensorContext(level, attachedPos, attachedBE);
@@ -473,7 +473,7 @@ public class SensorAPI implements ILuaAPI {
     // ═══════════════ NBT 获取 & 缓存 ═══════════════
 
     private CompoundTag getOrLoadNBT(int channel) {
-        MySensorBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
         if (sensor == null || sensor.getLevel() == null) return null;
 
         long now = sensor.getLevel().getGameTime();
@@ -483,7 +483,7 @@ public class SensorAPI implements ILuaAPI {
             return cachedNBT;
         }
 
-        cachedNBT = MySensorBlock.getAttachedBlockNBT(
+        cachedNBT = PeripheralExtenderBlock.getAttachedBlockNBT(
                 sensor.getLevel(), sensor.getBlockState(), sensor.getBlockPos());
         cachedChannel = channel;
         cacheGameTime = now;

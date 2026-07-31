@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
@@ -10,7 +11,6 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
@@ -20,16 +20,14 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.shapes.CollisionContext;
-import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jspecify.annotations.NonNull;
 
-public class MyReceiverBlock
+public class RedstoneTransceiverBlock
 extends BaseEntityBlock
 implements IWrenchable {
-    public static final MapCodec<MyReceiverBlock> CODEC = MyReceiverBlock.simpleCodec(MyReceiverBlock::new);
+    public static final MapCodec<RedstoneTransceiverBlock> CODEC = RedstoneTransceiverBlock.simpleCodec(RedstoneTransceiverBlock::new);
 
-    protected MyReceiverBlock(Properties properties) {
+    protected RedstoneTransceiverBlock(Properties properties) {
         super(properties);
     }
 
@@ -40,7 +38,7 @@ implements IWrenchable {
 
     @Override
     public BlockEntity newBlockEntity(@NonNull BlockPos pos, @NonNull BlockState state) {
-        return new MyReceiverBlockEntity(pos, state);
+        return new RedstoneTransceiverBlockEntity(pos, state);
     }
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NonNull Level level, @NonNull BlockState state, @NonNull BlockEntityType<T> type) {
@@ -72,20 +70,38 @@ implements IWrenchable {
     // ────────────────────────────────────────
 
     private static final Component RECEIVER_GUI_TITLE =
-            Component.translatable("gui.ccnavigationtable.receiver");
+            Component.translatable("gui.ccnavigationtable.redstone_transceiver");
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hitResult) {
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
+            BlockEntity be = level.getBlockEntity(pos);
+            CompoundTag bannerData = be instanceof RedstoneTransceiverBlockEntity receiverBE
+                    ? receiverBE.getBannerData() : new CompoundTag();
+            int[] occupiedChannels = be instanceof RedstoneTransceiverBlockEntity receiverBE
+                    ? receiverBE.getOccupiedChannels() : new int[0];
+            int loadMode = be instanceof RedstoneTransceiverBlockEntity receiverBE
+                    ? receiverBE.getLoadMode() : 0;
+            boolean onPhysicsBody = be instanceof RedstoneTransceiverBlockEntity receiverBE
+                    ? receiverBE.isOnPhysicsBody() : false;
+
             serverPlayer.openMenu(
                     new SimpleMenuProvider(
                             (containerId, inv, p) ->
-                                    new com.zzy205.myfirstmod.screen.MyReceiverMenu(containerId, pos, inv),
+                                    new com.zzy205.myfirstmod.screen.RedstoneTransceiverMenu(
+                                            containerId, pos, bannerData, occupiedChannels, loadMode, onPhysicsBody, inv),
                             RECEIVER_GUI_TITLE
                     ),
                     buf -> {
                         buf.writeBlockPos(pos);
+                        buf.writeNbt(bannerData);
+                        buf.writeVarInt(occupiedChannels.length);
+                        for (int ch : occupiedChannels) {
+                            buf.writeVarInt(ch);
+                        }
+                        buf.writeVarInt(loadMode);
+                        buf.writeBoolean(onPhysicsBody);
                     }
             );
         }
