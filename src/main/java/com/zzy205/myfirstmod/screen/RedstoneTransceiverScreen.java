@@ -187,15 +187,17 @@ public class RedstoneTransceiverScreen extends AbstractContainerScreen<RedstoneT
         tag.put("Channels", channels);
 
         ListTag ghosts = new ListTag();
-        for (int i = 0; i < bannerChannels.size(); i++) {
-            CompoundTag pair = new CompoundTag();
-            if (!ghostItem0.get(i).isEmpty()) {
-                pair.put("G0", ghostItem0.get(i).save(this.minecraft.level.registryAccess()));
+        if (this.minecraft != null && this.minecraft.level != null) {
+            for (int i = 0; i < bannerChannels.size(); i++) {
+                CompoundTag pair = new CompoundTag();
+                if (!ghostItem0.get(i).isEmpty()) {
+                    pair.put("G0", ghostItem0.get(i).save(this.minecraft.level.registryAccess()));
+                }
+                if (!ghostItem1.get(i).isEmpty()) {
+                    pair.put("G1", ghostItem1.get(i).save(this.minecraft.level.registryAccess()));
+                }
+                ghosts.add(pair);
             }
-            if (!ghostItem1.get(i).isEmpty()) {
-                pair.put("G1", ghostItem1.get(i).save(this.minecraft.level.registryAccess()));
-            }
-            ghosts.add(pair);
         }
         tag.put("Ghosts", ghosts);
         return tag;
@@ -218,12 +220,17 @@ public class RedstoneTransceiverScreen extends AbstractContainerScreen<RedstoneT
         ListTag ghosts = tag.getList("Ghosts", Tag.TAG_COMPOUND);
         for (int i = 0; i < ghosts.size(); i++) {
             CompoundTag pair = ghosts.getCompound(i);
-            ghostItem0.add(pair.contains("G0")
-                    ? ItemStack.parse(this.minecraft.level.registryAccess(), pair.getCompound("G0")).orElse(ItemStack.EMPTY)
-                    : ItemStack.EMPTY);
-            ghostItem1.add(pair.contains("G1")
-                    ? ItemStack.parse(this.minecraft.level.registryAccess(), pair.getCompound("G1")).orElse(ItemStack.EMPTY)
-                    : ItemStack.EMPTY);
+            if (this.minecraft != null && this.minecraft.level != null) {
+                ghostItem0.add(pair.contains("G0")
+                        ? ItemStack.parse(this.minecraft.level.registryAccess(), pair.getCompound("G0")).orElse(ItemStack.EMPTY)
+                        : ItemStack.EMPTY);
+                ghostItem1.add(pair.contains("G1")
+                        ? ItemStack.parse(this.minecraft.level.registryAccess(), pair.getCompound("G1")).orElse(ItemStack.EMPTY)
+                        : ItemStack.EMPTY);
+            } else {
+                ghostItem0.add(ItemStack.EMPTY);
+                ghostItem1.add(ItemStack.EMPTY);
+            }
         }
     }
 
@@ -668,6 +675,7 @@ public class RedstoneTransceiverScreen extends AbstractContainerScreen<RedstoneT
         int bannerIdx = info[0];
         int slot = info[1];
 
+        if (this.minecraft == null || this.minecraft.player == null) return false;
         ItemStack carried = this.minecraft.player.containerMenu.getCarried();
         if (rightClick || carried.isEmpty()) {
             setGhostItem(bannerIdx, slot, ItemStack.EMPTY);

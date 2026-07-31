@@ -9,6 +9,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 
 import javax.annotation.Nullable;
 import java.util.*;
@@ -135,14 +136,15 @@ public class ReceiverPeripheral implements IPeripheral {
      */
     @LuaFunction(mainThread = true)
     public final int getRedstoneSignal(int channel) {
-        if (be.getLevel() == null || be.getLevel().isClientSide) return 0;
+        Level level = be.getLevel();
+        if (level == null || level.isClientSide) return 0;
 
         // 1. 根据频道号找到对应 banner 的幽灵物品
         ItemStack[] ghosts = getGhostItemsByChannel(channel);
         if (ghosts == null) return 0;
 
         // 2. 查询 Create 红石网络
-        return CreateRedstoneCompat.getNetworkSignal(be.getLevel(), ghosts[0], ghosts[1]);
+        return CreateRedstoneCompat.getNetworkSignal(level, ghosts[0], ghosts[1]);
     }
 
     /**
@@ -165,13 +167,14 @@ public class ReceiverPeripheral implements IPeripheral {
      */
     @LuaFunction(mainThread = true)
     public final void setRedstoneSignal(int channel, int signal) {
-        if (be.getLevel() == null || be.getLevel().isClientSide) return;
+        Level level = be.getLevel();
+        if (level == null || level.isClientSide) return;
 
         ItemStack[] ghosts = getGhostItemsByChannel(channel);
         if (ghosts == null) return;
 
         CreateRedstoneCompat.setNetworkSignal(
-                be.getLevel(), be.getBlockPos(), ghosts[0], ghosts[1], signal);
+                level, be.getBlockPos(), ghosts[0], ghosts[1], signal);
     }
 
     /**

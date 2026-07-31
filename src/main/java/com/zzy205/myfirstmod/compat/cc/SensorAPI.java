@@ -474,9 +474,11 @@ public class SensorAPI implements ILuaAPI {
 
     private CompoundTag getOrLoadNBT(int channel) {
         PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
-        if (sensor == null || sensor.getLevel() == null) return null;
+        if (sensor == null) return null;
+        Level level = sensor.getLevel();
+        if (level == null) return null;
 
-        long now = sensor.getLevel().getGameTime();
+        long now = level.getGameTime();
 
         // 同 tick 同频道命中缓存
         if (cachedChannel == channel && cacheGameTime == now && cachedNBT != null) {
@@ -484,7 +486,7 @@ public class SensorAPI implements ILuaAPI {
         }
 
         cachedNBT = PeripheralExtenderBlock.getAttachedBlockNBT(
-                sensor.getLevel(), sensor.getBlockState(), sensor.getBlockPos());
+                level, sensor.getBlockState(), sensor.getBlockPos());
         cachedChannel = channel;
         cacheGameTime = now;
         return cachedNBT;
