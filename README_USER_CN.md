@@ -93,15 +93,21 @@ for k, v in pairs(items) do print(k, v) end
 local target = pe.getNavTargetPos(2)
 local dist   = pe.getNavDistance(2)
 local angle  = pe.getNavRelativeAngle(2)
-print(string.format("目标：%.0f 米外，方位 %.1f°", dist, angle))
+print(string.format("Target: %.0fm away, bearing %.1f°", dist, angle))
 
 -- 物理数据
 local mass = pe.getPhysicsMass(3)
 local com  = pe.getPhysicsCenterOfMass(3)
-print(string.format("质量：%.1f kg，质心：%.1f, %.1f, %.1f", mass, com.x, com.y, com.z))
+print(string.format("Mass: %.1f kg, COM: %.1f, %.1f, %.1f", mass, com.x, com.y, com.z))
 
 -- 无线红石
 pe.setRedstoneOutput(4, 15)  -- 向频道 4 的 外设扩展器 充能
+
+-- 机械动力 无线红石网络控制
+local redstone = peripheral.find("ccpe:redstone_transceiver")
+
+redstone.setRedstoneSignal(5, 15)  -- 向频道 5 的 Create 网络发送红石信号
+redstone.getRedstoneSignal(3)  -- 读取频道 3 的 Create 网络红石信号
 ```
 
 ## 要求

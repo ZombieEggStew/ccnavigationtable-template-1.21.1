@@ -102,6 +102,12 @@ print(string.format("Mass: %.1f kg, COM: %.1f, %.1f, %.1f", mass, com.x, com.y, 
 
 -- Wireless redstone
 pe.setRedstoneOutput(4, 15)  -- activate sensor on channel 4
+
+-- Create redstone link control
+local redstone = peripheral.find("ccpe:redstone_transceiver")
+
+redstone.setRedstoneSignal(5, 15)  -- transmit to Create network on channel 5
+redstone.getRedstoneSignal(3)  -- read Create network signal on channel 3
 ```
 
 ## Requirements
@@ -116,12 +122,5 @@ pe.setRedstoneOutput(4, 15)  -- activate sensor on channel 4
 
 Read operations ~0.02ms/call, redstone write operations ~50ms/call.
 
-## Inspiration
-
-The Microcontroller mod — a computer mod distinct from CC:Tweaked. Its Sensor connected to computers wirelessly via channels and read target block NBT data directly, without requiring per-mod peripheral adapters. This "universal sensor" design philosophy is exactly what CCPE aims for.
-
-Unfortunately Microcontroller later disappeared, so I wrote my own Sensor.
-
-## License
-
-MIT
+## Where is Create Microcontrollers
+why create microcontrollers 404
