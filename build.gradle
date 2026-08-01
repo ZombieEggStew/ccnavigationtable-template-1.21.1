@@ -180,6 +180,10 @@ dependencies {
     compileOnly "cc.tweaked:cc-tweaked-${minecraft_version}-core-api:${cc_tweaked_version}"
     compileOnly "cc.tweaked:cc-tweaked-${minecraft_version}-common-api:${cc_tweaked_version}"
     compileOnly "cc.tweaked:cc-tweaked-${minecraft_version}-forge-api:${cc_tweaked_version}"
+    // Simulated is jarJar'd inside create-aeronautics-bundled (META-INF/jarjar/).
+    // At compile time the outer JAR doesn't expose nested classes, so we need
+    // the extracted simulated-neoforge JAR explicitly on the compile classpath.
+    compileOnly files("libs/simulated-neoforge-1.21.1-1.3.0.jar")
 
     // ---- Sable (optional) -------------------------------------------------
     // compileOnly because Sable is an OPTIONAL runtime dep. Our code path that

@@ -20,11 +20,11 @@ import java.util.*;
  * 支持 {@code peripheral.wrap("right")} 和 {@code peripheral.find("ccnavigation:receiver")}。
  * Lua 端可读取 Receiver 的 banner 频道配置和幽灵物品。
  */
-public class ReceiverPeripheral implements IPeripheral {
+public class RedstoneTransceiverPeripheral implements IPeripheral {
 
     private final RedstoneTransceiverBlockEntity be;
 
-    public ReceiverPeripheral(RedstoneTransceiverBlockEntity be) {
+    public RedstoneTransceiverPeripheral(RedstoneTransceiverBlockEntity be) {
         this.be = be;
     }
 
@@ -36,7 +36,7 @@ public class ReceiverPeripheral implements IPeripheral {
     @Override
     public boolean equals(@Nullable IPeripheral other) {
         if (other == this) return true;
-        if (other instanceof ReceiverPeripheral that) {
+        if (other instanceof RedstoneTransceiverPeripheral that) {
             return this.be.getBlockPos().equals(that.be.getBlockPos());
         }
         return false;

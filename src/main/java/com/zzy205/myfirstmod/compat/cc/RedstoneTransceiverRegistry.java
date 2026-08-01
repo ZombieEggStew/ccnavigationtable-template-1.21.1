@@ -10,13 +10,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Receiver 频道注册表 —— 追踪每个 receiver 的 banner 频道占用。
- * 与 SensorRegistry 完全独立，两套频道互不干扰。
+ * 与 PeripheralExtenderRegistry 完全独立，两套频道互不干扰。
  */
-public final class ReceiverRegistry {
+public final class RedstoneTransceiverRegistry {
     /** BE -> BE 当前占用的频道号集合 */
     private static final Map<RedstoneTransceiverBlockEntity, Set<Integer>> beChannels = new ConcurrentHashMap<>();
 
-    private ReceiverRegistry() {}
+    private RedstoneTransceiverRegistry() {}
 
     /** BE 加载时注册，从 bannerData 读取所有频道 */
     public static void registerBE(RedstoneTransceiverBlockEntity be) {

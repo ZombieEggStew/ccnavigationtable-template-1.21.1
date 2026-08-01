@@ -31,12 +31,12 @@ import java.util.*;
  * <p>
  * 使用方式：
  * <pre>{@code
- * local sensors = require("ccnav.sensors")
- * local data = sensors.getAll(1)   -- 获取频道1的全量NBT
- * local x = data.x                 -- 读取具体字段
+ * local pe = require("ccnav.pe")
+ * local data = pe.getAll(1)   -- 获取频道1的全量NBT
+ * local x = data.x            -- 读取具体字段
  * }</pre>
  */
-public class SensorAPI implements ILuaAPI {
+public class PeripheralExtenderAPI implements ILuaAPI {
 
     // ═══════════════ NBT 缓存（同 tick 内多次路径查询只序列化一次） ═══════════════
     private CompoundTag cachedNBT;
@@ -50,7 +50,7 @@ public class SensorAPI implements ILuaAPI {
 
     @Override
     public @Nullable String getModuleName() {
-        return "ccnav.sensors";
+        return "ccnav.pe";
     }
 
     /**
@@ -318,7 +318,7 @@ public class SensorAPI implements ILuaAPI {
      */
     @LuaFunction(mainThread = true)
     public final int getRedstoneOutput(int channel) {
-        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         return sensor != null ? sensor.getRedstoneOutput() : 0;
     }
 
@@ -330,7 +330,7 @@ public class SensorAPI implements ILuaAPI {
      */
     @LuaFunction(mainThread = true)
     public final int getRedstoneInput(int channel) {
-        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         return sensor != null ? sensor.getRedstoneInput() : 0;
     }
 
@@ -339,8 +339,8 @@ public class SensorAPI implements ILuaAPI {
      * 传感器方块会像红石源一样向相邻方块输出该信号。
      *
      * <pre>{@code
-     * sensors.setRedstoneOutput(1, 15)  -- 频道 1 输出满信号
-     * sensors.setRedstoneOutput(1, 0)   -- 关闭
+     * pe.setRedstoneOutput(1, 15)  -- 频道 1 输出满信号
+     * pe.setRedstoneOutput(1, 0)   -- 关闭
      * }</pre>
      *
      * @param channel 频道号
@@ -348,7 +348,7 @@ public class SensorAPI implements ILuaAPI {
      */
     @LuaFunction(mainThread = true)
     public final void setRedstoneOutput(int channel, int signal) {
-        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor != null) {
             sensor.setRedstoneOutput(Math.clamp(signal, 0, 15));
         }
@@ -514,7 +514,7 @@ public class SensorAPI implements ILuaAPI {
      * 通过频道无线访问附着方块的外设方法。
      *
      * <pre>{@code
-     * local p = sensors.getPeripheral(1)
+     * local p = pe.getPeripheral(1)
      * if p then
      *     print(p.getSpeed())
      * end
@@ -525,7 +525,7 @@ public class SensorAPI implements ILuaAPI {
      */
     @LuaFunction(mainThread = true)
     public final @Nullable Object getPeripheral(int channel) {
-        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return null;
 
         Level level = sensor.getLevel();
@@ -565,7 +565,7 @@ public class SensorAPI implements ILuaAPI {
      * 获取传感器上下文：Level、附着方块位置、附着方块 BE。
      */
     private SensorContext getSensorContext(int channel) {
-        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return null;
 
         Level level = sensor.getLevel();
@@ -645,7 +645,7 @@ public class SensorAPI implements ILuaAPI {
     // ═══════════════ NBT 获取 & 缓存 ═══════════════
 
     private CompoundTag getOrLoadNBT(int channel) {
-        PeripheralExtenderBlockEntity sensor = SensorRegistry.get(channel);
+        PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return null;
         Level level = sensor.getLevel();
         if (level == null) return null;

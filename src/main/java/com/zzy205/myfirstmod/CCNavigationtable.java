@@ -4,10 +4,10 @@ import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
 import com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity;
-import com.zzy205.myfirstmod.compat.cc.CCNavSensorsSetup;
-import com.zzy205.myfirstmod.compat.cc.ReceiverPeripheral;
-import com.zzy205.myfirstmod.compat.cc.ReceiverRegistry;
-import com.zzy205.myfirstmod.compat.cc.SensorRegistry;
+import com.zzy205.myfirstmod.compat.cc.CCNavPeripheralExtenderSetup;
+import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverPeripheral;
+import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverRegistry;
+import com.zzy205.myfirstmod.compat.cc.PeripheralExtenderRegistry;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.network.ReceiverSyncPayload;
@@ -81,7 +81,7 @@ public class CCNavigationtable {
                         if (be instanceof PeripheralExtenderBlockEntity sensorBE) {
                             int newChannel = payload.scrolledValue();
                             if (newChannel != sensorBE.getScrolledValue()) {
-                                int assigned = SensorRegistry
+                                int assigned = PeripheralExtenderRegistry
                                         .register(newChannel, sensorBE);
                                 sensorBE.setScrolledValue(assigned);
                             }
@@ -101,7 +101,7 @@ public class CCNavigationtable {
                         if (be instanceof RedstoneTransceiverBlockEntity receiverBE) {
                             receiverBE.setBannerData(payload.data());
                             receiverBE.setLoadMode(payload.loadMode());
-                            ReceiverRegistry.updateChannels(receiverBE, payload.data());
+                            RedstoneTransceiverRegistry.updateChannels(receiverBE, payload.data());
                         }
                     }
             );
@@ -113,7 +113,7 @@ public class CCNavigationtable {
                 event.registerBlockEntity(
                         PeripheralCapability.get(),
                         MyModBlockEntities.redstone_transceiver_entity.get(),
-                        (be, side) -> new ReceiverPeripheral(
+                        (be, side) -> new RedstoneTransceiverPeripheral(
                                 (RedstoneTransceiverBlockEntity) be)
                 );
             }
@@ -145,7 +145,7 @@ public class CCNavigationtable {
 
         // 注册 CC:Tweaked 传感器 Lua API
         if (ModList.get().isLoaded("computercraft")) {
-            CCNavSensorsSetup.register();
+            CCNavPeripheralExtenderSetup.register();
             LOGGER.info("CC:Tweaked sensor API registered");
         }
     }

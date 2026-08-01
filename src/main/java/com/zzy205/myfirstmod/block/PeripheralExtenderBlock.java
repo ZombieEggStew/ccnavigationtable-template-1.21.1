@@ -2,7 +2,7 @@ package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
-import com.zzy205.myfirstmod.compat.cc.SensorRegistry;
+import com.zzy205.myfirstmod.compat.cc.PeripheralExtenderRegistry;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import com.zzy205.myfirstmod.screen.PeripheralExtenderMenu;
 import net.minecraft.core.BlockPos;
@@ -242,7 +242,7 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
             final boolean onPhysicsBody;
             if (be instanceof PeripheralExtenderBlockEntity sensorBE) {
                 sensorChannel = sensorBE.getScrolledValue();
-                var regChannels = SensorRegistry.getOccupiedChannels();
+                var regChannels = PeripheralExtenderRegistry.getOccupiedChannels();
                 occupiedChannels = regChannels.stream().mapToInt(Integer::intValue).toArray();
                 loadMode = sensorBE.getLoadMode();
                 onPhysicsBody = sensorBE.isOnPhysicsBody();

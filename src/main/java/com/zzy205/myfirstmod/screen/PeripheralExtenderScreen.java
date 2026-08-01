@@ -492,7 +492,7 @@ public class PeripheralExtenderScreen extends AbstractContainerScreen<Peripheral
 
         String luaPath = internalToLuaPath(internalPath);
         int channel = getMyChannel();
-        String code = "sensors.get(" + channel + ",\"" + luaPath + "\")";
+        String code = "pe.get(" + channel + ",\"" + luaPath + "\")";
 
         Minecraft.getInstance().keyboardHandler.setClipboard(code);
         copiedMessage = "copied: " + code;

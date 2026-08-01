@@ -1,7 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.zzy205.myfirstmod.Config;
-import com.zzy205.myfirstmod.compat.cc.SensorRegistry;
+import com.zzy205.myfirstmod.compat.cc.PeripheralExtenderRegistry;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
@@ -66,7 +66,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     public void onLoad() {
         super.onLoad();
         if (this.level != null && !this.level.isClientSide) {
-            int assigned = SensorRegistry.register(this.scrolledValue, this);
+            int assigned = PeripheralExtenderRegistry.register(this.scrolledValue, this);
             if (assigned != this.scrolledValue) {
                 this.scrolledValue = assigned;
                 this.setChanged();
@@ -83,7 +83,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         if (this.level != null && !this.level.isClientSide) {
             releaseSurroundingChunks();
             releaseSableTicket();
-            SensorRegistry.unregister(this.scrolledValue, this);
+            PeripheralExtenderRegistry.unregister(this.scrolledValue, this);
             // 仅清除内部状态，不触发方块更新（避免保存/卸载时 setBlock 死锁）
             this.redstoneOutput = 0;
         }
@@ -332,7 +332,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     /** 从注册表同步 occupiedChannels 快照到本 BE，并通知客户端 */
     public void refreshOccupiedChannels() {
         if (this.level == null || this.level.isClientSide) return;
-        var channels = SensorRegistry.getOccupiedChannels();
+        var channels = PeripheralExtenderRegistry.getOccupiedChannels();
         int[] arr = new int[channels.size()];
         int i = 0;
         for (int ch : channels) arr[i++] = ch;

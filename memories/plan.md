@@ -9,30 +9,35 @@
 ## ✅ 已完成
 
 ### 频道注册系统
-- `compat/cc/SensorRegistry.java` — 频道→BE 一对一映射
+- `compat/cc/PeripheralExtenderRegistry.java` — 频道→BE 一对一映射
   - `register(channel, be)` — 冲突时自动重分配，清理僵尸条目
   - `unregister(channel, be)` — 仅当 BE 匹配时移除，自动通知剩余传感器刷新
   - 防止 chunk 重载导致的同一 BE 多频道残留
   - 自动跳过 `removed=true` 的僵尸
 
-### SensorAPI — 三层 Lua API
-- `compat/cc/SensorAPI.java` — `ILuaAPI`，`getModuleName() = "ccnav.sensors"`
-- `compat/cc/CCNavSensorsSetup.java` — `ComputerCraftAPI.registerAPIFactory()`
+### PeripheralExtenderAPI — 三层 Lua API
+- `compat/cc/PeripheralExtenderAPI.java` — `ILuaAPI`，`getModuleName() = "ccnav.pe"`
+- `compat/cc/CCNavPeripheralExtenderSetup.java` — `ComputerCraftAPI.registerAPIFactory()`
 - `CCNavigationtable.commonSetup` — 检测 CC:T 加载后注册
 - **tick 级 NBT 缓存** — 同 tick 内多次查询只序列化一次
 
+Lua 使用方式：
+```lua
+local pe = require("ccnav.pe")
+```
+
 | Layer | Lua 方法 | 说明 |
 |-------|----------|------|
-| 1 | `sensors.getBlockPos(ch)` | `{x, y, z}`，含 Sable 坐标修正 |
-| 1 | `sensors.getBlockId(ch)` | 方块注册 ID 字符串 |
-| 1 | `sensors.getNavTargetPos(ch)` | 目标世界坐标 `{x, y, z}`（导航桌专用，直接 API） |
-| 1 | `sensors.getNavRelativeAngle(ch)` | 指针偏角 0-360°（导航桌专用，直接 API） |
-| 1 | `sensors.getNavSelfPos(ch)` | 导航桌自身投影坐标 `{x, y, z}`（发射点参考） |
-| 1 | `sensors.getNavDistance(ch)` | 直线距离（米） |
-| 1 | `sensors.getNavHorizontalDistance(ch)` | 水平距离 XZ（米） |
-| 1 | `sensors.getNavDirection(ch)` | 世界系归一化方向 `{dx, dy, dz}` |
-| 1 | `sensors.getNavBearing(ch)` | 水平方位角 0-360°（世界系，atan2(dx,dz)） |
-| 1 | `sensors.getNavElevation(ch)` | 仰角 -90°~+90°（水平面上为正） |
+| 1 | `pe.getBlockPos(ch)` | `{x, y, z}`，含 Sable 坐标修正 |
+| 1 | `pe.getBlockId(ch)` | 方块注册 ID 字符串 |
+| 1 | `pe.getNavTargetPos(ch)` | 目标世界坐标 `{x, y, z}`（导航桌专用，直接 API） |
+| 1 | `pe.getNavRelativeAngle(ch)` | 指针偏角 0-360°（导航桌专用，直接 API） |
+| 1 | `pe.getNavSelfPos(ch)` | 导航桌自身投影坐标 `{x, y, z}`（发射点参考） |
+| 1 | `pe.getNavDistance(ch)` | 直线距离（米） |
+| 1 | `pe.getNavHorizontalDistance(ch)` | 水平距离 XZ（米） |
+| 1 | `pe.getNavDirection(ch)` | 世界系归一化方向 `{dx, dy, dz}` |
+| 1 | `pe.getNavBearing(ch)` | 水平方位角 0-360°（世界系，atan2(dx,dz)） |
+| 1 | `pe.getNavElevation(ch)` | 仰角 -90°~+90°（水平面上为正） |
 | 2 | `sensors.get(ch, path)` | 路径查询，语法: `"id"` / `"a.b.c"` / `"Items[0].Count"` |
 | 3 | `sensors.getAll(ch)` | 全量 NBT → Lua Table |
 

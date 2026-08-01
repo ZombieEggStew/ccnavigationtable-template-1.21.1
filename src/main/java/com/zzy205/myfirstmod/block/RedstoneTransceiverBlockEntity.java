@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
-import com.zzy205.myfirstmod.compat.cc.ReceiverRegistry;
+import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverRegistry;
 import com.zzy205.myfirstmod.compat.create.CreateRedstoneCompat;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import net.minecraft.core.BlockPos;
@@ -32,7 +32,7 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity {
 
     /** 获取当前所有 receiver 占用的频道号数组 */
     public int[] getOccupiedChannels() {
-        return ReceiverRegistry.getOccupiedChannels()
+        return RedstoneTransceiverRegistry.getOccupiedChannels()
                 .stream().mapToInt(Integer::intValue).toArray();
     }
 
@@ -40,14 +40,14 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity {
     public void onLoad() {
         super.onLoad();
         if (level != null && !level.isClientSide) {
-            ReceiverRegistry.registerBE(this);
+            RedstoneTransceiverRegistry.registerBE(this);
         }
     }
 
     @Override
     public void setRemoved() {
         if (level != null && !level.isClientSide) {
-            ReceiverRegistry.unregisterBE(this);
+            RedstoneTransceiverRegistry.unregisterBE(this);
             // 清理此 Receiver 创建的所有虚拟 Create 红石发送端
             CreateRedstoneCompat.cleanupFor(worldPosition);
         }

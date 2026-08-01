@@ -12,13 +12,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * 每个传感器占用一个频道号（端口模型）。放置传感器时自动分配最小未被占用的频道号。
  */
-public final class SensorRegistry {
-    private static final Logger LOGGER = LoggerFactory.getLogger(SensorRegistry.class);
+public final class PeripheralExtenderRegistry {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PeripheralExtenderRegistry.class);
 
     /** 频道号 → 传感器方块实体 */
     private static final Map<Integer, PeripheralExtenderBlockEntity> registry = new ConcurrentHashMap<>();
 
-    private SensorRegistry() {}
+    private PeripheralExtenderRegistry() {}
 
     /**
      * 自动分配最小的未被占用的频道号，并注册传感器。
