@@ -225,7 +225,7 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
     // ────────────────────────────────────────
 
     private static final Component SENSOR_GUI_TITLE =
-            Component.translatable("gui.ccnavigationtable.sensor_nbt");
+            Component.translatable("gui.ccpe.sensor_nbt");
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,

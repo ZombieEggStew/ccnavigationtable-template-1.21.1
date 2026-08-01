@@ -27,7 +27,7 @@ import java.util.Set;
 public class RedstoneTransceiverScreen extends AbstractContainerScreen<RedstoneTransceiverMenu> {
 
     private static final ResourceLocation GUI_TEXTURE =
-            ResourceLocation.fromNamespaceAndPath("ccnavigationtable", "textures/gui/test_gui.png");
+            ResourceLocation.fromNamespaceAndPath("ccpe", "textures/gui/test_gui.png");
 
     /** Create 模组提供的玩家背包贴图 */
     private static final ResourceLocation PLAYER_INV_TEXTURE =
@@ -91,7 +91,7 @@ public class RedstoneTransceiverScreen extends AbstractContainerScreen<RedstoneT
     /** 长按删除阈值（tick，20=1秒） */
     private static final int DELETE_HOLD_TICKS = 20;
     private static final Component DELETE_HINT =
-            Component.translatable("gui.ccnavigationtable.redstone_transceiver.hold_to_delete");
+            Component.translatable("gui.ccpe.redstone_transceiver.hold_to_delete");
 
     // ── 频道选择 ──
     /** 频道数字区域 X（窗口相对坐标，banner 左侧） */
@@ -367,9 +367,9 @@ public class RedstoneTransceiverScreen extends AbstractContainerScreen<RedstoneT
         // 频道区悬浮提示
         if (hoveredChannelBanner >= 0) {
             List<Component> lines = new ArrayList<>();
-            lines.add(Component.translatable("gui.ccnavigationtable.sensor_channel")
+            lines.add(Component.translatable("gui.ccpe.sensor_channel")
                     .withStyle(Style.EMPTY.withColor(0x528FDE)));
-            lines.add(Component.translatable("gui.ccnavigationtable.scroll_to_change")
+            lines.add(Component.translatable("gui.ccpe.scroll_to_change")
                     .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
             lines.add(Component.translatable("gui.ccnavigationtable.shift_scroll_faster")
                     .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));

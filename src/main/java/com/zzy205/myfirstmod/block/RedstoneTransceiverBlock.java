@@ -71,7 +71,7 @@ implements IWrenchable {
     // ────────────────────────────────────────
 
     private static final Component RECEIVER_GUI_TITLE =
-            Component.translatable("gui.ccnavigationtable.redstone_transceiver");
+            Component.translatable("gui.ccpe.redstone_transceiver");
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,

@@ -39,7 +39,7 @@ import net.neoforged.fml.ModList;
 @Mod(CCNavigationtable.MOD_ID)
 public class CCNavigationtable {
     // Define mod id in a common place for everything to reference
-    public static final String MOD_ID = "ccnavigationtable";
+    public static final String MOD_ID = "ccpe";
     // Directly reference a slf4j logger
     public static final Logger LOGGER = LogUtils.getLogger();
 

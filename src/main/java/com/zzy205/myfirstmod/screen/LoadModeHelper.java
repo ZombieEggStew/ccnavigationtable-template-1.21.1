@@ -19,7 +19,7 @@ public final class LoadModeHelper {
 
     private static final String[] ALL_MODE_KEYS = {"off", "chunk", "physics"};
     private static final String[] ALL_DESC_KEYS = {"off.desc", "chunk.desc", "physics.desc"};
-    private static final String KEY_PREFIX = "gui.ccnavigationtable.load_mode.";
+    private static final String KEY_PREFIX = "gui.ccpe.load_mode.";
 
     /** 选择器宽度（像素） */
     public static final int HIT_W = 72;
@@ -51,7 +51,7 @@ public final class LoadModeHelper {
     public static void renderLabel(GuiGraphics g, Font font, int x, int y,
                                     int loadMode, boolean onPhysicsBody) {
         String modeName = I18n.get(KEY_PREFIX + ALL_MODE_KEYS[loadMode]);
-        String label = I18n.get("gui.ccnavigationtable.load_mode") + ": " + modeName;
+        String label = I18n.get("gui.ccpe.load_mode") + ": " + modeName;
         g.drawString(font, label, x, y, 0xfcfceb, true);
     }
 
@@ -66,9 +66,9 @@ public final class LoadModeHelper {
                 || mouseY < screenY || mouseY > screenY + HIT_H) return;
 
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.translatable("gui.ccnavigationtable.load_mode")
+        lines.add(Component.translatable("gui.ccpe.load_mode")
                 .withStyle(Style.EMPTY.withColor(0x528FDE)));
-        lines.add(Component.translatable("gui.ccnavigationtable.scroll_to_change")
+        lines.add(Component.translatable("gui.ccpe.scroll_to_change")
                 .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
 
         for (int m : getModeValues(onPhysicsBody)) {

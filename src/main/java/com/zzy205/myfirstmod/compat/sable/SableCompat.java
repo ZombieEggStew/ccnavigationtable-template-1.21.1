@@ -38,12 +38,12 @@ import java.util.UUID;
  */
 public final class SableCompat {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger("ccnavigationtable:SableCompat");
+    private static final Logger LOGGER = LoggerFactory.getLogger("ccpe:SableCompat");
 
     /** 传感器强制加载 Ticket 类型 */
     private static final SubLevelLoadingTicketType<BlockPos> SENSOR_TICKET_TYPE =
             SubLevelLoadingTicketType.create(
-                    ResourceLocation.fromNamespaceAndPath("ccnavigationtable", "sensor_force_load"),
+                    ResourceLocation.fromNamespaceAndPath("ccpe", "sensor_force_load"),
                     BlockPos.CODEC);
 
     private SableCompat() {}

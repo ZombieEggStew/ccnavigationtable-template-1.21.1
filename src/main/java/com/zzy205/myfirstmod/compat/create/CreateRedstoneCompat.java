@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class CreateRedstoneCompat {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger("ccnavigationtable:CreateRedstoneCompat");
+    private static final Logger LOGGER = LoggerFactory.getLogger("ccpe:CreateRedstoneCompat");
 
     private static final RedstoneLinkNetworkHandler HANDLER = Create.REDSTONE_LINK_NETWORK_HANDLER;
 
