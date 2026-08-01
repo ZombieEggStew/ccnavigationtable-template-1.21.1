@@ -1,5 +1,7 @@
 # CCPE — 设计 & 架构
 
+[![en](https://img.shields.io/badge/lang-English-blue)](README.md)
+
 > 为 CC:Tweaked 提供无线传感器访问的 NeoForge 模组 · 1.21.1
 
 ## 解决什么问题

@@ -1,5 +1,7 @@
 # CCPE — Design & Architecture
 
+[![zh-CN](https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-blue)](README_CN.md)
+
 > Wireless sensor access for CC:Tweaked · NeoForge 1.21.1
 
 ## Problem
