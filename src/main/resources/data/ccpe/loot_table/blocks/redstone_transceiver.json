@@ -11,11 +11,11 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "ccpe:micro_peripheral_extender"
+          "name": "ccpe:redstone_transceiver"
         }
       ],
       "rolls": 1.0
     }
   ],
-  "random_sequence": "ccpe:blocks/micro_peripheral_extender"
+  "random_sequence": "ccpe:blocks/redstone_transceiver"
 }

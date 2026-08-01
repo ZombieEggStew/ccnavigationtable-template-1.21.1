@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:andesite_casing"
+    },
+    "X": {
+      "item": "create:transmitter"
+    },
+    "Y": {
+      "item": "create:redstone_link"
+    }
+  },
+  "pattern": [
+    " X ",
+    " Y ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 4,
+    "id": "ccpe:micro_peripheral_extender"
+  }
+}
