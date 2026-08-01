@@ -43,7 +43,7 @@ CCPE 的传感器通过 NBT 缓存，**对任意方块都能读取数据**，不
 | `getPhysicsCenterOfMass(ch)` | `{x, y, z}` | 质心世界坐标 |
 | `getPhysicsGravityForce(ch)` | `number` | 重力（N）|
 
-> 速度类方法需传感器附着在 `simulated:velocity_sensor` 上
+**速度类方法需传感器附着在 `速度传感器` 上**
 | 方法 | 返回值 | 说明 |
 |---|---|---|
 | `getPhysicsVelocity(ch)` | `{x, y, z}` | 地面速度（m/s）|
