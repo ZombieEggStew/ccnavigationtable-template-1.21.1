@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.network;
 
-import com.zzy205.myfirstmod.CCNavigationtable;
+import com.zzy205.myfirstmod.CCPeripheraExtender;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 public record SensorNbtPayload(BlockPos sensorPos, CompoundTag nbt) implements CustomPacketPayload {
 
     public static final Type<SensorNbtPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(CCNavigationtable.MOD_ID, "peripheral_extender_nbt"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, "peripheral_extender_nbt"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SensorNbtPayload> STREAM_CODEC =
             StreamCodec.of(

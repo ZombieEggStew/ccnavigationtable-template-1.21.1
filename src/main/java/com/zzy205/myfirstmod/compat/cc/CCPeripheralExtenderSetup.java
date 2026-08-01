@@ -6,9 +6,9 @@ import dan200.computercraft.api.ComputerCraftAPI;
  * CC:Tweaked 传感器 API 注册入口。
  * 在 mod 初始化时调用 {@link #register()} 即可。
  */
-public final class CCNavPeripheralExtenderSetup {
+public final class CCPeripheralExtenderSetup {
 
-    private CCNavPeripheralExtenderSetup() {}
+    private CCPeripheralExtenderSetup() {}
 
     /**
      * 向 CC:Tweaked 注册传感器 Lua API 工厂。

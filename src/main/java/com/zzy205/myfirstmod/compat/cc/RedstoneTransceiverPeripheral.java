@@ -17,7 +17,7 @@ import java.util.*;
 /**
  * Receiver 的 CC:Tweaked 外设实现。
  * <p>
- * 支持 {@code peripheral.wrap("right")} 和 {@code peripheral.find("ccnavigation:receiver")}。
+ * 支持 {@code peripheral.wrap("right")} 和 {@code peripheral.find("ccpe:redstone_transceiver")}。
  * Lua 端可读取 Receiver 的 banner 频道配置和幽灵物品。
  */
 public class RedstoneTransceiverPeripheral implements IPeripheral {
@@ -30,7 +30,7 @@ public class RedstoneTransceiverPeripheral implements IPeripheral {
 
     @Override
     public String getType() {
-        return "ccnavigation:receiver";
+        return "ccpe:redstone_transceiver";
     }
 
     @Override
@@ -44,79 +44,6 @@ public class RedstoneTransceiverPeripheral implements IPeripheral {
 
     public RedstoneTransceiverBlockEntity getBlockEntity() {
         return be;
-    }
-
-    // ════════════════════ Lua API ════════════════════
-
-    /**
-     * 获取 receiver 当前的 banner 数量。
-     */
-    @LuaFunction(mainThread = true)
-    public final int getBannerCount() {
-        CompoundTag data = be.getBannerData();
-        return data.contains("Count") ? data.getInt("Count") : 0;
-    }
-
-    /**
-     * 获取指定索引 banner 的频道号。
-     *
-     * @param index banner 索引（1-based，与 GUI 保持一致）
-     * @return 频道号，索引越界返回 nil
-     */
-    @LuaFunction(mainThread = true)
-    public final @Nullable Integer getBannerChannel(int index) {
-        CompoundTag data = be.getBannerData();
-        ListTag channels = data.getList("Channels", Tag.TAG_INT);
-        int i = index - 1;
-        if (i < 0 || i >= channels.size()) return null;
-        return ((net.minecraft.nbt.IntTag) channels.get(i)).getAsInt();
-    }
-
-    /**
-     * 获取指定 banner 的幽灵槽物品信息。
-     *
-     * @param bannerIndex banner 索引（1-based）
-     * @param slotIndex   幽灵槽索引（1-based，1 或 2）
-     * @return 物品信息 table {@code {id="minecraft:stone", count=1}}，空槽返回空 table
-     */
-    @LuaFunction(mainThread = true)
-    public final Map<String, Object> getBannerItem(int bannerIndex, int slotIndex) {
-        CompoundTag data = be.getBannerData();
-        ListTag ghosts = data.getList("Ghosts", Tag.TAG_COMPOUND);
-        int bi = bannerIndex - 1;
-        int si = slotIndex - 1;
-        if (bi < 0 || bi >= ghosts.size() || si < 0 || si > 1) return Collections.emptyMap();
-
-        CompoundTag itemData = ghosts.getCompound(bi);
-        String key = "G" + si;
-        if (!itemData.contains(key)) return Collections.emptyMap();
-
-        CompoundTag item = itemData.getCompound(key);
-        if (item.isEmpty()) return Collections.emptyMap();
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("id", item.getString("id"));
-        result.put("count", item.contains("Count") ? item.getInt("Count") : 1);
-        if (item.contains("tag")) {
-            result.put("nbt", item.getString("tag"));
-        }
-        return result;
-    }
-
-    /**
-     * 获取 receiver 所有频道的列表（按索引顺序）。
-     *
-     * @return 频道号数组表，如 {@code {1, 5, 7}}
-     */
-    @LuaFunction(mainThread = true)
-    public final List<Integer> getChannels() {
-        CompoundTag data = be.getBannerData();
-        ListTag channels = data.getList("Channels", Tag.TAG_INT);
-        List<Integer> result = new ArrayList<>();
-        for (int i = 0; i < channels.size(); i++) {
-            result.add(((net.minecraft.nbt.IntTag) channels.get(i)).getAsInt());
-        }
-        return result;
     }
 
     // ════════════════════ Create 红石信号查询 ════════════════════
@@ -134,7 +61,7 @@ public class RedstoneTransceiverPeripheral implements IPeripheral {
      * @param channel 频道号
      * @return 0-15 的红石信号强度，频道不存在或 Create 未加载时返回 0
      */
-    @LuaFunction(mainThread = true)
+    @LuaFunction
     public final int getRedstoneSignal(int channel) {
         Level level = be.getLevel();
         if (level == null || level.isClientSide) return 0;

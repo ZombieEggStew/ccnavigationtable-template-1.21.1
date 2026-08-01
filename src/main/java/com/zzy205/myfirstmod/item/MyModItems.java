@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.item;
 
-import com.zzy205.myfirstmod.CCNavigationtable;
+import com.zzy205.myfirstmod.CCPeripheraExtender;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
@@ -11,7 +11,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 public class MyModItems {
     public static final DeferredRegister.Items MyItems =
-            DeferredRegister.createItems(CCNavigationtable.MOD_ID);
+            DeferredRegister.createItems(CCPeripheraExtender.MOD_ID);
 
     private static final Item.Properties test_properties = new Item.Properties();
     public static final DeferredItem<Item> test_item =

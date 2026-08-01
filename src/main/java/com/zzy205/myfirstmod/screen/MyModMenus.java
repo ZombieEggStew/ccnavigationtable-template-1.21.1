@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.screen;
 
-import com.zzy205.myfirstmod.CCNavigationtable;
+import com.zzy205.myfirstmod.CCPeripheraExtender;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
 import net.neoforged.bus.api.IEventBus;
@@ -10,7 +10,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 public class MyModMenus {
     public static final DeferredRegister<MenuType<?>> MENUS =
-            DeferredRegister.create(Registries.MENU, CCNavigationtable.MOD_ID);
+            DeferredRegister.create(Registries.MENU, CCPeripheraExtender.MOD_ID);
 
     public static final DeferredHolder<MenuType<?>, MenuType<PeripheralExtenderMenu>> PERIPHERAL_EXTENDER_MENU =
             MENUS.register("peripheral_extender_menu", () -> IMenuTypeExtension.create(PeripheralExtenderMenu::new));

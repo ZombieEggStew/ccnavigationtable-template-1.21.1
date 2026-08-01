@@ -4,7 +4,7 @@ import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
 import com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity;
-import com.zzy205.myfirstmod.compat.cc.CCNavPeripheralExtenderSetup;
+import com.zzy205.myfirstmod.compat.cc.CCPeripheralExtenderSetup;
 import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverPeripheral;
 import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverRegistry;
 import com.zzy205.myfirstmod.compat.cc.PeripheralExtenderRegistry;
@@ -34,8 +34,8 @@ import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.fml.ModList;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
-@Mod(CCNavigationtable.MOD_ID)
-public class CCNavigationtable {
+@Mod(CCPeripheraExtender.MOD_ID)
+public class CCPeripheraExtender {
     // Define mod id in a common place for everything to reference
     public static final String MOD_ID = "ccpe";
     // Directly reference a slf4j logger
@@ -43,7 +43,7 @@ public class CCNavigationtable {
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.
     // FML will recognize some parameter types like IEventBus or ModContainer and pass them in automatically.
-    public CCNavigationtable(IEventBus modEventBus, ModContainer modContainer) {
+    public CCPeripheraExtender(IEventBus modEventBus, ModContainer modContainer) {
         // Register the commonSetup method for modloading
         modEventBus.addListener(this::commonSetup);
 
@@ -134,7 +134,7 @@ public class CCNavigationtable {
 
         // 注册 CC:Tweaked 传感器 Lua API
         if (ModList.get().isLoaded("computercraft")) {
-            CCNavPeripheralExtenderSetup.register();
+            CCPeripheralExtenderSetup.register();
             LOGGER.info("CC:Tweaked sensor API registered");
         }
     }

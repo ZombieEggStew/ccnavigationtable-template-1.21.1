@@ -55,6 +55,32 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     /** CC:T 无线红石输出信号 (0-15) */
     private int redstoneOutput = 0;
 
+    // ════════════════ CC:T 快速查询缓存（serverTick 刷新，计算机线程安全读取） ════════════════
+
+    /** 缓存的附着方块 BE 引用 */
+    @javax.annotation.Nullable
+    private BlockEntity cachedAttachedBE = null;
+
+    /** 缓存的附着方块 NBT 快照（每个 tick 由 saveWithFullMetadata 生成新对象） */
+    private CompoundTag cachedAttachedCompoundTag = new CompoundTag();
+
+    /** 缓存的 Sable SubLevel */
+    @javax.annotation.Nullable
+    private SubLevel cachedSubLevel = null;
+
+    /** 缓存的 NavTable 目标世界坐标 */
+    @javax.annotation.Nullable
+    private Vec3 cachedNavTargetPos = null;
+
+    /** 缓存的 NavTable 自身世界坐标 */
+    private Vec3 cachedNavSelfPos = Vec3.ZERO;
+
+    /** 缓存的 NavTable 距离 */
+    private double cachedNavDistance = 0.0;
+
+    /** 缓存的 NavTable 相对角度 */
+    private float cachedNavRelativeAngle = 0.0f;
+
 
     public PeripheralExtenderBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.micro_peripheral_extender_entity.get(), pos, state);
@@ -229,6 +255,11 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     public static void serverTick(Level level, BlockPos pos, BlockState state, PeripheralExtenderBlockEntity be) {
         if (!(level instanceof ServerLevel serverLevel)) return;
         if (!level.isLoaded(pos)) return;  // 关服/卸载中跳过
+
+        // ★ 刷新所有 CC:T 快速查询缓存
+        be.refreshAllCaches(level, state);
+
+        // SubLevel ticket 管理（原有逻辑）
         if (!be.sableTicketRegistered || be.sableRootSubLevelId == null) return;
 
         // 每 5 秒强制刷新防止超时
@@ -444,6 +475,65 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         if (this.level == null) return 0;
         return this.level.getBestNeighborSignal(this.worldPosition);
     }
+
+    // ════════════════ 缓存刷新（serverTick 调用） ════════════════
+
+    void refreshAllCaches(Level level, BlockState state) {
+        BlockPos attachedPos = PeripheralExtenderBlock.getAttachedPos(state, this.worldPosition);
+        BlockEntity attachedBE = level.getBlockEntity(attachedPos);
+
+        if (attachedBE != null && !attachedBE.isRemoved()) {
+            this.cachedAttachedBE = attachedBE;
+            this.cachedAttachedCompoundTag = PeripheralExtenderBlock.getAttachedBlockNBT(level, state, this.worldPosition);
+
+            // NavTable 专用缓存
+            if (attachedBE instanceof dev.simulated_team.simulated.content.blocks.nav_table.NavTableBlockEntity nav) {
+                Vec3 target = nav.getTargetPosition(true);
+                this.cachedNavTargetPos = target;
+                this.cachedNavSelfPos = nav.getProjectedSelfPos();
+                this.cachedNavDistance = nav.distanceToTarget();
+                this.cachedNavRelativeAngle = nav.getRelativeAngle();
+            } else {
+                this.cachedNavTargetPos = null;
+                this.cachedNavSelfPos = Vec3.ZERO;
+                this.cachedNavDistance = 0.0;
+                this.cachedNavRelativeAngle = 0.0f;
+            }
+
+            // SubLevel 缓存
+            this.cachedSubLevel = SableCompat.getContainingSubLevel(attachedBE);
+            if (this.cachedSubLevel == null) {
+                this.cachedSubLevel = SableCompat.getContainingSubLevel(level, attachedPos);
+            }
+        } else {
+            this.cachedAttachedBE = null;
+            this.cachedAttachedCompoundTag = new CompoundTag();
+            this.cachedNavTargetPos = null;
+            this.cachedNavSelfPos = Vec3.ZERO;
+            this.cachedNavDistance = 0.0;
+            this.cachedNavRelativeAngle = 0.0f;
+            this.cachedSubLevel = null;
+        }
+    }
+
+    // ════════════════ 缓存读取（计算机线程安全，mainThread=false） ════════════════
+
+    @javax.annotation.Nullable
+    public BlockEntity getCachedAttachedBE() { return cachedAttachedBE; }
+
+    public CompoundTag getCachedAttachedCompoundTag() { return cachedAttachedCompoundTag; }
+
+    @javax.annotation.Nullable
+    public SubLevel getCachedSubLevel() { return cachedSubLevel; }
+
+    @javax.annotation.Nullable
+    public Vec3 getCachedNavTargetPos() { return cachedNavTargetPos; }
+
+    public Vec3 getCachedNavSelfPos() { return cachedNavSelfPos; }
+
+    public double getCachedNavDistance() { return cachedNavDistance; }
+
+    public float getCachedNavRelativeAngle() { return cachedNavRelativeAngle; }
 
     // ════════════════════ GUI 加载模式 ════════════════════
 

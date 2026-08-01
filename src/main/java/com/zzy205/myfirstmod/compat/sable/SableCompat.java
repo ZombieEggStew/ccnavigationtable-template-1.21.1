@@ -285,9 +285,23 @@ public final class SableCompat {
     }
 
     /**
-     * 获取 SubLevel 物理刚体的质心位置（局部坐标）。
+     * 获取指定位置物理结构的相对空气速度（已减去风速）。
      *
-     * @return 质心 Vec3，失败或不存在时返回 null
+     * @return Vec3（m/s），失败返回 null
+     */
+    public static Vec3 getAirVelocity(Level level, BlockPos pos) {
+        if (level == null || pos == null) return null;
+        try {
+            return Sable.HELPER.getVelocityRelativeToAir(level, pos.getCenter());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取 SubLevel 物理刚体的质心位置（世界坐标）。
+     *
+     * @return 质心 Vec3（世界空间），失败或不存在时返回 null
      */
     public static Vec3 getCenterOfMass(SubLevel subLevel) {
         if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
@@ -296,7 +310,8 @@ public final class SableCompat {
             if (massTracker == null) return null;
             Vector3dc com = massTracker.getCenterOfMass();
             if (com == null) return null;
-            return new Vec3(com.x(), com.y(), com.z());
+            Vector3d globalCom = subLevel.logicalPose().transformPosition(com, new Vector3d());
+            return new Vec3(globalCom.x(), globalCom.y(), globalCom.z());
         } catch (Exception e) {
             return null;
         }

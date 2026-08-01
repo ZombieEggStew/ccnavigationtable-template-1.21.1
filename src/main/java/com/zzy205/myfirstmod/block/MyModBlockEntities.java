@@ -6,7 +6,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
-import static com.zzy205.myfirstmod.CCNavigationtable.MOD_ID;
+import static com.zzy205.myfirstmod.CCPeripheraExtender.MOD_ID;
 
 public final class MyModBlockEntities {
     static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID);

@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.compat.jei;
 
-import com.zzy205.myfirstmod.CCNavigationtable;
+import com.zzy205.myfirstmod.CCPeripheraExtender;
 import com.zzy205.myfirstmod.screen.RedstoneTransceiverScreen;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -21,7 +21,7 @@ import java.util.List;
 public class AddonJEIPlugin implements IModPlugin {
 
     private static final ResourceLocation PLUGIN_ID =
-            ResourceLocation.fromNamespaceAndPath(CCNavigationtable.MOD_ID, "jei_plugin");
+            ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, "jei_plugin");
 
     @Override
     public ResourceLocation getPluginUid() {

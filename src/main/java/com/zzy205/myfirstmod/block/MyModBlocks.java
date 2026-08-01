@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
-import com.zzy205.myfirstmod.CCNavigationtable;
+import com.zzy205.myfirstmod.CCPeripheraExtender;
 import com.zzy205.myfirstmod.item.MyModItems;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
@@ -13,7 +13,7 @@ import java.util.function.Supplier;
 
 public class MyModBlocks {
     public static final DeferredRegister.Blocks MyBlocks =
-            DeferredRegister.createBlocks(CCNavigationtable.MOD_ID);
+            DeferredRegister.createBlocks(CCPeripheraExtender.MOD_ID);
 
     public static final DeferredBlock<Block> test_block =
             registerBlocks("test_block" , () -> new Block(BlockBehaviour.Properties.of().

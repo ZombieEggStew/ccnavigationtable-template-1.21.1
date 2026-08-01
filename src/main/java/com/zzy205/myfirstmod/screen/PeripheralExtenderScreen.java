@@ -19,6 +19,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -152,11 +153,23 @@ public class PeripheralExtenderScreen extends AbstractContainerScreen<Peripheral
         formatNBTForDisplay();
     }
 
+    private static final Comparator<String> NBT_KEY_ORDER = Comparator
+            .comparingInt((String k) -> switch (k) {
+                case "id" -> 0;
+                case "x"  -> 1;
+                case "y"  -> 2;
+                case "z"  -> 3;
+                default   -> 4;
+            })
+            .thenComparing(Comparator.naturalOrder());
+
     private void formatNBTForDisplay() {
         nbtRoots.clear();
         CompoundTag nbt = getLiveNBT();
         if (nbt == null || nbt.isEmpty()) return;
-        for (String key : nbt.getAllKeys()) {
+        List<String> sortedKeys = new ArrayList<>(nbt.getAllKeys());
+        sortedKeys.sort(NBT_KEY_ORDER);
+        for (String key : sortedKeys) {
             nbtRoots.add(buildTree(key, nbt.get(key), 0, key));
         }
     }

@@ -15,18 +15,18 @@ import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
-@Mod(value = CCNavigationtable.MOD_ID, dist = Dist.CLIENT)
+@Mod(value = CCPeripheraExtender.MOD_ID, dist = Dist.CLIENT)
 // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
-@EventBusSubscriber(modid = CCNavigationtable.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
-public class CCNavigationtableClient {
-    public CCNavigationtableClient(ModContainer container) {
+@EventBusSubscriber(modid = CCPeripheraExtender.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
+public class CCPeripheralExtenderClient {
+    public CCPeripheralExtenderClient(ModContainer container) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
     }
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
-        CCNavigationtable.LOGGER.info("HELLO FROM CLIENT SETUP");
-        CCNavigationtable.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
+        CCPeripheraExtender.LOGGER.info("HELLO FROM CLIENT SETUP");
+        CCPeripheraExtender.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
     }
 
     @SubscribeEvent
