@@ -1,0 +1,13 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "up": "ccpe:block/redstone_transceiver_top",
+    "down": "ccpe:block/redstone_transceiver_top",
+    "particle": "ccpe:block/redstone_transceiver_top",
+
+    "east": "ccpe:block/redstone_transceiver_side",
+    "north": "ccpe:block/redstone_transceiver_side",
+    "south": "ccpe:block/redstone_transceiver_side",
+    "west": "ccpe:block/redstone_transceiver_side"
+  }
+}

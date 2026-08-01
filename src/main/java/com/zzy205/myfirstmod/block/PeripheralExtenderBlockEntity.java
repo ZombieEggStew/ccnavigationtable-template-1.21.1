@@ -81,7 +81,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     @Override
     public void setRemoved() {
         if (this.level != null && !this.level.isClientSide) {
-            releaseSurroundingChunks();
+            releaseThisChunk();
             releaseSableTicket();
             PeripheralExtenderRegistry.unregister(this.scrolledValue, this);
             // 仅清除内部状态，不触发方块更新（避免保存/卸载时 setBlock 死锁）
@@ -93,10 +93,9 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     // ════════════════════ 区块强制加载 ════════════════════
 
     /**
-     * 对本传感器周围 3x3 区块执行 vanilla 强制加载（共 9 个区块）。
-     * 仅在传感器不在 Sable 子次元中时调用。
+     * 对本传感器所在区块执行 vanilla 强制加载。
      */
-    private void forceLoadSurroundingChunks() {
+    private void forceLoadThisChunk() {
         if (chunksForceLoaded) return;
         if (!Config.SENSOR_CHUNK_LOAD_ENABLED.get()) return;
 
@@ -113,9 +112,9 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     }
 
     /**
-     * 释放本传感器之前通过 vanilla 强制加载的 3x3 区块。
+     * 释放本传感器之前通过 vanilla 强制加载的区块。
      */
-    private void releaseSurroundingChunks() {
+    private void releaseThisChunk() {
         if (!chunksForceLoaded) return;
         // 关服/卸载时方块坐标可能已失效，跳过以避免访问已关闭的系统
         if (level == null || !level.isLoaded(worldPosition)) {
@@ -454,7 +453,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         int clamped = Math.clamp(mode, 0, 2);
         if (this.loadMode == clamped) return;
         // 先释放旧模式
-        releaseSurroundingChunks();
+        releaseThisChunk();
         releaseSableTicket();
         this.loadMode = clamped;
         this.setChanged();
@@ -466,7 +465,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     /** 根据当前 loadMode 启用对应的加载方式 */
     private void applyLoadMode() {
         switch (loadMode) {
-            case 1 -> forceLoadSurroundingChunks();
+            case 1 -> forceLoadThisChunk();
             case 2 -> tryRegisterSableTicket();
         }
     }

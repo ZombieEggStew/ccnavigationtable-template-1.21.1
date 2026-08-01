@@ -367,11 +367,11 @@ public class RedstoneTransceiverScreen extends AbstractContainerScreen<RedstoneT
         // 频道区悬浮提示
         if (hoveredChannelBanner >= 0) {
             List<Component> lines = new ArrayList<>();
-            lines.add(Component.translatable("gui.ccpe.sensor_channel")
+            lines.add(Component.translatable("gui.ccpe.peripheral_extender_channel")
                     .withStyle(Style.EMPTY.withColor(0x528FDE)));
             lines.add(Component.translatable("gui.ccpe.scroll_to_change")
                     .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
-            lines.add(Component.translatable("gui.ccnavigationtable.shift_scroll_faster")
+            lines.add(Component.translatable("gui.ccpe.shift_scroll_faster")
                     .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
             g.renderComponentTooltip(this.font, lines, (int) trackedMouseX, (int) trackedMouseY);
         }

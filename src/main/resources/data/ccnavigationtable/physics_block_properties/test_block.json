@@ -1,7 +1,0 @@
-{
-  "selector": "ccnavigationtable:test_block",
-  "properties": {
-    "sable:mass": 1.0,
-    "sable:volume": 1.0
-  }
-}

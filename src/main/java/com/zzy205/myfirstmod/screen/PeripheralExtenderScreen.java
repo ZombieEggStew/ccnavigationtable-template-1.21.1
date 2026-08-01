@@ -257,11 +257,11 @@ public class PeripheralExtenderScreen extends AbstractContainerScreen<Peripheral
                 || mouseY < overlayY || mouseY > overlayY + HIT_HEIGHT) return;
 
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.translatable("gui.ccpe.sensor_channel")
+        lines.add(Component.translatable("gui.ccpe.peripheral_extender_channel")
                 .withStyle(Style.EMPTY.withColor(0x528FDE)));
         lines.add(Component.translatable("gui.ccpe.scroll_to_change")
                 .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
-        lines.add(Component.translatable("gui.ccnavigationtable.shift_scroll_faster")
+        lines.add(Component.translatable("gui.ccpe.shift_scroll_faster")
                 .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
         g.renderComponentTooltip(this.font, lines, mouseX, mouseY);
     }
@@ -282,7 +282,7 @@ public class PeripheralExtenderScreen extends AbstractContainerScreen<Peripheral
         int[] lineY = {TEXT_START_Y - nbtScrollOffset};
         int relY = mouseY - this.topPos;  // 转相对坐标，对齐绘制坐标系
         if (nbtRoots.isEmpty()) {
-            String empty = Component.translatable("gui.ccpe.sensor_nbt.empty").getString();
+            String empty = Component.translatable("gui.ccpe.peripheral_extender_nbt.empty").getString();
             g.drawString(this.font, empty, TEXT_START_X, TEXT_START_Y, 0xFFE0E0E0, false);
         } else {
             for (NbtTreeNode root : nbtRoots) {

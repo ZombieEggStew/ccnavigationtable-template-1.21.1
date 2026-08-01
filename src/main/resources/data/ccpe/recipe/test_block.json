@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "#": {
+      "item": "ccpe:test_item"
+    }
+  },
+  "pattern": [
+    " # ",
+    " # ",
+    "###"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:test_block"
+  }
+}

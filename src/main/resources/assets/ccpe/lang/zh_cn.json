@@ -1,0 +1,41 @@
+﻿{
+  "item.ccpe.test_item": "测试物品",
+  "itemGroup.ccpe.my_mod_tab": "电脑外设扩展",
+
+  "block.ccpe.test_block": "测试方块",
+  "block.ccpe.micro_peripheral_extender": "微型外设扩展器",
+  "block.ccpe.redstone_transceiver": "红石收发器",
+
+  "gui.ccpe.redstone_transceiver": "红石收发器",
+  "gui.ccpe.redstone_transceiver.hold_to_delete": "按住鼠标左键删除此条",
+
+  "gui.ccpe.peripheral_extender_nbt.empty": "（无 NBT 数据）",
+  "gui.ccpe.peripheral_extender_channel": "频道选择",
+  "gui.ccpe.scroll_to_change": "滚动修改",
+  "gui.ccpe.shift_scroll_faster": "按住 Shift 滚动更快",
+  "gui.ccpe.scroll_to_select": "滚动选择",
+
+  "gui.ccpe.load_mode": "加载模式",
+  "gui.ccpe.load_mode.off": "关闭",
+  "gui.ccpe.load_mode.chunk": "区块",
+  "gui.ccpe.load_mode.physics": "物理",
+  "gui.ccpe.load_mode.off.desc": "不进行任何加载",
+  "gui.ccpe.load_mode.chunk.desc": "强制加载所在区块",
+  "gui.ccpe.load_mode.physics.desc": "Sable 物理结构防卸载",
+
+  "ccpe.configuration.title": "CC 外设扩展 设置",
+  "ccpe.configuration.section.ccpe.common.toml": "CC 外设扩展 设置",
+  "ccpe.configuration.section.ccpe.common.toml.title": "CC 外设扩展 设置",
+
+  "ccpe.configuration.sensorNbtPollInterval": "NBT 刷新间隔",
+  "ccpe.configuration.sensorNbtPollInterval.tooltip": "传感器 GUI 自动刷新间隔（tick，20=1秒）。设为 0 禁用自动刷新。",
+
+  "ccpe.configuration.sensorChunkLoadEnabled": "区块强加载",
+  "ccpe.configuration.sensorChunkLoadEnabled.tooltip": "传感器是否能够对所在区块执行强制加载。",
+
+  "ccpe.configuration.sensorMaxForceLoad": "最大加载数量",
+  "ccpe.configuration.sensorMaxForceLoad.tooltip": "允许同时强制加载区块的传感器最大数量。设为 0 表示无限制。",
+
+  "ccpe.configuration.sensorPortalTicketRadius": "物理体门票半径",
+  "ccpe.configuration.sensorPortalTicketRadius.tooltip": "附着 Sable 物理结构的传感器 PORTAL ticket 半径（区块）。每个传感器加载 (2×R+1)² 个区块。默认 3（7×7 区块）。"
+}

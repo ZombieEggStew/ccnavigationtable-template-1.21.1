@@ -17,7 +17,7 @@ public class MyModCreativeModeTabs {
 
     public static final Supplier<CreativeModeTab> MY_MOD_TAB_SUPPLIER =
             MY_MOD_TAB.register("my_mod_tab", () -> CreativeModeTab.builder()
-            .title(Component.translatable("itemGroup.ccnavigationtable.my_mod_tab"))
+            .title(Component.translatable("itemGroup.ccpe.my_mod_tab"))
             .icon(() -> new ItemStack(MyModItems.test_item.get()))
             .displayItems((parameters, output) -> {
                 output.accept(MyModItems.test_item);

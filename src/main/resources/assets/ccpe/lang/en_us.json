@@ -1,0 +1,41 @@
+﻿{
+  "item.ccpe.test_item": "Test Item",
+  "itemGroup.ccpe.my_mod_tab": "CC Navigation",
+
+  "block.ccpe.test_block": "Test Block",
+  "block.ccpe.micro_peripheral_extender": "Micro Peripheral Extender",
+  "block.ccpe.redstone_transceiver": "Redstone Transceiver",
+
+  "gui.ccpe.redstone_transceiver": "Redstone Transceiver",
+  "gui.ccpe.redstone_transceiver.hold_to_delete": "Hold left click to delete",
+
+  "gui.ccpe.peripheral_extender_nbt.empty": "(No NBT data)",
+  "gui.ccpe.peripheral_extender_channel": "Channel",
+  "gui.ccpe.scroll_to_change": "Scroll to change",
+  "gui.ccpe.shift_scroll_faster": "Hold Shift to scroll faster",
+  "gui.ccpe.scroll_to_select": "Scroll to select",
+
+  "gui.ccpe.load_mode": "Load Mode",
+  "gui.ccpe.load_mode.off": "Off",
+  "gui.ccpe.load_mode.chunk": "Chunk",
+  "gui.ccpe.load_mode.physics": "Physics",
+  "gui.ccpe.load_mode.off.desc": "No loading",
+  "gui.ccpe.load_mode.chunk.desc": "Force-load the chunk",
+  "gui.ccpe.load_mode.physics.desc": "Sable physics anti-unload",
+
+  "ccpe.configuration.title": "CC Peripheral Extender Config",
+  "ccpe.configuration.section.ccpe.common.toml": "CC Peripheral Extender Config",
+  "ccpe.configuration.section.ccpe.common.toml.title": "CC Peripheral Extender Config",
+
+  "ccpe.configuration.sensorNbtPollInterval": "NBT Poll Interval",
+  "ccpe.configuration.sensorNbtPollInterval.tooltip": "Sensor GUI auto-refresh interval in ticks (20 = 1 second). Set to 0 to disable.",
+
+  "ccpe.configuration.sensorChunkLoadEnabled": "Chunk Force Load",
+  "ccpe.configuration.sensorChunkLoadEnabled.tooltip": "Whether sensors can force-load the chunk they are in.",
+
+  "ccpe.configuration.sensorMaxForceLoad": "Max Force Load Count",
+  "ccpe.configuration.sensorMaxForceLoad.tooltip": "Maximum number of sensors that can force-load chunks simultaneously. 0 = unlimited.",
+
+  "ccpe.configuration.sensorPortalTicketRadius": "Physics Ticket Radius",
+  "ccpe.configuration.sensorPortalTicketRadius.tooltip": "PORTAL ticket radius in chunks for sensors on Sable physics structures. Each sensor loads (2×R+1)² chunks. Default: 3 (7×7 chunks)."
+}
