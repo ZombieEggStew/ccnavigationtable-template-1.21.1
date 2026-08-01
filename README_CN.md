@@ -96,9 +96,9 @@ src/main/java/com/zzy205/myfirstmod/
 
 ## 灵感来源
 
-Microcontroller 模组——一个区别于 CC:Tweaked 的电脑模组。它的 Sensor 通过频道与计算机无线连接，直接读取目标方块的 NBT 数据，无需为每个模组单独编写外设适配。这种"通用传感器"的设计理念正是 CCPE 的核心思路。
+Microcontrollers 模组——一个区别于 CC:Tweaked 的电脑模组。它的 Sensor 通过频道与计算机无线连接，直接读取目标方块的 NBT 数据，无需为每个模组单独编写外设适配。这种"通用传感器"的设计理念正是 CCPE 的核心思路。
 
-可惜 Microcontroller 后来消失了，于是我写了自己的 Sensor。
+可惜 Microcontrollers 后来消失了，于是我写了自己的 Sensor。
 
 ## 协议
 

@@ -94,9 +94,9 @@ src/main/java/com/zzy205/myfirstmod/
 
 ## Inspiration
 
-The Microcontroller mod — a computer mod distinct from CC:Tweaked. Its Sensor connected wirelessly via channels and read target block NBT directly, without per-mod peripheral adapters. This "universal sensor" design is the core idea behind CCPE.
+The Microcontrollers mod — a computer mod distinct from CC:Tweaked. Its Sensor connected wirelessly via channels and read target block NBT directly, without per-mod peripheral adapters. This "universal sensor" design is the core idea behind CCPE.
 
-Microcontroller later disappeared, so I wrote my own Sensor.
+Microcontrollers later disappeared, so I wrote my own Sensor.
 
 ## License
 
