@@ -35,16 +35,20 @@ CCPE 的传感器通过 NBT 缓存，**对任意方块都能读取数据**，不
 - `pe.getNavRelativeAngle(ch)` → `number` — 方位角（度，0~360）
 
 ### 🚀 物理数据（需 Sable/物理结构）
-| `getPhysicsPos(ch)` | `{x, y, z}` | 世界坐标（m）
-| `getPhysicsOrientation(ch)` | `{x, y, z, w}` | 旋转四元数
-| `getPhysicsMass(ch)` | `number` | 质量（kg）
-| `getPhysicsCenterOfMass(ch)` | `{x, y, z}` | 质心世界坐标
-| `getPhysicsGravityForce(ch)` | `number` | 重力（N）
+| 方法 | 返回值 | 说明 |
+|---|---|---|
+| `getPhysicsPos(ch)` | `{x, y, z}` | 世界坐标（m）|
+| `getPhysicsOrientation(ch)` | `{x, y, z, w}` | 旋转四元数 |
+| `getPhysicsMass(ch)` | `number` | 质量（kg）|
+| `getPhysicsCenterOfMass(ch)` | `{x, y, z}` | 质心世界坐标 |
+| `getPhysicsGravityForce(ch)` | `number` | 重力（N）|
 
 > 速度类方法需传感器附着在 `simulated:velocity_sensor` 上
-| `getPhysicsVelocity(ch)` | `{x, y, z}` | 地面速度（m/s）
-| `getPhysicsAirVelocity(ch)` | `{x, y, z}` | 空速，已减风速（m/s）
-| `getPhysicsAngularVelocity(ch)` | `{x, y, z}` | 角速度（rad/s）
+| 方法 | 返回值 | 说明 |
+|---|---|---|
+| `getPhysicsVelocity(ch)` | `{x, y, z}` | 地面速度（m/s）|
+| `getPhysicsAirVelocity(ch)` | `{x, y, z}` | 空速，已减风速（m/s）|
+| `getPhysicsAngularVelocity(ch)` | `{x, y, z}` | 角速度（rad/s）|
 
 ### 📶 无线红石
 - `pe.setRedstoneOutput(ch, 0-15)` — 无线红石发送 mainThread = true
