@@ -369,6 +369,9 @@ public class PeripheralExtenderScreen extends AbstractContainerScreen<Peripheral
             if (newValue > 9999) newValue = 9999;
             // 跳过已被其他传感器占用的频道
             newValue = skipOccupiedChannels(newValue, dir);
+            // 边界钳位后再次跳占，防止钳位值恰好被占用
+            if (newValue < 0) newValue = skipOccupiedChannels(0, 1);
+            if (newValue > 9999) newValue = skipOccupiedChannels(9999, -1);
             if (newValue < 0) newValue = 0;
             if (newValue > 9999) newValue = 9999;
             if (newValue != scrolledValue) {

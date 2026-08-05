@@ -15,10 +15,10 @@ public class MyModBlocks {
     public static final DeferredRegister.Blocks MyBlocks =
             DeferredRegister.createBlocks(CCPeripheraExtender.MOD_ID);
 
-    public static final DeferredBlock<Block> test_block =
-            registerBlocks("test_block" , () -> new Block(BlockBehaviour.Properties.of().
-                    strength(1.0f , 6.0f)
-            ));
+//     public static final DeferredBlock<Block> test_block =
+//             registerBlocks("test_block" , () -> new Block(BlockBehaviour.Properties.of().
+//                     strength(1.0f , 6.0f)
+//             ));
 
     public static final DeferredBlock<Block> micro_peripheral_extender =
             registerBlocks("micro_peripheral_extender" , () -> new PeripheralExtenderBlock(BlockBehaviour.Properties.of().

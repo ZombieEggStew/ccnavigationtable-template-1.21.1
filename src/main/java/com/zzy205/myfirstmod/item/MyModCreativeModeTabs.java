@@ -18,10 +18,10 @@ public class MyModCreativeModeTabs {
     public static final Supplier<CreativeModeTab> MY_MOD_TAB_SUPPLIER =
             MY_MOD_TAB.register("my_mod_tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.ccpe.my_mod_tab"))
-            .icon(() -> new ItemStack(MyModItems.test_item.get()))
+            .icon(() -> new ItemStack(MyModBlocks.micro_peripheral_extender.get()))
             .displayItems((parameters, output) -> {
-                output.accept(MyModItems.test_item);
-                output.accept(MyModBlocks.test_block);
+                // output.accept(MyModItems.test_item);
+                // output.accept(MyModBlocks.test_block);
                 output.accept(MyModBlocks.micro_peripheral_extender);
                 output.accept(MyModBlocks.redstone_transceiver);
             })

@@ -28,7 +28,7 @@ CCPE 的传感器通过 NBT 缓存，**对任意方块都能读取数据**，不
 - 通过 `pe.get(频道, 路径)` 或 `pe.getAll(频道)` 读取 NBT 数据
 - 路径语法：`"Items[0].Count"`、`"ForgeData.CustomName"` 等
 
-### 🧭 导航桌集成
+### 🧭 导航桌集成 （需要航空学的导航桌）
 - `pe.getNavTargetPos(ch)` → `{x, y, z}` — 目标世界坐标
 - `pe.getNavSelfPos(ch)` → `{x, y, z}` — 自身世界坐标
 - `pe.getNavDistance(ch)` → `number` — 到目标距离（米）
@@ -39,9 +39,11 @@ CCPE 的传感器通过 NBT 缓存，**对任意方块都能读取数据**，不
 |---|---|---|
 | `getPhysicsPos(ch)` | `{x, y, z}` | 世界坐标（m）|
 | `getPhysicsOrientation(ch)` | `{x, y, z, w}` | 旋转四元数 |
-| `getPhysicsMass(ch)` | `number` | 质量（kg）|
 | `getPhysicsCenterOfMass(ch)` | `{x, y, z}` | 质心世界坐标 |
+| `getPhysicsMass(ch)` | `number` | 质量（kg）|
+| `getPhysicsChainMass(ch)` | `number` | 物理体链总质量（kg）|
 | `getPhysicsGravityForce(ch)` | `number` | 重力（N）|
+| `getPhysicsChainGravityForce(ch)` | `number` | 物理体链总重力（N）|
 
 **速度类方法需传感器附着在 `速度传感器` 上**
 | 方法 | 返回值 | 说明 |

@@ -27,7 +27,7 @@ The cache refreshes every server tick (50ms), and Lua reads take ~0.02ms per cal
 - Read NBT via `pe.get(channel, path)` or `pe.getAll(channel)`
 - Path syntax: `"Items[0].Count"`, `"ForgeData.CustomName"`, etc.
 
-### 🧭 Navigation Table Integration
+### 🧭 Navigation Table Integration (requires simulated:navigation_table)
 - `pe.getNavTargetPos(ch)` → `{x, y, z}` — target world coordinates
 - `pe.getNavSelfPos(ch)` → `{x, y, z}` — self world coordinates
 - `pe.getNavDistance(ch)` → `number` — distance to target (meters)
@@ -38,9 +38,11 @@ The cache refreshes every server tick (50ms), and Lua reads take ~0.02ms per cal
 |---|---|---|
 | `getPhysicsPos(ch)` | `{x, y, z}` | World position (meters) |
 | `getPhysicsOrientation(ch)` | `{x, y, z, w}` | Rotation quaternion |
-| `getPhysicsMass(ch)` | `number` | Mass (kg) |
 | `getPhysicsCenterOfMass(ch)` | `{x, y, z}` | Center of mass (world coordinates) |
+| `getPhysicsMass(ch)` | `number` | Mass (kg) |
 | `getPhysicsGravityForce(ch)` | `number` | Gravity force (N) |
+| `getPhysicsChainMass(ch)` | `number` | Total mass of the physics body chain (kg) |
+| `getPhysicsChainGravityForce(ch)` | `number` | Total gravity force of the physics body chain (N) |
 
 > Velocity methods require sensor attached to `simulated:velocity_sensor`
 > 

@@ -205,14 +205,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
         return result;
     }
 
-    @LuaFunction
-    public final Double getPhysicsMass(int channel) {
-        PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
-        if (sensor == null) return null;
-        SubLevel sub = sensor.getCachedSubLevel();
-        if (sub == null) return null;
-        return SableCompat.getMass(sub);
-    }
+
 
     @LuaFunction
     public final Map<String, Double> getPhysicsCenterOfMass(int channel) {
@@ -226,10 +219,35 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     }
 
     @LuaFunction
+    public final Double getPhysicsMass(int channel) {
+        PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
+        if (sensor == null) return null;
+        SubLevel sub = sensor.getCachedSubLevel();
+        if (sub == null) return null;
+        return SableCompat.getMass(sub);
+    }
+
+    @LuaFunction
+    public final Double getPhysicsChainMass(int channel) {
+        PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
+        if (sensor == null) return null;
+        SubLevel sub = sensor.getCachedSubLevel();
+        if (sub == null) return null;
+        return SableCompat.getChainMass(sub);
+    }
+
+    @LuaFunction
     public final Double getPhysicsGravityForce(int channel) {
         Double mass = getPhysicsMass(channel);
-        return mass != null ? mass * 11.0 : null;
+        return mass != null && mass > 0 ? mass * 11.0 : null;
     }
+
+    @LuaFunction
+    public final Double getPhysicsChainGravityForce(int channel) {
+        Double mass = getPhysicsChainMass(channel);
+        return mass != null && mass > 0 ? mass * 11.0 : null;
+    }
+
 
     private static Map<String, Double> vec3ToMap(Vec3 v) {
         Map<String, Double> result = new LinkedHashMap<>();

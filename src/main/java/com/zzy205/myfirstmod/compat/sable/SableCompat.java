@@ -1,6 +1,5 @@
 package com.zzy205.myfirstmod.compat.sable;
 
-import com.mojang.serialization.Codec;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.SubLevelHelper;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
@@ -316,4 +315,23 @@ public final class SableCompat {
             return null;
         }
     }
+
+    /**
+     * 获取 SubLevel 及其所有约束连接的物理结构的总质量。
+     */
+    public static Double getChainMass(SubLevel subLevel) {
+        if (subLevel == null) return null;
+        try {
+            List<SubLevel> chain = getConnectedChain(subLevel);
+            double total = 0.0;
+            for (SubLevel sl : chain) {
+                Double m = getMass(sl);
+                if (m != null) total += m;
+            }
+            return total;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
 }

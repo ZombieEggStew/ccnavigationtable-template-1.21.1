@@ -482,6 +482,9 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         BlockPos attachedPos = PeripheralExtenderBlock.getAttachedPos(state, this.worldPosition);
         BlockEntity attachedBE = level.getBlockEntity(attachedPos);
 
+        // SubLevel 缓存（始终尝试，不依赖 BE 是否存在——Sable 可处理无 BE 的方块）
+        this.cachedSubLevel = SableCompat.getContainingSubLevel(level, attachedPos);
+
         if (attachedBE != null && !attachedBE.isRemoved()) {
             this.cachedAttachedBE = attachedBE;
             this.cachedAttachedCompoundTag = PeripheralExtenderBlock.getAttachedBlockNBT(level, state, this.worldPosition);
@@ -499,12 +502,6 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
                 this.cachedNavDistance = 0.0;
                 this.cachedNavRelativeAngle = 0.0f;
             }
-
-            // SubLevel 缓存
-            this.cachedSubLevel = SableCompat.getContainingSubLevel(attachedBE);
-            if (this.cachedSubLevel == null) {
-                this.cachedSubLevel = SableCompat.getContainingSubLevel(level, attachedPos);
-            }
         } else {
             this.cachedAttachedBE = null;
             this.cachedAttachedCompoundTag = new CompoundTag();
@@ -512,7 +509,6 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
             this.cachedNavSelfPos = Vec3.ZERO;
             this.cachedNavDistance = 0.0;
             this.cachedNavRelativeAngle = 0.0f;
-            this.cachedSubLevel = null;
         }
     }
 

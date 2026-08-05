@@ -45,3 +45,6 @@ sources/
 ### Local Maven dependencies (manually downloaded jars) ###
 libs/
 t.txt
+
+temp/
+tools/
