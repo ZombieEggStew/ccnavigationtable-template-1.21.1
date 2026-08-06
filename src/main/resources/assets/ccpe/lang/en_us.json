@@ -5,7 +5,7 @@
   "block.ccpe.test_block": "Test Block",
   "block.ccpe.micro_peripheral_extender": "Micro Peripheral Extender",
   "block.ccpe.redstone_transceiver": "Redstone Transceiver",
-  "block.ccpe.transmission_peripheral": "CC Transmission",
+  "block.ccpe.transmission_peripheral": "Electronic Transmission",
 
   "gui.ccpe.redstone_transceiver": "Redstone Transceiver",
   "gui.ccpe.redstone_transceiver.hold_to_delete": "Hold left click to delete",

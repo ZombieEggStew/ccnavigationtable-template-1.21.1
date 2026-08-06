@@ -7,3 +7,6 @@
 - Fixed an issue where channel 0 could be manually selected and duplicated when already occupied.
 
 - Removed test blocks and test items.
+
+1.0.2
+- Added transmission peripheral : a rotation speed controller designed specifically for CC:T control

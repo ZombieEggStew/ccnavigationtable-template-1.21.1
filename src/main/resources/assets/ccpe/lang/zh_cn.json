@@ -5,7 +5,7 @@
   "block.ccpe.test_block": "测试方块",
   "block.ccpe.micro_peripheral_extender": "微型外设扩展器",
   "block.ccpe.redstone_transceiver": "红石收发器",
-  "block.ccpe.transmission_peripheral": "CC变速器",
+  "block.ccpe.transmission_peripheral": "电子变速箱",
 
   "gui.ccpe.redstone_transceiver": "红石收发器",
   "gui.ccpe.redstone_transceiver.hold_to_delete": "按住鼠标左键删除此条",

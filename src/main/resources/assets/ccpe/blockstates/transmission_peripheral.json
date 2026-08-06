@@ -2,15 +2,13 @@
   "variants": {
     "axis=x": {
       "model": "ccpe:block/transmission_peripheral",
-      "x": 90,
       "y": 90
     },
     "axis=y": {
-      "model": "ccpe:block/transmission_peripheral"
+      "model": "ccpe:block/transmission_peripheral_v"
     },
     "axis=z": {
-      "model": "ccpe:block/transmission_peripheral",
-      "x": 90
+      "model": "ccpe:block/transmission_peripheral"
     }
   }
 }

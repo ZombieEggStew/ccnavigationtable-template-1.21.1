@@ -1,10 +1,28 @@
 # CCPE — CC 外设扩展器
 
-> 为 ComputerCraft: Tweaked 提供无线传感器访问的 NeoForge 模组
+> 为 Create: Aeronautics 提供一些好用的 ComputerCraft: Tweaked 外设的 NeoForge 模组
 
-## 这是什么？
+## 包含内容
+
+- **微型外设扩展器** — 无线读取任意方块的 NBT 数据；无线红石信号控制；远程外设连接
+- **红石收发器** — 无线读取和发送 Create Redstone Link 信号
+- **电子变速箱** — 专门为 CC:T 控制设计的转速控制器
+
+
+
+## 功能
+
+### 📡 无线方块读数
+
+CC:Tweaked 原版要求计算机紧贴目标方块才能访问外设。
+虽然不少模组为各自的方块适配了外设接口，但并非所有方块都有适配。
 
 CCPE 为 CC:Tweaked 添加了**外设扩展器**。将传感器贴在任意方块上，设置频道号，就能在 Lua 中无线读取该方块的数据——无需线缆，不限距离。
+
+- 通过 `pe.get(频道, 路径)` 或 `pe.getAll(频道)` 读取 NBT 数据
+- 路径语法：`"Items[0].Count"`、`"ForgeData.CustomName"` 等
+
+数据在服务端每 tick（50ms）刷新一次，Lua 端读取约 0.02ms/次，适合高频监控场景。
 
 ```lua
 local pe = require("ccpe.pe")
@@ -12,27 +30,16 @@ local data = pe.getAll(1)              -- 读取频道 1 方块的完整 NBT
 local cnt  = pe.get(1, "Items[0].Count")  -- 读取指定路径的字段
 ```
 
-## 特点
-
-CC:Tweaked 原版要求计算机紧贴目标方块才能访问外设。
-虽然不少模组为各自的方块适配了外设接口，但并非所有方块都有适配。
-
-CCPE 的传感器通过 NBT 缓存，**对任意方块都能读取数据**，不需要等待模组作者逐个适配。
-
-数据在服务端每 tick（50ms）刷新一次，Lua 端读取约 0.02ms/次，适合高频监控场景。
-
-## 功能
-
-### 📡 无线方块读数
-- 传感器可附着到**任意**方块
-- 通过 `pe.get(频道, 路径)` 或 `pe.getAll(频道)` 读取 NBT 数据
-- 路径语法：`"Items[0].Count"`、`"ForgeData.CustomName"` 等
+### 🔌 外设代理
+- `pe.getPeripheral(ch)` — 无线访问附着方块的 CC:T 外设方法
 
 ### 🧭 导航桌集成 （需要航空学的导航桌）
-- `pe.getNavTargetPos(ch)` → `{x, y, z}` — 目标世界坐标
-- `pe.getNavSelfPos(ch)` → `{x, y, z}` — 自身世界坐标
-- `pe.getNavDistance(ch)` → `number` — 到目标距离（米）
-- `pe.getNavRelativeAngle(ch)` → `number` — 方位角（度，0~360）
+| 方法 | 返回值 | 说明 |
+|---|---|---|
+| `pe.getNavTargetPos(ch)` | `{x, y, z}` | 目标世界坐标 |
+| `pe.getNavSelfPos(ch)` | `{x, y, z}` | 自身世界坐标 |
+| `pe.getNavDistance(ch)` | `number` | 到目标距离（米） |
+| `pe.getNavRelativeAngle(ch)` | `number` | 方位角（度，0~360） |
 
 ### 🚀 物理数据（需 Sable/物理结构）
 | 方法 | 返回值 | 说明 |
@@ -57,13 +64,68 @@ CCPE 的传感器通过 NBT 缓存，**对任意方块都能读取数据**，不
 - `pe.getRedstoneOutput(ch)` — 读取发送信号
 - `pe.getRedstoneInput(ch)` — 读取输入红石信号
 
-### 🔌 外设代理
-- `pe.getPeripheral(ch)` — 无线访问附着方块的 CC:T 外设方法
+
+---
+
 
 ### 📻 红石收发器
-- 基于频道的 Create Redstone Link 集成
-- `receiver.setRedstoneSignal(频道, 0-15)` — 向 Create 网络发送信号 mainThread = true
-- `receiver.getRedstoneSignal(频道)` — 读取 Create 网络信号
+
+使计算机可以直接读取和发送 Create Redstone Link 信号，不需要再在计算机旁边摆上一堆 create:redstone_link
+
+每个收发器能够配置多个频道，每个频道绑定一个红石频率。Lua 端通过频道号操作：
+
+```lua
+local r = peripheral.find("ccpe:redstone_transceiver")
+
+-- 读取频道 3 对应的 Create 红石网络信号
+local signal = r.getRedstoneSignal(3)
+
+-- 向频道 7 对应的 Create 网络发送满信号
+r.setRedstoneSignal(7, 15)
+```
+
+| 方法 | 说明 |
+|---|---|
+| `getRedstoneSignal(频道)` | 读取指定频道绑定的 Create Redstone Link 信号（0-15） |
+| `setRedstoneSignal(频道, 0-15)` | 向指定频道绑定的 Create 网络发送红石信号 `mainThread=true` |
+
+
+---
+
+
+### 🎛️ 电子变速箱
+
+> **与 create:RotationSpeedController 有什么不同?**
+使用机械动力的转速控制器作为外设执行 `getTargetSpeed()` 会触发 `RotationPropagator.handleRemoved()` 会级联清空整个下游子网络的 source，导致不符合预期的结果（比如在转速控制器的下游使用 aeroworks 的 stepper_servo，改变转速的同时激活步进电机，电机会乱转）。
+而 simulated 的 analog_transmission 难以精细调节。
+
+电子变速箱（type: `ccpe:transmission_peripheral`）是纯 CC:T 外设控制的 Create 动能变速器。**不接受红石信号**，只能通过 Lua 控制。可放置在动能网络中间，实时调节下游转速。
+
+```lua
+local t = peripheral.find("ccpe:transmission_peripheral")
+
+-- 比率模式：下游 = 上游 × 比率
+t.setRatio(0.5)   -- 下游降速至 50%
+t.setRatio(3.0)   -- 下游加速至 3 倍（上限 256 RPM）
+
+-- 目标模式：直接设定下游转速（0~256，保留两位小数）
+t.setTargetSpeed(128.56)
+print(t.getTargetSpeed())  -- 128.56
+
+-- 查询当前状态
+print(t.getRatio())
+```
+
+| 方法 | 说明 |
+|---|---|
+| `setRatio(ratio)` | 设置变速比（≥0），比例模式 `mainThread=true` |
+| `getRatio()` | 获取当前变速比 |
+| `setTargetSpeed(speed)` | 直接设定下游转速（0~256.00）`mainThread=true` |
+| `getTargetSpeed()` | 获取目标转速 |
+
+
+---
+
 
 ### 🏗️ 区块加载与物理体加载
 
@@ -81,6 +143,10 @@ CCPE 的传感器通过 NBT 缓存，**对任意方块都能读取数据**，不
 - `sensorChunkLoadEnabled` — 是否允许区块加载
 - `sensorMaxForceLoad` — 最大同时加载传感器数量
 - `sensorPortalTicketRadius` — PORTAL ticket 半径
+
+
+---
+
 
 ## 快速上手
 
@@ -110,6 +176,11 @@ local redstone = peripheral.find("ccpe:redstone_transceiver")
 
 redstone.setRedstoneSignal(5, 15)  -- 向频道 5 的 Create 网络发送红石信号
 redstone.getRedstoneSignal(3)  -- 读取频道 3 的 Create 网络红石信号
+
+-- 电子变速箱 动能变速控制
+local trans = peripheral.wrap("right")
+trans.setTargetSpeed(200)  -- 设定下游转速 200 RPM
+trans.setRatio(0.75)       -- 切换到比率模式：75% 输出
 ```
 
 ## 要求

@@ -1,10 +1,27 @@
 # CCPE — CC Peripheral Extender
 
-> Wireless sensor access for ComputerCraft: Tweaked on NeoForge
+> Handy ComputerCraft: Tweaked peripherals for Create: Aeronautics on NeoForge
 
-## What is this?
+## What's Included
 
-CCPE adds **peripheral extender blocks** to CC:Tweaked. Attach a sensor to any block, set a channel number, and wirelessly read that block's data from Lua — no cables, no distance limits.
+- **Micro Peripheral Extender** — wireless NBT reading for any block; wireless redstone signal control; remote peripheral access
+- **Redstone Transceiver** — wireless read and transmit of Create Redstone Link signals
+- **Electronic Transmission** — a rotation speed controller designed specifically for CC:T control
+
+
+
+## Features
+
+### 📡 Wireless Block Reading
+
+CC:Tweaked requires computers to be directly adjacent to target blocks for peripheral access. While many mods add peripheral support for their blocks, not every block has it.
+
+CCPE adds a **Peripheral Extender**. Attach the sensor to any block, set a channel number, and wirelessly read that block's data from Lua — no cables, no distance limits.
+
+- Read NBT via `pe.get(channel, path)` or `pe.getAll(channel)`
+- Path syntax: `"Items[0].Count"`, `"ForgeData.CustomName"`, etc.
+
+Data refreshes every server tick (50ms), Lua reads take ~0.02ms/call — ideal for high-frequency monitoring.
 
 ```lua
 local pe = require("ccpe.pe")
@@ -12,40 +29,29 @@ local data = pe.getAll(1)              -- read full NBT of block on channel 1
 local cnt  = pe.get(1, "Items[0].Count")  -- read a specific field by path
 ```
 
-## Features
-
-CC:Tweaked's standard peripherals require the computer to be directly adjacent to the target block. While many mods add peripheral adapters for their blocks, not every block has one.
-
-CCPE's sensor caches block data via NBT snapshots — **works with any block**, no need to wait for mod authors to add peripheral support.
-
-The cache refreshes every server tick (50ms), and Lua reads take ~0.02ms per call, suitable for high-frequency monitoring.
-
-## API
-
-### 📡 Wireless Block Reading
-- Attach sensor to **any** block
-- Read NBT via `pe.get(channel, path)` or `pe.getAll(channel)`
-- Path syntax: `"Items[0].Count"`, `"ForgeData.CustomName"`, etc.
+### 🔌 Peripheral Proxy
+- `pe.getPeripheral(ch)` — wirelessly access the attached block's CC:T peripheral methods
 
 ### 🧭 Navigation Table Integration (requires simulated:navigation_table)
-- `pe.getNavTargetPos(ch)` → `{x, y, z}` — target world coordinates
-- `pe.getNavSelfPos(ch)` → `{x, y, z}` — self world coordinates
-- `pe.getNavDistance(ch)` → `number` — distance to target (meters)
-- `pe.getNavRelativeAngle(ch)` → `number` — bearing angle (degrees, 0~360)
-
-### 🚀 Physics Data (requires Sable/physical structure)
 | Method | Return | Description |
 |---|---|---|
-| `getPhysicsPos(ch)` | `{x, y, z}` | World position (meters) |
+| `pe.getNavTargetPos(ch)` | `{x, y, z}` | Target world position |
+| `pe.getNavSelfPos(ch)` | `{x, y, z}` | Self world position |
+| `pe.getNavDistance(ch)` | `number` | Distance to target (meters) |
+| `pe.getNavRelativeAngle(ch)` | `number` | Bearing angle (degrees, 0~360) |
+
+### 🚀 Physics Data (requires Sable/physics structure)
+| Method | Return | Description |
+|---|---|---|
+| `getPhysicsPos(ch)` | `{x, y, z}` | World position (m) |
 | `getPhysicsOrientation(ch)` | `{x, y, z, w}` | Rotation quaternion |
 | `getPhysicsCenterOfMass(ch)` | `{x, y, z}` | Center of mass (world coordinates) |
 | `getPhysicsMass(ch)` | `number` | Mass (kg) |
+| `getPhysicsChainMass(ch)` | `number` | Total mass of physics body chain (kg) |
 | `getPhysicsGravityForce(ch)` | `number` | Gravity force (N) |
-| `getPhysicsChainMass(ch)` | `number` | Total mass of the physics body chain (kg) |
-| `getPhysicsChainGravityForce(ch)` | `number` | Total gravity force of the physics body chain (N) |
+| `getPhysicsChainGravityForce(ch)` | `number` | Total gravity force of physics body chain (N) |
 
-> Velocity methods require sensor attached to `simulated:velocity_sensor`
-> 
+**Velocity methods require sensor attached to `simulated:velocity_sensor`**
 | Method | Return | Description |
 |---|---|---|
 | `getPhysicsVelocity(ch)` | `{x, y, z}` | Ground velocity (m/s) |
@@ -53,17 +59,76 @@ The cache refreshes every server tick (50ms), and Lua reads take ~0.02ms per cal
 | `getPhysicsAngularVelocity(ch)` | `{x, y, z}` | Angular velocity (rad/s) |
 
 ### 📶 Wireless Redstone
-- `pe.setRedstoneOutput(ch, 0-15)` — transmit redstone signal (mainThread=true)
+- `pe.setRedstoneOutput(ch, 0-15)` — transmit redstone signal (main thread)
 - `pe.getRedstoneOutput(ch)` — read transmitted signal
 - `pe.getRedstoneInput(ch)` — read received signal
 
-### 🔌 Peripheral Proxy
-- `pe.getPeripheral(ch)` — wirelessly access the attached block's CC:T peripheral methods
+
+---
+
 
 ### 📻 Redstone Transceiver
-- Channel-based Create Redstone Link integration
-- `receiver.setRedstoneSignal(channel, 0-15)` — transmit to Create network (mainThread=true)
-- `receiver.getRedstoneSignal(channel)` — read Create network signal
+
+Allows computers to directly read and transmit Create Redstone Link signals — no need to place multiple redstone link blocks next to your computer.
+
+Each transceiver uses Banners to configure multiple channels, each bound to a pair of redstone frequency items. Access via channel number from Lua:
+
+```lua
+local r = peripheral.find("ccpe:redstone_transceiver")
+
+-- Read the Create redstone network signal on channel 3
+local signal = r.getRedstoneSignal(3)
+
+-- Transmit a full signal to the Create network on channel 7
+r.setRedstoneSignal(7, 15)
+```
+
+| Method | Description |
+|---|---|
+| `getRedstoneSignal(channel)` | Read the Create Redstone Link signal bound to the channel (0–15) |
+| `setRedstoneSignal(channel, 0-15)` | Transmit a redstone signal to the Create network bound to the channel (main thread) |
+
+
+---
+
+
+### 🎛️ Electronic Transmission
+
+> **How is it different from the RotationSpeedController?**
+> Using Create's RotationSpeedController as a peripheral (calling `setTargetSpeed()`) triggers `RotationPropagator.handleRemoved()`, which cascades through the entire downstream sub-network clearing all sources. This causes unexpected behavior (e.g. stepper servos from Aeroworks running wild when speed changes).
+> Simulated's AnalogTransmission lacks a CC:T interface and is difficult to fine-tune.
+
+The Electronic Transmission uses `detachKinetics()` + `attachKinetics()` to gently refresh the network without disrupting downstream devices.
+
+Electronic Transmission (`ccpe:transmission_peripheral`) **does not accept redstone signals** — Lua control only. Place it in a kinetic network to adjust downstream speed in real time.
+
+```lua
+local t = peripheral.find("ccpe:transmission_peripheral")
+
+-- Ratio mode: downstream = upstream × ratio
+t.setRatio(0.5)   -- reduce to 50%
+t.setRatio(3.0)   -- boost to 3× (capped at 256 RPM)
+
+-- Target speed mode: directly set downstream speed (0–256, 2 decimal places)
+t.setTargetSpeed(128.56)
+print(t.getTargetSpeed())  -- 128.56
+
+-- Query current state
+print(t.getRatio())
+```
+
+| Method | Description |
+|---|---|
+| `setRatio(ratio)` | Set speed ratio (≥0), enters ratio mode (main thread) |
+| `getRatio()` | Get current ratio |
+| `setTargetSpeed(speed)` | Directly set downstream speed 0–256.00, enters target mode (main thread) |
+| `getTargetSpeed()` | Get target speed |
+
+> Calling `setRatio` switches to ratio mode; calling `setTargetSpeed` switches to target mode. Actual output is capped at 256 RPM in both modes.
+
+
+---
+
 
 ### 🏗️ Chunk & Physics Body Loading
 
@@ -81,6 +146,10 @@ Config (`config/ccpe-common.toml`):
 - `sensorChunkLoadEnabled` — enable chunk loading
 - `sensorMaxForceLoad` — max concurrent loaded sensors
 - `sensorPortalTicketRadius` — PORTAL ticket radius
+
+
+---
+
 
 ## Quick Start
 
@@ -103,13 +172,17 @@ local com  = pe.getPhysicsCenterOfMass(3)
 print(string.format("Mass: %.1f kg, COM: %.1f, %.1f, %.1f", mass, com.x, com.y, com.z))
 
 -- Wireless redstone
-pe.setRedstoneOutput(4, 15)  -- activate sensor on channel 4
+pe.setRedstoneOutput(4, 15)  -- power the sensor on channel 4
 
 -- Create redstone link control
 local redstone = peripheral.find("ccpe:redstone_transceiver")
-
 redstone.setRedstoneSignal(5, 15)  -- transmit to Create network on channel 5
-redstone.getRedstoneSignal(3)  -- read Create network signal on channel 3
+redstone.getRedstoneSignal(3)      -- read Create network signal on channel 3
+
+-- Electronic transmission control
+local trans = peripheral.find("ccpe:transmission_peripheral")
+trans.setTargetSpeed(200)  -- set downstream speed to 200 RPM
+trans.setRatio(0.75)       -- switch to ratio mode: 75% output
 ```
 
 ## Requirements
@@ -123,6 +196,3 @@ redstone.getRedstoneSignal(3)  -- read Create network signal on channel 3
 ## Performance
 
 Read operations ~0.02ms/call, redstone write operations ~50ms/call.
-
-## Where is Create Microcontrollers
-why create microcontrollers 404
