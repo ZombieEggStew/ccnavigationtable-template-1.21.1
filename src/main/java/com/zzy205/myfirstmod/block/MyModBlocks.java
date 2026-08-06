@@ -33,6 +33,13 @@ public class MyModBlocks {
                     strength(1.0f , 6.0f)
             ));
 
+    public static final DeferredBlock<TransmissionPeripheralBlock> transmission_peripheral =
+            registerBlocks("transmission_peripheral", () -> new TransmissionPeripheralBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.METAL).
+                    strength(2.0f, 6.0f).
+                    noOcclusion()
+            ));
+
 
 
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {

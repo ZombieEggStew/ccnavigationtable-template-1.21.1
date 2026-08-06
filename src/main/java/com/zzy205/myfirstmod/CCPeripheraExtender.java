@@ -4,6 +4,7 @@ import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
 import com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity;
+import com.zzy205.myfirstmod.block.TransmissionPeripheralBlockEntity;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralExtenderSetup;
 import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverPeripheral;
 import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverRegistry;
@@ -113,6 +114,11 @@ public class CCPeripheraExtender {
                         MyModBlockEntities.redstone_transceiver_entity.get(),
                         (be, side) -> new RedstoneTransceiverPeripheral(
                                 (RedstoneTransceiverBlockEntity) be)
+                );
+                event.registerBlockEntity(
+                        PeripheralCapability.get(),
+                        MyModBlockEntities.transmission_peripheral_entity.get(),
+                        (be, side) -> ((TransmissionPeripheralBlockEntity) be).getPeripheral()
                 );
             }
         });
