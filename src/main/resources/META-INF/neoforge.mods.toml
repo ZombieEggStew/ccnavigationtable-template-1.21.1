@@ -1,0 +1,93 @@
+# NeoForge mod metadata for CC Peripheral Extender (CCPE)
+# See: https://docs.neoforged.net/docs/gettingstarted/modfiles
+
+modLoader = "javafml"
+loaderVersion = "[1,)"
+
+license = "MIT"
+
+[[mods]]
+modId = "ccpe"
+version = "1.0.2-1.21.1"
+displayName = "CC Peripheral Extender"
+authors = "ZombieEggStew"
+
+description = '''
+CCPE (CC Peripheral Extender) provides CC:Tweaked peripheral extensions,
+including the Electronic Transmission block that acts as a configurable
+rotation speed controller between two shafts with Lua-based ratio and
+target speed control.
+'''
+
+# =========================================================================
+# Dependencies
+# =========================================================================
+# NeoForge
+[[dependencies.ccpe]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+# Create (required — we extend SplitShaftBlockEntity)
+[[dependencies.ccpe]]
+modId = "create"
+type = "required"
+versionRange = "[6.0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+# CC:Tweaked (required — PeripheralCapability)
+[[dependencies.ccpe]]
+modId = "computercraft"
+type = "required"
+versionRange = "[1.118,)"
+ordering = "AFTER"
+side = "BOTH"
+
+# Flywheel (required — visual rendering)
+[[dependencies.ccpe]]
+modId = "flywheel"
+type = "required"
+versionRange = "[1.0,)"
+ordering = "AFTER"
+side = "CLIENT"
+
+# Simulated (optional — only used when present, with runtime ModList check)
+[[dependencies.ccpe]]
+modId = "simulated"
+type = "optional"
+versionRange = "[1.3,)"
+ordering = "AFTER"
+side = "BOTH"
+
+# Sable (optional — runtime guarded via SableImpl)
+[[dependencies.ccpe]]
+modId = "sable"
+type = "optional"
+versionRange = "[2.0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+# Sable Companion (optional — pulled by Sable)
+[[dependencies.ccpe]]
+modId = "sablecompanion"
+type = "optional"
+versionRange = "[1.6,)"
+ordering = "AFTER"
+side = "BOTH"
+
+# JEI (optional — item/recipe viewing compatibility)
+[[dependencies.ccpe]]
+modId = "jei"
+type = "optional"
+versionRange = "[19,)"
+ordering = "NONE"
+side = "BOTH"
+
+# =========================================================================
+# Mixins
+# =========================================================================
+#[[mixins]]
+#config = "ccpe.mixins.json"
