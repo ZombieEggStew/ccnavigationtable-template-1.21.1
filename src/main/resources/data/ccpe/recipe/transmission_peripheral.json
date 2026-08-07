@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:large_cogwheel"
+    },
+    "X": {
+      "item": "create:sequenced_gearshift"
+    },
+    "Y": {
+      "item": "create:rotation_speed_controller"
+    },
+    "Z": {
+        "item": "create:electron_tube"
+    }
+  },
+  "pattern": [
+    " Z ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:transmission_peripheral"
+  }
+}
