@@ -10,3 +10,6 @@
 
 1.0.2
 - Added transmission peripheral : a rotation speed controller designed specifically for CC:T control
+
+1.0.3
+- Added recipe for transmission peripheral
