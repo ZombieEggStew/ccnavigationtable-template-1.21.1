@@ -78,14 +78,6 @@ versionRange = "[1.6,)"
 ordering = "AFTER"
 side = "BOTH"
 
-# Aeroworks (optional — control desk module integration)
-[[dependencies.ccpe]]
-modId = "aeroworks"
-type = "optional"
-versionRange = "[1.4,)"
-ordering = "AFTER"
-side = "BOTH"
-
 # JEI (optional — item/recipe viewing compatibility)
 [[dependencies.ccpe]]
 modId = "jei"

@@ -38,12 +38,7 @@
   "ccpe.configuration.sensorMaxForceLoad.tooltip": "允许同时强制加载区块的传感器最大数量。设为 0 表示无限制。",
 
   "ccpe.configuration.sensorPortalTicketRadius": "物理体门票半径",
-  "ccpe.configuration.sensorPortalTicketRadius.tooltip": "Sable 物理结构上传感器使用的 PORTAL ticket 半径（单位：区块）。每个传感器加载 (2×R+1)² 个区块。默认：3（7×7区块）。",
+  "ccpe.configuration.sensorPortalTicketRadius.tooltip": "Sable 物理结构上传感器使用的 PORTAL ticket 半径（单位：区块）。每个传感器加载 (2×R+1)² 个区块。默认：3（7×7区块）。"
 
-  "ccpe.module.toggle_throttle_quadrant.summary": "拉拉拉拉杆杆杆杆",
-  "ccpe.module.toggle_throttle_quadrant.channel.red": "红",
-  "ccpe.module.toggle_throttle_quadrant.channel.amber": "黄",
-  "ccpe.module.toggle_throttle_quadrant.channel.green": "绿",
-  "ccpe.module.toggle_throttle_quadrant.channel.blue": "蓝",
-  "item.ccpe.toggle_throttle_quadrant_module": "切换式油门台"
+
 }
