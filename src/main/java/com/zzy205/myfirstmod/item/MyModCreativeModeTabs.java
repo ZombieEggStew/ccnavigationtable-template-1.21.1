@@ -2,7 +2,6 @@ package com.zzy205.myfirstmod.item;
 
 import com.zzy205.myfirstmod.CCPeripheraExtender;
 import com.zzy205.myfirstmod.block.MyModBlocks;
-import com.zzy205.myfirstmod.compat.aeroworks.AeroworksCompat;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
@@ -26,11 +25,6 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.micro_peripheral_extender);
                 output.accept(MyModBlocks.redstone_transceiver);
                 output.accept(MyModBlocks.transmission_peripheral);
-
-                // Aeroworks 可选联动物品（仅在 Aeroworks 已加载时显示）
-                if (AeroworksCompat.isLoaded()) {
-                    output.accept(AeroworksCompat.TOGGLE_THROTTLE_QUADRANT.get());
-                }
             })
             .build());
     public static void register(IEventBus modEventBus) {

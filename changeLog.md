@@ -13,3 +13,6 @@
 
 1.0.3
 - Added recipe for transmission peripheral
+
+1.0.4
+- Added optional integration with Aeroworks: Toggle Throttle Quadrant module (4 toggle latches)

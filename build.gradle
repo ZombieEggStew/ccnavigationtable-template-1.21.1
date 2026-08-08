@@ -22,12 +22,12 @@ sourceSets.main.resources {
 }
 
 repositories {
-    // 本地手动下载的依赖，优先从 libs/ 解析
+    // 本地手动下载的依赖，优先�?libs/ 解析
     maven {
         name = 'LocalLibs'
         url = file('libs')
     }
-    mavenLocal() // 也可用 %USERPROFILE%\.m2\repository
+    mavenLocal() // 也可�?%USERPROFILE%\.m2\repository
     maven {
         name = 'Create Maven'
         url = 'https://maven.createmod.net'
@@ -163,15 +163,15 @@ dependencies {
     compileOnly("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") {
         transitive = false
     }
-    // Ponder — shades net.createmod.catnip.data.Couple, which Create's API
+    // Ponder �?shades net.createmod.catnip.data.Couple, which Create's API
     // surface (RedstoneLinkNetworkHandler.Frequency, getNetworkKey()) references.
     // The standalone Catnip-NeoForge-* artifact has Couple in a different
     // package (net.createmod.catnip.utility) starting in 0.8.x, so we depend on
     // ponder which carries the matching shaded copy.
     compileOnly "net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}"
-    // Registrate — referenced by some Create classes
+    // Registrate �?referenced by some Create classes
     compileOnly "com.tterrag.registrate:Registrate:${registrate_version}"
-    // Flywheel API — for any Create class that exposes Flywheel types
+    // Flywheel API �?for any Create class that exposes Flywheel types
     compileOnly "dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}"
 
     // ---- CC:Tweaked -------------------------------------------------------
@@ -191,7 +191,7 @@ dependencies {
     // when ModList reports sable is present at runtime.
     //
     // transitive = false: Sable's POM pulls in sable-companion and veil-neoforge
-    // (graphics lib), neither of which we need to compile against — we only
+    // (graphics lib), neither of which we need to compile against �?we only
     // reference dev.ryanhcode.sable.sublevel.SubLevel and Pose3d from the main
     // jar. Skipping transitives avoids hauling in extra maven repos.
     compileOnly("dev.ryanhcode.sable:sable-neoforge-${minecraft_version}:${sable_version}") {
@@ -214,7 +214,7 @@ dependencies {
     // ---- Runtime mods (only present in run tasks, never in the published jar)
     // We use transitive=false to avoid Gradle trying to resolve Create's
     // optional integration deps (FTB Chunks/Teams/Library, JourneyMap, Curios,
-    // Architectury, etc.) — those aren't actually required for Create to load.
+    // Architectury, etc.) �?those aren't actually required for Create to load.
     // We explicitly add only what Create's mods.toml hard-requires: flywheel
     // and ponder (registrate is bundled inside Create's jarJar but harmless
     // to declare).
