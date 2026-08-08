@@ -38,5 +38,12 @@
   "ccpe.configuration.sensorMaxForceLoad.tooltip": "Maximum number of sensors that can force-load chunks simultaneously. 0 = unlimited.",
 
   "ccpe.configuration.sensorPortalTicketRadius": "Physics Ticket Radius",
-  "ccpe.configuration.sensorPortalTicketRadius.tooltip": "PORTAL ticket radius in chunks for sensors on Sable physics structures. Each sensor loads (2×R+1)² chunks. Default: 3 (7×7 chunks)."
+  "ccpe.configuration.sensorPortalTicketRadius.tooltip": "PORTAL ticket radius in chunks for sensors on Sable physics structures. Each sensor loads (2×R+1)² chunks. Default: 3 (7×7 chunks).",
+
+  "ccpe.module.toggle_throttle_quadrant.summary": "latch latch latch latch",
+  "ccpe.module.toggle_throttle_quadrant.channel.red": "Red",
+  "ccpe.module.toggle_throttle_quadrant.channel.amber": "Amber",
+  "ccpe.module.toggle_throttle_quadrant.channel.green": "Green",
+  "ccpe.module.toggle_throttle_quadrant.channel.blue": "Blue",
+  "item.ccpe.toggle_throttle_quadrant_module": "Toggle Throttle Quadrant"
 }

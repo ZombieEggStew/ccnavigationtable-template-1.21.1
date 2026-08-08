@@ -1,0 +1,28 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    {
+      "item": "minecraft:lever"
+    },
+    {
+      "item": "minecraft:lever"
+    },
+    {
+      "item": "minecraft:lever"
+    },
+    {
+      "item": "minecraft:lever"
+    },
+    {
+      "item": "create:transmitter"
+    },
+    {
+      "item": "create:brass_casing"
+    }
+    ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:toggle_throttle_quadrant_module"
+  }
+}

@@ -9,6 +9,7 @@ import com.zzy205.myfirstmod.compat.cc.CCPeripheralExtenderSetup;
 import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverPeripheral;
 import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverRegistry;
 import com.zzy205.myfirstmod.compat.cc.PeripheralExtenderRegistry;
+import com.zzy205.myfirstmod.compat.aeroworks.AeroworksCompat;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.network.ReceiverSyncPayload;
@@ -50,6 +51,10 @@ public class CCPeripheraExtender {
 
         MyModItems.register(modEventBus);
         MyModCreativeModeTabs.register(modEventBus);
+
+        // Aeroworks 可选联动：注册自定义模块（仅在 Aeroworks 已加载时生效）
+        AeroworksCompat.init(modEventBus);
+
         MyModBlocks.register(modEventBus);
         MyModBlockEntities.register(modEventBus);
         MyModMenus.register(modEventBus);

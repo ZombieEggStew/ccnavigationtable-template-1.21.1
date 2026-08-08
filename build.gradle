@@ -208,6 +208,9 @@ dependencies {
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
     // localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
 
+    // ---- Aeroworks (optional) ---------------------------------------------
+    compileOnly files("libs/aeroworks-${aeroworks_version}.jar")
+
     // ---- Runtime mods (only present in run tasks, never in the published jar)
     // We use transitive=false to avoid Gradle trying to resolve Create's
     // optional integration deps (FTB Chunks/Teams/Library, JourneyMap, Curios,

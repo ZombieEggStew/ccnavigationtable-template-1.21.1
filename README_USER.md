@@ -9,6 +9,9 @@
 - **Electronic Transmission** — a rotation speed controller designed specifically for CC:T control
 
 
+## Optional Integration
+- **Toggle Throttle Quadrant (requires Aeroworks)** — four toggle latches
+
 
 ## Features
 
