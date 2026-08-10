@@ -2,9 +2,11 @@ package com.zzy205.myfirstmod;
 
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
+import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
 import com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralBlockEntity;
+import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralExtenderSetup;
 import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverPeripheral;
 import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverRegistry;
@@ -14,6 +16,8 @@ import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.network.ReceiverSyncPayload;
 import com.zzy205.myfirstmod.network.SensorFilterPayload;
 import com.zzy205.myfirstmod.network.SensorNbtPayload;
+import com.zzy205.myfirstmod.network.PlaceModulePayload;
+import com.zzy205.myfirstmod.network.RemoveModulePayload;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import dan200.computercraft.api.peripheral.PeripheralCapability;
 import org.slf4j.Logger;
@@ -102,6 +106,41 @@ public class CCPeripheraExtender {
                             receiverBE.setBannerData(payload.data());
                             receiverBE.setLoadMode(payload.loadMode());
                             RedstoneTransceiverRegistry.updateChannels(receiverBE, payload.data());
+                        }
+                    }
+            );
+
+            // 客户端→服务端：Monitor 放置模块
+            registrar.playToServer(
+                    PlaceModulePayload.TYPE,
+                    PlaceModulePayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.pos());
+                        if (be instanceof MonitorBlockEntity monitorBE) {
+                            var type = ModuleType.byName(payload.moduleTypeName());
+                            if (type != null) {
+                                int id = monitorBE.tryPlaceModule(payload.gridX(), payload.gridY(), type);
+                                if (id >= 0 && !ctx.player().isCreative()) {
+                                    ctx.player().getMainHandItem().shrink(1);
+                                }
+                            }
+                        }
+                    }
+            );
+
+            // 客户端→服务端：Monitor 移除模块
+            registrar.playToServer(
+                    RemoveModulePayload.TYPE,
+                    RemoveModulePayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.pos());
+                        if (be instanceof MonitorBlockEntity monitorBE) {
+                            String removedType = monitorBE.tryRemoveModule(payload.moduleId());
+                            if (removedType != null && !ctx.player().isCreative()) {
+                                // TODO: 后续把模块物品返还给玩家
+                            }
                         }
                     }
             );

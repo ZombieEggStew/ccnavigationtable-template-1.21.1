@@ -40,6 +40,13 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    public static final DeferredBlock<MonitorBlock> monitor =
+            registerBlocks("my_monitor", () -> new MonitorBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.METAL).
+                    strength(1.5f, 6.0f).
+                    noOcclusion()
+            ));
+
 
 
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {

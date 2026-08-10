@@ -3,6 +3,9 @@ package com.zzy205.myfirstmod;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
+import com.zzy205.myfirstmod.block.MonitorRenderer;
+import com.zzy205.myfirstmod.block.MyModPartialModels;
+import com.zzy205.myfirstmod.client.MonitorGridOverlay;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import com.zzy205.myfirstmod.screen.RedstoneTransceiverScreen;
 import com.zzy205.myfirstmod.screen.PeripheralExtenderScreen;
@@ -20,6 +23,7 @@ import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.neoforged.neoforge.common.NeoForge;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
 @Mod(value = CCPeripheraExtender.MOD_ID, dist = Dist.CLIENT)
@@ -27,6 +31,7 @@ import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 public class CCPeripheralExtenderClient {
     public CCPeripheralExtenderClient(ModContainer container) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
+        MonitorGridOverlay.register();
     }
 
     @SubscribeEvent
@@ -39,6 +44,9 @@ public class CCPeripheralExtenderClient {
                 .factory(TransmissionPeripheralVisual::new)
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
+
+        // 初始化自定义 PartialModel（参照 Create 的 AllPartialModels.init()）
+        MyModPartialModels.init();
     }
 
     @SubscribeEvent
@@ -46,6 +54,9 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.transmission_peripheral_entity.get(),
                 TransmissionPeripheralRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.monitor_entity.get(),
+                MonitorRenderer::new);
     }
 
     @SubscribeEvent

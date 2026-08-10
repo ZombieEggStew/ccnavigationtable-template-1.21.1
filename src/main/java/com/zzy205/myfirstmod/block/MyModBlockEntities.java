@@ -13,6 +13,7 @@ public final class MyModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PeripheralExtenderBlockEntity>> micro_peripheral_extender_entity = BLOCK_ENTITY_TYPES.register("micro_peripheral_extender", () -> BlockEntityType.Builder.of(PeripheralExtenderBlockEntity::new, MyModBlocks.micro_peripheral_extender.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<RedstoneTransceiverBlockEntity>> redstone_transceiver_entity = BLOCK_ENTITY_TYPES.register("redstone_transceiver", () -> BlockEntityType.Builder.of(RedstoneTransceiverBlockEntity::new, MyModBlocks.redstone_transceiver.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TransmissionPeripheralBlockEntity>> transmission_peripheral_entity = BLOCK_ENTITY_TYPES.register("transmission_peripheral", () -> BlockEntityType.Builder.of(TransmissionPeripheralBlockEntity::new, MyModBlocks.transmission_peripheral.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MonitorBlockEntity>> monitor_entity = BLOCK_ENTITY_TYPES.register("my_monitor", () -> BlockEntityType.Builder.of(MonitorBlockEntity::new, MyModBlocks.monitor.get()).build(null));
 
     public static void register(IEventBus bus) {
         BLOCK_ENTITY_TYPES.register(bus);

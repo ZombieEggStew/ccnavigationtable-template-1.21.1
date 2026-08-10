@@ -13,9 +13,11 @@ public class MyModItems {
     public static final DeferredRegister.Items MyItems =
             DeferredRegister.createItems(CCPeripheraExtender.MOD_ID);
 
-    // private static final Item.Properties test_properties = new Item.Properties();
-    // public static final DeferredItem<Item> test_item =
-    //         MyItems.register("test_item", () -> new Item(test_properties));
+    // ── 仪表模块物品 ──
+    public static final DeferredItem<Item> MODULE_BUTTON_1 = MyItems.register(
+            "module_button_1", () -> new Item(new Item.Properties()));
+    public static final DeferredItem<Item> MODULE_BUTTON_2 = MyItems.register(
+            "module_button_2", () -> new Item(new Item.Properties()));
 
     public static <T extends Block> void registerBlockItems(String name, DeferredBlock<T> block) {
         MyModItems.MyItems.register(name, () -> new BlockItem(block.get(), new Item.Properties()));
