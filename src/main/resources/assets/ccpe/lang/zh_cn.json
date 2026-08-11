@@ -15,6 +15,8 @@
   "module.ccpe.button_2": "按钮元件 (2×2)",
   "item.ccpe.module_button_1": "按钮元件 (1×1)",
   "item.ccpe.module_button_2": "按钮元件 (2×2)",
+  "item.ccpe.module_toggle_switch": "钮子开关 (1×1)",
+  "item.ccpe.module_knob": "旋钮 (2×2)",
 
   "gui.ccpe.redstone_transceiver": "红石收发器",
   "gui.ccpe.redstone_transceiver.hold_to_delete": "按住鼠标左键删除此条",

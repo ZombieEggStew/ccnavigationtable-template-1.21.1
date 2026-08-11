@@ -40,6 +40,14 @@ public class Config {
             .comment("Monitor 模块边框颜色 - 透明度 (0-255)。默认: 255")
             .defineInRange("monitorOutlineA", 255, 0, 255);
 
+    public static final ModConfigSpec.DoubleValue MONITOR_GRID_LINE_WIDTH = CLIENT_BUILDER
+            .comment("Monitor 棋盘网格线粗细倍率 (0.0-2.0)。默认: 1.0")
+            .defineInRange("monitorGridLineWidth", 1.0, 0.0, 2.0);
+
+    public static final ModConfigSpec.DoubleValue MONITOR_OUTLINE_LINE_WIDTH = CLIENT_BUILDER
+            .comment("Monitor 模块边框/预览框线条粗细倍率 (0.0-2.0)。默认: 1.0")
+            .defineInRange("monitorOutlineLineWidth", 1.0, 0.0, 2.0);
+
     static final ModConfigSpec SPEC = BUILDER.build();
     static final ModConfigSpec CLIENT_SPEC = CLIENT_BUILDER.build();
 }

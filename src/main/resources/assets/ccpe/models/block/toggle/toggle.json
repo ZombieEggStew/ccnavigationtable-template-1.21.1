@@ -1,0 +1,12 @@
+{
+    "parent": "block/block",
+    "loader": "neoforge:obj",
+    "flip_v": true,
+    "model": "ccpe:models/block/toggle/toggle.obj",
+    "automatic_culling": false,
+	"render_type": "minecraft:cutout_mipped",
+    "textures": {
+        "0": "ccpe:block/toggle_tex",
+        "particle": "#0"
+    }
+}

@@ -17,8 +17,10 @@ import com.zzy205.myfirstmod.network.ReceiverSyncPayload;
 import com.zzy205.myfirstmod.network.SensorFilterPayload;
 import com.zzy205.myfirstmod.network.SensorNbtPayload;
 import com.zzy205.myfirstmod.network.SyncGridPayload;
+import com.zzy205.myfirstmod.network.ModulePressPayload;
 import com.zzy205.myfirstmod.network.PlaceModulePayload;
 import com.zzy205.myfirstmod.network.RemoveModulePayload;
+import com.zzy205.myfirstmod.network.ModuleKnobRotatePayload;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import dan200.computercraft.api.peripheral.PeripheralCapability;
 import org.slf4j.Logger;
@@ -155,6 +157,39 @@ public class CCPeripheraExtender {
                             if (removedType != null && !ctx.player().isCreative()) {
                                 // TODO: 后续把模块物品返还给玩家
                             }
+                        }
+                    }
+            );
+
+            // 客户端→服务端：Monitor 模块按钮按下/释放/切换
+            registrar.playToServer(
+                    ModulePressPayload.TYPE,
+                    ModulePressPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.pos());
+                        if (be instanceof MonitorBlockEntity monitorBE) {
+                            var mod = monitorBE.getGridState().getModule(payload.moduleId());
+                            boolean isToggle = mod != null && mod.type() == ModuleType.TOGGLE_SWITCH;
+                            if (payload.pressed()) {
+                                if (isToggle) monitorBE.toggleModule(payload.moduleId());
+                                else monitorBE.pressModule(payload.moduleId());
+                            } else {
+                                if (!isToggle) monitorBE.releaseModule(payload.moduleId());
+                            }
+                        }
+                    }
+            );
+
+            // 客户端→服务端：旋钮旋转角度
+            registrar.playToServer(
+                    ModuleKnobRotatePayload.TYPE,
+                    ModuleKnobRotatePayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.pos());
+                        if (be instanceof MonitorBlockEntity monitorBE) {
+                            monitorBE.rotateKnob(payload.moduleId(), payload.angle());
                         }
                     }
             );

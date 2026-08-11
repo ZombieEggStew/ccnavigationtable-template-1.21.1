@@ -29,6 +29,8 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.monitor);
                 output.accept(MyModItems.MODULE_BUTTON_1);
                 output.accept(MyModItems.MODULE_BUTTON_2);
+                output.accept(MyModItems.MODULE_TOGGLE_SWITCH);
+                output.accept(MyModItems.MODULE_KNOB);
             })
             .build());
     public static void register(IEventBus modEventBus) {

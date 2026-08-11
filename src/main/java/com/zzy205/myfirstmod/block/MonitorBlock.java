@@ -24,6 +24,7 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -127,6 +128,49 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
         return new int[]{gx, gy};
     }
 
+    /**
+     * 玩家视线 → 屏幕平面交点 → 网格坐标。
+     * 平面偏移 +0.025（内凹，在屏幕面与网格线间），与视觉一致。
+     * @return [gridX, gridY] 或 null
+     */
+    @Nullable
+    public static int[] rayToGrid(BlockPos pos, Direction facing,
+                                   Vec3 eyePos, Vec3 lookVec) {
+        float c = ROT_ORIGIN / 16f;
+        float planeZ = SCREEN_Z / 16f + 0.025f;
+
+        // 屏幕面在世界空间中的法向量和一点
+        Vec3 normal, point;
+        switch (facing) {
+            case NORTH:
+                normal = new Vec3(0, 0, 1);
+                point = new Vec3(pos.getX() + c, pos.getY() + c, pos.getZ() + planeZ);
+                break;
+            case SOUTH:
+                normal = new Vec3(0, 0, -1);
+                point = new Vec3(pos.getX() + c, pos.getY() + c, pos.getZ() + (1 - planeZ));
+                break;
+            case EAST:
+                normal = new Vec3(-1, 0, 0);
+                point = new Vec3(pos.getX() + (1 - planeZ), pos.getY() + c, pos.getZ() + c);
+                break;
+            case WEST:
+                normal = new Vec3(1, 0, 0);
+                point = new Vec3(pos.getX() + planeZ, pos.getY() + c, pos.getZ() + c);
+                break;
+            default: return null;
+        }
+
+        // 射线-平面求交: t = ((point - eye) · normal) / (look · normal)
+        double denom = lookVec.dot(normal);
+        if (Math.abs(denom) < 1e-6) return null;
+        double t = point.subtract(eyePos).dot(normal) / denom;
+        if (t < 0) return null;
+
+        Vec3 hit = eyePos.add(lookVec.scale(t));
+        return worldHitToGrid(pos, facing, hit.x, hit.y, hit.z);
+    }
+
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level,
                                               BlockPos pos, Player player, InteractionHand hand,
@@ -136,8 +180,8 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
         if (!level.isClientSide) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 
         Direction facing = state.getValue(FACING);
-        int[] gp = worldHitToGrid(pos, facing,
-                hitResult.getLocation().x, hitResult.getLocation().y, hitResult.getLocation().z);
+        int[] gp = rayToGrid(pos, facing,
+                player.getEyePosition(1f), player.getViewVector(1f));
 
         // ── 扳手拆卸 ──
         if (stack.getItem().toString().equals("create:wrench") && gp != null) {

@@ -8,6 +8,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -71,6 +73,44 @@ public class MonitorBlockEntity extends BlockEntity {
     private void blockChanged() {
         if (level instanceof ServerLevel serverLevel) {
             serverLevel.getChunkSource().blockChanged(worldPosition);
+        }
+    }
+
+    /** 按钮按下（服务端调用，自动同步客户端） */
+    public void pressModule(int id) {
+        gridState.press(id);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            syncGridToClients();
+        }
+    }
+
+    /** 按钮释放（服务端调用，自动同步客户端） */
+    public void releaseModule(int id) {
+        gridState.release(id);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            syncGridToClients();
+        }
+    }
+
+    /** 反转锁存状态（钮子开关等，服务端调用） */
+    public void toggleModule(int id) {
+        gridState.toggle(id);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            level.playSound(null, worldPosition, SoundEvents.LEVER_CLICK,
+                    SoundSource.BLOCKS, 0.3f, gridState.isPressed(id) ? 1.2f : 1.1f);
+            syncGridToClients();
+        }
+    }
+
+    /** 旋钮旋转（服务端调用），angle 为累计角度（度） */
+    public void rotateKnob(int id, float angle) {
+        gridState.setKnobAngle(id, angle);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            syncGridToClients();
         }
     }
 

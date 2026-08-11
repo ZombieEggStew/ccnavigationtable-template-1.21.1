@@ -150,7 +150,7 @@
 			"to": [15, 14, 5],
 			"rotation": {"angle": 0, "axis": "y", "origin": [1, 2, 5]},
 			"faces": {
-				"north": {"uv": [0, 3.25, 3.5, 6.25], "texture": "#0"}
+				"north": {"uv": [0, 9.75, 3.5, 12.75], "texture": "#0"}
 			}
 		}
 	],

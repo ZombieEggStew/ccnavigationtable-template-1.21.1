@@ -6,7 +6,9 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 14×12 棋盘网格状态。
@@ -19,6 +21,9 @@ public class GridState {
 
     private final int[][] grid = new int[GRID_WIDTH][GRID_HEIGHT];
     private final Map<Integer, MonitorModule> modules = new LinkedHashMap<>();
+    private final Set<Integer> pressedModules = new HashSet<>();
+    /** 旋钮模块的角度（度），moduleId → Y 轴旋转角度 */
+    private final Map<Integer, Float> knobAngles = new java.util.HashMap<>();
     private int nextId = 0;
 
     public GridState() {
@@ -79,12 +84,47 @@ public class GridState {
     public MonitorModule tryRemove(int moduleId) {
         MonitorModule mod = modules.remove(moduleId);
         if (mod == null) return null;
+        pressedModules.remove(moduleId);
+        knobAngles.remove(moduleId);
         for (int dx = 0; dx < mod.getWidth(); dx++) {
             for (int dy = 0; dy < mod.getHeight(); dy++) {
                 grid[mod.gridX() + dx][mod.gridY() + dy] = -1;
             }
         }
         return mod;
+    }
+
+    // ── 按钮按下 / 释放 / 切换 ──
+
+    public void press(int moduleId) {
+        if (modules.containsKey(moduleId)) pressedModules.add(moduleId);
+    }
+
+    public void release(int moduleId) {
+        pressedModules.remove(moduleId);
+    }
+
+    /** 反转锁存状态（钮子开关等） */
+    public void toggle(int moduleId) {
+        if (!modules.containsKey(moduleId)) return;
+        if (pressedModules.contains(moduleId))
+            pressedModules.remove(moduleId);
+        else
+            pressedModules.add(moduleId);
+    }
+
+    public boolean isPressed(int moduleId) {
+        return pressedModules.contains(moduleId);
+    }
+
+    // ── 旋钮角度 ──
+
+    public void setKnobAngle(int moduleId, float angle) {
+        if (modules.containsKey(moduleId)) knobAngles.put(moduleId, angle);
+    }
+
+    public float getKnobAngle(int moduleId) {
+        return knobAngles.getOrDefault(moduleId, 0f);
     }
 
     // ── NBT ──
@@ -100,6 +140,9 @@ public class GridState {
             modTag.putString("type", mod.type().name);
             modTag.putInt("x", mod.gridX());
             modTag.putInt("y", mod.gridY());
+            modTag.putBoolean("pressed", pressedModules.contains(mod.id()));
+            float ka = knobAngles.getOrDefault(mod.id(), 0f);
+            if (ka != 0f) modTag.putFloat("knobAngle", ka);
             modList.add(modTag);
         }
         tag.put("modules", modList);
@@ -108,6 +151,8 @@ public class GridState {
 
     public void load(HolderLookup.Provider registries, CompoundTag tag) {
         modules.clear();
+        pressedModules.clear();
+        knobAngles.clear();
         for (int x = 0; x < GRID_WIDTH; x++) {
             for (int y = 0; y < GRID_HEIGHT; y++) {
                 grid[x][y] = -1;
@@ -125,6 +170,8 @@ public class GridState {
             int y = modTag.getInt("y");
             MonitorModule mod = new MonitorModule(id, type, x, y);
             modules.put(id, mod);
+            if (modTag.getBoolean("pressed")) pressedModules.add(id);
+            if (modTag.contains("knobAngle")) knobAngles.put(id, modTag.getFloat("knobAngle"));
             for (int dx = 0; dx < type.width; dx++) {
                 for (int dy = 0; dy < type.height; dy++) {
                     grid[x + dx][y + dy] = id;
