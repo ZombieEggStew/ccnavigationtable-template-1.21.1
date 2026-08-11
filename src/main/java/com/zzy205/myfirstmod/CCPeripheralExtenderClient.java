@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
+import com.zzy205.myfirstmod.block.MonitorPreloadedModels;
 import com.zzy205.myfirstmod.block.MonitorRenderer;
 import com.zzy205.myfirstmod.block.MyModPartialModels;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
@@ -14,11 +15,13 @@ import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import dev.engine_room.flywheel.lib.visualization.SimpleBlockEntityVisualizer;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.ModelEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
@@ -29,9 +32,14 @@ import net.neoforged.neoforge.common.NeoForge;
 @Mod(value = CCPeripheraExtender.MOD_ID, dist = Dist.CLIENT)
 @EventBusSubscriber(modid = CCPeripheraExtender.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
 public class CCPeripheralExtenderClient {
-    public CCPeripheralExtenderClient(ModContainer container) {
+    public CCPeripheralExtenderClient(ModContainer container, IEventBus modEventBus) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         MonitorGridOverlay.register();
+
+        // 预加载 Monitor 模块模型（仿 control-panels PreLoadedModel 模式）
+        MonitorPreloadedModels.init();
+        modEventBus.addListener(MonitorPreloadedModels::registerAdditional);
+        modEventBus.addListener(MonitorPreloadedModels::bakingCompleted);
     }
 
     @SubscribeEvent

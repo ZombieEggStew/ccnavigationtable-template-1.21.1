@@ -21,5 +21,25 @@ public class Config {
             .comment("PORTAL ticket radius (in chunks) for Sable physics structures with sensors attached. Each sensor loads (2*R+1)² chunks around the structure's world position. Default: 3 (= 7×7 chunks).")
             .defineInRange("sensorPortalTicketRadius", 3, 1, 32);
 
+    // ── 客户端：Monitor 模块渲染 ──
+    private static final ModConfigSpec.Builder CLIENT_BUILDER = new ModConfigSpec.Builder();
+
+    public static final ModConfigSpec.IntValue MONITOR_OUTLINE_R = CLIENT_BUILDER
+            .comment("Monitor 模块边框颜色 - 红 (0-255)。默认: 160")
+            .defineInRange("monitorOutlineR", 160, 0, 255);
+
+    public static final ModConfigSpec.IntValue MONITOR_OUTLINE_G = CLIENT_BUILDER
+            .comment("Monitor 模块边框颜色 - 绿 (0-255)。默认: 160")
+            .defineInRange("monitorOutlineG", 160, 0, 255);
+
+    public static final ModConfigSpec.IntValue MONITOR_OUTLINE_B = CLIENT_BUILDER
+            .comment("Monitor 模块边框颜色 - 蓝 (0-255)。默认: 160")
+            .defineInRange("monitorOutlineB", 160, 0, 255);
+
+    public static final ModConfigSpec.IntValue MONITOR_OUTLINE_A = CLIENT_BUILDER
+            .comment("Monitor 模块边框颜色 - 透明度 (0-255)。默认: 255")
+            .defineInRange("monitorOutlineA", 255, 0, 255);
+
     static final ModConfigSpec SPEC = BUILDER.build();
+    static final ModConfigSpec CLIENT_SPEC = CLIENT_BUILDER.build();
 }

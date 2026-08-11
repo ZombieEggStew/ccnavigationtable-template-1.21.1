@@ -1,40 +1,35 @@
 package com.zzy205.myfirstmod.client;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.block.MonitorBlock;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.monitor.GridState;
+import com.zzy205.myfirstmod.monitor.MonitorModule;
 import com.zzy205.myfirstmod.monitor.ModuleType;
+import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import org.joml.Matrix4f;
 
 /**
  * 在 Monitor 屏幕表面渲染棋盘网格 + 模块边框 + 放置预览。
- * 参照 Control-Panels：AFTER_BLOCK_ENTITIES + RenderType.lines() + LevelRenderer.renderShape()。
+ * 使用 Catnip Outliner 渲染 —— 效果与 Create 一致。
  */
 public class MonitorGridOverlay {
 
-    private static boolean LOGGED = false;
-    /** 调试：每秒输出一次日志，避免刷屏 */
-    private static long lastDebugTick = 0;
-    private static final long DEBUG_INTERVAL_MS = 1000;
-
     public static void register() {
         NeoForge.EVENT_BUS.addListener(MonitorGridOverlay::onRenderLevel);
-        CCPeripheraExtender.LOGGER.info("MonitorGridOverlay registered on NeoForge.EVENT_BUS");
+        CCPeripheraExtender.LOGGER.info("MonitorGridOverlay registered with Catnip Outliner");
     }
 
     public static void onRenderLevel(RenderLevelStageEvent event) {
@@ -52,11 +47,6 @@ public class MonitorGridOverlay {
         BlockState state = level.getBlockState(pos);
         if (!(state.getBlock() instanceof MonitorBlock)) return;
 
-        if (!LOGGED) {
-            CCPeripheraExtender.LOGGER.info("MonitorGridOverlay FIRED! pos={}", pos);
-            LOGGED = true;
-        }
-
         Direction facing = state.getValue(MonitorBlock.FACING);
         GridState grid = null;
         if (level.getBlockEntity(pos) instanceof MonitorBlockEntity be) grid = be.getGridState();
@@ -65,155 +55,116 @@ public class MonitorGridOverlay {
         ItemStack held = player.getMainHandItem();
         ModuleType heldType = ModuleType.fromItem(held);
 
-        // ═══ 调试日志 ═══
-        long now = System.currentTimeMillis();
-        if (now - lastDebugTick > DEBUG_INTERVAL_MS) {
-            lastDebugTick = now;
-            CCPeripheraExtender.LOGGER.info("[MonitorDebug] held={} type={} facing={} hitPos=({},{},{})",
-                    held.isEmpty() ? "EMPTY" : held.getItem(),
-                    heldType,
-                    facing,
-                    String.format("%.3f", bhr.getLocation().x),
-                    String.format("%.3f", bhr.getLocation().y),
-                    String.format("%.3f", bhr.getLocation().z));
+        Outliner outliner = Outliner.getInstance();
+        int moduleColor = (Config.MONITOR_OUTLINE_A.get() << 24)
+                | (Config.MONITOR_OUTLINE_R.get() << 16)
+                | (Config.MONITOR_OUTLINE_G.get() << 8)
+                | Config.MONITOR_OUTLINE_B.get();
+
+        // 鼠标命中位置 → 网格坐标 → 是否对准已安装模块
+        int[] gp = MonitorBlock.worldHitToGrid(pos, facing,
+                bhr.getLocation().x, bhr.getLocation().y, bhr.getLocation().z);
+        MonitorModule hoveredModule = null;
+        if (gp != null) {
+            hoveredModule = grid.getModule(grid.getCell(gp[0], gp[1]));
         }
 
-        var poseStack = event.getPoseStack();
-        var cam = event.getCamera().getPosition();
+        boolean showGrid = heldType != null;
+        boolean showPreview = heldType != null || hoveredModule != null;
 
-        poseStack.pushPose();
-        poseStack.translate(pos.getX() - cam.x, pos.getY() - cam.y, pos.getZ() - cam.z);
-        Matrix4f mat = poseStack.last().pose();
-
-        MultiBufferSource.BufferSource bufSource = mc.renderBuffers().bufferSource();
-        VertexConsumer vc = bufSource.getBuffer(RenderType.lines());
-
-        // 1. 网格线
-        drawGridLines(vc, mat, facing);
-
-        // 2. 已放置模块边框
-        if (!grid.isEmpty()) {
-            drawModuleOutlines(poseStack, vc, mat, grid, facing);
+        // 1. 网格线（仅手持模块时）
+        if (showGrid) {
+            drawGridLines(outliner, pos, facing);
         }
 
-        // 3. 放置预览
-        if (heldType != null) {
-            int[] gp = MonitorBlock.worldHitToGrid(pos, facing,
-                    bhr.getLocation().x, bhr.getLocation().y, bhr.getLocation().z);
-
-            // ═══ 调试日志 ═══
-            if (now - lastDebugTick <= DEBUG_INTERVAL_MS + 100) { // 在上面的日志同一帧
-                CCPeripheraExtender.LOGGER.info("[MonitorDebug] worldHitToGrid={} type={}x{}",
-                        gp == null ? "NULL" : String.format("[%d,%d]", gp[0], gp[1]),
-                        heldType.width, heldType.height);
-            }
-
-            if (gp != null) {
+        // 2. 放置预览 / 对准高亮
+        if (showPreview) {
+            if (heldType != null && gp != null) {
+                // 手持模块：绿色/红色放置预览
                 boolean ok = grid.canPlace(gp[0], gp[1], heldType.width, heldType.height);
-                CCPeripheraExtender.LOGGER.info("[MonitorDebug] canPlace={} drawing preview at ({},{}) {}x{}",
-                        ok, gp[0], gp[1], heldType.width, heldType.height);
-
-                drawPreview(poseStack, vc, mat, gp[0], gp[1],
-                        heldType.width, heldType.height, ok, facing);
-            } else if (now - lastDebugTick <= DEBUG_INTERVAL_MS + 100) {
-                CCPeripheraExtender.LOGGER.info("[MonitorDebug] worldHitToGrid returned NULL — check screen constants or hit location");
+                int color = ok ? 0x4CDA64 : 0xFF5E5E;
+                drawModuleOutline(outliner, pos, gp[0], gp[1],
+                        heldType.width, heldType.height, "preview", color, facing);
+            } else if (hoveredModule != null) {
+                // 空手对准已安装模块：高亮边框
+                drawModuleOutline(outliner, pos, hoveredModule.gridX(), hoveredModule.gridY(),
+                        hoveredModule.getWidth(), hoveredModule.getHeight(),
+                        "hover", moduleColor, facing);
             }
         }
-
-        poseStack.popPose();
     }
 
-    // ── 旋转（局部→方块空间）──
+    /** 颜色提亮（限制不超过 0xFF） */
+    private static int brighten(int color, float factor) {
+        int r = Math.min(0xFF, (int) (((color >> 16) & 0xFF) * factor));
+        int g = Math.min(0xFF, (int) (((color >> 8) & 0xFF) * factor));
+        int b = Math.min(0xFF, (int) ((color & 0xFF) * factor));
+        return (r << 16) | (g << 8) | b;
+    }
 
-    private static void rot(float[] out, float x, float y, float z, Direction f) {
+    // ── 坐标旋转：NORTH 局部 → 世界局部 ──
+
+    private static Vec3 rot(float x, float y, float z, Direction f) {
         float c = MonitorBlock.ROT_ORIGIN / 16f;
-        switch (f) {
-            case NORTH: out[0]=x; out[1]=y; out[2]=z; break;
-            case SOUTH: out[0]=2*c-x; out[1]=y; out[2]=2*c-z; break;
-            case EAST:  out[0]=2*c-z; out[1]=y; out[2]=x; break;
-            case WEST:  out[0]=z; out[1]=y; out[2]=2*c-x; break;
-            default:    out[0]=x; out[1]=y; out[2]=z;
-        }
+        return switch (f) {
+            case NORTH -> new Vec3(x, y, z);
+            case SOUTH -> new Vec3(2 * c - x, y, 2 * c - z);
+            case EAST  -> new Vec3(2 * c - z, y, x);
+            case WEST  -> new Vec3(z, y, 2 * c - x);
+            default    -> new Vec3(x, y, z);
+        };
     }
 
-    // ── 网格线（手动线段）──
+    private static Vec3 world(BlockPos pos, float x, float y, float z, Direction f) {
+        Vec3 r = rot(x, y, z, f);
+        return new Vec3(pos.getX() + r.x, pos.getY() + r.y, pos.getZ() + r.z);
+    }
 
-    private static void drawGridLines(VertexConsumer vc, Matrix4f mat, Direction f) {
-        // float z = MonitorBlock.SCREEN_Z / 16f + 0.05f;
-        float z = MonitorBlock.SCREEN_Z / 16f;
+    // ── 网格线 ──
+
+    private static void drawGridLines(Outliner o, BlockPos pos, Direction f) {
+        float z = MonitorBlock.SCREEN_Z / 16f + 0.05f;
         float x0 = MonitorBlock.SCREEN_X_MIN / 16f;
         float x1 = MonitorBlock.SCREEN_X_MAX / 16f;
         float y0 = MonitorBlock.SCREEN_Y_MIN / 16f;
         float y1 = MonitorBlock.SCREEN_Y_MAX / 16f;
-        float[] a = new float[3], b = new float[3];
+
         // 竖线
         for (int i = 0; i <= 14; i++) {
             float x = x0 + i / 16f;
-            rot(a, x, y0, z, f);
-            rot(b, x, y1, z, f);
-            vc.addVertex(mat, a[0], a[1], a[2]).setColor(1.0f, 1.0f, 1.0f, 0.3f).setNormal(0, 0, 1);
-            vc.addVertex(mat, b[0], b[1], b[2]).setColor(1.0f, 1.0f, 1.0f, 0.3f).setNormal(0, 0, 1);
+            Vec3 from = world(pos, x, y0, z, f);
+            Vec3 to = world(pos, x, y1, z, f);
+            o.showLine("grid_v" + i, from, to).colored(0xFFFFFF).lineWidth(1 / 128f);
         }
         // 横线
         for (int i = 0; i <= 12; i++) {
             float y = y0 + i / 16f;
-            rot(a, x0, y, z, f);
-            rot(b, x1, y, z, f);
-            vc.addVertex(mat, a[0], a[1], a[2]).setColor(1.0f, 1.0f, 1.0f, 0.3f).setNormal(0, 0, 1);
-            vc.addVertex(mat, b[0], b[1], b[2]).setColor(1.0f, 1.0f, 1.0f, 0.3f).setNormal(0, 0, 1);
+            Vec3 from = world(pos, x0, y, z, f);
+            Vec3 to = world(pos, x1, y, z, f);
+            o.showLine("grid_h" + i, from, to).colored(0xFFFFFF).lineWidth(1 / 128f);
         }
     }
 
-    // ── 已放置模块边框（与网格线同方式：rot + 手动线段）──
+    // ── 模块/预览矩形边框 ──
 
-    private static void drawModuleOutlines(PoseStack ps, VertexConsumer vc, Matrix4f mat,
-                                            GridState grid, Direction f) {
-        for (var mod : grid.getAllModules().values()) {
-            int col = getColor(mod.id());
-            float r = ((col>>16)&0xFF)/255f, g = ((col>>8)&0xFF)/255f, b = (col&0xFF)/255f;
-            float x0 = MonitorBlock.SCREEN_X_MIN / 16f + mod.gridX() / 16f;
-            float y0 = MonitorBlock.SCREEN_Y_MIN / 16f + mod.gridY() / 16f;
-            float x1 = x0 + mod.getWidth() / 16f;
-            float y1 = y0 + mod.getHeight() / 16f;
-            drawRectOutline(vc, mat, x0, y0, x1, y1, MonitorBlock.SCREEN_Z / 16f, r, g, b, 0.5f, f);
-        }
-    }
-
-    // ── 放置预览（与网格线同方式）──
-
-    private static void drawPreview(PoseStack ps, VertexConsumer vc, Matrix4f mat,
-                                     int gx, int gy, int w, int h, boolean ok, Direction f) {
+    private static void drawModuleOutline(Outliner o, BlockPos pos,
+                                           int gx, int gy, int w, int h, String slot, int color, Direction f) {
         float x0 = MonitorBlock.SCREEN_X_MIN / 16f + gx / 16f;
         float y0 = MonitorBlock.SCREEN_Y_MIN / 16f + gy / 16f;
         float x1 = x0 + w / 16f;
         float y1 = y0 + h / 16f;
-        // 在网格面上方略微偏移，确保可见
-        float z = MonitorBlock.SCREEN_Z / 16f;
-        float r = ok ? 0f : 1f, green = ok ? 1f : 0f;
-        drawRectOutline(vc, mat, x0, y0, x1, y1, z, r, green, 0f, 0.9f, f);
+        float z = MonitorBlock.SCREEN_Z / 16f + 0.05f;
+
+        // 四边
+        Vec3 p00 = world(pos, x0, y0, z, f);
+        Vec3 p10 = world(pos, x1, y0, z, f);
+        Vec3 p11 = world(pos, x1, y1, z, f);
+        Vec3 p01 = world(pos, x0, y1, z, f);
+
+        o.showLine(slot + "_top",    p00, p10).colored(color).lineWidth(1 / 64f);
+        o.showLine(slot + "_right",  p10, p11).colored(color).lineWidth(1 / 64f);
+        o.showLine(slot + "_bottom", p11, p01).colored(color).lineWidth(1 / 64f);
+        o.showLine(slot + "_left",   p01, p00).colored(color).lineWidth(1 / 64f);
     }
 
-    /** 绘制矩形四边（与网格线相同的 rot 方式）。 */
-    private static void drawRectOutline(VertexConsumer vc, Matrix4f mat,
-                                         float x0, float y0, float x1, float y1, float z,
-                                         float r, float g, float b, float a, Direction f) {
-        float[] p0 = new float[3], p1 = new float[3], p2 = new float[3], p3 = new float[3];
-        rot(p0, x0, y0, z, f);
-        rot(p1, x1, y0, z, f);
-        rot(p2, x1, y1, z, f);
-        rot(p3, x0, y1, z, f);
-        vc.addVertex(mat, p0[0], p0[1], p0[2]).setColor(r, g, b, a).setNormal(0, 0, 1);
-        vc.addVertex(mat, p1[0], p1[1], p1[2]).setColor(r, g, b, a).setNormal(0, 0, 1);
-        vc.addVertex(mat, p1[0], p1[1], p1[2]).setColor(r, g, b, a).setNormal(0, 0, 1);
-        vc.addVertex(mat, p2[0], p2[1], p2[2]).setColor(r, g, b, a).setNormal(0, 0, 1);
-        vc.addVertex(mat, p2[0], p2[1], p2[2]).setColor(r, g, b, a).setNormal(0, 0, 1);
-        vc.addVertex(mat, p3[0], p3[1], p3[2]).setColor(r, g, b, a).setNormal(0, 0, 1);
-        vc.addVertex(mat, p3[0], p3[1], p3[2]).setColor(r, g, b, a).setNormal(0, 0, 1);
-        vc.addVertex(mat, p0[0], p0[1], p0[2]).setColor(r, g, b, a).setNormal(0, 0, 1);
-    }
-
-    private static int getColor(int id) {
-        int[] pal = {0x5A8F3C, 0x3C7ABF, 0xBF8F3C, 0x8F3CBF, 0xBF3C5A, 0x3CBFBF, 0xBFBF3C, 0xBF6F3C};
-        return pal[id % pal.length];
-    }
 }

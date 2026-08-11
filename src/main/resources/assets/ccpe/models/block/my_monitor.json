@@ -3,7 +3,7 @@
 	"credit": "Made with Blockbench",
 	"render_type": "minecraft:cutout",
 	"textures": {
-		"0": "ccpe:block/my_monitor_desk_tex",
+		"0": "ccpe:block/my_monitor_tex",
 		"particle": "ccpe:block/andesite_casing"
 	},
 	"elements": [
@@ -18,7 +18,7 @@
 				"south": {"uv": [11.5, 9.5, 15.5, 10], "texture": "#0"},
 				"west": {"uv": [15.5, 7, 16, 9.5], "rotation": 90, "texture": "#0"},
 				"up": {"uv": [11.5, 7, 15.5, 9.5], "texture": "#0"},
-				"down": {"uv": [0, 0, 5.25, 3], "texture": "#0"}
+				"down": {"uv": [11.5, 7, 15.5, 9.5], "texture": "#0"}
 			}
 		},
 		{
@@ -46,7 +46,7 @@
 			"name": "case_exterior",
 			"from": [1, 2, 4],
 			"to": [15, 14, 9],
-			"rotation": {"angle": 0, "axis": "y", "origin": [15, 2, 6]},
+			"rotation": {"angle": 0, "axis": "x", "origin": [15, 2, 6]},
 			"faces": {
 				"north": {"uv": [11.25, 0, 14.75, 3], "texture": "#0"},
 				"east": {"uv": [16, 0, 14.75, 3], "texture": "#0"},
@@ -150,7 +150,7 @@
 			"to": [15, 14, 5],
 			"rotation": {"angle": 0, "axis": "y", "origin": [1, 2, 5]},
 			"faces": {
-				"north": {"uv": [7, 0.25, 10.5, 3.25], "texture": "#0"}
+				"north": {"uv": [0, 3.25, 3.5, 6.25], "texture": "#0"}
 			}
 		}
 	],

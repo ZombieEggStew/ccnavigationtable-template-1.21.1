@@ -4,6 +4,7 @@ import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.network.PlaceModulePayload;
+import com.zzy205.myfirstmod.network.RemoveModulePayload;
 import net.createmod.catnip.math.VoxelShaper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -132,17 +133,32 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
                                               BlockHitResult hitResult) {
         if (hand != InteractionHand.MAIN_HAND) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 
-        if (level.isClientSide) {
-            ModuleType type = ModuleType.fromItem(stack);
-            if (type != null) {
-                int[] gp = worldHitToGrid(pos, state.getValue(FACING),
-                        hitResult.getLocation().x, hitResult.getLocation().y, hitResult.getLocation().z);
-                if (gp != null) {
-                    PacketDistributor.sendToServer(new PlaceModulePayload(pos, gp[0], gp[1], type.name));
+        if (!level.isClientSide) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+
+        Direction facing = state.getValue(FACING);
+        int[] gp = worldHitToGrid(pos, facing,
+                hitResult.getLocation().x, hitResult.getLocation().y, hitResult.getLocation().z);
+
+        // ── 扳手拆卸 ──
+        if (stack.getItem().toString().equals("create:wrench") && gp != null) {
+            var be = level.getBlockEntity(pos);
+            if (be instanceof MonitorBlockEntity monitorBE) {
+                int cellId = monitorBE.getGridState().getCell(gp[0], gp[1]);
+                if (cellId >= 0) {
+                    PacketDistributor.sendToServer(new RemoveModulePayload(pos, cellId));
                     return ItemInteractionResult.SUCCESS;
                 }
             }
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
+
+        // ── 模块放置 ──
+        ModuleType type = ModuleType.fromItem(stack);
+        if (type != null && gp != null) {
+            PacketDistributor.sendToServer(new PlaceModulePayload(pos, gp[0], gp[1], type.name));
+            return ItemInteractionResult.SUCCESS;
+        }
+
         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 }

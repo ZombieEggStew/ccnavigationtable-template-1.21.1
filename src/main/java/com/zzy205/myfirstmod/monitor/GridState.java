@@ -97,7 +97,7 @@ public class GridState {
         for (MonitorModule mod : modules.values()) {
             CompoundTag modTag = new CompoundTag();
             modTag.putInt("id", mod.id());
-            modTag.putString("type", mod.type().name());
+            modTag.putString("type", mod.type().name);
             modTag.putInt("x", mod.gridX());
             modTag.putInt("y", mod.gridY());
             modList.add(modTag);

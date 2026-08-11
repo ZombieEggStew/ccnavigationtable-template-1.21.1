@@ -16,6 +16,7 @@ import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.network.ReceiverSyncPayload;
 import com.zzy205.myfirstmod.network.SensorFilterPayload;
 import com.zzy205.myfirstmod.network.SensorNbtPayload;
+import com.zzy205.myfirstmod.network.SyncGridPayload;
 import com.zzy205.myfirstmod.network.PlaceModulePayload;
 import com.zzy205.myfirstmod.network.RemoveModulePayload;
 import com.zzy205.myfirstmod.screen.MyModMenus;
@@ -71,6 +72,19 @@ public class CCPeripheraExtender {
                         var be = level.getBlockEntity(payload.sensorPos());
                         if (be instanceof PeripheralExtenderBlockEntity sensorBE) {
                             sensorBE.setCachedAttachedNBT(payload.nbt());
+                        }
+                    }
+            );
+
+            // 服务端→客户端：同步 Monitor 棋盘网格状态
+            registrar.playToClient(
+                    SyncGridPayload.TYPE,
+                    SyncGridPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.pos());
+                        if (be instanceof MonitorBlockEntity monitorBE) {
+                            monitorBE.getGridState().load(level.registryAccess(), payload.gridTag());
                         }
                     }
             );
@@ -173,6 +187,7 @@ public class CCPeripheraExtender {
 
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
