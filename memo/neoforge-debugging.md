@@ -1,0 +1,3 @@
+- VS Code Java launch for NeoForge must not use `-Dfml.modFolders=.../bin/main` in this repo; that path does not exist.
+- Use `-Dfml.modFolders=ccnavigationtable%%D:/aMyMCMods/ccnavigationtable-template-1.21.1/build/classes/java/main`.
+- Keep a preLaunchTask running `gradlew prepareClientRun classes` so run args and class output stay in sync for F5 debug.

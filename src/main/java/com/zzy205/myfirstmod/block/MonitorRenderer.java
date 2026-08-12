@@ -10,6 +10,7 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.neoforged.neoforge.client.model.data.ModelData;
@@ -20,13 +21,17 @@ import java.util.Map;
 /**
  * Monitor BER — 在屏幕表面渲染已放置的模块模型。
  * 各模块的微调/动画逻辑见 {@link ModuleRenderBehavior}。
+ * 
+ * animProgress 使用 (BlockPos, moduleId) 复合 key，
+ * 防止不同 Monitor 之间同 moduleId 的动画进度互相污染。
  */
 public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> {
 
     private static final RandomSource RANDOM = RandomSource.create(42L);
     private static final float PRESS_DEPTH = 0.6f;
 
-    private final Map<Integer, Float> animProgress = new HashMap<>();
+    /** 每个 Monitor 独立的动画进度表，外层 key=BlockPos，内层 key=moduleId */
+    private final Map<BlockPos, Map<Integer, Float>> animProgress = new HashMap<>();
 
     public MonitorRenderer(BlockEntityRendererProvider.Context ctx) {}
 
@@ -36,6 +41,7 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         var grid = be.getGridState();
         if (grid.isEmpty() && !grid.hasScreen()) return;
 
+        BlockPos bePos = be.getBlockPos();
         Direction facing = be.getBlockState().getValue(MonitorBlock.FACING);
 
         poseStack.pushPose();
@@ -45,7 +51,8 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         poseStack.translate(-c, -c, -c);
 
         // ── 渲染模块 ──
-        animProgress.keySet().removeIf(id -> !grid.getAllModules().containsKey(id));
+        var beAnims = animProgress.computeIfAbsent(bePos, k -> new HashMap<>());
+        beAnims.keySet().removeIf(id -> !grid.getAllModules().containsKey(id));
 
         for (var mod : grid.getAllModules().values()) {
             BakedModel model = MonitorPreloadedModels.getModel(mod.type());
@@ -53,14 +60,13 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
 
             var bhv = ModuleRenderBehavior.of(mod.type());
 
-            // 动画进度：旋钮用角度，普通按钮/钮子用 0/1
             boolean isKnob = mod.type() == com.zzy205.myfirstmod.monitor.ModuleType.KNOB;
             float target = isKnob ? grid.getKnobAngle(mod.id()) : (grid.isPressed(mod.id()) ? 1f : 0f);
-            float current = animProgress.getOrDefault(mod.id(), 0f);
+            float current = beAnims.getOrDefault(mod.id(), 0f);
             float speed = target > current ? bhv.animPressSpeed() : bhv.animReleaseSpeed();
             float next = current + (target - current) * speed;
             if (Math.abs(next - target) < 0.01f) next = target;
-            animProgress.put(mod.id(), next);
+            beAnims.put(mod.id(), next);
 
             poseStack.pushPose();
 
