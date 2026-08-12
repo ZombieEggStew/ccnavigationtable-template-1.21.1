@@ -20,6 +20,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -51,7 +53,10 @@ public class MonitorGridOverlay {
     /** 解缠绕后的累计角度增量（弧度），可超过 2π */
     private static float knobUnwrappedDelta = 0f;
     private static int knobSendCooldown = 0;
-    private static final int KNOB_SEND_INTERVAL = 2;   // 每 2 tick 发送一次
+    /** 上次播放音效时的角度（度），用于判断方向 */
+    private static float knobLastSoundAngle = 0f;
+    private static final int KNOB_SEND_INTERVAL = 2;
+    private static final float KNOB_SOUND_STEP = 12f; // 每旋转多少度播放一次音效
 
     public static void register() {
         NeoForge.EVENT_BUS.addListener(MonitorGridOverlay::onRenderLevel);
@@ -152,6 +157,7 @@ public class MonitorGridOverlay {
                 // 按下瞬间准心角度（弧度），作为解缠绕起点
                 knobPrevRawAngle = computeCrosshairAngle(player, pos, facing);
                 knobUnwrappedDelta = 0f;
+                knobLastSoundAngle = knobAccumAngle;
             }
         } else if (knobDragging && !useDown) {
             knobDragging = false;
@@ -326,6 +332,21 @@ public class MonitorGridOverlay {
         knobPrevRawAngle = rawAngle;
 
         float newAngle = knobAccumAngle + (float) Math.toDegrees(knobUnwrappedDelta);
+
+        // ── 谢泼德音阶音效 ──
+        // 每 KNOB_SOUND_STEP 度播放一次，根据旋转方向调整音调
+        float soundDiff = newAngle - knobLastSoundAngle;
+        int soundSteps = (int) (soundDiff / KNOB_SOUND_STEP);
+        if (soundSteps != 0) {
+            boolean forward = soundSteps > 0;
+            // 音调在 [0.5, 2.0] 之间循环，每 360° 回归
+            float cycleAngle = newAngle % 360f;
+            if (cycleAngle < 0) cycleAngle += 360f;
+            float pitch = 0.5f + (cycleAngle / 360f) * 1.5f; // 0.5 → 2.0
+            if (!forward) pitch = 2.0f - (pitch - 0.5f);      // 反转时倒放音阶
+            mc.player.playSound(SoundEvents.LEVER_CLICK, 0.1f, pitch);
+            knobLastSoundAngle = newAngle - (soundDiff - soundSteps * KNOB_SOUND_STEP);
+        }
 
         // 周期性发送旋转角度到服务端
         knobSendCooldown--;
