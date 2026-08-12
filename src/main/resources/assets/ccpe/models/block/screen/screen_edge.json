@@ -1,0 +1,20 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "ccpe:block/screen_tex",
+		"particle": "ccpe:block/screen_tex"
+	},
+	"elements": [
+		{
+			"name": "edge_v_1_2",
+			"from": [0.125, 0, 0.7],
+			"to": [1, 1, 1],
+			"rotation": {"angle": 0, "axis": "y", "origin": [0.5, 0.5, 0.5]},
+			"faces": {
+				"north": {"uv": [5.33333, 0.66667, 10.66667, 5.33333], "rotation": 90, "texture": "#0"},
+				"west": {"uv": [5.33333, 0.66667, 10.66667, 1.33333], "rotation": 270, "texture": "#0"}
+			}
+		}
+	]
+}

@@ -33,6 +33,8 @@ public class MyModItems {
             
     public static final DeferredItem<Item> MODULE_KNOB = MyItems.register(
             "module_knob", () -> new Item(new Item.Properties()));
+    public static final DeferredItem<Item> MODULE_SCREEN = MyItems.register(
+            "module_screen", () -> new Item(new Item.Properties()));
 
     public static <T extends Block> void registerBlockItems(String name, DeferredBlock<T> block) {
         MyModItems.MyItems.register(name, () -> new BlockItem(block.get(), new Item.Properties()));

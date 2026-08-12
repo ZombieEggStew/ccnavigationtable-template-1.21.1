@@ -1,0 +1,19 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "ccpe:block/screen_tex",
+		"particle": "ccpe:block/screen_tex"
+	},
+	"elements": [
+		{
+			"name": "center",
+			"from": [0, 0, 0.7],
+			"to": [1, 1, 1],
+			"rotation": {"angle": 0, "axis": "x", "origin": [0.5, 0.5, 0.5]},
+			"faces": {
+				"north": {"uv": [5.33333, 5.33333, 10.66667, 10.66667], "rotation": 180, "texture": "#0"}
+			}
+		}
+	]
+}

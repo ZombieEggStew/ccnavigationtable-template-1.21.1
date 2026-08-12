@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
+import com.zzy205.myfirstmod.monitor.GridState;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
@@ -33,7 +34,7 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
     public void render(MonitorBlockEntity be, float partialTick, PoseStack poseStack,
                        MultiBufferSource buffer, int light, int overlay) {
         var grid = be.getGridState();
-        if (grid.isEmpty()) return;
+        if (grid.isEmpty() && !grid.hasScreen()) return;
 
         Direction facing = be.getBlockState().getValue(MonitorBlock.FACING);
 
@@ -43,6 +44,7 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         poseStack.mulPose(Axis.YP.rotationDegrees(-facing.getOpposite().toYRot()));
         poseStack.translate(-c, -c, -c);
 
+        // ── 渲染模块 ──
         animProgress.keySet().removeIf(id -> !grid.getAllModules().containsKey(id));
 
         for (var mod : grid.getAllModules().values()) {
@@ -77,6 +79,12 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
 
             poseStack.popPose();
         }
+
+        // ── 渲染所有屏幕 9 宫格 ──
+        for (var screen : grid.getScreenRegions()) {
+            renderScreen(poseStack, buffer, screen, light, overlay);
+        }
+
         poseStack.popPose();
     }
 
@@ -88,5 +96,80 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         }
         for (var q : model.getQuads(null, null, RANDOM, ModelData.EMPTY, null))
             consumer.putBulkData(pose, q, 1, 1, 1, 1, light, OverlayTexture.NO_OVERLAY);
+    }
+
+    // ── 屏幕 9 宫格渲染 ──
+
+    private void renderScreen(PoseStack ps, MultiBufferSource buffer,
+                              GridState.ScreenRegion scr, int light, int overlay) {
+        BakedModel corner = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_CORNER);
+        BakedModel edge   = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_EDGE);
+        BakedModel center = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_CENTER);
+
+        VertexConsumer vc = buffer.getBuffer(Sheets.solidBlockSheet());
+
+        float cellSize   = 1f / 16f;
+        float borderSize = cellSize;   // 角模型占 1 格
+
+        float scrX = (MonitorBlock.SCREEN_X_MIN + scr.minX()) / 16f;
+        float scrY = (MonitorBlock.SCREEN_Y_MIN + scr.minY()) / 16f;
+        float scrW = scr.width()  * cellSize;
+        float scrH = scr.height() * cellSize;
+        float scrZ = MonitorBlock.SCREEN_Z / 16f;
+
+        float innerW = scrW - 2 * borderSize;
+        float innerH = scrH - 2 * borderSize;
+
+        // ── 四个角（绕 Z 轴旋转，法线安全）──
+        if (corner != null) {
+            // 左上：0°（模型自带方向即左上）
+            renderCorner(ps, vc, corner, scrX, scrY, scrZ, 0, light, overlay);
+            // 右上：Z 90°
+            renderCorner(ps, vc, corner, scrX + scrW - borderSize, scrY, scrZ, 90, light, overlay);
+            // 左下：Z -90°
+            renderCorner(ps, vc, corner, scrX, scrY + scrH - borderSize, scrZ, -90, light, overlay);
+            // 右下：Z 180°
+            renderCorner(ps, vc, corner, scrX + scrW - borderSize, scrY + scrH - borderSize, scrZ, 180, light, overlay);
+        }
+
+        // ── 四边（平铺，避免纹理拉伸变形）──
+        if (edge != null) {
+            int edgeTilesH = Math.max(0, scr.width() - 2);  // 水平边单元数
+            int edgeTilesV = Math.max(0, scr.height() - 2); // 垂直边单元数
+            for (int i = 0; i < edgeTilesV; i++) {
+                // 右边：180°
+                renderCorner(ps, vc, edge, scrX + scrW - borderSize, scrY + borderSize + i * cellSize, scrZ, 180, light, overlay);
+                // 左边：0°
+                renderCorner(ps, vc, edge, scrX, scrY + borderSize + i * cellSize, scrZ, 0, light, overlay);
+            }
+            for (int i = 0; i < edgeTilesH; i++) {
+                // 上边：90°
+                renderCorner(ps, vc, edge, scrX + borderSize + i * cellSize, scrY, scrZ, 90, light, overlay);
+                // 下边：-90°
+                renderCorner(ps, vc, edge, scrX + borderSize + i * cellSize, scrY + scrH - borderSize, scrZ, -90, light, overlay);
+            }
+        }
+
+        // ── 中央面板（XY 双向拉伸）──
+        if (center != null && innerW > 0.001f && innerH > 0.001f) {
+            ps.pushPose();
+            ps.translate(scrX + borderSize, scrY + borderSize, scrZ);
+            ps.scale(innerW / cellSize, innerH / cellSize, 1);
+            renderModel(ps, vc, center, light, overlay);
+            ps.popPose();
+        }
+    }
+
+    /** 渲染一个角模型，绕格子中心 Z 轴旋转（法线安全） */
+    private void renderCorner(PoseStack ps, VertexConsumer vc, BakedModel corner,
+                              float cellX, float cellY, float scrZ, float zDegrees,
+                              int light, int overlay) {
+        float halfCell = 0.5f / 16f;
+        ps.pushPose();
+        ps.translate(cellX + halfCell, cellY + halfCell, scrZ);
+        if (zDegrees != 0) ps.mulPose(Axis.ZP.rotationDegrees(zDegrees));
+        ps.translate(-halfCell, -halfCell, 0);
+        renderModel(ps, vc, corner, light, overlay);
+        ps.popPose();
     }
 }

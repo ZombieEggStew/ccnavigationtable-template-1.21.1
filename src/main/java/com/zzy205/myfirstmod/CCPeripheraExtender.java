@@ -21,6 +21,8 @@ import com.zzy205.myfirstmod.network.ModulePressPayload;
 import com.zzy205.myfirstmod.network.PlaceModulePayload;
 import com.zzy205.myfirstmod.network.RemoveModulePayload;
 import com.zzy205.myfirstmod.network.ModuleKnobRotatePayload;
+import com.zzy205.myfirstmod.network.PlaceScreenPayload;
+import com.zzy205.myfirstmod.network.RemoveScreenPayload;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import dan200.computercraft.api.peripheral.PeripheralCapability;
 import org.slf4j.Logger;
@@ -190,6 +192,39 @@ public class CCPeripheraExtender {
                         var be = level.getBlockEntity(payload.pos());
                         if (be instanceof MonitorBlockEntity monitorBE) {
                             monitorBE.rotateKnob(payload.moduleId(), payload.angle());
+                        }
+                    }
+            );
+
+            // 客户端→服务端：放置屏幕（两点矩形选择，可多个共存）
+            registrar.playToServer(
+                    PlaceScreenPayload.TYPE,
+                    PlaceScreenPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.pos());
+                        if (be instanceof MonitorBlockEntity monitorBE) {
+                            boolean ok = monitorBE.addScreen(
+                                    payload.gridX1(), payload.gridY1(),
+                                    payload.gridX2(), payload.gridY2()
+                            );
+                            if (ok && !ctx.player().isCreative()) {
+                                ctx.player().getMainHandItem().shrink(1);
+                            }
+                        }
+                    }
+            );
+
+            // 客户端→服务端：移除指定格子的屏幕（扳手拆卸）
+            registrar.playToServer(
+                    RemoveScreenPayload.TYPE,
+                    RemoveScreenPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.pos());
+                        if (be instanceof MonitorBlockEntity monitorBE) {
+                            monitorBE.removeScreenAt(payload.gridX(), payload.gridY());
+                            // TODO: 归还屏幕物品
                         }
                     }
             );

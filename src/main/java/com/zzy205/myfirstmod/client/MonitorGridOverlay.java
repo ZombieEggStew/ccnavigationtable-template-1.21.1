@@ -9,6 +9,8 @@ import com.zzy205.myfirstmod.monitor.MonitorModule;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.network.ModuleKnobRotatePayload;
 import com.zzy205.myfirstmod.network.ModulePressPayload;
+import com.zzy205.myfirstmod.network.PlaceScreenPayload;
+import com.zzy205.myfirstmod.network.RemoveScreenPayload;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -58,6 +60,14 @@ public class MonitorGridOverlay {
     private static final int KNOB_SEND_INTERVAL = 2;
     private static final float KNOB_SOUND_STEP = 12f; // 每旋转多少度播放一次音效
 
+    /** 屏幕两点放置状态 */
+    private static boolean screenPlacing = false;
+    private static BlockPos screenAnchorPos = null;
+    private static Direction screenAnchorFacing = null;
+    private static int screenAnchorX = -1;
+    private static int screenAnchorY = -1;
+    private static boolean screenLastUseDown = false;  // 防连发
+
     public static void register() {
         NeoForge.EVENT_BUS.addListener(MonitorGridOverlay::onRenderLevel);
         NeoForge.EVENT_BUS.addListener(MonitorGridOverlay::onClientTick);
@@ -86,6 +96,14 @@ public class MonitorGridOverlay {
 
         ItemStack held = player.getMainHandItem();
         ModuleType heldType = ModuleType.fromItem(held);
+        boolean holdingScreen = held.getItem().toString().equals("ccpe:module_screen");
+        boolean holdingWrench = held.getItem().toString().contains("create") && held.getItem().toString().contains("wrench");
+
+        // ── 屏幕放置：切换物品或看向其他方块则取消 ──
+        if (screenPlacing && (!holdingScreen || (screenAnchorPos != null && !screenAnchorPos.equals(pos)))) {
+            screenPlacing = false;
+            screenAnchorPos = null;
+        }
 
         Outliner outliner = Outliner.getInstance();
         int moduleColor = (Config.MONITOR_OUTLINE_A.get() << 24)
@@ -102,14 +120,52 @@ public class MonitorGridOverlay {
             hoveredModule = grid.getModule(grid.getCell(gp[0], gp[1]));
         }
 
-        boolean showGrid = heldType != null;
-        boolean showPreview = heldType != null || hoveredModule != null;
+        boolean showGrid = heldType != null || holdingScreen;
+        boolean showPreview = heldType != null || hoveredModule != null || holdingScreen || screenPlacing;
+
+        boolean useDown = mc.options.keyUse.isDown();
+
+        // ── 屏幕两点放置交互（边沿触发，防连发）──
+        boolean screenClickEdge = useDown && !screenLastUseDown;
+        screenLastUseDown = useDown;
+
+        if (holdingScreen && gp != null && screenClickEdge) {
+            if (!screenPlacing) {
+                // 第一次点击：记录锚点
+                screenPlacing = true;
+                screenAnchorPos = pos;
+                screenAnchorFacing = facing;
+                screenAnchorX = gp[0];
+                screenAnchorY = gp[1];
+            } else if (screenAnchorPos != null && screenAnchorPos.equals(pos)) {
+                // 第二次点击：尝试放置
+                int minX = Math.min(screenAnchorX, gp[0]);
+                int maxX = Math.max(screenAnchorX, gp[0]);
+                int minY = Math.min(screenAnchorY, gp[1]);
+                int maxY = Math.max(screenAnchorY, gp[1]);
+                // 最小 2×2
+                if (maxX - minX >= GridState.SCREEN_MIN_SIZE - 1
+                        && maxY - minY >= GridState.SCREEN_MIN_SIZE - 1) {
+                    PacketDistributor.sendToServer(
+                            new PlaceScreenPayload(pos, screenAnchorX, screenAnchorY, gp[0], gp[1]));
+                }
+                screenPlacing = false;
+                screenAnchorPos = null;
+            }
+        }
+
+        // 扳手拆卸屏幕（边沿触发）
+        if (holdingWrench && gp != null && screenClickEdge
+                && grid.getCell(gp[0], gp[1]) == GridState.SCREEN_CELL_MARKER) {
+            PacketDistributor.sendToServer(new RemoveScreenPayload(pos, gp[0], gp[1]));
+        }
 
         // ── 按钮按下/释放检测 ──
-        boolean useDown = mc.options.keyUse.isDown();
+        // 屏幕放置模式下不触发按钮/钮子/旋钮交互
+        if (!holdingScreen && !screenPlacing) {
         boolean isToggle = hoveredModule != null && hoveredModule.type() == ModuleType.TOGGLE_SWITCH;
 
-        if (hoveredModule != null && useDown && heldType == null) {
+        if (hoveredModule != null && useDown && heldType == null && !knobDragging) {
             if (isToggle) {
                 // 钮子开关：右键触发切换，松开右键后才允许再次触发
                 if (toggleFiredId != hoveredModule.id()) {
@@ -141,7 +197,7 @@ public class MonitorGridOverlay {
 
         // ── 旋钮拖拽 ──
         if (hoveredModule != null && hoveredModule.type() == ModuleType.KNOB
-                && useDown && heldType == null) {
+                && useDown && heldType == null && !knobDragging) {
             if (!knobDragging) {
                 knobDragging = true;
                 knobDragPos = pos;
@@ -164,14 +220,29 @@ public class MonitorGridOverlay {
             knobDragPos = null;
             knobDragModuleId = -1;
         }
+        } // !holdingScreen && !screenPlacing
 
-        // 1. 网格线（仅手持模块时）
+        // 1. 网格线（手持模块或屏幕物品时）
         if (showGrid) {
             drawGridLines(outliner, pos, facing);
         }
 
-        // 2. 放置预览 / 对准高亮
-        if (showPreview) {
+        // 1.5 屏幕放置预览（两点选择过程中的实时矩形）
+        if (screenPlacing && screenAnchorPos != null && screenAnchorPos.equals(pos) && gp != null) {
+            int minX = Math.min(screenAnchorX, gp[0]);
+            int maxX = Math.max(screenAnchorX, gp[0]);
+            int minY = Math.min(screenAnchorY, gp[1]);
+            int maxY = Math.max(screenAnchorY, gp[1]);
+            int w = maxX - minX + 1;
+            int h = maxY - minY + 1;
+            boolean bigEnough = w >= GridState.SCREEN_MIN_SIZE && h >= GridState.SCREEN_MIN_SIZE;
+            boolean canPlace = grid.canPlaceScreen(minX, minY, maxX, maxY);
+            int color = (bigEnough && canPlace) ? 0x4CDA64 : 0xFF5E5E;
+            drawModuleOutline(outliner, pos, minX, minY, w, h, "screen_preview", color, facing);
+        }
+
+        // 2. 放置预览 / 对准高亮（屏幕模式下不显示）
+        if (showPreview && !screenPlacing && !holdingScreen) {
             if (heldType != null && gp != null) {
                 // 手持模块：绿色/红色放置预览
                 boolean ok = grid.canPlace(gp[0], gp[1], heldType.width, heldType.height);

@@ -114,6 +114,37 @@ public class MonitorBlockEntity extends BlockEntity {
         }
     }
 
+    // ── 屏幕 ──
+
+    /**
+     * 新增一个屏幕（服务端调用）。
+     * @return true 成功
+     */
+    public boolean addScreen(int x1, int y1, int x2, int y2) {
+        if (gridState.addScreen(x1, y1, x2, y2)) {
+            setChanged();
+            if (level != null && !level.isClientSide) {
+                syncGridToClients();
+                blockChanged();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /** 移除指定格子所属的屏幕（服务端调用）。 */
+    public boolean removeScreenAt(int gx, int gy) {
+        if (gridState.removeScreenAt(gx, gy)) {
+            setChanged();
+            if (level != null && !level.isClientSide) {
+                syncGridToClients();
+                blockChanged();
+            }
+            return true;
+        }
+        return false;
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);

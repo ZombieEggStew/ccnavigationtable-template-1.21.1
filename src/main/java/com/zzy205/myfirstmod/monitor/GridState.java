@@ -9,15 +9,21 @@ import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * 14×12 棋盘网格状态。
- * grid[x][y] = moduleId（-1 表示空格）。
+ * grid[x][y] = moduleId（-1 表示空格，-2 表示屏幕占用）。
  */
 public class GridState {
 
     public static final int GRID_WIDTH = 14;
     public static final int GRID_HEIGHT = 12;
+    /** 屏幕占用的格子标记（与 -1 空和 ≥0 moduleId 区分） */
+    public static final int SCREEN_CELL_MARKER = -2;
+    /** 屏幕最小尺寸（格） */
+    public static final int SCREEN_MIN_SIZE = 2;
 
     private final int[][] grid = new int[GRID_WIDTH][GRID_HEIGHT];
     private final Map<Integer, MonitorModule> modules = new LinkedHashMap<>();
@@ -25,6 +31,9 @@ public class GridState {
     /** 旋钮模块的角度（度），moduleId → Y 轴旋转角度 */
     private final Map<Integer, Float> knobAngles = new java.util.HashMap<>();
     private int nextId = 0;
+
+    /** 屏幕区域列表（一个 Monitor 可放置多个屏幕） */
+    private final List<ScreenRegion> screenRegions = new ArrayList<>();
 
     public GridState() {
         for (int x = 0; x < GRID_WIDTH; x++) {
@@ -55,14 +64,23 @@ public class GridState {
 
     // ── 放置 / 移除 ──
 
-    /** 检查矩形区域是否可放置。 */
+    /** 检查矩形区域是否可放置模块。屏幕占用的格子也不可放置。 */
     public boolean canPlace(int x, int y, int w, int h) {
         if (x < 0 || y < 0 || x + w > GRID_WIDTH || y + h > GRID_HEIGHT) return false;
         for (int dx = 0; dx < w; dx++) {
             for (int dy = 0; dy < h; dy++) {
-                if (grid[x + dx][y + dy] != -1) return false;
+                int cell = grid[x + dx][y + dy];
+                if (cell != -1) return false;  // 被模块(≥0)或屏幕(-2)占用
             }
         }
+        return true;
+    }
+
+    /** 检查矩形区域是否可放置屏幕（只检查模块占用，不检查屏幕自身）。 */
+    public boolean canPlaceScreen(int minX, int minY, int maxX, int maxY) {
+        for (int x = minX; x <= maxX; x++)
+            for (int y = minY; y <= maxY; y++)
+                if (grid[x][y] >= 0) return false;  // 已有模块占用
         return true;
     }
 
@@ -127,6 +145,69 @@ public class GridState {
         return knobAngles.getOrDefault(moduleId, 0f);
     }
 
+    // ── 屏幕区域 ──
+
+    /** 屏幕矩形。min 为左上角（较小坐标），max 为右下角（较大坐标）。 */
+    public record ScreenRegion(int minX, int minY, int maxX, int maxY) {
+        public int width()  { return maxX - minX + 1; }
+        public int height() { return maxY - minY + 1; }
+    }
+
+    public List<ScreenRegion> getScreenRegions() { return screenRegions; }
+
+    public boolean hasScreen() { return !screenRegions.isEmpty(); }
+
+    /** 根据格子坐标查找所属屏幕，未找到返回 null */
+    @javax.annotation.Nullable
+    public ScreenRegion getScreenAt(int gx, int gy) {
+        for (var sr : screenRegions)
+            if (gx >= sr.minX() && gx <= sr.maxX() && gy >= sr.minY() && gy <= sr.maxY())
+                return sr;
+        return null;
+    }
+
+    /**
+     * 新增一个屏幕（不再替换已有屏幕）。
+     * @return true 成功，false 失败
+     */
+    public boolean addScreen(int x1, int y1, int x2, int y2) {
+        int minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+        int minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+
+        if (minX < 0 || maxX >= GRID_WIDTH || minY < 0 || maxY >= GRID_HEIGHT) return false;
+        if (maxX - minX + 1 < SCREEN_MIN_SIZE || maxY - minY + 1 < SCREEN_MIN_SIZE) return false;
+        if (!canPlaceScreen(minX, minY, maxX, maxY)) return false;
+
+        ScreenRegion sr = new ScreenRegion(minX, minY, maxX, maxY);
+        screenRegions.add(sr);
+        for (int x = minX; x <= maxX; x++)
+            for (int y = minY; y <= maxY; y++)
+                grid[x][y] = SCREEN_CELL_MARKER;
+        return true;
+    }
+
+    /** 移除指定格子所属的屏幕。成功返回 true。 */
+    public boolean removeScreenAt(int gx, int gy) {
+        ScreenRegion sr = getScreenAt(gx, gy);
+        if (sr == null) return false;
+        screenRegions.remove(sr);
+        for (int x = sr.minX(); x <= sr.maxX(); x++)
+            for (int y = sr.minY(); y <= sr.maxY(); y++)
+                if (grid[x][y] == SCREEN_CELL_MARKER)
+                    grid[x][y] = -1;
+        return true;
+    }
+
+    /** 清除所有屏幕 */
+    public void clearAllScreens() {
+        for (var sr : screenRegions)
+            for (int x = sr.minX(); x <= sr.maxX(); x++)
+                for (int y = sr.minY(); y <= sr.maxY(); y++)
+                    if (grid[x][y] == SCREEN_CELL_MARKER)
+                        grid[x][y] = -1;
+        screenRegions.clear();
+    }
+
     // ── NBT ──
 
     public CompoundTag save(HolderLookup.Provider registries) {
@@ -146,6 +227,19 @@ public class GridState {
             modList.add(modTag);
         }
         tag.put("modules", modList);
+
+        // 屏幕区域列表
+        ListTag scrList = new ListTag();
+        for (var sr : screenRegions) {
+            CompoundTag scrTag = new CompoundTag();
+            scrTag.putInt("minX", sr.minX());
+            scrTag.putInt("minY", sr.minY());
+            scrTag.putInt("maxX", sr.maxX());
+            scrTag.putInt("maxY", sr.maxY());
+            scrList.add(scrTag);
+        }
+        tag.put("screens", scrList);
+
         return tag;
     }
 
@@ -153,6 +247,7 @@ public class GridState {
         modules.clear();
         pressedModules.clear();
         knobAngles.clear();
+        screenRegions.clear();
         for (int x = 0; x < GRID_WIDTH; x++) {
             for (int y = 0; y < GRID_HEIGHT; y++) {
                 grid[x][y] = -1;
@@ -176,6 +271,22 @@ public class GridState {
                 for (int dy = 0; dy < type.height; dy++) {
                     grid[x + dx][y + dy] = id;
                 }
+            }
+        }
+
+        // 恢复屏幕区域列表
+        if (tag.contains("screens")) {
+            ListTag scrList = tag.getList("screens", Tag.TAG_COMPOUND);
+            for (int i = 0; i < scrList.size(); i++) {
+                CompoundTag scrTag = scrList.getCompound(i);
+                int minX = scrTag.getInt("minX");
+                int minY = scrTag.getInt("minY");
+                int maxX = scrTag.getInt("maxX");
+                int maxY = scrTag.getInt("maxY");
+                screenRegions.add(new ScreenRegion(minX, minY, maxX, maxY));
+                for (int x = minX; x <= maxX; x++)
+                    for (int y = minY; y <= maxY; y++)
+                        grid[x][y] = SCREEN_CELL_MARKER;
             }
         }
     }
