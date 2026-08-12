@@ -11,6 +11,7 @@ import com.zzy205.myfirstmod.network.ModuleKnobRotatePayload;
 import com.zzy205.myfirstmod.network.ModulePressPayload;
 import com.zzy205.myfirstmod.network.PlaceScreenPayload;
 import com.zzy205.myfirstmod.network.RemoveScreenPayload;
+import com.zzy205.myfirstmod.screen.MonitorModuleScreen;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -75,6 +76,8 @@ public class MonitorGridOverlay {
         int screenAnchorX = -1;
         int screenAnchorY = -1;
         boolean screenLastUseDown = false;  // 防连发
+        /** Shift+右键模块防连发 */
+        boolean shiftUseLastDown = false;
     }
 
     /** 所有活跃 Monitor 的交互状态，key 为 Monitor 方块坐标 */
@@ -149,9 +152,20 @@ public class MonitorGridOverlay {
         }
 
         boolean showGrid = heldType != null || holdingScreen;
-        boolean showPreview = heldType != null || hoveredModule != null || holdingScreen || interact.screenPlacing;
+        boolean onScreenCell = gp != null && grid.getCell(gp[0], gp[1]) == GridState.SCREEN_CELL_MARKER;
+        boolean showPreview = heldType != null || hoveredModule != null || holdingScreen || interact.screenPlacing || onScreenCell;
 
         boolean useDown = mc.options.keyUse.isDown();
+
+        // ── Shift+右键模块 → 打开配置 GUI（边沿触发）──
+        boolean shiftHeld = player.isShiftKeyDown();
+        boolean shiftUseEdge = useDown && shiftHeld && !interact.shiftUseLastDown;
+        interact.shiftUseLastDown = useDown && shiftHeld;
+
+        if (hoveredModule != null && shiftUseEdge && heldType == null && !holdingScreen) {
+            mc.setScreen(new MonitorModuleScreen(pos, hoveredModule, grid));
+            return;
+        }
 
         // ── 屏幕两点放置交互（边沿触发，防连发）──
         boolean screenClickEdge = useDown && !interact.screenLastUseDown;
@@ -263,6 +277,18 @@ public class MonitorGridOverlay {
                 drawModuleOutline(outliner, pos, hoveredModule.gridX(), hoveredModule.gridY(),
                         hoveredModule.getWidth(), hoveredModule.getHeight(),
                         keyPrefix + "/hover", moduleColor, facing);
+            } else if (onScreenCell) {
+                // 悬停在屏幕上 → 高亮整个屏幕区域
+                var scr = grid.getScreenAt(gp[0], gp[1]);
+                if (scr != null) {
+                    int alpha = Math.max(0x20, Config.MONITOR_OUTLINE_A.get() / 2);
+                    int screenColor = (alpha << 24)
+                            | (Config.MONITOR_OUTLINE_R.get() << 16)
+                            | (Config.MONITOR_OUTLINE_G.get() << 8)
+                            | Config.MONITOR_OUTLINE_B.get();
+                    drawModuleOutline(outliner, pos, scr.minX(), scr.minY(),
+                            scr.width(), scr.height(), keyPrefix + "/screen_hover", screenColor, facing);
+                }
             }
         }
     }
@@ -318,7 +344,7 @@ public class MonitorGridOverlay {
         float x1 = MonitorBlock.SCREEN_X_MAX / 16f;
         float y0 = MonitorBlock.SCREEN_Y_MIN / 16f;
         float y1 = MonitorBlock.SCREEN_Y_MAX / 16f;
-        float lw = (float) (1 / 128f * Config.MONITOR_GRID_LINE_WIDTH.get());
+        float lw = (float) (1 / 256f * Config.MONITOR_GRID_LINE_WIDTH.get());
 
         for (int i = 0; i <= 14; i++) {
             float x = x0 + i / 16f;

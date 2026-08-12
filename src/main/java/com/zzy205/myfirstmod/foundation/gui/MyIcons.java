@@ -1,0 +1,49 @@
+package com.zzy205.myfirstmod.foundation.gui;
+
+import net.createmod.catnip.gui.element.ScreenElement;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.resources.ResourceLocation;
+
+/**
+ * 自定义图标精灵表 — 来自 textures/gui/icons/my_icons.png。
+ * 每格 16×16，按列/行索引。
+ * 
+ * <pre>{@code
+ * // 用法：
+ * ToggleButton btn = new ToggleButton(x, y,
+ *         MyIcons.LOCKED,    // 选中图标
+ *         MyIcons.UNLOCKED,  // 未选中图标
+ *         0x80FF80);
+ * }</pre>
+ */
+public class MyIcons implements ScreenElement {
+
+    public static final ResourceLocation ATLAS =
+            ResourceLocation.fromNamespaceAndPath("ccpe", "textures/gui/my_icons.png");
+
+    private static final int ATLAS_SIZE = 64;
+    private static final int CELL = 16;
+
+    // ═══════ 在这里添加你的图标 ═══════
+    // 参数：new MyIcons(列号, 行号)
+    // 列0行0 = 贴图左上角第一个 16×16 格
+
+    public static final MyIcons CHANNEL = new MyIcons(0, 0);
+    public static final MyIcons SHOW_TOOLTIP = new MyIcons(1, 0);
+
+    // public static final MyIcons LOCKED   = new MyIcons(0, 0);
+    // public static final MyIcons UNLOCKED = new MyIcons(1, 0);
+
+    private final int u;
+    private final int v;
+
+    private MyIcons(int column, int row) {
+        this.u = column * CELL;
+        this.v = row * CELL;
+    }
+
+    @Override
+    public void render(GuiGraphics graphics, int x, int y) {
+        graphics.blit(ATLAS, x, y, u, v, CELL, CELL, ATLAS_SIZE, ATLAS_SIZE);
+    }
+}

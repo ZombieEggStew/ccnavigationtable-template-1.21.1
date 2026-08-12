@@ -10,9 +10,15 @@
 
   "gui.ccpe.monitor_assembly": "Monitor Assembly",
   "gui.ccpe.monitor.module_info": "%s at (%s, %s) size %s×%s",
+  "gui.ccpe.module_config": "Module Config",
+  "gui.ccpe.module_config.title": "%s #%s",
+  "gui.ccpe.module_config.done": "Done",
 
-  "module.ccpe.button_1": "Button Module (1×1)",
-  "module.ccpe.button_2": "Button Module (2×2)",
+  "module.ccpe.button_1": "Small Button",
+  "module.ccpe.button_2": "Medium Button",
+  "module.ccpe.toggle_switch": "Toggle Switch",
+  "module.ccpe.knob": "Knob",
+  "module.ccpe.screen": "Screen",
   "item.ccpe.module_button_1": "Button Module (1×1)",
   "item.ccpe.module_button_2": "Button Module (2×2)",
   "item.ccpe.module_toggle_switch": "Toggle Switch (1×1)",

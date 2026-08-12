@@ -10,13 +10,20 @@
 
   "gui.ccpe.monitor_assembly": "仪表装配",
   "gui.ccpe.monitor.module_info": "%s 位于 (%s, %s) 尺寸 %s×%s",
+  "gui.ccpe.module_config": "模块配置",
+  "gui.ccpe.module_config.title": "%s #%s",
+  "gui.ccpe.module_config.done": "完成",
 
-  "module.ccpe.button_1": "按钮元件 (1×1)",
-  "module.ccpe.button_2": "按钮元件 (2×2)",
-  "item.ccpe.module_button_1": "按钮元件 (1×1)",
-  "item.ccpe.module_button_2": "按钮元件 (2×2)",
-  "item.ccpe.module_toggle_switch": "钮子开关 (1×1)",
-  "item.ccpe.module_knob": "旋钮 (2×2)",
+  "module.ccpe.button_1": "小型按钮",
+  "module.ccpe.button_2": "中型按钮",
+  "module.ccpe.toggle_switch": "钮子开关",
+  "module.ccpe.knob": "旋钮",
+  "module.ccpe.screen": "屏幕",
+
+  "item.ccpe.module_button_1": "按钮模块(1×1)",
+  "item.ccpe.module_button_2": "按钮模块 (2×2)",
+  "item.ccpe.module_toggle_switch": "开关模块 (1×1)",
+  "item.ccpe.module_knob": "旋钮模块 (2×2)",
   "item.ccpe.module_screen": "屏幕模块",
 
   "gui.ccpe.redstone_transceiver": "红石收发器",
