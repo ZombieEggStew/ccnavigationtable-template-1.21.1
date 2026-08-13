@@ -20,7 +20,6 @@ public final class ModuleConfigSections {
 
     static {
         REGISTRY.put(ModuleType.BUTTON_1X1, ButtonConfigSection::new);
-        REGISTRY.put(ModuleType.BUTTON_2X2, ButtonConfigSection::new);
         // TOGGLE_SWITCH / KNOB：暂无特殊设置，走 Empty
     }
 

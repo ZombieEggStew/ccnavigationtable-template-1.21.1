@@ -24,13 +24,11 @@
 
 
   "module.ccpe.button_1": "小型按钮",
-  "module.ccpe.button_2": "中型按钮",
   "module.ccpe.toggle_switch": "钮子开关",
   "module.ccpe.knob": "旋钮",
   "module.ccpe.screen": "屏幕",
 
   "item.ccpe.module_button_1": "按钮模块(1×1)",
-  "item.ccpe.module_button_2": "按钮模块 (2×2)",
   "item.ccpe.module_toggle_switch": "开关模块 (1×1)",
   "item.ccpe.module_knob": "旋钮模块 (2×2)",
   "item.ccpe.module_screen": "屏幕模块",

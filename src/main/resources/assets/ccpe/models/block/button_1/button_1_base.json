@@ -1,0 +1,23 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"1": "ccpe:block/button_1_tex"
+	},
+	"elements": [
+		{
+			"name": "button_1_base",
+			"from": [0, 0, 0.875],
+			"to": [1, 1, 1],
+			"rotation": {"angle": 0, "axis": "x", "origin": [0.5, 0.5, 0.5]},
+			"faces": {
+				"north": {"uv": [16, 9, 8, 8], "rotation": 180, "texture": "#1"},
+				"east": {"uv": [16, 8, 8, 9], "rotation": 90, "texture": "#1"},
+				"south": {"uv": [8, 0, 16, 8], "texture": "#1"},
+				"west": {"uv": [16, 8, 8, 9], "rotation": 270, "texture": "#1"},
+				"up": {"uv": [8, 8, 16, 0], "texture": "#1"},
+				"down": {"uv": [8, 8, 16, 9], "rotation": 180, "texture": "#1"}
+			}
+		}
+	]
+}

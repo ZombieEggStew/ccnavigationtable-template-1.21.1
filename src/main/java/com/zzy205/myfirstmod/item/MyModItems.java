@@ -21,8 +21,6 @@ public class MyModItems {
     // ── 仪表模块物品 ──
     public static final DeferredItem<Item> MODULE_BUTTON_1 = MyItems.register(
             "module_button_1", () -> new Item(new Item.Properties()));
-    public static final DeferredItem<Item> MODULE_BUTTON_2 = MyItems.register(
-            "module_button_2", () -> new Item(new Item.Properties()));
     public static final DeferredItem<Item> MODULE_TOGGLE_SWITCH = MyItems.register(
             "module_toggle_switch", () -> new Item(new Item.Properties()) {
                 @Override

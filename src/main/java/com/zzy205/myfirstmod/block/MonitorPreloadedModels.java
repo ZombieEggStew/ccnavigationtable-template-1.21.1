@@ -27,6 +27,8 @@ public class MonitorPreloadedModels {
 
     public static final String TOGGLE_LEVER = "toggle_lever";
     public static final String KNOB_HANDLE = "knob_handle";
+    public static final String BUTTON_1_HEAD = "button_1_head";
+    public static final String BUTTON_1_INDICATOR = "button_1_indicator";
 
     // 屏幕 9 宫格部件（单一 corner / edge / center 模型 + 代码旋转）
     public static final String SCREEN_CORNER = "screen_corner";
@@ -34,12 +36,13 @@ public class MonitorPreloadedModels {
     public static final String SCREEN_CENTER = "screen_center";
 
     static {
-        MAIN_LOC.put(ModuleType.BUTTON_1X1, rl("block/button_1"));
-        MAIN_LOC.put(ModuleType.BUTTON_2X2, rl("block/button_2"));
+        MAIN_LOC.put(ModuleType.BUTTON_1X1, rl("block/button_1/button_1_base"));
         MAIN_LOC.put(ModuleType.TOGGLE_SWITCH, rl("block/toggle/toggle_base"));
         MAIN_LOC.put(ModuleType.KNOB, rl("block/knob_1/knob_1_base"));
         EXTRA_LOC.put(TOGGLE_LEVER, rl("block/toggle/toggle"));
         EXTRA_LOC.put(KNOB_HANDLE, rl("block/knob_1/knob_1"));
+        EXTRA_LOC.put(BUTTON_1_HEAD, rl("block/button_1/button_1_head"));
+        EXTRA_LOC.put(BUTTON_1_INDICATOR, rl("block/button_1/button_1_indicator"));
         EXTRA_LOC.put(SCREEN_CORNER, rl("block/screen/screen_corner"));
         EXTRA_LOC.put(SCREEN_EDGE,   rl("block/screen/screen_edge"));
         EXTRA_LOC.put(SCREEN_CENTER, rl("block/screen/screen_center"));

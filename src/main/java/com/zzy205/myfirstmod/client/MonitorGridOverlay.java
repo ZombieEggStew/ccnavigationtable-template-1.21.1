@@ -43,6 +43,7 @@ public class MonitorGridOverlay {
 
     private static final int KNOB_SEND_INTERVAL = 2;
     private static final float KNOB_SOUND_STEP = 12f; // 每旋转多少度播放一次音效
+    private static final float GRID_LINE_OFFSET = 0.06f;
 
     /**
      * 单个 Monitor 的客户端交互状态。
@@ -208,6 +209,7 @@ public class MonitorGridOverlay {
         // 屏幕放置模式 / 手持扳手时不触发按钮/钮子/旋钮交互（扳手直接拆卸模块）
         if (!holdingScreen && !holdingWrench && !interact.screenPlacing) {
         boolean isToggle = hoveredModule != null && hoveredModule.type() == ModuleType.TOGGLE_SWITCH;
+        boolean isKnob = hoveredModule != null && hoveredModule.type() == ModuleType.KNOB;
 
         if (hoveredModule != null && useDown && heldType == null && !interact.knobDragging) {
             if (isToggle) {
@@ -215,7 +217,7 @@ public class MonitorGridOverlay {
                     PacketDistributor.sendToServer(new ModulePressPayload(pos, hoveredModule.id(), true));
                     interact.toggleFiredId = hoveredModule.id();
                 }
-            } else if (interact.pressingModuleId < 0) {
+            } else if (!isKnob && interact.pressingModuleId < 0) {
                 PacketDistributor.sendToServer(new ModulePressPayload(pos, hoveredModule.id(), true));
                 interact.pressingModuleId = hoveredModule.id();
             }
@@ -346,7 +348,7 @@ public class MonitorGridOverlay {
     // ── 网格线 ──
 
     private static void drawGridLines(Outliner o, BlockPos pos, Direction f, String keyPrefix) {
-        float z = MonitorBlock.SCREEN_Z / 16f + 0.05f;
+        float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;
         float x0 = MonitorBlock.SCREEN_X_MIN / 16f;
         float x1 = MonitorBlock.SCREEN_X_MAX / 16f;
         float y0 = MonitorBlock.SCREEN_Y_MIN / 16f;
@@ -375,7 +377,7 @@ public class MonitorGridOverlay {
         float y0 = MonitorBlock.SCREEN_Y_MIN / 16f + gy / 16f;
         float x1 = x0 + w / 16f;
         float y1 = y0 + h / 16f;
-        float z = MonitorBlock.SCREEN_Z / 16f + 0.05f;
+        float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;
         float lw = (float) (1 / 128f * Config.MONITOR_OUTLINE_LINE_WIDTH.get());
 
         Vec3 p00 = world(pos, x0, y0, z, f);

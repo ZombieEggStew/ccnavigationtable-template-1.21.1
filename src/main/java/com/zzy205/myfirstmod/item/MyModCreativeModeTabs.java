@@ -28,7 +28,6 @@ public class MyModCreativeModeTabs {
                 // output.accept(MyModBlocks.flight_console);
                 output.accept(MyModBlocks.monitor);
                 output.accept(MyModItems.MODULE_BUTTON_1);
-                output.accept(MyModItems.MODULE_BUTTON_2);
                 output.accept(MyModItems.MODULE_TOGGLE_SWITCH);
                 output.accept(MyModItems.MODULE_KNOB);
                 output.accept(MyModItems.MODULE_SCREEN);

@@ -93,6 +93,8 @@ public class MonitorBlockEntity extends BlockEntity {
         gridState.press(id);
         setChanged();
         if (level != null && !level.isClientSide) {
+            level.playSound(null, worldPosition, SoundEvents.WOODEN_BUTTON_CLICK_ON,
+                    SoundSource.BLOCKS, 0.2f, 0.5f);
             syncGridToClients();
         }
     }
@@ -102,6 +104,8 @@ public class MonitorBlockEntity extends BlockEntity {
         gridState.release(id);
         setChanged();
         if (level != null && !level.isClientSide) {
+            level.playSound(null, worldPosition, SoundEvents.WOODEN_BUTTON_CLICK_OFF,
+                    SoundSource.BLOCKS, 0.2f, 0.5f);
             syncGridToClients();
         }
     }

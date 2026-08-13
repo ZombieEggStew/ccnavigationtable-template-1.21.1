@@ -23,12 +23,10 @@
   "gui.ccpe.module_config.show_tooltip_off": "Show tooltip text: OFF",
 
   "module.ccpe.button_1": "Small Button",
-  "module.ccpe.button_2": "Medium Button",
   "module.ccpe.toggle_switch": "Toggle Switch",
   "module.ccpe.knob": "Knob",
   "module.ccpe.screen": "Screen",
   "item.ccpe.module_button_1": "Button Module (1×1)",
-  "item.ccpe.module_button_2": "Button Module (2×2)",
   "item.ccpe.module_toggle_switch": "Toggle Switch (1×1)",
   "item.ccpe.module_knob": "Knob (2×2)",
   "item.ccpe.module_screen": "Screen Module",

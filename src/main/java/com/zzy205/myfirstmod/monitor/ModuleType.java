@@ -9,7 +9,6 @@ import org.jetbrains.annotations.Nullable;
 public enum ModuleType {
 
     BUTTON_1X1("button_1", 1, 1),
-    BUTTON_2X2("button_2", 2, 2),
     TOGGLE_SWITCH("toggle_switch", 1, 1),
     KNOB("knob", 2, 2),
     ;

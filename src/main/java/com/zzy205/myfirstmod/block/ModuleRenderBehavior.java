@@ -3,12 +3,15 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
+import com.simibubi.create.foundation.render.RenderTypes;
 import com.zzy205.myfirstmod.monitor.ModuleType;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.neoforged.neoforge.client.model.data.ModelData;
 
@@ -25,9 +28,7 @@ public abstract class ModuleRenderBehavior {
     private static final Map<ModuleType, ModuleRenderBehavior> REGISTRY = new EnumMap<>(ModuleType.class);
 
     static {
-        var button = new ButtonBehavior();
-        REGISTRY.put(ModuleType.BUTTON_1X1, button);
-        REGISTRY.put(ModuleType.BUTTON_2X2, button);
+        REGISTRY.put(ModuleType.BUTTON_1X1, new ButtonBehavior(MonitorPreloadedModels.BUTTON_1_HEAD, MonitorPreloadedModels.BUTTON_1_INDICATOR));
         REGISTRY.put(ModuleType.TOGGLE_SWITCH, new ToggleBehavior());
         REGISTRY.put(ModuleType.KNOB, new KnobBehavior());
     }
@@ -69,9 +70,72 @@ public abstract class ModuleRenderBehavior {
             consumer.putBulkData(pose, q, 1, 1, 1, 1, light, OverlayTexture.NO_OVERLAY);
     }
 
+    /** 带顶点色与自定义光照的模型渲染（用于发光部件：可指定颜色 + FULL_BRIGHT） */
+    protected static void renderModelColored(PoseStack ps, VertexConsumer consumer, BakedModel model,
+                                             float r, float g, float b, float a, int light, int overlay) {
+        var pose = ps.last();
+        for (Direction dir : Direction.values()) {
+            for (var q : model.getQuads(null, dir, RANDOM, ModelData.EMPTY, null))
+                consumer.putBulkData(pose, q, r, g, b, a, light, overlay);
+        }
+        for (var q : model.getQuads(null, null, RANDOM, ModelData.EMPTY, null))
+            consumer.putBulkData(pose, q, r, g, b, a, light, overlay);
+    }
+
     // ── 默认：按钮行为 ──
 
-    public static class ButtonBehavior extends ModuleRenderBehavior {}
+    public static class ButtonBehavior extends ModuleRenderBehavior {
+        private static final float PRESS_DEPTH = 0.2f;
+
+        private final String headKey;      // 可空：独立按钮主体（按下凹陷）
+        private final String indicatorKey; // 可空：发光灯带
+
+        public ButtonBehavior() { this(MonitorPreloadedModels.BUTTON_1_HEAD, MonitorPreloadedModels.BUTTON_1_INDICATOR); }
+
+        public ButtonBehavior(String headKey, String indicatorKey) {
+            this.headKey = headKey;
+            this.indicatorKey = indicatorKey;
+        }
+
+        /** 有独立 head 时主模型（底座）不凹陷，凹陷由 head/indicator 在 renderExtra 里自行处理 */
+        @Override public boolean usePressDepth() { return headKey == null; }
+
+        /** 按下动画速度：每帧逼近目标的比例，值越大越快（默认 0.1） */
+        @Override public float animPressSpeed() { return 0.3f; }
+
+        @Override public float animReleaseSpeed() { return 0.3f; }
+
+        @Override
+        public void renderExtra(PoseStack ps, MultiBufferSource buffer, float anim, int light, int overlay) {
+            // ① 按钮主体：按下沿 z 轴凹陷
+            if (headKey != null) {
+                BakedModel head = MonitorPreloadedModels.getExtra(headKey);
+                if (head != null) {
+                    ps.pushPose();
+                    ps.translate(0, 0, PRESS_DEPTH * anim / 16f);
+                    renderModel(ps, buffer.getBuffer(Sheets.solidBlockSheet()), head, light, overlay);
+                    ps.popPose();
+                }
+            }
+
+            // ② 灯带：绿色渐变荧光，跟随按钮主体一起凹陷
+            if (indicatorKey != null && anim > 0.01f) {
+                BakedModel indicator = MonitorPreloadedModels.getExtra(indicatorKey);
+                if (indicator != null) {
+                    ps.pushPose();
+                    if (headKey != null) ps.translate(0, 0, PRESS_DEPTH * anim / 16f);
+                    // 绿色渐变：暗绿 → 亮绿（仿电源指示灯），anim 已在 MonitorRenderer 平滑插值
+                    float r = Mth.lerp(anim, 0.03f, 0.22f);
+                    float g = Mth.lerp(anim, 0.18f, 1.00f);
+                    float b = Mth.lerp(anim, 0.05f, 0.36f);
+                    // FULL_BRIGHT 不受环境光；additive 加法混合 = 荧光；顶点色随按下变亮
+                    renderModelColored(ps, buffer.getBuffer(RenderTypes.additive()), indicator,
+                            r, g, b, 1f, LightTexture.FULL_BRIGHT, overlay);
+                    ps.popPose();
+                }
+            }
+        }
+    }
 
     // ── 钮子开关 ──
 
