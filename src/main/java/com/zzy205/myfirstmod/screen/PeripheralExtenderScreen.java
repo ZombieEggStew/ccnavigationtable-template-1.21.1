@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.screen;
 
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
+import com.zzy205.myfirstmod.channel.ChannelScrollHelper;
 import com.zzy205.myfirstmod.network.SensorFilterPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -364,16 +365,7 @@ public class PeripheralExtenderScreen extends AbstractContainerScreen<Peripheral
         // 数值区域：±1，Shift=±10，跳过已被其他传感器占用的频道
         if (mouseX >= valueHitX && mouseX <= valueHitX + VALUE_HIT_W) {
             int jump = hasShiftDown() ? 10 : 1;
-            int newValue = scrolledValue + dir * jump;
-            if (newValue < 0) newValue = 0;
-            if (newValue > 9999) newValue = 9999;
-            // 跳过已被其他传感器占用的频道
-            newValue = skipOccupiedChannels(newValue, dir);
-            // 边界钳位后再次跳占，防止钳位值恰好被占用
-            if (newValue < 0) newValue = skipOccupiedChannels(0, 1);
-            if (newValue > 9999) newValue = skipOccupiedChannels(9999, -1);
-            if (newValue < 0) newValue = 0;
-            if (newValue > 9999) newValue = 9999;
+            int newValue = ChannelScrollHelper.next(scrolledValue, dir, jump, getMyChannel(), getOccupiedChannelsSnapshot());
             if (newValue != scrolledValue) {
                 scrolledValue = newValue;
                 playScrollSound();
@@ -566,23 +558,6 @@ public class PeripheralExtenderScreen extends AbstractContainerScreen<Peripheral
 
     // ════════════════ 频道滚动：跳过已占用频道 ════════════════
 
-    /**
-     * 以当前传感器自己的频道号为基准，跳过已被其他传感器占用的频道。
-     * @param value    当前值
-     * @param dir      滚动方向：1=增大, -1=减小
-     * @return 跳过占用频道后的值
-     */
-    private int skipOccupiedChannels(int value, int dir) {
-        int myChannel = getMyChannel();
-        int safety = 0;
-        while (safety < 10000 && isOccupiedByOther(value, myChannel)) {
-            value += dir;
-            if (value < 0 || value > 9999) break;
-            safety++;
-        }
-        return value;
-    }
-
     /** 当前传感器自己的频道号（优先菜单 extraData，fallback 客户端 BE） */
     private int getMyChannel() {
         int menuChannel = menu.getSensorChannel();
@@ -596,25 +571,17 @@ public class PeripheralExtenderScreen extends AbstractContainerScreen<Peripheral
         return -1;
     }
 
-    /** 检查频道是否被"其他"传感器占用（优先菜单 extraData，fallback 客户端 BE） */
-    private boolean isOccupiedByOther(int channel, int myChannel) {
-        if (channel == myChannel) return false;
-        // 优先从菜单 extraData（包含服务端同时发来的快照）
+    /** 获取已占用频道快照（优先菜单 extraData，fallback 客户端 BE）。 */
+    private int[] getOccupiedChannelsSnapshot() {
         int[] menuOccupied = menu.getOccupiedChannels();
-        if (menuOccupied.length > 0) {
-            for (int ch : menuOccupied) {
-                if (ch == channel) return true;
-            }
-            return false;
-        }
-        // Fallback: 客户端 BE（可能由 updateTag 后续同步更新）
+        if (menuOccupied.length > 0) return menuOccupied;
         if (this.minecraft != null && this.minecraft.level != null) {
             BlockEntity be = this.minecraft.level.getBlockEntity(menu.getSensorPos());
             if (be instanceof PeripheralExtenderBlockEntity sensorBE) {
-                return sensorBE.isChannelOccupiedByOther(channel);
+                return sensorBE.getOccupiedChannels();
             }
         }
-        return false;
+        return new int[0];
     }
 
     // ════════════════ NBT 树节点 ════════════════

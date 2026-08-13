@@ -24,13 +24,17 @@ public class GridState {
     public static final int SCREEN_CELL_MARKER = -2;
     /** 屏幕最小尺寸（格） */
     public static final int SCREEN_MIN_SIZE = 2;
+    /** 模块 ID 范围（同一 monitor 内唯一） */
+    public static final int MODULE_ID_MIN = 0;
+    public static final int MODULE_ID_MAX = 9999;
 
     private final int[][] grid = new int[GRID_WIDTH][GRID_HEIGHT];
     private final Map<Integer, MonitorModule> modules = new LinkedHashMap<>();
     private final Set<Integer> pressedModules = new HashSet<>();
     /** 旋钮模块的角度（度），moduleId → Y 轴旋转角度 */
     private final Map<Integer, Float> knobAngles = new java.util.HashMap<>();
-    private int nextId = 0;
+    /** 每个模块的额外配置（tooltip 文本 + 各类型专属键），moduleId → config */
+    private final Map<Integer, CompoundTag> moduleConfigs = new java.util.HashMap<>();
 
     /** 屏幕区域列表（一个 Monitor 可放置多个屏幕） */
     private final List<ScreenRegion> screenRegions = new ArrayList<>();
@@ -56,6 +60,16 @@ public class GridState {
 
     public Map<Integer, MonitorModule> getAllModules() {
         return modules;
+    }
+
+    /** 获取模块的额外配置（无则返回空 tag）。 */
+    public CompoundTag getModuleConfig(int moduleId) {
+        return moduleConfigs.getOrDefault(moduleId, new CompoundTag());
+    }
+
+    /** 设置模块的额外配置。 */
+    public void setModuleConfig(int moduleId, CompoundTag config) {
+        if (modules.containsKey(moduleId)) moduleConfigs.put(moduleId, config.copy());
     }
 
     public boolean isEmpty() {
@@ -84,10 +98,11 @@ public class GridState {
         return true;
     }
 
-    /** 放置模块，返回生成的 moduleId；失败返回 -1。 */
+    /** 放置模块，自动分配最小空闲 moduleId；失败返回 -1。 */
     public int tryPlace(int x, int y, ModuleType type) {
         if (!canPlace(x, y, type.width, type.height)) return -1;
-        int id = nextId++;
+        int id = findFreeId();
+        if (id < 0) return -1;
         MonitorModule mod = new MonitorModule(id, type, x, y);
         modules.put(id, mod);
         for (int dx = 0; dx < type.width; dx++) {
@@ -98,12 +113,63 @@ public class GridState {
         return id;
     }
 
+    /** 找到最小空闲 ID（0..9999，模块与屏幕共用命名空间）。 */
+    private int findFreeId() {
+        for (int id = MODULE_ID_MIN; id <= MODULE_ID_MAX; id++) {
+            if (!isIdUsed(id)) return id;
+        }
+        return -1;
+    }
+
+    /** 判断 ID 是否已被模块或屏幕占用。 */
+    private boolean isIdUsed(int id) {
+        if (modules.containsKey(id)) return true;
+        for (var sr : screenRegions) {
+            if (sr.id() == id) return true;
+        }
+        return false;
+    }
+
+    /** 本 monitor 内所有控件（模块 + 屏幕）占用的 ID。 */
+    public int[] getOccupiedIds() {
+        Set<Integer> ids = new HashSet<>(modules.keySet());
+        for (var sr : screenRegions) ids.add(sr.id());
+        return ids.stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    /** 修改模块 ID（同一 monitor 内唯一）。成功返回 true。 */
+    public boolean trySetId(int oldId, int newId) {
+        if (oldId == newId) return true;
+        MonitorModule mod = modules.get(oldId);
+        if (mod == null) return false;
+        if (newId < MODULE_ID_MIN || newId > MODULE_ID_MAX) return false;
+        if (isIdUsed(newId)) return false;
+
+        modules.remove(oldId);
+        modules.put(newId, new MonitorModule(newId, mod.type(), mod.gridX(), mod.gridY()));
+
+        for (int x = 0; x < GRID_WIDTH; x++) {
+            for (int y = 0; y < GRID_HEIGHT; y++) {
+                if (grid[x][y] == oldId) grid[x][y] = newId;
+            }
+        }
+
+        if (pressedModules.remove(oldId)) pressedModules.add(newId);
+        Float ka = knobAngles.remove(oldId);
+        if (ka != null) knobAngles.put(newId, ka);
+        CompoundTag cfg = moduleConfigs.remove(oldId);
+        if (cfg != null) moduleConfigs.put(newId, cfg);
+
+        return true;
+    }
+
     /** 移除模块，返回被移除的模块信息；不存在返回 null。 */
     public MonitorModule tryRemove(int moduleId) {
         MonitorModule mod = modules.remove(moduleId);
         if (mod == null) return null;
         pressedModules.remove(moduleId);
         knobAngles.remove(moduleId);
+        moduleConfigs.remove(moduleId);
         for (int dx = 0; dx < mod.getWidth(); dx++) {
             for (int dy = 0; dy < mod.getHeight(); dy++) {
                 grid[mod.gridX() + dx][mod.gridY() + dy] = -1;
@@ -148,7 +214,7 @@ public class GridState {
     // ── 屏幕区域 ──
 
     /** 屏幕矩形。min 为左上角（较小坐标），max 为右下角（较大坐标）。 */
-    public record ScreenRegion(int minX, int minY, int maxX, int maxY) {
+    public record ScreenRegion(int id, int minX, int minY, int maxX, int maxY, String text) {
         public int width()  { return maxX - minX + 1; }
         public int height() { return maxY - minY + 1; }
     }
@@ -166,24 +232,52 @@ public class GridState {
         return null;
     }
 
+    /** 按 ID 查找屏幕，未找到返回 null。 */
+    @javax.annotation.Nullable
+    public ScreenRegion getScreenById(int id) {
+        for (var sr : screenRegions)
+            if (sr.id() == id) return sr;
+        return null;
+    }
+
+    /** 更新屏幕的 ID 与文本（同一 monitor 内 ID 唯一）。成功返回 true。 */
+    public boolean updateScreen(int oldId, int newId, String text) {
+        int idx = -1;
+        for (int i = 0; i < screenRegions.size(); i++) {
+            if (screenRegions.get(i).id() == oldId) { idx = i; break; }
+        }
+        if (idx < 0) return false;
+
+        ScreenRegion sr = screenRegions.get(idx);
+        if (newId != oldId) {
+            if (newId < MODULE_ID_MIN || newId > MODULE_ID_MAX) return false;
+            if (isIdUsed(newId)) return false;
+        }
+        screenRegions.set(idx, new ScreenRegion(newId, sr.minX(), sr.minY(), sr.maxX(), sr.maxY(), text));
+        return true;
+    }
+
     /**
-     * 新增一个屏幕（不再替换已有屏幕）。
-     * @return true 成功，false 失败
+     * 新增一个屏幕（不再替换已有屏幕），自动分配最小空闲 ID。
+     * @return 新屏幕 ID，失败返回 -1
      */
-    public boolean addScreen(int x1, int y1, int x2, int y2) {
+    public int addScreen(int x1, int y1, int x2, int y2) {
         int minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
         int minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
 
-        if (minX < 0 || maxX >= GRID_WIDTH || minY < 0 || maxY >= GRID_HEIGHT) return false;
-        if (maxX - minX + 1 < SCREEN_MIN_SIZE || maxY - minY + 1 < SCREEN_MIN_SIZE) return false;
-        if (!canPlaceScreen(minX, minY, maxX, maxY)) return false;
+        if (minX < 0 || maxX >= GRID_WIDTH || minY < 0 || maxY >= GRID_HEIGHT) return -1;
+        if (maxX - minX + 1 < SCREEN_MIN_SIZE || maxY - minY + 1 < SCREEN_MIN_SIZE) return -1;
+        if (!canPlaceScreen(minX, minY, maxX, maxY)) return -1;
 
-        ScreenRegion sr = new ScreenRegion(minX, minY, maxX, maxY);
+        int id = findFreeId();
+        if (id < 0) return -1;
+
+        ScreenRegion sr = new ScreenRegion(id, minX, minY, maxX, maxY, "");
         screenRegions.add(sr);
         for (int x = minX; x <= maxX; x++)
             for (int y = minY; y <= maxY; y++)
                 grid[x][y] = SCREEN_CELL_MARKER;
-        return true;
+        return id;
     }
 
     /** 移除指定格子所属的屏幕。成功返回 true。 */
@@ -212,7 +306,6 @@ public class GridState {
 
     public CompoundTag save(HolderLookup.Provider registries) {
         CompoundTag tag = new CompoundTag();
-        tag.putInt("nextId", nextId);
 
         ListTag modList = new ListTag();
         for (MonitorModule mod : modules.values()) {
@@ -224,6 +317,8 @@ public class GridState {
             modTag.putBoolean("pressed", pressedModules.contains(mod.id()));
             float ka = knobAngles.getOrDefault(mod.id(), 0f);
             if (ka != 0f) modTag.putFloat("knobAngle", ka);
+            CompoundTag cfg = moduleConfigs.get(mod.id());
+            if (cfg != null && !cfg.isEmpty()) modTag.put("config", cfg);
             modList.add(modTag);
         }
         tag.put("modules", modList);
@@ -232,10 +327,12 @@ public class GridState {
         ListTag scrList = new ListTag();
         for (var sr : screenRegions) {
             CompoundTag scrTag = new CompoundTag();
+            scrTag.putInt("id", sr.id());
             scrTag.putInt("minX", sr.minX());
             scrTag.putInt("minY", sr.minY());
             scrTag.putInt("maxX", sr.maxX());
             scrTag.putInt("maxY", sr.maxY());
+            if (!sr.text().isEmpty()) scrTag.putString("text", sr.text());
             scrList.add(scrTag);
         }
         tag.put("screens", scrList);
@@ -247,6 +344,7 @@ public class GridState {
         modules.clear();
         pressedModules.clear();
         knobAngles.clear();
+        moduleConfigs.clear();
         screenRegions.clear();
         for (int x = 0; x < GRID_WIDTH; x++) {
             for (int y = 0; y < GRID_HEIGHT; y++) {
@@ -254,7 +352,6 @@ public class GridState {
             }
         }
 
-        nextId = tag.getInt("nextId");
         ListTag modList = tag.getList("modules", Tag.TAG_COMPOUND);
         for (int i = 0; i < modList.size(); i++) {
             CompoundTag modTag = modList.getCompound(i);
@@ -267,6 +364,7 @@ public class GridState {
             modules.put(id, mod);
             if (modTag.getBoolean("pressed")) pressedModules.add(id);
             if (modTag.contains("knobAngle")) knobAngles.put(id, modTag.getFloat("knobAngle"));
+            if (modTag.contains("config")) moduleConfigs.put(id, modTag.getCompound("config"));
             for (int dx = 0; dx < type.width; dx++) {
                 for (int dy = 0; dy < type.height; dy++) {
                     grid[x + dx][y + dy] = id;
@@ -279,11 +377,13 @@ public class GridState {
             ListTag scrList = tag.getList("screens", Tag.TAG_COMPOUND);
             for (int i = 0; i < scrList.size(); i++) {
                 CompoundTag scrTag = scrList.getCompound(i);
+                int id = scrTag.contains("id") ? scrTag.getInt("id") : findFreeId();
                 int minX = scrTag.getInt("minX");
                 int minY = scrTag.getInt("minY");
                 int maxX = scrTag.getInt("maxX");
                 int maxY = scrTag.getInt("maxY");
-                screenRegions.add(new ScreenRegion(minX, minY, maxX, maxY));
+                String text = scrTag.getString("text");
+                screenRegions.add(new ScreenRegion(id, minX, minY, maxX, maxY, text));
                 for (int x = minX; x <= maxX; x++)
                     for (int y = minY; y <= maxY; y++)
                         grid[x][y] = SCREEN_CELL_MARKER;

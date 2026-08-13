@@ -57,6 +57,8 @@ TOGGLE_SWITCH("toggle_switch", 1, 1),  // name, 宽, 高
 KNOB("knob", 2, 2),
 ```
 
+> 模块放置时自动分配最小空闲 ID（0..9999，单个 monitor 内唯一，与屏幕共用命名空间），**无需再注册频道**。
+
 ### 2. MonitorPreloadedModels 模型烘焙
 ```java
 // src/.../block/MonitorPreloadedModels.java
@@ -228,3 +230,60 @@ ps.mulPose(Axis.YP.rotationDegrees(anim * 270));
 - [ ] `MyModCreativeModeTabs` 选项卡
 - [ ] `models/item/module_<name>.json` 物品栏模型
 - [ ] `lang/zh_cn.json` + `en_us.json`
+- [ ] （可选）专属配置：新建 `<Type>ConfigSection` 并在 `ModuleConfigSections` 注册
+
+---
+
+## 七、模块专属配置 section（统一菜单扩展）
+
+> 每个模块类型可在统一菜单公共区（ID 滚轮 + tooltip 文本）下方挂一个专属配置区。
+> 框架文件：`screen/ModuleConfigSection.java`（接口）、`screen/ModuleConfigSections.java`（工厂注册表）、`screen/ButtonConfigSection.java`（示例）。
+
+### 1. 新建 section 类
+
+```java
+// src/.../screen/<Type>ConfigSection.java
+public class KnobConfigSection implements ModuleConfigSection {
+    private ToggleButton detentToggle;
+
+    @Override
+    public void init(MonitorModuleScreen screen, int y, CompoundTag config) {
+        detentToggle = new ToggleButton(screen.getWinLeft() + 22, y,
+                MyIcons.XXX, MyIcons.XXX, 0x80FF80);
+        detentToggle.setSelected(config.getBoolean("detent"));
+        detentToggle.withCallback(() -> detentToggle.setSelected(!detentToggle.isSelected()));
+        screen.addSectionWidget(detentToggle);   // 必须用这个公开方法添加控件
+    }
+
+    @Override
+    public void save(CompoundTag config) {
+        if (detentToggle != null) config.putBoolean("detent", detentToggle.isSelected());
+    }
+}
+```
+
+### 2. 在注册表登记
+
+```java
+// src/.../screen/ModuleConfigSections.java
+static {
+    REGISTRY.put(ModuleType.KNOB, KnobConfigSection::new);
+}
+```
+
+### 3. 配置读写与存储
+
+- section 自己定义专属键（如上例 `detent`）；公共 `text` 键保留给 tooltip 文本，别占用。
+- 存储：`GridState.moduleConfigs`（moduleId → CompoundTag），NBT 里每个模块的 `config` 子 tag。
+- 改 ID 时 `trySetId` 已自动 re-key `moduleConfigs`，无需额外处理。
+
+### 4. 网络与行为层
+
+- 网络：**无需新包**。菜单关闭时 `MonitorModuleScreen` 用 `ModuleConfigPayload` 一次带 id + text + config 上送，服务端 `applyModuleConfig` 会调 `setModuleConfig`。
+- 行为层读取：交互逻辑里用 `grid.getModuleConfig(id).getBoolean("detent")` 判断。
+
+### 5. 注意事项
+
+- section 实例由工厂**每次新建**（内部持有控件引用），不要做成单例。
+- 屏幕(`name == "screen"`)和未注册类型走 `ModuleConfigSection.Empty`。
+- 菜单窗口目前固定 159 高，section 起始 Y 为 `SECTION_Y_OFFSET = 80`；控件多了再考虑动态高度/滚动。

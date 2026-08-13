@@ -17,6 +17,7 @@ import com.zzy205.myfirstmod.network.ReceiverSyncPayload;
 import com.zzy205.myfirstmod.network.SensorFilterPayload;
 import com.zzy205.myfirstmod.network.SensorNbtPayload;
 import com.zzy205.myfirstmod.network.SyncGridPayload;
+import com.zzy205.myfirstmod.network.ModuleConfigPayload;
 import com.zzy205.myfirstmod.network.ModulePressPayload;
 import com.zzy205.myfirstmod.network.PlaceModulePayload;
 import com.zzy205.myfirstmod.network.RemoveModulePayload;
@@ -196,6 +197,19 @@ public class CCPeripheraExtender {
                     }
             );
 
+            // 客户端→服务端：模块 / 屏幕的 ID 与配置修改
+            registrar.playToServer(
+                    ModuleConfigPayload.TYPE,
+                    ModuleConfigPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.pos());
+                        if (be instanceof MonitorBlockEntity monitorBE) {
+                            monitorBE.applyModuleConfig(payload.name(), payload.oldId(), payload.newId(), payload.config());
+                        }
+                    }
+            );
+
             // 客户端→服务端：放置屏幕（两点矩形选择，可多个共存）
             registrar.playToServer(
                     PlaceScreenPayload.TYPE,
@@ -204,11 +218,11 @@ public class CCPeripheraExtender {
                         var level = ctx.player().level();
                         var be = level.getBlockEntity(payload.pos());
                         if (be instanceof MonitorBlockEntity monitorBE) {
-                            boolean ok = monitorBE.addScreen(
+                            int id = monitorBE.addScreen(
                                     payload.gridX1(), payload.gridY1(),
                                     payload.gridX2(), payload.gridY2()
                             );
-                            if (ok && !ctx.player().isCreative()) {
+                            if (id >= 0 && !ctx.player().isCreative()) {
                                 ctx.player().getMainHandItem().shrink(1);
                             }
                         }

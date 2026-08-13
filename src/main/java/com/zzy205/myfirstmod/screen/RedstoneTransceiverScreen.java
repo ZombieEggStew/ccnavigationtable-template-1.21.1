@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.screen;
 
+import com.zzy205.myfirstmod.channel.ChannelScrollHelper;
 import com.zzy205.myfirstmod.network.ReceiverSyncPayload;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -407,13 +408,7 @@ public class RedstoneTransceiverScreen extends AbstractContainerScreen<RedstoneT
             int dir = scrollY > 0 ? 1 : -1;
             int step = hasShiftDown() ? 10 : 1;
             int oldVal = bannerChannels.get(chIdx);
-            int newVal = oldVal + dir * step;
-            if (newVal < CHANNEL_MIN) newVal = CHANNEL_MIN;
-            if (newVal > CHANNEL_MAX) newVal = CHANNEL_MAX;
-            // 跳过已被占用的频道
-            newVal = skipOccupiedChannels(newVal, dir, oldVal);
-            if (newVal < CHANNEL_MIN) newVal = CHANNEL_MIN;
-            if (newVal > CHANNEL_MAX) newVal = CHANNEL_MAX;
+            int newVal = ChannelScrollHelper.next(oldVal, dir, step, oldVal, getAllOccupiedChannels());
             if (newVal != oldVal) {
                 bannerChannels.set(chIdx, newVal);
                 playClickSound();
@@ -616,34 +611,7 @@ public class RedstoneTransceiverScreen extends AbstractContainerScreen<RedstoneT
 
     /** 找到最小的未被占用的频道号（菜单快照 + 本地 banner 频道合并） */
     private int findFreeChannel() {
-        int[] occupied = getAllOccupiedChannels();
-        int ch = 0;
-        while (true) {
-            boolean blocked = false;
-            for (int oc : occupied) { if (oc == ch) { blocked = true; break; } }
-            if (!blocked) return ch;
-            ch++;
-        }
-    }
-
-    /** 跳过已被其他 receiver 占用的频道（菜单快照 + 本地频道合并，排除自己）。
-     *  若找不到可用频道则返回原值不变。 */
-    private int skipOccupiedChannels(int value, int dir, int myChannel) {
-        int[] occupied = getAllOccupiedChannels();
-        int safety = 0;
-        int candidate = value;
-        while (safety < 10000) {
-            boolean blocked = false;
-            for (int ch : occupied) {
-                if (ch == candidate && ch != myChannel) { blocked = true; break; }
-            }
-            if (!blocked) return candidate;
-            candidate += dir;
-            if (candidate < CHANNEL_MIN || candidate > CHANNEL_MAX) break;
-            safety++;
-        }
-        // 找不到可用频道，保持原频道不变
-        return myChannel;
+        return ChannelScrollHelper.findFree(getAllOccupiedChannels());
     }
 
     // ── 幽灵物品槽 ──

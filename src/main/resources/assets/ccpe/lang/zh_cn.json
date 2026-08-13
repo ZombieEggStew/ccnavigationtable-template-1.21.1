@@ -13,6 +13,15 @@
   "gui.ccpe.module_config": "模块配置",
   "gui.ccpe.module_config.title": "%s #%s",
   "gui.ccpe.module_config.done": "完成",
+  "gui.ccpe.module_config.id_title": "模块 ID",
+  "gui.ccpe.module_config.button_latch": "锁存模式",
+  "gui.ccpe.screen_config.id_title": "屏幕 ID",
+  "gui.ccpe.module_config.text_hint": "输入提示...",
+  "gui.ccpe.module_config.text_title": "文本输入",
+  "gui.ccpe.module_config.text_tip": "鼠标悬停显示的文本",
+  "gui.ccpe.module_config.show_tooltip_on": "显示提示文本：开",
+  "gui.ccpe.module_config.show_tooltip_off": "显示提示文本：关",
+
 
   "module.ccpe.button_1": "小型按钮",
   "module.ccpe.button_2": "中型按钮",

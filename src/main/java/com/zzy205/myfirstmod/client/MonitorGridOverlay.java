@@ -157,13 +157,20 @@ public class MonitorGridOverlay {
 
         boolean useDown = mc.options.keyUse.isDown();
 
-        // ── Shift+右键模块 → 打开配置 GUI（边沿触发）──
+        // ── Shift+右键模块 / 屏幕 → 打开配置 GUI（边沿触发）──
         boolean shiftHeld = player.isShiftKeyDown();
         boolean shiftUseEdge = useDown && shiftHeld && !interact.shiftUseLastDown;
         interact.shiftUseLastDown = useDown && shiftHeld;
 
         if (hoveredModule != null && shiftUseEdge && heldType == null && !holdingScreen) {
-            mc.setScreen(new MonitorModuleScreen(pos, hoveredModule, grid));
+            String text = grid.getModuleConfig(hoveredModule.id()).getString("text");
+            mc.setScreen(new MonitorModuleScreen(pos, grid, hoveredModule.type().name, hoveredModule.id(), text));
+            return;
+        }
+
+        GridState.ScreenRegion screenAt = gp != null ? grid.getScreenAt(gp[0], gp[1]) : null;
+        if (screenAt != null && shiftUseEdge && heldType == null && !holdingScreen) {
+            mc.setScreen(new MonitorModuleScreen(pos, grid, "screen", screenAt.id(), screenAt.text()));
             return;
         }
 
@@ -198,8 +205,8 @@ public class MonitorGridOverlay {
         }
 
         // ── 按钮按下/释放检测 ──
-        // 屏幕放置模式下不触发按钮/钮子/旋钮交互
-        if (!holdingScreen && !interact.screenPlacing) {
+        // 屏幕放置模式 / 手持扳手时不触发按钮/钮子/旋钮交互（扳手直接拆卸模块）
+        if (!holdingScreen && !holdingWrench && !interact.screenPlacing) {
         boolean isToggle = hoveredModule != null && hoveredModule.type() == ModuleType.TOGGLE_SWITCH;
 
         if (hoveredModule != null && useDown && heldType == null && !interact.knobDragging) {
