@@ -28,11 +28,10 @@ public class MyIcons implements ScreenElement {
     // 参数：new MyIcons(列号, 行号)
     // 列0行0 = 贴图左上角第一个 16×16 格
 
-    public static final MyIcons CHANNEL = new MyIcons(0, 0);
+    public static final MyIcons ID = new MyIcons(0, 0);
     public static final MyIcons SHOW_TOOLTIP = new MyIcons(1, 0);
-
-    // public static final MyIcons LOCKED   = new MyIcons(0, 0);
-    // public static final MyIcons UNLOCKED = new MyIcons(1, 0);
+    public static final MyIcons CHANNEL = new MyIcons(2, 0);
+    public static final MyIcons BACKGROUND = new MyIcons(3, 0);
 
     private final int u;
     private final int v;

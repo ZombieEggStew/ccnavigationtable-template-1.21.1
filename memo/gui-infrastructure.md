@@ -9,7 +9,9 @@
 |---|---|---|
 | `HoverTintIconButton` | Create `IconButton` | hover 时用 `graphics.setColor(r,g,b)` 给 BUTTON_HOVER 着色 |
 | `ToggleButton` | `HoverTintIconButton` | selected/unselected 双图标，选中 BUTTON_DOWN + 图标偏移 1px |
+| `ScrollValueBar` | `AbstractWidget` | 滚轮数值输入条：横条背景 + 图标 + 短输入框 + 数值，悬停滚轮修改（Shift 加速、跳过占用） |
 | `MyIcons` | `ScreenElement` | 自绘 64×64 图标精灵表 `textures/gui/icons/my_icons.png`，16×16/格 |
+| `MyUIElements` | `ScreenElement` | 自绘 `textures/gui/gui_2.png` 中的横条/输入框背景元素 |
 
 ## 关键机制
 

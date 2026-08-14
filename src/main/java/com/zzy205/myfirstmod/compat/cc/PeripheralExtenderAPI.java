@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlock;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
@@ -260,14 +261,21 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     @LuaFunction(mainThread = true)
     public final @Nullable Object getPeripheral(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
-        if (sensor == null) return null;
-        BlockEntity be = sensor.getCachedAttachedBE();
-        if (be == null) return null;
-        if (be instanceof IPeripheral p) return p;
-        if (sensor.getLevel() == null) return null;
-        Direction side = getSensorSide(sensor.getBlockState());
-        return sensor.getLevel().getCapability(PeripheralCapability.get(),
-                PeripheralExtenderBlock.getAttachedPos(sensor.getBlockState(), sensor.getBlockPos()), side);
+        if (sensor != null) {
+            BlockEntity be = sensor.getCachedAttachedBE();
+            if (be == null) return null;
+            if (be instanceof IPeripheral p) return p;
+            if (sensor.getLevel() == null) return null;
+            Direction side = getSensorSide(sensor.getBlockState());
+            return sensor.getLevel().getCapability(PeripheralCapability.get(),
+                    PeripheralExtenderBlock.getAttachedPos(sensor.getBlockState(), sensor.getBlockPos()), side);
+        }
+
+        // 显示器频道 → 返回显示器自身的 CC:T 外设
+        MonitorBlockEntity monitor = MonitorRegistry.get(channel);
+        if (monitor != null) return monitor.getPeripheral();
+
+        return null;
     }
 
     /**

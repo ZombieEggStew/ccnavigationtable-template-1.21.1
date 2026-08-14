@@ -82,6 +82,7 @@ com.zzy205.myfirstmod
 | `monitor/GridState.java` | 14×12 网格的核心状态；模块/屏幕占用、ID、按压状态、旋钮角度、配置、NBT 序列化 | 任何 Monitor 数据结构或状态转移 |
 | `monitor/MonitorModule.java` | 不可变模块记录：ID、类型和网格坐标 |
 | `monitor/ModuleType.java` | 模块类型、尺寸、名称和物品映射 | 新模块类型、尺寸或物品关联 |
+| `monitor/MonitorBackground.java` | Monitor 背景选项（五个字符串）与默认值 | 背景选项/默认值变更 |
 | `block/ModuleRenderBehavior.java` | 按模块类型选择渲染行为；包含 Button、Toggle、Knob 行为 | 模块动态渲染、按压/旋钮视觉状态 |
 
 重要约束：模块和屏幕在同一 Monitor 内共享 `0..9999` ID 命名空间。`GridState.trySetId` 修改 ID 时必须同步网格、按压状态、旋钮角度和模块配置。
@@ -92,13 +93,16 @@ com.zzy205.myfirstmod
 |---|---|
 | `screen/MyModMenus.java` | 菜单类型注册 |
 | `screen/MonitorModuleScreen.java` | Monitor 模块/屏幕通用配置界面；汇总公共配置和类型专属配置后发送 `ModuleConfigPayload` |
+| `screen/MonitorMenuScreen.java` | Monitor 自身菜单（蹲下+右键空白处打开）；背景 + bar_id 滚轮选择全局频道，无 bar_tooltip |
 | `screen/ModuleConfigSection.java` | 模块专属配置区接口及空实现 |
 | `screen/ModuleConfigSections.java` | 按模块名称创建配置区的工厂；每次必须创建新实例 |
 | `screen/ButtonConfigSection.java` | Button 类型配置区 |
 | `screen/LoadModeHelper.java` | GUI 中负载模式的显示和选择辅助逻辑 |
 | `foundation/gui/MyIcons.java` | Create 风格 GUI 图标定义 |
+| `foundation/gui/MyUIElements.java` | GUI 背景元素（横条/输入框背景等）定义 |
 | `foundation/gui/widget/HoverTintIconButton.java` | 带悬停染色的图标按钮 |
 | `foundation/gui/widget/ToggleButton.java` | 可选中状态的图标切换按钮 |
+| `foundation/gui/widget/ScrollValueBar.java` | 滚轮数值输入条（频道/ID 滚轮选择） |
 
 GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送 `ModuleConfigPayload` → `CCPeripheraExtender` 在服务端调用 `MonitorBlockEntity.applyModuleConfig` → `GridState` 保存。
 
@@ -116,6 +120,8 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `network/ModuleConfigPayload.java` | 客户端 → 服务端 | 修改模块/屏幕 ID 和配置 |
 | `network/PlaceScreenPayload.java` | 客户端 → 服务端 | 请求放置矩形屏幕 |
 | `network/RemoveScreenPayload.java` | 客户端 → 服务端 | 请求移除屏幕 |
+| `network/MonitorChannelPayload.java` | 客户端 → 服务端 | 保存 Monitor 全局频道号 |
+| `network/MonitorBackgroundPayload.java` | 客户端 → 服务端 | 保存 Monitor 背景选项 |
 | `network/SensorFilterPayload.java` | 客户端 → 服务端 | 保存传感器频道和负载模式 |
 | `network/SensorNbtPayload.java` | 服务端 → 客户端 | 推送传感器缓存 NBT |
 | `network/ReceiverSyncPayload.java` | 客户端 → 服务端 | 保存 Receiver 数据和负载模式 |
@@ -127,13 +133,18 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `channel/ChannelRegistry.java` | 按频道登记、查询和释放外围设备；处理频道占用关系 |
 | `channel/ChannelScrollHelper.java` | GUI 滚轮选择频道/ID，跳过已占用值并支持 Shift 步进 |
 
+传感器与显示器共享同一全局频道命名空间（`compat/cc/GlobalChannelRegistry`），保证频道全局唯一。
+
 ## CC:Tweaked 与其他兼容层
 
 | 文件 | 职责 |
 |---|---|
 | `compat/cc/CCPeripheralExtenderSetup.java` | 注册 CC:Tweaked Lua API |
 | `compat/cc/PeripheralExtenderAPI.java` | Peripheral Extender 的 Lua 全局 API |
-| `compat/cc/PeripheralExtenderRegistry.java` | Peripheral Extender 的频道登记表 |
+| `compat/cc/GlobalChannelRegistry.java` | 传感器+显示器共享的全局频道注册表 |
+| `compat/cc/PeripheralExtenderRegistry.java` | 传感器频道登记表（委托全局注册表） |
+| `compat/cc/MonitorRegistry.java` | Monitor 频道登记表（委托全局注册表） |
+| `compat/cc/MonitorPeripheral.java` | Monitor 的 `IPeripheral` 实现（空外设） |
 | `compat/cc/RedstoneTransceiverPeripheral.java` | Redstone Transceiver 的 `IPeripheral` 实现 |
 | `compat/cc/RedstoneTransceiverRegistry.java` | Receiver 频道和外设实例登记 |
 | `compat/create/CreateRedstoneCompat.java` | Create 红石链接兼容，建立虚拟红石连接 |

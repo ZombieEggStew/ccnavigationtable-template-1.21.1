@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.screen;
 
 import com.zzy205.myfirstmod.channel.ChannelScrollHelper;
 import com.zzy205.myfirstmod.foundation.gui.MyIcons;
+import com.zzy205.myfirstmod.foundation.gui.MyUIElements;
 import com.zzy205.myfirstmod.foundation.gui.widget.HoverTintIconButton;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.network.ModuleConfigPayload;
@@ -172,14 +173,13 @@ public class MonitorModuleScreen extends Screen {
 
         bar_id_y = currentY;
         // ── 横条：背景 + 输入框背景 ──
-        renderBar_bg(g, winLeft, currentY);
+        MyUIElements.BAR_BACKGROUND.render(g, winLeft, currentY);
 
         // 左侧 16×16 图标
-        MyIcons.CHANNEL.render(g, winLeft + 22, currentY + 6);
+        MyIcons.ID.render(g, winLeft + 22, currentY + 6);
 
         // 输入短框背景
-        g.blit(TEXTURE, winLeft, currentY + 5,
-                INPUT_BG_TEX_X, INPUT_BG_TEX_Y, INPUT_BG_TEX_W, INPUT_BG_TEX_H, TEX_W, TEX_H);
+        MyUIElements.SCROLL_INPUT_SHORT.render(g, winLeft, currentY + 5);
 
         // ID 数值（居中于输入框内）
         String valueText = String.valueOf(idValue);
@@ -191,19 +191,14 @@ public class MonitorModuleScreen extends Screen {
 
     public int renderBarTooltipText(GuiGraphics g, int currentY) {
         //背景
-        renderBar_bg(g, winLeft, currentY);
+        MyUIElements.BAR_BACKGROUND.render(g, winLeft, currentY);
 
         MyIcons.SHOW_TOOLTIP.render(g, winLeft + 22, currentY + 6);
 
         // 输入长框背景
-        g.blit(TEXTURE, winLeft, currentY + 5,
-                INPUT_BG_LONG_TEX_X, INPUT_BG_LONG_TEX_Y, INPUT_BG_TEX_W, INPUT_BG_TEX_H, TEX_W, TEX_H);
-        return currentY + BAR_TEX_H;
-    }
+        MyUIElements.INPUT_LONG.render(g, winLeft, currentY + 5);
 
-    public void renderBar_bg(GuiGraphics g , int x, int y) {
-        // 横条底层背景
-        g.blit(TEXTURE, x, y, BAR_TEX_X, BAR_TEX_Y, BAR_TEX_W, BAR_TEX_H, TEX_W, TEX_H);
+        return currentY + BAR_TEX_H;
     }
 
     /** ID 滚轮命中检测 */

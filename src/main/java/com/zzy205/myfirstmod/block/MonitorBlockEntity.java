@@ -1,9 +1,15 @@
 package com.zzy205.myfirstmod.block;
 
 import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
+import com.zzy205.myfirstmod.compat.cc.MonitorPeripheral;
+import com.zzy205.myfirstmod.compat.cc.MonitorRegistry;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
+import com.zzy205.myfirstmod.monitor.MonitorBackground;
 import com.zzy205.myfirstmod.network.SyncGridPayload;
+import dan200.computercraft.api.peripheral.IPeripheral;
+import org.jetbrains.annotations.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -26,6 +32,15 @@ public class MonitorBlockEntity extends BlockEntity {
     private String screenText = "";
     /** 14×12 棋盘网格 */
     private final GridState gridState = new GridState();
+    /** 全局频道号（-1 表示尚未注册，注册时自动分配） */
+    private int channel = -1;
+    /** 背景选项（默认"蓝色棋盘"） */
+    private String background = MonitorBackground.DEFAULT;
+    /** 所有已被占用的频道号快照（服务端设置，客户端通过 updateTag 同步） */
+    private int[] occupiedChannels = new int[0];
+    /** CC:T 外设实例（懒加载），避免直接在 BE 上实现 IPeripheral 导致 getType() 冲突 */
+    @Nullable
+    private IPeripheral peripheral;
 
     public MonitorBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.monitor_entity.get(), pos, state);
@@ -34,10 +49,21 @@ public class MonitorBlockEntity extends BlockEntity {
     @Override
     public void onLoad() {
         super.onLoad();
+        if (this.level != null && !this.level.isClientSide) {
+            int assigned = MonitorRegistry.register(this.channel, this);
+            if (assigned != this.channel) {
+                this.channel = assigned;
+                this.setChanged();
+            }
+            refreshOccupiedChannels();
+        }
     }
 
     @Override
     public void setRemoved() {
+        if (this.level != null && !this.level.isClientSide) {
+            MonitorRegistry.unregister(this.channel, this);
+        }
         super.setRemoved();
     }
 
@@ -45,6 +71,57 @@ public class MonitorBlockEntity extends BlockEntity {
     public void setScreenText(String text) { this.screenText = text; setChanged(); }
 
     public GridState getGridState() { return gridState; }
+
+    /** 全局频道号。 */
+    public int getChannel() { return channel; }
+
+    /** 当前背景选项。 */
+    public String getBackground() { return background; }
+
+    /** 设置背景（服务端调用）：校验并同步客户端。 */
+    public void setBackground(String value) {
+        if (level == null || level.isClientSide) return;
+        String normalized = MonitorBackground.isValid(value) ? value : MonitorBackground.DEFAULT;
+        if (normalized.equals(this.background)) return;
+        this.background = normalized;
+        setChanged();
+        blockChanged();
+    }
+
+    /** 获取 CC:T 外设实例（懒加载）。 */
+    public IPeripheral getPeripheral() {
+        if (peripheral == null) {
+            peripheral = new MonitorPeripheral(this);
+        }
+        return peripheral;
+    }
+
+    /** 更新全局频道号（服务端调用）：重新注册并同步客户端。 */
+    public void setChannel(int newChannel) {
+        if (level == null || level.isClientSide) return;
+        // -1 表示客户端尚未同步到真实频道，直接忽略，避免误触发自动重分配
+        if (newChannel < 0) return;
+        if (newChannel == this.channel) return;
+        int assigned = MonitorRegistry.register(newChannel, this);
+        this.channel = assigned;
+        setChanged();
+        blockChanged();
+    }
+
+    /** 获取已占用频道号数组（客户端菜单用它跳过已占用频道）。 */
+    public int[] getOccupiedChannels() { return occupiedChannels; }
+
+    /** 从全局注册表同步 occupiedChannels 快照到本 BE，并通知客户端。 */
+    public void refreshOccupiedChannels() {
+        if (this.level == null || this.level.isClientSide) return;
+        var channels = GlobalChannelRegistry.occupiedChannels();
+        int[] arr = new int[channels.size()];
+        int i = 0;
+        for (int ch : channels) arr[i++] = ch;
+        this.occupiedChannels = arr;
+        this.setChanged();
+        this.level.sendBlockUpdated(this.getBlockPos(), this.getBlockState(), this.getBlockState(), 3);
+    }
 
     /** 尝试放置模块（服务端调用），成功返回 moduleId，失败返回 -1。 */
     public int tryPlaceModule(int x, int y, ModuleType type) {
@@ -184,6 +261,9 @@ public class MonitorBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putString("ScreenText", screenText);
+        tag.putInt("Channel", channel);
+        tag.putString("Background", background);
+        tag.putIntArray("OccupiedChannels", occupiedChannels);
         tag.put("GridState", gridState.save(registries));
     }
 
@@ -191,6 +271,12 @@ public class MonitorBlockEntity extends BlockEntity {
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         screenText = tag.getString("ScreenText");
+        if (tag.contains("Channel")) channel = tag.getInt("Channel");
+        if (tag.contains("Background")) {
+            String bg = tag.getString("Background");
+            background = MonitorBackground.isValid(bg) ? bg : MonitorBackground.DEFAULT;
+        }
+        if (tag.contains("OccupiedChannels")) occupiedChannels = tag.getIntArray("OccupiedChannels");
         if (tag.contains("GridState")) {
             gridState.load(registries, tag.getCompound("GridState"));
         }
@@ -199,6 +285,9 @@ public class MonitorBlockEntity extends BlockEntity {
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         CompoundTag tag = super.getUpdateTag(registries);
+        tag.putInt("Channel", channel);
+        tag.putString("Background", background);
+        tag.putIntArray("OccupiedChannels", occupiedChannels);
         tag.put("GridState", gridState.save(registries));
         return tag;
     }

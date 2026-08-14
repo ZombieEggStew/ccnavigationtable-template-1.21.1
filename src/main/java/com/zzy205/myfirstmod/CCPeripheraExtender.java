@@ -22,6 +22,8 @@ import com.zzy205.myfirstmod.network.ModulePressPayload;
 import com.zzy205.myfirstmod.network.PlaceModulePayload;
 import com.zzy205.myfirstmod.network.RemoveModulePayload;
 import com.zzy205.myfirstmod.network.ModuleKnobRotatePayload;
+import com.zzy205.myfirstmod.network.MonitorBackgroundPayload;
+import com.zzy205.myfirstmod.network.MonitorChannelPayload;
 import com.zzy205.myfirstmod.network.PlaceScreenPayload;
 import com.zzy205.myfirstmod.network.RemoveScreenPayload;
 import com.zzy205.myfirstmod.screen.MyModMenus;
@@ -110,6 +112,32 @@ public class CCPeripheraExtender {
                             }
                             sensorBE.setLoadMode(payload.loadMode());
                             sensorBE.refreshOccupiedChannels();
+                        }
+                    }
+            );
+
+            // 客户端→服务端：保存 Monitor 全局频道
+            registrar.playToServer(
+                    MonitorChannelPayload.TYPE,
+                    MonitorChannelPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.monitorPos());
+                        if (be instanceof MonitorBlockEntity monitorBE) {
+                            monitorBE.setChannel(payload.channel());
+                        }
+                    }
+            );
+
+            // 客户端→服务端：保存 Monitor 背景
+            registrar.playToServer(
+                    MonitorBackgroundPayload.TYPE,
+                    MonitorBackgroundPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.monitorPos());
+                        if (be instanceof MonitorBlockEntity monitorBE) {
+                            monitorBE.setBackground(payload.background());
                         }
                     }
             );
@@ -257,6 +285,11 @@ public class CCPeripheraExtender {
                         PeripheralCapability.get(),
                         MyModBlockEntities.transmission_peripheral_entity.get(),
                         (be, side) -> ((TransmissionPeripheralBlockEntity) be).getPeripheral()
+                );
+                event.registerBlockEntity(
+                        PeripheralCapability.get(),
+                        MyModBlockEntities.monitor_entity.get(),
+                        (be, side) -> ((MonitorBlockEntity) be).getPeripheral()
                 );
             }
         });

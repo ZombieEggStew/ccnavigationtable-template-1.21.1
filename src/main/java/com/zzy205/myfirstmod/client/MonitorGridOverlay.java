@@ -5,12 +5,14 @@ import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.block.MonitorBlock;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.monitor.GridState;
+import com.zzy205.myfirstmod.monitor.MonitorBackground;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.network.ModuleKnobRotatePayload;
 import com.zzy205.myfirstmod.network.ModulePressPayload;
 import com.zzy205.myfirstmod.network.PlaceScreenPayload;
 import com.zzy205.myfirstmod.network.RemoveScreenPayload;
+import com.zzy205.myfirstmod.screen.MonitorMenuScreen;
 import com.zzy205.myfirstmod.screen.MonitorModuleScreen;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
@@ -167,6 +169,7 @@ public class MonitorGridOverlay {
         if (gp != null) {
             hoveredModule = grid.getModule(grid.getCell(gp[0], gp[1]));
         }
+        GridState.ScreenRegion screenAt = gp != null ? grid.getScreenAt(gp[0], gp[1]) : null;
 
         if (hoveredModule != null) {
             var config = grid.getModuleConfig(hoveredModule.id());
@@ -174,6 +177,8 @@ public class MonitorGridOverlay {
             if (!text.isBlank()) {
                 hoveredTooltip = Component.literal(text);
             }
+        } else if (screenAt != null && !screenAt.text().isBlank()) {
+            hoveredTooltip = Component.literal(screenAt.text());
         }
 
         boolean showGrid = heldType != null || holdingScreen;
@@ -193,9 +198,22 @@ public class MonitorGridOverlay {
             return;
         }
 
-        GridState.ScreenRegion screenAt = gp != null ? grid.getScreenAt(gp[0], gp[1]) : null;
         if (screenAt != null && shiftUseEdge && heldType == null && !holdingScreen) {
             mc.setScreen(new MonitorModuleScreen(pos, grid, "screen", screenAt.id(), screenAt.text()));
+            return;
+        }
+
+        // ── Shift+右键 Monitor 空白处 → 打开 Monitor 自身菜单（滚轮选择频道/背景）──
+        if (shiftUseEdge && heldType == null && !holdingScreen && !holdingWrench) {
+            int channel = 0;
+            int[] occupied = new int[0];
+            String background = MonitorBackground.DEFAULT;
+            if (level.getBlockEntity(pos) instanceof MonitorBlockEntity monitorBE) {
+                channel = monitorBE.getChannel();
+                occupied = monitorBE.getOccupiedChannels();
+                background = monitorBE.getBackground();
+            }
+            mc.setScreen(new MonitorMenuScreen(pos, channel, occupied, background));
             return;
         }
 
