@@ -204,11 +204,16 @@ public class GridState {
     // ── 旋钮角度 ──
 
     public void setKnobAngle(int moduleId, float angle) {
-        if (modules.containsKey(moduleId)) knobAngles.put(moduleId, angle);
+        if (modules.containsKey(moduleId)) knobAngles.put(moduleId, normalizeKnobAngle(angle));
     }
 
     public float getKnobAngle(int moduleId) {
         return knobAngles.getOrDefault(moduleId, 0f);
+    }
+
+    private static float normalizeKnobAngle(float angle) {
+        float normalized = angle % 360f;
+        return normalized < 0f ? normalized + 360f : normalized;
     }
 
     // ── 屏幕区域 ──
@@ -315,8 +320,8 @@ public class GridState {
             modTag.putInt("x", mod.gridX());
             modTag.putInt("y", mod.gridY());
             modTag.putBoolean("pressed", pressedModules.contains(mod.id()));
-            float ka = knobAngles.getOrDefault(mod.id(), 0f);
-            if (ka != 0f) modTag.putFloat("knobAngle", ka);
+            if (mod.type() == ModuleType.KNOB)
+                modTag.putFloat("knobAngle", getKnobAngle(mod.id()));
             CompoundTag cfg = moduleConfigs.get(mod.id());
             if (cfg != null && !cfg.isEmpty()) modTag.put("config", cfg);
             modList.add(modTag);
@@ -363,7 +368,11 @@ public class GridState {
             MonitorModule mod = new MonitorModule(id, type, x, y);
             modules.put(id, mod);
             if (modTag.getBoolean("pressed")) pressedModules.add(id);
-            if (modTag.contains("knobAngle")) knobAngles.put(id, modTag.getFloat("knobAngle"));
+            if (type == ModuleType.KNOB) {
+                float angle = modTag.contains("knobAngle")
+                        ? modTag.getFloat("knobAngle") : 0f;
+                knobAngles.put(id, normalizeKnobAngle(angle));
+            }
             if (modTag.contains("config")) moduleConfigs.put(id, modTag.getCompound("config"));
             for (int dx = 0; dx < type.width; dx++) {
                 for (int dy = 0; dy < type.height; dy++) {

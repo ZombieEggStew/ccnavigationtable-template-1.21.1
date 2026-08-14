@@ -3,7 +3,6 @@ package com.zzy205.myfirstmod.screen;
 import com.zzy205.myfirstmod.channel.ChannelScrollHelper;
 import com.zzy205.myfirstmod.foundation.gui.MyIcons;
 import com.zzy205.myfirstmod.foundation.gui.widget.HoverTintIconButton;
-import com.zzy205.myfirstmod.foundation.gui.widget.ToggleButton;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.network.ModuleConfigPayload;
 
@@ -21,6 +20,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
@@ -85,7 +85,6 @@ public class MonitorModuleScreen extends Screen {
     private int winLeft;
     private int winTop;
     private int idValue = 0;  // 滚轮控制的模块 ID
-    private ToggleButton showTooltipToggle;
     private EditBox textInput;     // 文本输入框
 
     private int bar_id_y = 0;
@@ -121,22 +120,6 @@ public class MonitorModuleScreen extends Screen {
         doneBtn.setToolTip(Component.translatable("gui.ccpe.module_config.done"));
         this.addRenderableWidget(doneBtn);
 
-        // 显示提示 ToggleButton
-        this.showTooltipToggle = new ToggleButton(
-                winLeft + 22, winTop + 18 + BAR_TEX_H + BAR_MARGIN_Y + 5,
-                MyIcons.SHOW_TOOLTIP,
-                MyIcons.SHOW_TOOLTIP,
-                0x80FF80);
-        CompoundTag moduleConfig = grid.getModuleConfig(originalId);
-        boolean showTooltip = !moduleConfig.contains("showTooltip") || moduleConfig.getBoolean("showTooltip");
-        this.showTooltipToggle.setSelected(showTooltip);
-        this.showTooltipToggle.setToolTip(tooltipToggleText(showTooltip));
-        this.showTooltipToggle.withCallback(() -> {
-            showTooltipToggle.setSelected(!showTooltipToggle.isSelected());
-            showTooltipToggle.setToolTip(tooltipToggleText(showTooltipToggle.isSelected()));
-        });
-        this.addRenderableWidget(this.showTooltipToggle);
-
         // 文本输入框（滚轮滑条下方）
         this.textInput = new EditBox(this.font,
                 winLeft + TEXT_INPUT_X, winTop + TEXT_INPUT_Y,
@@ -169,9 +152,9 @@ public class MonitorModuleScreen extends Screen {
         _currentY += 18;
         _currentY = renderBar_id(g, _currentY);
 
-        // 显示提示
+        // 悬浮文本
         _currentY += BAR_MARGIN_Y;
-        _currentY = renderBar_ShowTooltip(g, _currentY);
+        _currentY = renderBarTooltipText(g, _currentY);
 
         _currentY += BAR_MARGIN_Y;
 
@@ -206,9 +189,11 @@ public class MonitorModuleScreen extends Screen {
     }
 
 
-    public int renderBar_ShowTooltip(GuiGraphics g,int currentY){
+    public int renderBarTooltipText(GuiGraphics g, int currentY) {
         //背景
         renderBar_bg(g, winLeft, currentY);
+
+        MyIcons.SHOW_TOOLTIP.render(g, winLeft + 22, currentY + 6);
 
         // 输入长框背景
         g.blit(TEXTURE, winLeft, currentY + 5,
@@ -274,7 +259,6 @@ public class MonitorModuleScreen extends Screen {
         // 汇总公共配置（tooltip 文本）+ 每类型特殊配置，一次性发送
         CompoundTag config = new CompoundTag();
         config.putString("text", textInput.getValue());
-        config.putBoolean("showTooltip", showTooltipToggle.isSelected());
         section.save(config);
         PacketDistributor.sendToServer(new ModuleConfigPayload(monitorPos, name, originalId, idValue, config));
         super.onClose();
@@ -303,15 +287,6 @@ public class MonitorModuleScreen extends Screen {
                         .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
         g.renderComponentTooltip(this.font, lines, mouseX, mouseY);
     }
-
-    /** 显示提示开关 tooltip 文本 */
-    private static Component tooltipToggleText(boolean selected) {
-        return Component.translatable(selected
-                ? "gui.ccpe.module_config.show_tooltip_on"
-                : "gui.ccpe.module_config.show_tooltip_off");
-    }
-
-
 
     private void playScrollSound() {
         Minecraft.getInstance().getSoundManager()

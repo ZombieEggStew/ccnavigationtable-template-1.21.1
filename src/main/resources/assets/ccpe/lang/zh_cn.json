@@ -16,7 +16,7 @@
   "gui.ccpe.module_config.id_title": "模块 ID",
   "gui.ccpe.module_config.button_latch": "锁存模式",
   "gui.ccpe.screen_config.id_title": "屏幕 ID",
-  "gui.ccpe.module_config.text_hint": "输入提示...",
+  "gui.ccpe.module_config.text_hint": "不显示提示文本",
   "gui.ccpe.module_config.text_title": "文本输入",
   "gui.ccpe.module_config.text_tip": "鼠标悬停显示的文本",
   "gui.ccpe.module_config.show_tooltip_on": "显示提示文本：开",

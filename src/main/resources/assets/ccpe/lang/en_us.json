@@ -16,7 +16,7 @@
   "gui.ccpe.module_config.id_title": "Module ID",
   "gui.ccpe.module_config.button_latch": "Latch Mode",
   "gui.ccpe.screen_config.id_title": "Screen ID",
-  "gui.ccpe.module_config.text_hint": "Enter tooltip...",
+  "gui.ccpe.module_config.text_hint": "No tooltip text",
   "gui.ccpe.module_config.text_title": "Text Input",
   "gui.ccpe.module_config.text_tip": "Tooltip text to show on hover",
   "gui.ccpe.module_config.show_tooltip_on": "Show tooltip text: ON",

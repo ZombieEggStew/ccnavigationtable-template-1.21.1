@@ -4,6 +4,9 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.zzy205.myfirstmod.monitor.GridState;
+import com.zzy205.myfirstmod.monitor.ModuleType;
+import com.zzy205.myfirstmod.client.MonitorGridOverlay;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
@@ -12,6 +15,7 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.RandomSource;
 import net.neoforged.neoforge.client.model.data.ModelData;
 
@@ -60,12 +64,19 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
 
             var bhv = ModuleRenderBehavior.of(mod.type());
 
-            boolean isKnob = mod.type() == com.zzy205.myfirstmod.monitor.ModuleType.KNOB;
+            boolean isKnob = mod.type() == ModuleType.KNOB;
             float target = isKnob ? grid.getKnobAngle(mod.id()) : (grid.isPressed(mod.id()) ? 1f : 0f);
-            float current = beAnims.getOrDefault(mod.id(), 0f);
-            float speed = target > current ? bhv.animPressSpeed() : bhv.animReleaseSpeed();
-            float next = current + (target - current) * speed;
-            if (Math.abs(next - target) < 0.01f) next = target;
+            float current = beAnims.computeIfAbsent(mod.id(), ignored -> target);
+            float delta = target - current;
+            if (isKnob) {
+                delta %= 360f;
+                if (delta > 180f) delta -= 360f;
+                else if (delta < -180f) delta += 360f;
+            }
+            float speed = delta >= 0f ? bhv.animPressSpeed() : bhv.animReleaseSpeed();
+            float next = current + delta * speed;
+            if (!isKnob && Math.abs(next - target) < 0.01f) next = target;
+            if (isKnob && Math.abs(delta) < 0.01f) next = current;
             beAnims.put(mod.id(), next);
 
             poseStack.pushPose();
@@ -82,6 +93,7 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
             renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), model, light, overlay);
             // 额外部件（拉杆等）
             bhv.renderExtra(poseStack, buffer, next, light, overlay);
+            if (isKnob) renderKnobAngle(poseStack, buffer, bePos, mod.id(), light);
 
             poseStack.popPose();
         }
@@ -91,6 +103,25 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
             renderScreen(poseStack, buffer, screen, light, overlay);
         }
 
+        poseStack.popPose();
+    }
+
+    private static void renderKnobAngle(PoseStack poseStack, MultiBufferSource buffer,
+                                        BlockPos monitorPos, int moduleId, int light) {
+        Float angle = MonitorGridOverlay.getActiveKnobAngle(monitorPos, moduleId);
+        if (angle == null) return;
+
+        String text = Math.round(angle) + "°";
+        var font = Minecraft.getInstance().font;
+        float scale = 1f / 512f;
+        poseStack.pushPose();
+        poseStack.mulPose(Axis.XP.rotationDegrees(-90));
+        poseStack.mulPose(Axis.ZP.rotationDegrees(180));
+        poseStack.translate(0.0f, 0.0F, 1f / 16f);
+        poseStack.scale(scale, -scale, scale);
+        font.drawInBatch(Component.literal(text), -font.width(text) / 2f, -font.lineHeight / 2f,
+                0xFFFFFFFF, true, poseStack.last().pose(), buffer,
+                net.minecraft.client.gui.Font.DisplayMode.NORMAL, 0, light);
         poseStack.popPose();
     }
 

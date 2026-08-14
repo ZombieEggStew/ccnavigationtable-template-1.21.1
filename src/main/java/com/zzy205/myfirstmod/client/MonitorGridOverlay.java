@@ -74,6 +74,8 @@ public class MonitorGridOverlay {
         int knobSendCooldown = 0;
         /** 上次播放音效时的角度（度） */
         float knobLastSoundAngle = 0f;
+        /** 当前拖动中的绝对角度（度），仅客户端显示使用 */
+        float knobDisplayAngle = 0f;
 
         // ── 屏幕两点放置 ──
         boolean screenPlacing = false;
@@ -87,6 +89,13 @@ public class MonitorGridOverlay {
 
     /** 所有活跃 Monitor 的交互状态，key 为 Monitor 方块坐标 */
     private static final Map<BlockPos, InteractionState> interactions = new HashMap<>();
+
+    /** 获取正在拖动的旋钮角度；未拖动或模块不匹配时返回 null。 */
+    public static Float getActiveKnobAngle(BlockPos pos, int moduleId) {
+        InteractionState state = interactions.get(pos);
+        if (state == null || !state.knobDragging || state.knobDragModuleId != moduleId) return null;
+        return state.knobDisplayAngle;
+    }
 
     public static void register() {
         NeoForge.EVENT_BUS.addListener(MonitorGridOverlay::onRenderLevel);
@@ -162,8 +171,7 @@ public class MonitorGridOverlay {
         if (hoveredModule != null) {
             var config = grid.getModuleConfig(hoveredModule.id());
             String text = config.getString("text");
-            boolean showTooltip = !config.contains("showTooltip") || config.getBoolean("showTooltip");
-            if (showTooltip && !text.isBlank()) {
+            if (!text.isBlank()) {
                 hoveredTooltip = Component.literal(text);
             }
         }
@@ -266,6 +274,7 @@ public class MonitorGridOverlay {
             interact.knobPrevRawAngle = computeCrosshairAngle(player, pos, facing, interact.knobCenterX, interact.knobCenterY);
             interact.knobUnwrappedDelta = 0f;
             interact.knobLastSoundAngle = interact.knobAccumAngle;
+            interact.knobDisplayAngle = normalizeDisplayAngle(interact.knobAccumAngle);
         } else if (interact.knobDragging && !useDown) {
             interact.knobDragging = false;
             interact.knobDragModuleId = -1;
@@ -510,16 +519,15 @@ public class MonitorGridOverlay {
             state.knobPrevRawAngle = rawAngle;
 
             float newAngle = state.knobAccumAngle + (float) Math.toDegrees(state.knobUnwrappedDelta);
+            state.knobDisplayAngle = normalizeDisplayAngle(newAngle);
 
             // ── 谢泼德音阶音效 ──
             float soundDiff = newAngle - state.knobLastSoundAngle;
             int soundSteps = (int) (soundDiff / KNOB_SOUND_STEP);
             if (soundSteps != 0) {
-                boolean forward = soundSteps > 0;
                 float cycleAngle = newAngle % 360f;
                 if (cycleAngle < 0) cycleAngle += 360f;
                 float pitch = 0.5f + (cycleAngle / 360f) * 1.5f;
-                if (!forward) pitch = 2.0f - (pitch - 0.5f);
                 mc.player.playSound(SoundEvents.LEVER_CLICK, 0.1f, pitch);
                 state.knobLastSoundAngle = newAngle - (soundDiff - soundSteps * KNOB_SOUND_STEP);
             }
@@ -532,6 +540,11 @@ public class MonitorGridOverlay {
                         new ModuleKnobRotatePayload(pos, state.knobDragModuleId, newAngle));
             }
         }
+    }
+
+    private static float normalizeDisplayAngle(float angle) {
+        float normalized = angle % 360f;
+        return normalized < 0f ? normalized + 360f : normalized;
     }
 
 }

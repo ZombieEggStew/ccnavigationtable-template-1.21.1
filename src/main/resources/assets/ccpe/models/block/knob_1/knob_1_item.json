@@ -1,0 +1,10 @@
+{
+    "parent": "block/block",
+    "loader": "neoforge:obj",
+    "flip_v": true,
+    "model": "ccpe:models/block/knob_1/knob_1_item.obj",
+    "textures": {
+        "0": "ccpe:block/knob",
+        "particle": "#0"
+    }
+}
