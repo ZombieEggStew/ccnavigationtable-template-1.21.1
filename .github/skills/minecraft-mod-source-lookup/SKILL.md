@@ -1,26 +1,30 @@
 ---
 name: minecraft-mod-source-lookup
-description: '查找 Minecraft NeoForge/Fabric mod 依赖的源代码。当需要查看其他 mod（如 Create、CC:Tweaked、Sable、JEI、Flywheel 等）的 API 或实现源码时使用此技能。源码存放于工作区根目录下的 sources/ 或 libs/ 文件夹中。用于：理解 mod API 方法签名、追踪调用链、调试兼容性问题、阅读 mixin 目标类、理解网络协议。'
+description: '当需要确认 Minecraft 1.21.1 NeoForge 依赖 API、参考案例 mod 实现或跨 mod 调用链时使用。优先查阅工作区根目录下的 sources/、reference/ 和 libs/；用于确认 API 方法签名、追踪调用链、调试兼容性问题或理解注册与渲染机制。'
 ---
 
-# Minecraft Mod 依赖源码查找
+# Minecraft Mod 依赖与案例查找
 
 ## 何时使用
 
 - 需要查看某个依赖 mod 的类、方法或接口的源代码
+- 需要参考 `reference/` 中案例 mod 的实现方式
 - 需要理解 Create、CC:Tweaked、Sable、JEI 等 mod 的 API 行为
 - 调试与依赖 mod 的兼容性问题
 - 追踪跨 mod 的调用链或 mixin 目标
 - 了解某个 mod 的网络包、事件或注册机制
 
-## 源码位置
+不要为了了解项目概况或做常规源码修改读取依赖源码。只有当前代码的 import、编译错误或明确问题指向外部 API 时才使用本 skill。
+
+## 参考目录
 
 工作区根目录下有专门的源码目录：
 
 | 目录 | 用途 |
 |------|------|
-| `sources/` | 解压后的 mod 源码 jar（`-sources.jar`），按 mod 名称分文件夹 |
-| `libs/` | 部分 mod 的源码可能放在此处 |
+| `sources/` | 解压后的依赖 mod 源码和 API 源码 |
+| `reference/` | 可参考的案例 mod 源码或完整项目 |
+| `libs/` | 必须依赖的 mod 接口、源码或本地库 |
 
 源码文件夹命名格式通常为：`<mod-name>-<mc_version>-<mod_version>-sources/`
 
@@ -47,9 +51,9 @@ description: '查找 Minecraft NeoForge/Fabric mod 依赖的源代码。当需�
 | `net.createmod.catnip` | `create-` |
 | `dev.engine_room.flywheel` | `flywheel`（在 sable 源码内） |
 
-### 2. 在 sources/ 中搜索
+### 2. 在对应目录中限定搜索
 
-使用 `file_search` 或 `grep_search` 工具，限定搜索范围为对应 mod 的源码目录。
+根据目标选择 `sources/`、`reference/` 或 `libs/`，使用 `file_search` 或 `grep_search` 限定搜索范围。优先读取 API 定义和直接相关的实现，不要扫描整个目录。
 
 示例 — 搜索 Create 的 RedstoneLinkNetworkHandler：
 ```
@@ -63,7 +67,7 @@ grep_search: includePattern = "sources/sable-*/**/*.java", query = "transformPos
 
 ### 3. 阅读源码文件
 
-找到目标文件后，使用 `read_file` 读取完整内容。Minecraft mod 的源码目录结构通常遵循标准 Java 包结构：
+找到目标文件后，先读取包含目标方法、类型或调用点的局部范围；只有局部内容无法确定 API 合约时才扩大读取范围。Minecraft mod 的源码目录结构通常遵循标准 Java 包结构：
 
 ```
 sources/<mod>-sources/

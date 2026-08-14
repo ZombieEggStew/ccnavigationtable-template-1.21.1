@@ -14,8 +14,10 @@ import com.zzy205.myfirstmod.network.RemoveScreenPayload;
 import com.zzy205.myfirstmod.screen.MonitorModuleScreen;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -25,6 +27,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.sounds.SoundEvents;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -44,6 +47,7 @@ public class MonitorGridOverlay {
     private static final int KNOB_SEND_INTERVAL = 2;
     private static final float KNOB_SOUND_STEP = 12f; // 每旋转多少度播放一次音效
     private static final float GRID_LINE_OFFSET = 0.06f;
+    private static Component hoveredTooltip;
 
     /**
      * 单个 Monitor 的客户端交互状态。
@@ -86,12 +90,15 @@ public class MonitorGridOverlay {
 
     public static void register() {
         NeoForge.EVENT_BUS.addListener(MonitorGridOverlay::onRenderLevel);
+        NeoForge.EVENT_BUS.addListener(MonitorGridOverlay::onRenderGui);
         NeoForge.EVENT_BUS.addListener(MonitorGridOverlay::onClientTick);
         CCPeripheraExtender.LOGGER.info("MonitorGridOverlay registered with Catnip Outliner");
     }
 
     public static void onRenderLevel(RenderLevelStageEvent event) {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES) return;
+
+        hoveredTooltip = null;
 
         var mc = Minecraft.getInstance();
         var player = mc.player;
@@ -150,6 +157,15 @@ public class MonitorGridOverlay {
         MonitorModule hoveredModule = null;
         if (gp != null) {
             hoveredModule = grid.getModule(grid.getCell(gp[0], gp[1]));
+        }
+
+        if (hoveredModule != null) {
+            var config = grid.getModuleConfig(hoveredModule.id());
+            String text = config.getString("text");
+            boolean showTooltip = !config.contains("showTooltip") || config.getBoolean("showTooltip");
+            if (showTooltip && !text.isBlank()) {
+                hoveredTooltip = Component.literal(text);
+            }
         }
 
         boolean showGrid = heldType != null || holdingScreen;
@@ -300,6 +316,16 @@ public class MonitorGridOverlay {
                 }
             }
         }
+    }
+
+    private static void onRenderGui(RenderGuiEvent.Post event) {
+        var mc = Minecraft.getInstance();
+        if (hoveredTooltip == null || mc.screen != null || mc.options.hideGui) return;
+
+        GuiGraphics graphics = event.getGuiGraphics();
+        int x = graphics.guiWidth() / 2 + 10;
+        int y = graphics.guiHeight() / 2 + 12;
+        graphics.renderTooltip(mc.font, hoveredTooltip, x, y);
     }
 
     /** 释放所有非 exceptPos 的 Monitor 上仍处于按下状态的按钮，清理过期条目 */

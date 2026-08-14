@@ -21,12 +21,19 @@ description: '查阅项目 memo 文档。memo 目录包含项目进度（.TO DO.
 |------|------|---------|
 | `.TO DO.md` | 项目整体进度清单 | 了解已完成/待完成功能、规划下一步工作 |
 | `current.md` | 当前正在进行的任务及设计文档 | 了解当前功能的架构决策、实现方案 |
-| `add_module_guide.md` | 添加新 Monitor 元件的标准流程 | 添加按钮/旋钮/滑条等新元件时参考 |
-| `catnip.md` | Catnip Outliner API 用法参考 | 需要画 3D 线框、AABB、线段、聚合轮廓时 |
-| `obj_model.md` | NeoForge OBJ 模型渲染方法 | 制作/调试 OBJ 模型、理解 OBJ→MTL→JSON→PNG 管线 |
-| `render_item.md` | 多部件物品的物品栏渲染 | 实现 CustomRenderedItemModel 组合渲染 |
-| `rotation.md` | NeoForge 1.21.1 旋转问题手册 | 调试方向/旋转相关 bug、理解 CW vs CCW |
-| `standalone_model.md` | Standalone 模型烘焙备忘 | BER 中渲染独立模型、ModelEvent 两步烘焙 |
+| `record_screen_module.md` | 可变尺寸屏幕实现记录 | 修改屏幕数据、渲染、放置或拆卸行为时 |
+| `knob-interaction.md` | 旋钮交互数据流 | 修改旋钮拖拽、角度同步或音效时 |
+| `monitor-state-isolation.md` | 多 Monitor 客户端状态规范 | 修改交互状态、动画缓存或 Outliner key 时 |
+| `gui-infrastructure.md` | 已落地 GUI 基础设施 | 修改现有控件的实现细节时 |
+| `neoforge-debugging.md` | 本项目 F5 启动事实 | 调试启动配置或 classpath 时 |
+| `code-map.md` | Java 源码职责、核心数据流和修改入口 | 需要快速定位应修改的 Java 文件时 |
+
+## 最小上下文原则
+
+- 不要在每次任务开始时读取 `.TO DO.md`、`current.md` 或全部 memo。
+- 只读取与当前请求直接对应的一份 memo；仅当它引用了另一个必须的文档时再读取下一份。
+- 项目进度、当前任务或设计取舍没有直接关系时，不加载 memo。
+- 需要定位 Java 文件职责、模块边界或修改入口时，查阅 `code-map.md`；不要因此读取全部其他 memo。
 
 ## 查阅步骤
 
@@ -36,16 +43,17 @@ description: '查阅项目 memo 文档。memo 目录包含项目进度（.TO DO.
 
 - **项目进度相关** → `.TO DO.md`
 - **当前开发任务** → `current.md`
-- **添加新元件** → `add_module_guide.md`
-- **3D 线框/高亮** → `catnip.md`
-- **OBJ 模型** → `obj_model.md`
-- **物品栏渲染** → `render_item.md`
-- **旋转/朝向** → `rotation.md`
-- **模型烘焙** → `standalone_model.md`
+- **添加新元件** → `add-monitor-module` skill
+- **3D 线框/高亮** → `catnip-outliner` skill
+- **OBJ 模型或模型烘焙** → `neoforge-model-rendering` skill
+- **物品栏渲染** → `create-custom-item-rendering` skill
+- **旋转/朝向** → `neoforge-create-rotation` skill
+- **Create 风格 GUI** → `create-style-gui` skill
+- **CC:Tweaked 传感器 Lua API** → `cc-sensor-lua-api` skill
 
 ### 2. 读取对应文件
 
-使用 `read_file` 读取 `memo/<文件名>`，不需要搜索源码。
+使用 `read_file` 读取 `memo/<文件名>` 中与当前任务有关的段落，不需要搜索源码。
 
 ### 3. 结合源码实施
 
@@ -53,15 +61,11 @@ memo 文档提供了关键 API 速查和代码模板，结合项目现有代码�
 
 ## 文档间关联
 
-- `current.md` 中的设计方案会引用 `add_module_guide.md` 的流程
-- `add_module_guide.md` 引用 `obj_model.md` 的 OBJ 导出设置
-- `add_module_guide.md` 引用 `render_item.md` 的物品栏渲染方法
-- `add_module_guide.md` 引用 `catnip.md` 的线框渲染
-- `render_item.md` 引用 `standalone_model.md` 的模型烘焙模式
+- 任务型技术资料已迁移到 `.github/skills/`，只在描述匹配时加载。
+- memo 只保存当前项目已实现的状态、特殊约束和短期进度。
 
 ## 注意事项
 
-- `current.md` 内容会随开发进度频繁更新，每次开始新任务前应先查阅
+- `current.md` 内容会随开发进度频繁更新；仅在当前任务、架构决策或未完成工作需要它时查阅
 - `.TO DO.md` 中的 checkbox 状态是项目进度的重要参考
-- memo 文档是手动整理的技术要点，比源码搜索更快更准确
-- 如果 memo 文档中没有覆盖所需知识点，再回退到 `minecraft-mod-source-lookup` 技能查阅源码
+- 如果 memo 和相关 skill 都无法回答当前 API 问题，再回退到 `minecraft-mod-source-lookup` skill。

@@ -127,7 +127,10 @@ public class MonitorModuleScreen extends Screen {
                 MyIcons.SHOW_TOOLTIP,
                 MyIcons.SHOW_TOOLTIP,
                 0x80FF80);
-        this.showTooltipToggle.setToolTip(tooltipToggleText(false));
+        CompoundTag moduleConfig = grid.getModuleConfig(originalId);
+        boolean showTooltip = !moduleConfig.contains("showTooltip") || moduleConfig.getBoolean("showTooltip");
+        this.showTooltipToggle.setSelected(showTooltip);
+        this.showTooltipToggle.setToolTip(tooltipToggleText(showTooltip));
         this.showTooltipToggle.withCallback(() -> {
             showTooltipToggle.setSelected(!showTooltipToggle.isSelected());
             showTooltipToggle.setToolTip(tooltipToggleText(showTooltipToggle.isSelected()));
@@ -271,6 +274,7 @@ public class MonitorModuleScreen extends Screen {
         // 汇总公共配置（tooltip 文本）+ 每类型特殊配置，一次性发送
         CompoundTag config = new CompoundTag();
         config.putString("text", textInput.getValue());
+        config.putBoolean("showTooltip", showTooltipToggle.isSelected());
         section.save(config);
         PacketDistributor.sendToServer(new ModuleConfigPayload(monitorPos, name, originalId, idValue, config));
         super.onClose();

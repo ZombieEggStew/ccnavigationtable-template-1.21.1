@@ -1,7 +1,7 @@
 # Monitor GUI 基础设施 — 技术要点
 
 > 位置：`foundation/gui/`（widget 在 `foundation/gui/widget/`）
-> 参考：memo/create_style_gui_design.md（Aeroworks 分析）
+> 通用 GUI 实施流程见 `create-style-gui` skill。
 
 ## 类清单
 
