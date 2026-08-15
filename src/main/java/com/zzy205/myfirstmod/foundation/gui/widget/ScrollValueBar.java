@@ -21,7 +21,7 @@ import java.util.List;
  * 滚轮数值输入条 —— 横条背景 + 图标 + 输入框 + 数值。
  * 鼠标悬停在输入框区域滚轮可修改数值（Shift 加速、跳过占用频道/ID）。
  */
-public class ScrollValueBar extends AbstractWidget {
+public class ScrollValueBar extends AbstractWidget implements TooltipWidget {
 
     // 相对横条左上角的布局偏移（与 MonitorModuleScreen 的 bar_id 一致）
     private static final int ICON_X = 22;
@@ -39,7 +39,11 @@ public class ScrollValueBar extends AbstractWidget {
     /** 悬停高亮（半透明白） */
     private static final int HOVER_COLOR = 0x30FFFFFF;
 
-    private final ScreenElement icon;
+    private ScreenElement icon;
+    private ToggleButton toggleButton;
+    /** 数值模式的自定义范围（非 null 时按 [min,max] 钳位，否则用频道跳过逻辑）。 */
+    private Integer min;
+    private Integer max;
     private final ScreenElement barBackground;
     private final ScreenElement inputBackground;
     private final int myValue;
@@ -53,32 +57,50 @@ public class ScrollValueBar extends AbstractWidget {
     private int value;
 
     public ScrollValueBar(int x, int y, int width, int height,
-                          int value, int myValue, int[] occupied,
-                          ScreenElement icon) {
+                          int value, int myValue, int[] occupied) {
         super(x, y, width, height, Component.empty());
         this.value = value;
         this.myValue = myValue;
         this.occupied = occupied;
         this.optionLabels = null;
-        this.icon = icon;
         this.barBackground = MyUIElements.BAR_BACKGROUND;
         this.inputBackground = MyUIElements.SCROLL_INPUT_LONG;
     }
 
     /** 离散选项模式：value 为选项下标，滚轮循环切换。 */
     public ScrollValueBar(int x, int y, int width, int height,
-                          int value, Component[] optionLabels, ScreenElement icon) {
+                          int value, Component[] optionLabels) {
         super(x, y, width, height, Component.empty());
         this.value = value;
         this.optionLabels = optionLabels;
         this.myValue = -1;
         this.occupied = new int[0];
-        this.icon = icon;
         this.barBackground = MyUIElements.BAR_BACKGROUND;
         this.inputBackground = MyUIElements.SCROLL_INPUT_LONG;
     }
 
     public int getValue() { return value; }
+
+    /** 链式设置图标（渲染在图标位置）。 */
+    public ScrollValueBar withIcon(ScreenElement icon) {
+        this.icon = icon;
+        return this;
+    }
+
+    /** 链式设置可交互的 ToggleButton（渲染并转发点击到图标位置）。 */
+    public ScrollValueBar withToggleButton(ToggleButton button) {
+        this.toggleButton = button;
+        button.setPosition(getX() + ICON_X, getY() + ICON_Y);
+        return this;
+    }
+
+    /** 设置数值模式的范围（滚动在该范围内钳位，不再跳过占用频道）。 */
+    public ScrollValueBar range(int min, int max) {
+        this.min = min;
+        this.max = max;
+        this.value = Math.max(min, Math.min(max, this.value));
+        return this;
+    }
 
     /** 当前显示的文本（离散模式下为选项标签，数值模式下为数字）。 */
     private Component displayText() {
@@ -92,7 +114,11 @@ public class ScrollValueBar extends AbstractWidget {
         int x = this.getX();
         int y = this.getY();
         barBackground.render(g, x, y);
-        icon.render(g, x + ICON_X, y + ICON_Y);
+        if (toggleButton != null) {
+            toggleButton.render(g, mouseX, mouseY, partialTick);
+        } else if (icon != null) {
+            icon.render(g, x + ICON_X, y + ICON_Y);
+        }
         inputBackground.render(g, x, y + INPUT_Y);
         // 悬停高亮
         if (isOverHitArea(mouseX, mouseY)) {
@@ -110,16 +136,23 @@ public class ScrollValueBar extends AbstractWidget {
     }
 
     @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        return toggleButton != null && toggleButton.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (!isOverHitArea(mouseX, mouseY) || scrollY == 0) return false;
-        // 滚轮向下 → 下一个选项/数值
-        int dir = scrollY > 0 ? -1 : 1;
+        // 滚轮向上 → 数值增大；向下 → 数值减小
+        int dir = scrollY > 0 ? 1 : -1;
         int newValue;
         if (optionLabels != null) {
             newValue = Math.floorMod(value + dir, optionLabels.length);
         } else {
             int jump = Screen.hasShiftDown() ? 10 : 1;
-            newValue = ChannelScrollHelper.next(value, dir, jump, myValue, occupied);
+            newValue = min != null && max != null
+                    ? Math.max(min, Math.min(max, value + dir * jump))
+                    : ChannelScrollHelper.next(value, dir, jump, myValue, occupied);
         }
         if (newValue != value) {
             value = newValue;
@@ -154,8 +187,17 @@ public class ScrollValueBar extends AbstractWidget {
         return this;
     }
 
-    /** 悬停时渲染 tooltip（由 Screen 在 super.render() 之后调用，确保在最上层）。 */
+    /** 悬停时渲染 tooltip（由外层 Screen 在 super.render() 之后调用，确保在最上层）。 */
     public void renderTooltip(GuiGraphics g, int mouseX, int mouseY) {
+        // 内嵌开关 tooltip 优先（AbstractSimiWidget 不自绘 tooltip）
+        if (toggleButton != null && toggleButton.isMouseOver(mouseX, mouseY)) {
+            var tooltip = toggleButton.getToolTip();
+            if (!tooltip.isEmpty()) {
+                g.renderComponentTooltip(Minecraft.getInstance().font, tooltip, mouseX, mouseY);
+            }
+            return;
+        }
+        // 滚轮区域 tooltip
         if (!isOverHitArea(mouseX, mouseY)) return;
         List<Component> lines = new ArrayList<>(tooltipLines);
         if (tooltipOptions && optionLabels != null) {

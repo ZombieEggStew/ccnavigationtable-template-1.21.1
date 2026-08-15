@@ -9,7 +9,6 @@ import com.zzy205.myfirstmod.network.MonitorBackgroundPayload;
 import com.zzy205.myfirstmod.network.MonitorChannelPayload;
 import net.createmod.catnip.gui.element.ScreenElement;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -20,7 +19,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * 布局复制 {@link MonitorModuleScreen}：相同背景面板与第一行 bar_id（滚轮选择频道），
  * 不包含第二行 bar_tooltip、文本输入框与类型专属配置区。
  */
-public class MonitorMenuScreen extends Screen {
+public class MonitorMenuScreen extends AbstractMonitorScreen {
 
     private static final int WIN_W = 192;
     private static final int WIN_H = 159;
@@ -75,8 +74,8 @@ public class MonitorMenuScreen extends Screen {
         // 频道滚轮输入条
         this.channelBar = new ScrollValueBar(
                 winLeft, winTop + BAR_ID_Y, BAR_TEX_W, BAR_TEX_H,
-                originalChannel, originalChannel, occupiedChannels,
-                MyIcons.CHANNEL)
+                originalChannel, originalChannel, occupiedChannels)
+            .withIcon(MyIcons.CHANNEL)
             .addToolTipTitle(Component.translatable("gui.ccpe.monitor_menu.id_title"))
             .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"))
             .addToolTipInstruction(Component.translatable("gui.ccpe.shift_scroll_faster"));
@@ -84,8 +83,8 @@ public class MonitorMenuScreen extends Screen {
 
         this.backgroundBar = new ScrollValueBar(
                 winLeft, winTop + BAR_ID_Y + BAR_TEX_H + BAR_MARGIN_Y, BAR_TEX_W, BAR_TEX_H,
-                MonitorBackground.indexOf(background), MonitorBackground.displayNames(),
-                MyIcons.BACKGROUND)
+                MonitorBackground.indexOf(background), MonitorBackground.displayNames())
+                .withIcon(MyIcons.BACKGROUND)
                 .addToolTipTitle(Component.translatable("gui.ccpe.monitor_menu.background_title"))
                 .addToolTipOptions()
                 .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"));
@@ -106,20 +105,13 @@ public class MonitorMenuScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+    protected void renderCustom(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         // 自定义背景面板
         g.blit(TEXTURE, winLeft, winTop, 0, 0, WIN_W, WIN_H, TEX_W, TEX_H);
 
         // 标题
         Component title = Component.translatable("block.ccpe.my_monitor");
         g.drawString(this.font, title, winLeft + TITLE_X, winTop + TITLE_Y, TITLE_COLOR, false);
-
-        // 最后画控件（按钮、频道滚轮条等），确保在最上层
-        super.render(g, mouseX, mouseY, partialTick);
-
-        // tooltip（在最上层）
-        channelBar.renderTooltip(g, mouseX, mouseY);
-        backgroundBar.renderTooltip(g, mouseX, mouseY);
     }
 
     @Override
@@ -127,15 +119,5 @@ public class MonitorMenuScreen extends Screen {
         PacketDistributor.sendToServer(new MonitorChannelPayload(monitorPos, channelBar.getValue()));
         PacketDistributor.sendToServer(new MonitorBackgroundPayload(monitorPos, MonitorBackground.keyAt(backgroundBar.getValue())));
         super.onClose();
-    }
-
-    @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // 禁用原版半透明渐变背景，使用自定义贴图代替
-    }
-
-    @Override
-    public boolean isPauseScreen() {
-        return false;
     }
 }

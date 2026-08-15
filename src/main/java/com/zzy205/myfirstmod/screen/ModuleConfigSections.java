@@ -19,8 +19,8 @@ public final class ModuleConfigSections {
     private static final Map<ModuleType, Factory> REGISTRY = new EnumMap<>(ModuleType.class);
 
     static {
-        REGISTRY.put(ModuleType.BUTTON_1X1, ButtonConfigSection::new);
-        // TOGGLE_SWITCH / KNOB：暂无特殊设置，走 Empty
+        REGISTRY.put(ModuleType.KNOB, KnobConfigSection::new);
+        // TOGGLE_SWITCH：暂无特殊设置，走 Empty
     }
 
     private ModuleConfigSections() {}

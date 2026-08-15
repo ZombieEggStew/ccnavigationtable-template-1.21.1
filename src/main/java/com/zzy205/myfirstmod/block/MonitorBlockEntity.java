@@ -198,8 +198,42 @@ public class MonitorBlockEntity extends BlockEntity {
         }
     }
 
+    /** 设置钮子开关的锁存状态（服务端调用，CC:T Lua 控制用），自动同步客户端。 */
+    public void setToggleState(int id, boolean state) {
+        if (gridState.getModule(id) == null) return;   // 模块已不存在
+        if (gridState.isPressed(id) == state) return;  // 状态相同，无操作
+        if (state) gridState.press(id); else gridState.release(id);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            level.playSound(null, worldPosition, SoundEvents.LEVER_CLICK,
+                    SoundSource.BLOCKS, 0.3f, state ? 1.2f : 1.1f);
+            syncGridToClients();
+        }
+    }
+
+    /** 设置模块/屏幕的 tooltip 文本（服务端调用，CC:T Lua 控制用），自动同步客户端。 */
+    public void setTooltip(int id, String text) {
+        if (gridState.getModule(id) != null) {
+            // 普通模块：写配置 "text"（配置界面/悬停 tooltip）
+            CompoundTag config = gridState.getModuleConfig(id).copy();
+            config.putString("text", text);
+            gridState.setModuleConfig(id, config);
+        } else if (gridState.getScreenById(id) != null) {
+            // 屏幕：写屏幕文本（悬停显示）
+            gridState.updateScreen(id, id, text);
+        } else {
+            return;  // 无效 ID
+        }
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            syncGridToClients();
+        }
+    }
+
     /** 旋钮旋转（服务端调用），angle 为累计角度（度） */
     public void rotateKnob(int id, float angle) {
+        int step = gridState.getDetentStep(id);
+        if (step > 0) angle = GridState.snapToDetent(angle, step);
         gridState.setKnobAngle(id, angle);
         setChanged();
         if (level != null && !level.isClientSide) {
@@ -216,7 +250,13 @@ public class MonitorBlockEntity extends BlockEntity {
             changed = gridState.updateScreen(oldId, newId, config.getString("text"));
         } else {
             changed = gridState.trySetId(oldId, newId);
-            if (changed) gridState.setModuleConfig(newId, config);
+            if (changed) {
+                gridState.setModuleConfig(newId, config);
+                // 切换到卡位模式（或修改卡位角度）时，把旋钮吸附到最近档位
+                if (ModuleType.KNOB == ModuleType.byName(name)) {
+                    gridState.snapKnobToDetent(newId);
+                }
+            }
         }
         if (changed) {
             setChanged();

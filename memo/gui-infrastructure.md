@@ -10,6 +10,7 @@
 | `HoverTintIconButton` | Create `IconButton` | hover 时用 `graphics.setColor(r,g,b)` 给 BUTTON_HOVER 着色 |
 | `ToggleButton` | `HoverTintIconButton` | selected/unselected 双图标，选中 BUTTON_DOWN + 图标偏移 1px |
 | `ScrollValueBar` | `AbstractWidget` | 滚轮数值输入条：横条背景 + 图标 + 短输入框 + 数值，悬停滚轮修改（Shift 加速、跳过占用） |
+| `TextInputBar` | `AbstractWidget` | 长文本输入条：横条背景 + 图标 + 长输入框 + 内嵌 EditBox，点击聚焦、悬停 tooltip/高亮 |
 | `MyIcons` | `ScreenElement` | 自绘 64×64 图标精灵表 `textures/gui/icons/my_icons.png`，16×16/格 |
 | `MyUIElements` | `ScreenElement` | 自绘 `textures/gui/gui_2.png` 中的横条/输入框背景元素 |
 
@@ -57,4 +58,12 @@ new HoverTintIconButton(x, y, AllIcons.I_CONFIRM, 0x80FF80);
 // 开关按钮
 ToggleButton t = new ToggleButton(x, y, MyIcons.LOCK, MyIcons.UNLOCK, 0x80FF80);
 t.withCallback(() -> t.setSelected(!t.isSelected()));
+
+// 长文本输入条（内嵌 EditBox，点击聚焦）
+TextInputBar bar = new TextInputBar(x, y, 256, 28, initialText, 50, MyIcons.SHOW_TOOLTIP)
+    .setHint(Component.translatable("hint.key"))
+    .addToolTipTitle(Component.translatable("title.key"))
+    .addToolTipInstruction(Component.translatable("tip.key"));
+addRenderableWidget(bar);
+String value = bar.getValue();
 ```

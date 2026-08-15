@@ -69,7 +69,14 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
             var bhv = ModuleRenderBehavior.of(mod.type());
 
             boolean isKnob = mod.type() == ModuleType.KNOB;
-            float target = isKnob ? grid.getKnobAngle(mod.id()) : (grid.isPressed(mod.id()) ? 1f : 0f);
+            float target;
+            if (isKnob) {
+                // 拖拽中优先使用客户端视觉角度（卡位微扭动）；否则跟随服务端角度
+                Float visual = MonitorGridOverlay.getActiveKnobVisualAngle(bePos, mod.id());
+                target = visual != null ? visual : grid.getKnobAngle(mod.id());
+            } else {
+                target = grid.isPressed(mod.id()) ? 1f : 0f;
+            }
             float current = beAnims.computeIfAbsent(mod.id(), ignored -> target);
             float delta = target - current;
             if (isKnob) {
@@ -97,7 +104,7 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
             renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), model, light, overlay);
             // 额外部件（拉杆等）
             bhv.renderExtra(poseStack, buffer, next, light, overlay);
-            if (isKnob) renderKnobAngle(poseStack, buffer, bePos, mod.id(), light);
+            if (isKnob) renderKnobAngle(poseStack, buffer, bePos, mod.id(), light, grid.getKnobAngle(mod.id()));
 
             poseStack.popPose();
         }
@@ -142,9 +149,16 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
     }
 
     private static void renderKnobAngle(PoseStack poseStack, MultiBufferSource buffer,
-                                        BlockPos monitorPos, int moduleId, int light) {
+                                        BlockPos monitorPos, int moduleId, int light, float serverAngle) {
+        // 拖拽中优先显示客户端视觉角度；否则仅在准心悬浮于该旋钮上时显示服务端当前角度
         Float angle = MonitorGridOverlay.getActiveKnobAngle(monitorPos, moduleId);
-        if (angle == null) return;
+        if (angle == null) {
+            if (MonitorGridOverlay.getHoveredKnobModuleId(monitorPos) == moduleId) {
+                angle = serverAngle;
+            } else {
+                return;
+            }
+        }
 
         String text = Math.round(angle) + "°";
         var font = Minecraft.getInstance().font;

@@ -5,14 +5,15 @@ import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.network.PlaceModulePayload;
-import com.zzy205.myfirstmod.network.RemoveModulePayload;
 import net.createmod.catnip.math.VoxelShaper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -104,6 +105,16 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
         return null;
     }
 
+    @Override
+    public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+        return InteractionResult.sidedSuccess(context.getLevel().isClientSide);
+    }
+
+    @Override
+    public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
+        return InteractionResult.sidedSuccess(context.getLevel().isClientSide);
+    }
+
     /**
      * 世界空间命中点 → 屏幕网格坐标（客户端使用）。
      * 注意：射线命中方块外表面，非凹入的屏幕面，故不校验 Z。
@@ -189,21 +200,10 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
         if (!level.isClientSide) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 
         Direction facing = state.getValue(FACING);
-        int[] gp = rayToGrid(pos, facing,
-                player.getEyePosition(1f), player.getViewVector(1f));
-
-        // ── 扳手拆卸 ──
-        if (stack.getItem().toString().equals("create:wrench") && gp != null) {
-            var be = level.getBlockEntity(pos);
-            if (be instanceof MonitorBlockEntity monitorBE) {
-                int cellId = monitorBE.getGridState().getCell(gp[0], gp[1]);
-                if (cellId >= 0) {
-                    PacketDistributor.sendToServer(new RemoveModulePayload(pos, cellId));
-                    return ItemInteractionResult.SUCCESS;
-                }
-            }
-            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-        }
+        // 直接使用 hitResult.getLocation()：它在 Sable 子次元中已经是局部（plot）坐标系，
+        // 与 pos 同空间，避免了自算射线-平面求交带来的内凹平面视差。
+        int[] gp = worldHitToGrid(pos, facing,
+                hitResult.getLocation().x, hitResult.getLocation().y, hitResult.getLocation().z);
 
         // ── 模块放置 ──
         ModuleType type = ModuleType.fromItem(stack);

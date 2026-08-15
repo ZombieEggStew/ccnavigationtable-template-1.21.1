@@ -206,6 +206,12 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
     }
 
     @Override
+    public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+        return useWithoutItem(state, context.getLevel(), context.getClickedPos(), context.getPlayer(),
+                new BlockHitResult(context.getClickLocation(), context.getClickedFace(), context.getClickedPos(), true));
+    }
+
+    @Override
     public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
         Level level = context.getLevel();
         BlockPos pos = context.getClickedPos();

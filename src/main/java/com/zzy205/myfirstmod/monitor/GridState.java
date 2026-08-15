@@ -216,10 +216,44 @@ public class GridState {
         return normalized < 0f ? normalized + 360f : normalized;
     }
 
+    /**
+     * 旋钮卡位步长（度）。卡位开启且角度 &gt; 0 时返回步长，否则返回 0（自由旋转）。
+     */
+    public int getDetentStep(int moduleId) {
+        CompoundTag cfg = moduleConfigs.get(moduleId);
+        if (cfg == null || !cfg.getBoolean("detent")) return 0;
+        int angle = cfg.getInt("angle");
+        return angle > 0 ? angle : 0;
+    }
+
+    /** 把角度吸附到最近卡位档位（0-360，360 归一为 0）。 */
+    public static float snapToDetent(float angle, int step) {
+        if (step <= 0) return normalizeKnobAngle(angle);
+        float norm = normalizeKnobAngle(angle);
+        float q = norm / step;
+        int base = (int) Math.floor(q);
+        float frac = q - base;
+        // 严格超过半程才吸附到下一档：半程点仍停在当前档位（微扭动峰值处）
+        int idx = frac > 0.5f ? base + 1 : base;
+        return (idx * step) % 360f;
+    }
+
+    /** 卡位开启时把旋钮当前角度吸附到最近档位（配置变更时调用）。 */
+    public void snapKnobToDetent(int moduleId) {
+        if (!modules.containsKey(moduleId)) return;
+        int step = getDetentStep(moduleId);
+        if (step <= 0) return;
+        knobAngles.put(moduleId, snapToDetent(getKnobAngle(moduleId), step));
+    }
+
     // ── 屏幕区域 ──
 
     /** 屏幕矩形。min 为左上角（较小坐标），max 为右下角（较大坐标）。 */
-    public record ScreenRegion(int id, int minX, int minY, int maxX, int maxY, String text) {
+    public record ScreenRegion(int id, int minX, int minY, int maxX, int maxY, String tooltipText) {
+        /** 初始化阶段不传入文本（表面渲染字符尚未实现），tooltip 默认为空。 */
+        public ScreenRegion(int id, int minX, int minY, int maxX, int maxY) {
+            this(id, minX, minY, maxX, maxY, "");
+        }
         public int width()  { return maxX - minX + 1; }
         public int height() { return maxY - minY + 1; }
     }
@@ -245,8 +279,8 @@ public class GridState {
         return null;
     }
 
-    /** 更新屏幕的 ID 与文本（同一 monitor 内 ID 唯一）。成功返回 true。 */
-    public boolean updateScreen(int oldId, int newId, String text) {
+    /** 更新屏幕的 ID 与 tooltip 文本（同一 monitor 内 ID 唯一）。成功返回 true。 */
+    public boolean updateScreen(int oldId, int newId, String tooltipText) {
         int idx = -1;
         for (int i = 0; i < screenRegions.size(); i++) {
             if (screenRegions.get(i).id() == oldId) { idx = i; break; }
@@ -258,7 +292,7 @@ public class GridState {
             if (newId < MODULE_ID_MIN || newId > MODULE_ID_MAX) return false;
             if (isIdUsed(newId)) return false;
         }
-        screenRegions.set(idx, new ScreenRegion(newId, sr.minX(), sr.minY(), sr.maxX(), sr.maxY(), text));
+        screenRegions.set(idx, new ScreenRegion(newId, sr.minX(), sr.minY(), sr.maxX(), sr.maxY(), tooltipText));
         return true;
     }
 
@@ -277,7 +311,7 @@ public class GridState {
         int id = findFreeId();
         if (id < 0) return -1;
 
-        ScreenRegion sr = new ScreenRegion(id, minX, minY, maxX, maxY, "");
+        ScreenRegion sr = new ScreenRegion(id, minX, minY, maxX, maxY);
         screenRegions.add(sr);
         for (int x = minX; x <= maxX; x++)
             for (int y = minY; y <= maxY; y++)
@@ -337,7 +371,7 @@ public class GridState {
             scrTag.putInt("minY", sr.minY());
             scrTag.putInt("maxX", sr.maxX());
             scrTag.putInt("maxY", sr.maxY());
-            if (!sr.text().isEmpty()) scrTag.putString("text", sr.text());
+            if (!sr.tooltipText().isEmpty()) scrTag.putString("tooltipText", sr.tooltipText());
             scrList.add(scrTag);
         }
         tag.put("screens", scrList);
@@ -391,8 +425,8 @@ public class GridState {
                 int minY = scrTag.getInt("minY");
                 int maxX = scrTag.getInt("maxX");
                 int maxY = scrTag.getInt("maxY");
-                String text = scrTag.getString("text");
-                screenRegions.add(new ScreenRegion(id, minX, minY, maxX, maxY, text));
+                String tooltipText = scrTag.getString("tooltipText");
+                screenRegions.add(new ScreenRegion(id, minX, minY, maxX, maxY, tooltipText));
                 for (int x = minX; x <= maxX; x++)
                     for (int y = minY; y <= maxY; y++)
                         grid[x][y] = SCREEN_CELL_MARKER;

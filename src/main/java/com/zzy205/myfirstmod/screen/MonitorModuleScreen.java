@@ -1,36 +1,27 @@
 package com.zzy205.myfirstmod.screen;
 
-import com.zzy205.myfirstmod.channel.ChannelScrollHelper;
 import com.zzy205.myfirstmod.foundation.gui.MyIcons;
-import com.zzy205.myfirstmod.foundation.gui.MyUIElements;
 import com.zzy205.myfirstmod.foundation.gui.widget.HoverTintIconButton;
+import com.zzy205.myfirstmod.foundation.gui.widget.ScrollValueBar;
+import com.zzy205.myfirstmod.foundation.gui.widget.TextInputBar;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.network.ModuleConfigPayload;
 
 import com.simibubi.create.foundation.gui.AllIcons;
 import net.createmod.catnip.gui.element.ScreenElement;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
-
-import java.util.List;
 
 /**
  * Monitor 模块配置界面 —— 蹲下+右键模块时打开。
  * 窗口 192×127，纹理位于 textures/gui/gui_2.png。
  */
-public class MonitorModuleScreen extends Screen {
+public class MonitorModuleScreen extends AbstractMonitorScreen {
 
     private static final int WIN_W = 192;
     private static final int WIN_H = 159;
@@ -48,32 +39,10 @@ public class MonitorModuleScreen extends Screen {
     private static final int DONE_BTN_BOTTOM = 24;
 
     // ── 横条：背景 + 图标 + 输入框 ──
-    // 纹理坐标（源贴图中的位置）
-    private static final int BAR_TEX_X = 0;
-    private static final int BAR_TEX_Y = 160;
     private static final int BAR_TEX_W = 256;
     private static final int BAR_TEX_H = 28;
-    private static final int INPUT_BG_TEX_X = 0;
-    private static final int INPUT_BG_TEX_Y = 208;
-    private static final int INPUT_BG_LONG_TEX_X = 0;
-    private static final int INPUT_BG_LONG_TEX_Y = 240;
-    private static final int INPUT_BG_TEX_W = 256;
-    private static final int INPUT_BG_TEX_H = 18;
-
+    private static final int BAR_ID_Y = 18;  // 首条横条（ID 滚轮）相对窗口顶部的偏移
     private static final int BAR_MARGIN_Y = 2;  // 横条之间的垂直间距
-
-    // ── ID 滚轮选择 ──
-
-    private static final int ID_HIT_W = 46;                         // 命中区宽度
-    private static final int ID_HIT_H = INPUT_BG_TEX_H;              // 命中区高度
-
-    // ── 文本输入框（滚轮滑条下方，位置可微调）──
-
-    private static final int TEXT_INPUT_X = 48;                 // 窗口内 X 偏移
-    private static final int TEXT_INPUT_Y = 58;
-    private static final int TEXT_INPUT_W = 109;               // 输入框宽度
-    private static final int TEXT_INPUT_H = 10;                // 输入框高度
-
 
     private final BlockPos monitorPos;
     private final GridState grid;
@@ -85,12 +54,10 @@ public class MonitorModuleScreen extends Screen {
 
     private int winLeft;
     private int winTop;
-    private int idValue = 0;  // 滚轮控制的模块 ID
-    private EditBox textInput;     // 文本输入框
+    private ScrollValueBar idBar;  // ID 滚轮输入条
+    private TextInputBar textBar;  // 悬浮文本输入条
 
-    private int bar_id_y = 0;
-
-    private static final int SECTION_Y_OFFSET = 80;  // 特殊设置区起始 Y（窗口相对）
+    private static final int SECTION_Y_OFFSET = 78;  // 特殊设置区起始 Y（窗口相对）
 
     public MonitorModuleScreen(BlockPos monitorPos, GridState grid, String name, int originalId, String initialText) {
         super(Component.empty());
@@ -106,9 +73,25 @@ public class MonitorModuleScreen extends Screen {
         this.winLeft = (this.width - WIN_W) / 2;
         this.winTop = (this.height - WIN_H) / 2;
 
-        // 以当前 ID 初始化滚轮值
-        this.idValue = originalId;
+        // ID 滚轮输入条（与 MonitorMenuScreen 频道条一致）
+        this.idBar = new ScrollValueBar(
+                winLeft, winTop + BAR_ID_Y, BAR_TEX_W, BAR_TEX_H,
+                originalId, originalId, grid.getOccupiedIds())
+            .withIcon(MyIcons.ID)
+            .addToolTipTitle(Component.translatable("gui.ccpe.module_config.id_title"))
+            .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"))
+            .addToolTipInstruction(Component.translatable("gui.ccpe.shift_scroll_faster"));
+        this.addRenderableWidget(this.idBar);
 
+        // 悬浮文本输入条（滚轮滑条下方）
+        this.textBar = new TextInputBar(
+                winLeft, winTop + BAR_ID_Y + BAR_TEX_H + BAR_MARGIN_Y,
+                BAR_TEX_W, BAR_TEX_H, initialText, 50, MyIcons.SHOW_TOOLTIP)
+            .setHint(Component.translatable("gui.ccpe.module_config.text_hint"))
+            .addToolTipTitle(Component.translatable("gui.ccpe.module_config.text_title"))
+            .addToolTipInstruction(Component.translatable("gui.ccpe.module_config.text_tip"));
+        this.addRenderableWidget(this.textBar);
+        
         // 右下角"完成"按钮
         HoverTintIconButton doneBtn = new HoverTintIconButton(
                 winLeft + WIN_W - DONE_BTN_RIGHT,
@@ -121,16 +104,9 @@ public class MonitorModuleScreen extends Screen {
         doneBtn.setToolTip(Component.translatable("gui.ccpe.module_config.done"));
         this.addRenderableWidget(doneBtn);
 
-        // 文本输入框（滚轮滑条下方）
-        this.textInput = new EditBox(this.font,
-                winLeft + TEXT_INPUT_X, winTop + TEXT_INPUT_Y,
-                TEXT_INPUT_W, TEXT_INPUT_H, Component.empty());
-        this.textInput.setMaxLength(50);
-        this.textInput.setBordered(false);
-        this.textInput.setTextColor(0xFFFFFF);
-        this.textInput.setValue(initialText);
-        this.textInput.setHint(Component.translatable("gui.ccpe.module_config.text_hint"));
-        this.addRenderableWidget(this.textInput);
+
+
+
 
         // 每类型特殊设置区
         this.section = ModuleConfigSections.create(name);
@@ -140,105 +116,13 @@ public class MonitorModuleScreen extends Screen {
 
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        int _currentY = winTop;
+    protected void renderCustom(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         // 先画自定义背景面板
         g.blit(TEXTURE, winLeft, winTop, 0, 0, WIN_W, WIN_H, TEX_W, TEX_H);
 
         // 标题：仅显示名称
         Component titleText = Component.translatable("module.ccpe." + name);
         g.drawString(this.font, titleText, winLeft + TITLE_X, winTop + TITLE_Y, TITLE_COLOR, false);
-        // ID
-
-        _currentY += 18;
-        _currentY = renderBar_id(g, _currentY);
-
-        // 悬浮文本
-        _currentY += BAR_MARGIN_Y;
-        _currentY = renderBarTooltipText(g, _currentY);
-
-        _currentY += BAR_MARGIN_Y;
-
-        // 最后画控件（按钮、输入框等），确保在最上层
-        super.render(g, mouseX, mouseY, partialTick);
-
-        // ID tooltip（在最上层）
-        renderIdTooltip(g, mouseX, mouseY);
-
-        // 文本输入框 tooltip（在最上层）
-        renderTextInputTooltip(g, mouseX, mouseY);
-    }
-
-    public int renderBar_id(GuiGraphics g,int currentY) {
-
-        bar_id_y = currentY;
-        // ── 横条：背景 + 输入框背景 ──
-        MyUIElements.BAR_BACKGROUND.render(g, winLeft, currentY);
-
-        // 左侧 16×16 图标
-        MyIcons.ID.render(g, winLeft + 22, currentY + 6);
-
-        // 输入短框背景
-        MyUIElements.SCROLL_INPUT_SHORT.render(g, winLeft, currentY + 5);
-
-        // ID 数值（居中于输入框内）
-        String valueText = String.valueOf(idValue);
-        g.drawString(this.font, valueText, winLeft + 50, currentY + 10, 0xFCFCEB, true);
-
-        return currentY + BAR_TEX_H;
-    }
-
-
-    public int renderBarTooltipText(GuiGraphics g, int currentY) {
-        //背景
-        MyUIElements.BAR_BACKGROUND.render(g, winLeft, currentY);
-
-        MyIcons.SHOW_TOOLTIP.render(g, winLeft + 22, currentY + 6);
-
-        // 输入长框背景
-        MyUIElements.INPUT_LONG.render(g, winLeft, currentY + 5);
-
-        return currentY + BAR_TEX_H;
-    }
-
-    /** ID 滚轮命中检测 */
-    private boolean inIdHitArea(double mouseX, double mouseY) {
-        int hitX = winLeft + 45;
-        int hitY = bar_id_y + 5;
-        return mouseX >= hitX && mouseX < hitX + ID_HIT_W
-                && mouseY >= hitY && mouseY < hitY + ID_HIT_H;
-    }
-    /** 文本输入框命中检测 */
-    private boolean inTextInputArea(double mouseX, double mouseY) {
-        int hitX = winLeft + TEXT_INPUT_X;
-        int hitY = winTop + TEXT_INPUT_Y;
-        return mouseX >= hitX && mouseX < hitX + TEXT_INPUT_W
-                && mouseY >= hitY && mouseY < hitY + TEXT_INPUT_H;
-    }
-    
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (!inIdHitArea(mouseX, mouseY) || scrollY == 0) {
-            return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
-        }
-        int dir = scrollY > 0 ? 1 : -1;
-        int jump = hasShiftDown() ? 10 : 1;
-        int newValue = ChannelScrollHelper.next(idValue, dir, jump, getMyId(), getOccupiedIds());
-        if (newValue != idValue) {
-            idValue = newValue;
-            playScrollSound();
-        }
-        return true;
-    }
-
-    /** 当前控件自己的 ID（打开 GUI 时的值） */
-    private int getMyId() {
-        return originalId;
-    }
-
-    /** 本 monitor 内所有控件（模块 + 屏幕）占用的 ID。 */
-    private int[] getOccupiedIds() {
-        return grid.getOccupiedIds();
     }
 
     /** 供 ModuleConfigSection 添加自己的控件。 */
@@ -253,48 +137,9 @@ public class MonitorModuleScreen extends Screen {
     public void onClose() {
         // 汇总公共配置（tooltip 文本）+ 每类型特殊配置，一次性发送
         CompoundTag config = new CompoundTag();
-        config.putString("text", textInput.getValue());
+        config.putString("text", textBar.getValue());
         section.save(config);
-        PacketDistributor.sendToServer(new ModuleConfigPayload(monitorPos, name, originalId, idValue, config));
+        PacketDistributor.sendToServer(new ModuleConfigPayload(monitorPos, name, originalId, idBar.getValue(), config));
         super.onClose();
-    }
-
-    /** ID 数值 tooltip */
-    private void renderIdTooltip(GuiGraphics g, int mouseX, int mouseY) {
-        if (!inIdHitArea(mouseX, mouseY)) return;
-        List<Component> lines = List.of(
-                Component.translatable("gui.ccpe.module_config.id_title")
-                        .withStyle(Style.EMPTY.withColor(0x528FDE)),
-                Component.translatable("gui.ccpe.scroll_to_change")
-                        .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)),
-                Component.translatable("gui.ccpe.shift_scroll_faster")
-                        .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
-        g.renderComponentTooltip(this.font, lines, mouseX, mouseY);
-    }
-
-    /** 文本输入框 tooltip（格式与频道 tooltip 一致） */
-    private void renderTextInputTooltip(GuiGraphics g, int mouseX, int mouseY) {
-        if (!inTextInputArea(mouseX, mouseY)) return;
-        List<Component> lines = List.of(
-                Component.translatable("gui.ccpe.module_config.text_title")
-                        .withStyle(Style.EMPTY.withColor(0x528FDE)),
-                Component.translatable("gui.ccpe.module_config.text_tip")
-                        .withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
-        g.renderComponentTooltip(this.font, lines, mouseX, mouseY);
-    }
-
-    private void playScrollSound() {
-        Minecraft.getInstance().getSoundManager()
-                .play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_HAT.value(), 1.25f, 0.3f));
-    }
-
-    @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // 禁用原版半透明渐变背景，使用自定义贴图代替
-    }
-
-    @Override
-    public boolean isPauseScreen() {
-        return false;
     }
 }

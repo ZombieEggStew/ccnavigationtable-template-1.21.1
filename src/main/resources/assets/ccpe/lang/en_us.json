@@ -1,4 +1,4 @@
-﻿{
+{
   "item.ccpe.test_item": "Test Item",
   "itemGroup.ccpe.my_mod_tab": "CC Navigation",
 
@@ -23,6 +23,12 @@
   "gui.ccpe.module_config.done": "Done",
   "gui.ccpe.module_config.id_title": "Module ID",
   "gui.ccpe.module_config.button_latch": "Latch Mode",
+  "gui.ccpe.module_config.knob_detent": "Detent",
+  "gui.ccpe.module_config.knob_detent_tip": "Snap the knob to detent angles when on",
+  "gui.ccpe.module_config.knob_detent_on": "On",
+  "gui.ccpe.module_config.knob_detent_off": "Off",
+  "gui.ccpe.module_config.knob_angle": "Angle Range",
+  "gui.ccpe.module_config.knob_angle_tip": "With detent on, the knob snaps to multiples of this angle",
   "gui.ccpe.screen_config.id_title": "Screen ID",
   "gui.ccpe.module_config.text_hint": "No tooltip text",
   "gui.ccpe.module_config.text_title": "Text Input",

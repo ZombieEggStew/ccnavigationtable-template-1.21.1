@@ -4,6 +4,7 @@ import com.zzy205.myfirstmod.CCPeripheraExtender;
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.block.MonitorBlock;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.MonitorBackground;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
@@ -11,9 +12,11 @@ import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.network.ModuleKnobRotatePayload;
 import com.zzy205.myfirstmod.network.ModulePressPayload;
 import com.zzy205.myfirstmod.network.PlaceScreenPayload;
+import com.zzy205.myfirstmod.network.RemoveModulePayload;
 import com.zzy205.myfirstmod.network.RemoveScreenPayload;
 import com.zzy205.myfirstmod.screen.MonitorMenuScreen;
 import com.zzy205.myfirstmod.screen.MonitorModuleScreen;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -78,6 +81,12 @@ public class MonitorGridOverlay {
         float knobLastSoundAngle = 0f;
         /** 当前拖动中的绝对角度（度），仅客户端显示使用 */
         float knobDisplayAngle = 0f;
+        /** 卡位模式下上一次吸附到的档位角度（度），用于只在跨档时发声 */
+        float knobLastDetent = 0f;
+        /** 拖拽中旋钮把手的视觉角度（度，含卡位前半程的微扭动），仅用于模型渲染 */
+        float knobVisualAngle = 0f;
+        /** 本次拖拽的卡位步长（0 = 自由模式，此时把手跟随服务端角度） */
+        int knobDetentStep = 0;
 
         // ── 屏幕两点放置 ──
         boolean screenPlacing = false;
@@ -92,11 +101,28 @@ public class MonitorGridOverlay {
     /** 所有活跃 Monitor 的交互状态，key 为 Monitor 方块坐标 */
     private static final Map<BlockPos, InteractionState> interactions = new HashMap<>();
 
+    /** 当前准心悬浮的旋钮（全局唯一：准心同时只能对准一个方块），仅用于悬停时显示角度 */
+    private static BlockPos hoveredKnobPos = null;
+    private static int hoveredKnobModuleId = -1;
+
     /** 获取正在拖动的旋钮角度；未拖动或模块不匹配时返回 null。 */
     public static Float getActiveKnobAngle(BlockPos pos, int moduleId) {
         InteractionState state = interactions.get(pos);
         if (state == null || !state.knobDragging || state.knobDragModuleId != moduleId) return null;
         return state.knobDisplayAngle;
+    }
+
+    /** 获取正在拖动的旋钮把手的视觉角度（含卡位前半程微扭动）；非卡位或未拖动时返回 null。 */
+    public static Float getActiveKnobVisualAngle(BlockPos pos, int moduleId) {
+        InteractionState state = interactions.get(pos);
+        if (state == null || !state.knobDragging || state.knobDragModuleId != moduleId
+                || state.knobDetentStep <= 0) return null;
+        return state.knobVisualAngle;
+    }
+
+    /** 获取当前准心悬浮的旋钮模块 ID；未悬浮旋钮时返回 -1。 */
+    public static int getHoveredKnobModuleId(BlockPos pos) {
+        return (hoveredKnobPos != null && hoveredKnobPos.equals(pos)) ? hoveredKnobModuleId : -1;
     }
 
     public static void register() {
@@ -128,7 +154,11 @@ public class MonitorGridOverlay {
         // ── 释放所有非当前 Monitor 的活跃按钮按下 ──
         releaseStalePressesExcept(player, isMonitor ? pos : null);
 
-        if (!isMonitor || pos == null) return;
+        if (!isMonitor || pos == null) {
+            hoveredKnobPos = null;
+            hoveredKnobModuleId = -1;
+            return;
+        }
 
         BlockHitResult bhr = (BlockHitResult) hit;
         Level level = player.level();
@@ -161,15 +191,28 @@ public class MonitorGridOverlay {
                 | (Config.MONITOR_OUTLINE_G.get() << 8)
                 | Config.MONITOR_OUTLINE_B.get();
 
-        // 鼠标命中位置 → 网格坐标（射线与屏幕平面求交，+0.025 内凹）
-        int[] gp = MonitorBlock.rayToGrid(pos, facing,
-                player.getEyePosition((float) event.getPartialTick().getGameTimeDeltaTicks()),
-                player.getViewVector((float) event.getPartialTick().getGameTimeDeltaTicks()));
+        // 鼠标命中位置 → 网格坐标。
+        // 关键点：Sable 的 clip mixin 返回的 BlockHitResult 已经是子次元局部（plot）坐标系，
+        // 因此直接用 hitResult.getLocation()（与 pos 同空间）即可得到准确的屏幕命中点，
+        // 无需再自行做射线-平面求交（那会因屏幕面内凹 0.025 而在斜视时产生视差偏移）。
+        float partialTick = (float) event.getPartialTick().getGameTimeDeltaTicks();
+        SubLevel subLevel = SableCompat.getContainingSubLevel(level, pos);
+        int[] gp = MonitorBlock.worldHitToGrid(pos, facing,
+                bhr.getLocation().x, bhr.getLocation().y, bhr.getLocation().z);
         MonitorModule hoveredModule = null;
         if (gp != null) {
             hoveredModule = grid.getModule(grid.getCell(gp[0], gp[1]));
         }
         GridState.ScreenRegion screenAt = gp != null ? grid.getScreenAt(gp[0], gp[1]) : null;
+
+        // ── 记录当前准心悬浮的旋钮模块，供渲染器在“仅悬停”时显示角度 ──
+        if (hoveredModule != null && hoveredModule.type() == ModuleType.KNOB) {
+            hoveredKnobPos = pos;
+            hoveredKnobModuleId = hoveredModule.id();
+        } else {
+            hoveredKnobPos = null;
+            hoveredKnobModuleId = -1;
+        }
 
         if (hoveredModule != null) {
             var config = grid.getModuleConfig(hoveredModule.id());
@@ -177,8 +220,8 @@ public class MonitorGridOverlay {
             if (!text.isBlank()) {
                 hoveredTooltip = Component.literal(text);
             }
-        } else if (screenAt != null && !screenAt.text().isBlank()) {
-            hoveredTooltip = Component.literal(screenAt.text());
+        } else if (screenAt != null && !screenAt.tooltipText().isBlank()) {
+            hoveredTooltip = Component.literal(screenAt.tooltipText());
         }
 
         boolean showGrid = heldType != null || holdingScreen;
@@ -187,19 +230,36 @@ public class MonitorGridOverlay {
 
         boolean useDown = mc.options.keyUse.isDown();
 
-        // ── Shift+右键模块 / 屏幕 → 打开配置 GUI（边沿触发）──
+        // ── 右键模块 / 屏幕 → 打开配置 GUI（普通扳手右键或空手蹲下右键）──
         boolean shiftHeld = player.isShiftKeyDown();
         boolean shiftUseEdge = useDown && shiftHeld && !interact.shiftUseLastDown;
         interact.shiftUseLastDown = useDown && shiftHeld;
+        boolean useEdge = useDown && !interact.screenLastUseDown;
+        interact.screenLastUseDown = useDown;
 
-        if (hoveredModule != null && shiftUseEdge && heldType == null && !holdingScreen) {
+        // ── 扳手蹲下右键拆除模块/屏幕 ──
+        if (holdingWrench && shiftUseEdge && gp != null) {
+            int cellId = grid.getCell(gp[0], gp[1]);
+            if (cellId >= 0) {
+                PacketDistributor.sendToServer(new RemoveModulePayload(pos, cellId));
+                return;
+            }
+            if (cellId == GridState.SCREEN_CELL_MARKER) {
+                PacketDistributor.sendToServer(new RemoveScreenPayload(pos, gp[0], gp[1]));
+                return;
+            }
+        }
+
+        if (hoveredModule != null && (shiftUseEdge || holdingWrench && useEdge)
+            && heldType == null && !holdingScreen) {
             String text = grid.getModuleConfig(hoveredModule.id()).getString("text");
             mc.setScreen(new MonitorModuleScreen(pos, grid, hoveredModule.type().name, hoveredModule.id(), text));
             return;
         }
 
-        if (screenAt != null && shiftUseEdge && heldType == null && !holdingScreen) {
-            mc.setScreen(new MonitorModuleScreen(pos, grid, "screen", screenAt.id(), screenAt.text()));
+        if (screenAt != null && (shiftUseEdge || holdingWrench && useEdge)
+            && heldType == null && !holdingScreen) {
+            mc.setScreen(new MonitorModuleScreen(pos, grid, "screen", screenAt.id(), screenAt.tooltipText()));
             return;
         }
 
@@ -218,10 +278,7 @@ public class MonitorGridOverlay {
         }
 
         // ── 屏幕两点放置交互（边沿触发，防连发）──
-        boolean screenClickEdge = useDown && !interact.screenLastUseDown;
-        interact.screenLastUseDown = useDown;
-
-        if (holdingScreen && gp != null && screenClickEdge) {
+        if (holdingScreen && gp != null && useEdge) {
             if (!interact.screenPlacing) {
                 interact.screenPlacing = true;
                 interact.screenAnchorFacing = facing;
@@ -239,12 +296,6 @@ public class MonitorGridOverlay {
                 }
                 interact.screenPlacing = false;
             }
-        }
-
-        // 扳手拆卸屏幕（边沿触发）
-        if (holdingWrench && gp != null && screenClickEdge
-                && grid.getCell(gp[0], gp[1]) == GridState.SCREEN_CELL_MARKER) {
-            PacketDistributor.sendToServer(new RemoveScreenPayload(pos, gp[0], gp[1]));
         }
 
         // ── 按钮按下/释放检测 ──
@@ -286,13 +337,21 @@ public class MonitorGridOverlay {
             interact.knobCenterX = MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + hoveredModule.gridX() + hoveredModule.getWidth() / 2f;
             interact.knobCenterY = MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + hoveredModule.gridY() + hoveredModule.getHeight() / 2f;
             var be = level.getBlockEntity(pos);
+            int detentStep = 0;
             if (be instanceof MonitorBlockEntity monitorBE) {
                 interact.knobAccumAngle = monitorBE.getGridState().getKnobAngle(hoveredModule.id());
+                detentStep = monitorBE.getGridState().getDetentStep(hoveredModule.id());
             }
-            interact.knobPrevRawAngle = computeCrosshairAngle(player, pos, facing, interact.knobCenterX, interact.knobCenterY);
+            interact.knobPrevRawAngle = computeCrosshairAngle(pos, facing, bhr.getLocation(), interact.knobCenterX, interact.knobCenterY);
             interact.knobUnwrappedDelta = 0f;
             interact.knobLastSoundAngle = interact.knobAccumAngle;
             interact.knobDisplayAngle = normalizeDisplayAngle(interact.knobAccumAngle);
+            // 卡位模式：以当前角度的最近档位作为起始档位，避免拖拽第一帧误触发音效
+            interact.knobLastDetent = detentStep > 0
+                    ? GridState.snapToDetent(interact.knobAccumAngle, detentStep)
+                    : interact.knobDisplayAngle;
+            interact.knobDetentStep = detentStep;
+            interact.knobVisualAngle = interact.knobDisplayAngle;
         } else if (interact.knobDragging && !useDown) {
             interact.knobDragging = false;
             interact.knobDragModuleId = -1;
@@ -301,7 +360,7 @@ public class MonitorGridOverlay {
 
         // 1. 网格线（手持模块或屏幕物品时）
         if (showGrid) {
-            drawGridLines(outliner, pos, facing, keyPrefix);
+            drawGridLines(outliner, pos, facing, keyPrefix, subLevel, partialTick);
         }
 
         // 1.5 屏幕放置预览
@@ -315,7 +374,7 @@ public class MonitorGridOverlay {
             boolean bigEnough = w >= GridState.SCREEN_MIN_SIZE && h >= GridState.SCREEN_MIN_SIZE;
             boolean canPlace = grid.canPlaceScreen(minX, minY, maxX, maxY);
             int color = (bigEnough && canPlace) ? 0x4CDA64 : 0xFF5E5E;
-            drawModuleOutline(outliner, pos, minX, minY, w, h, keyPrefix + "/screen_preview", color, facing);
+            drawModuleOutline(outliner, pos, minX, minY, w, h, keyPrefix + "/screen_preview", color, facing, subLevel, partialTick);
         }
 
         // 2. 放置预览 / 对准高亮
@@ -324,11 +383,11 @@ public class MonitorGridOverlay {
                 boolean ok = grid.canPlace(gp[0], gp[1], heldType.width, heldType.height);
                 int color = ok ? 0x4CDA64 : 0xFF5E5E;
                 drawModuleOutline(outliner, pos, gp[0], gp[1],
-                        heldType.width, heldType.height, keyPrefix + "/preview", color, facing);
+                        heldType.width, heldType.height, keyPrefix + "/preview", color, facing, subLevel, partialTick);
             } else if (hoveredModule != null) {
                 drawModuleOutline(outliner, pos, hoveredModule.gridX(), hoveredModule.gridY(),
                         hoveredModule.getWidth(), hoveredModule.getHeight(),
-                        keyPrefix + "/hover", moduleColor, facing);
+                        keyPrefix + "/hover", moduleColor, facing, subLevel, partialTick);
             } else if (onScreenCell) {
                 // 悬停在屏幕上 → 高亮整个屏幕区域
                 var scr = grid.getScreenAt(gp[0], gp[1]);
@@ -339,7 +398,7 @@ public class MonitorGridOverlay {
                             | (Config.MONITOR_OUTLINE_G.get() << 8)
                             | Config.MONITOR_OUTLINE_B.get();
                     drawModuleOutline(outliner, pos, scr.minX(), scr.minY(),
-                            scr.width(), scr.height(), keyPrefix + "/screen_hover", screenColor, facing);
+                            scr.width(), scr.height(), keyPrefix + "/screen_hover", screenColor, facing, subLevel, partialTick);
                 }
             }
         }
@@ -393,14 +452,17 @@ public class MonitorGridOverlay {
         };
     }
 
-    private static Vec3 world(BlockPos pos, float x, float y, float z, Direction f) {
+    private static Vec3 world(BlockPos pos, float x, float y, float z, Direction f,
+                              SubLevel subLevel, float partialTick) {
         Vec3 r = rot(x, y, z, f);
-        return new Vec3(pos.getX() + r.x, pos.getY() + r.y, pos.getZ() + r.z);
+        Vec3 local = new Vec3(pos.getX() + r.x, pos.getY() + r.y, pos.getZ() + r.z);
+        return SableCompat.toWorldPosition(subLevel, partialTick, local);
     }
 
     // ── 网格线 ──
 
-    private static void drawGridLines(Outliner o, BlockPos pos, Direction f, String keyPrefix) {
+    private static void drawGridLines(Outliner o, BlockPos pos, Direction f, String keyPrefix,
+                                      SubLevel subLevel, float partialTick) {
         float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;
         float x0 = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET) / 16f;
         float x1 = (MonitorBlock.SCREEN_X_MAX - MonitorBlock.GRID_INSET) / 16f;
@@ -410,14 +472,14 @@ public class MonitorGridOverlay {
 
         for (int i = 0; i <= GridState.GRID_WIDTH; i++) {
             float x = x0 + i / 16f;
-            Vec3 from = world(pos, x, y0, z, f);
-            Vec3 to = world(pos, x, y1, z, f);
+            Vec3 from = world(pos, x, y0, z, f, subLevel, partialTick);
+            Vec3 to = world(pos, x, y1, z, f, subLevel, partialTick);
             o.showLine(keyPrefix + "/grid_v" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
         for (int i = 0; i <= GridState.GRID_HEIGHT; i++) {
             float y = y0 + i / 16f;
-            Vec3 from = world(pos, x0, y, z, f);
-            Vec3 to = world(pos, x1, y, z, f);
+            Vec3 from = world(pos, x0, y, z, f, subLevel, partialTick);
+            Vec3 to = world(pos, x1, y, z, f, subLevel, partialTick);
             o.showLine(keyPrefix + "/grid_h" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
     }
@@ -425,7 +487,8 @@ public class MonitorGridOverlay {
     // ── 模块/预览矩形边框 ──
 
     private static void drawModuleOutline(Outliner o, BlockPos pos,
-                                           int gx, int gy, int w, int h, String slot, int color, Direction f) {
+                                           int gx, int gy, int w, int h, String slot, int color, Direction f,
+                                           SubLevel subLevel, float partialTick) {
         float x0 = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + gx) / 16f;
         float y0 = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + gy) / 16f;
         float x1 = x0 + w / 16f;
@@ -433,10 +496,10 @@ public class MonitorGridOverlay {
         float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;
         float lw = (float) (1 / 128f * Config.MONITOR_OUTLINE_LINE_WIDTH.get());
 
-        Vec3 p00 = world(pos, x0, y0, z, f);
-        Vec3 p10 = world(pos, x1, y0, z, f);
-        Vec3 p11 = world(pos, x1, y1, z, f);
-        Vec3 p01 = world(pos, x0, y1, z, f);
+        Vec3 p00 = world(pos, x0, y0, z, f, subLevel, partialTick);
+        Vec3 p10 = world(pos, x1, y0, z, f, subLevel, partialTick);
+        Vec3 p11 = world(pos, x1, y1, z, f, subLevel, partialTick);
+        Vec3 p01 = world(pos, x0, y1, z, f, subLevel, partialTick);
 
         o.showLine(slot + "_top",    p00, p10).colored(color).lineWidth(lw);
         o.showLine(slot + "_right",  p10, p11).colored(color).lineWidth(lw);
@@ -446,53 +509,19 @@ public class MonitorGridOverlay {
 
     // ── 旋钮拖拽：准心绕旋钮中心旋转 → 旋钮跟随 ──
 
-    /** 计算玩家准心在屏幕平面上相对旋钮中心的角度（弧度） */
-    private static float computeCrosshairAngle(Player player,
-                                                BlockPos pos, Direction facing,
+    /** 计算屏幕命中点相对旋钮中心的角度（弧度）。hitLocation 为子次元局部空间命中点。 */
+    private static float computeCrosshairAngle(BlockPos pos, Direction facing, Vec3 hitLocation,
                                                 float knobCx, float knobCy) {
-        // 与 MonitorBlock.rayToGrid 相同的射线-平面求交
         float c = MonitorBlock.ROT_ORIGIN / 16f;
-        float planeZ = MonitorBlock.SCREEN_Z / 16f + 0.025f;
-        Vec3 eyePos = player.getEyePosition(1f);
-        Vec3 lookVec = player.getViewVector(1f);
-
-        Vec3 normal, point;
-        switch (facing) {
-            case NORTH:
-                normal = new Vec3(0, 0, 1);
-                point = new Vec3(pos.getX() + c, pos.getY() + c, pos.getZ() + planeZ);
-                break;
-            case SOUTH:
-                normal = new Vec3(0, 0, -1);
-                point = new Vec3(pos.getX() + c, pos.getY() + c, pos.getZ() + (1 - planeZ));
-                break;
-            case EAST:
-                normal = new Vec3(-1, 0, 0);
-                point = new Vec3(pos.getX() + (1 - planeZ), pos.getY() + c, pos.getZ() + c);
-                break;
-            case WEST:
-                normal = new Vec3(1, 0, 0);
-                point = new Vec3(pos.getX() + planeZ, pos.getY() + c, pos.getZ() + c);
-                break;
-            default: return 0f;
-        }
-
-        double denom = lookVec.dot(normal);
-        if (Math.abs(denom) < 1e-6) return 0f;
-        double t = point.subtract(eyePos).dot(normal) / denom;
-        if (t < 0) return 0f;
-
-        Vec3 hit = eyePos.add(lookVec.scale(t));
-
-        double lx = hit.x - pos.getX();
-        double ly = hit.y - pos.getY();
-        double lz = hit.z - pos.getZ();
+        double lx = hitLocation.x - pos.getX();
+        double ly = hitLocation.y - pos.getY();
+        double lz = hitLocation.z - pos.getZ();
         double rx;
         switch (facing) {
-            case NORTH: rx = lx;     break;
-            case SOUTH: rx = 2*c - lx; break;
-            case EAST:  rx = lz;     break;
-            case WEST:  rx = 2*c - lz; break;
+            case NORTH: rx = lx;        break;
+            case SOUTH: rx = 2*c - lx;  break;
+            case EAST:  rx = lz;        break;
+            case WEST:  rx = 2*c - lz;  break;
             default: return 0f;
         }
         float sx = (float)(rx * 16.0);
@@ -528,7 +557,7 @@ public class MonitorGridOverlay {
             }
 
             // 当前 raw 角度 → 解缠绕
-            float rawAngle = computeCrosshairAngle(mc.player, pos, state.knobDragFacing,
+            float rawAngle = computeCrosshairAngle(pos, state.knobDragFacing, bhr.getLocation(),
                     state.knobCenterX, state.knobCenterY);
             float diff = rawAngle - state.knobPrevRawAngle;
             if (diff > Math.PI) diff -= (float)(2 * Math.PI);
@@ -537,17 +566,43 @@ public class MonitorGridOverlay {
             state.knobPrevRawAngle = rawAngle;
 
             float newAngle = state.knobAccumAngle + (float) Math.toDegrees(state.knobUnwrappedDelta);
-            state.knobDisplayAngle = normalizeDisplayAngle(newAngle);
 
-            // ── 谢泼德音阶音效 ──
-            float soundDiff = newAngle - state.knobLastSoundAngle;
-            int soundSteps = (int) (soundDiff / KNOB_SOUND_STEP);
-            if (soundSteps != 0) {
-                float cycleAngle = newAngle % 360f;
-                if (cycleAngle < 0) cycleAngle += 360f;
-                float pitch = 0.5f + (cycleAngle / 360f) * 1.5f;
-                mc.player.playSound(SoundEvents.LEVER_CLICK, 0.1f, pitch);
-                state.knobLastSoundAngle = newAngle - (soundDiff - soundSteps * KNOB_SOUND_STEP);
+            // 读取卡位配置（0 = 自由旋转）
+            int detentStep = 0;
+            if (mc.level != null && mc.level.getBlockEntity(pos) instanceof MonitorBlockEntity be) {
+                detentStep = be.getGridState().getDetentStep(state.knobDragModuleId);
+            }
+
+            float sendAngle;
+            if (detentStep > 0) {
+                // ── 卡位模式：吸附到最近档位，只在跨档时发声 ──
+                float norm = normalizeDisplayAngle(newAngle);
+                float snapped = GridState.snapToDetent(norm, detentStep);
+                state.knobDisplayAngle = snapped;
+                if (snapped != state.knobLastDetent) {
+                    float pitch = 0.5f + (snapped / 360f) * 1.5f;
+                    mc.player.playSound(SoundEvents.LEVER_CLICK, 0.1f, pitch);
+                    state.knobLastDetent = snapped;
+                }
+                // 弹性微扭动：把手滞后于手部 1/3（最大偏离 step/6），松手后由渲染器弹回档位
+                float off = norm - snapped;
+                if (off > 180f) off -= 360f;
+                else if (off < -180f) off += 360f;
+                state.knobVisualAngle = normalizeDisplayAngle(snapped + off / 3f);
+                sendAngle = snapped;
+            } else {
+                // ── 自由模式：每 12° 播放一次谢泼德音阶音效 ──
+                state.knobDisplayAngle = normalizeDisplayAngle(newAngle);
+                float soundDiff = newAngle - state.knobLastSoundAngle;
+                int soundSteps = (int) (soundDiff / KNOB_SOUND_STEP);
+                if (soundSteps != 0) {
+                    float cycleAngle = newAngle % 360f;
+                    if (cycleAngle < 0) cycleAngle += 360f;
+                    float pitch = 0.5f + (cycleAngle / 360f) * 1.5f;
+                    mc.player.playSound(SoundEvents.LEVER_CLICK, 0.1f, pitch);
+                    state.knobLastSoundAngle = newAngle - (soundDiff - soundSteps * KNOB_SOUND_STEP);
+                }
+                sendAngle = newAngle;
             }
 
             // 周期性发送旋转角度到服务端
@@ -555,7 +610,7 @@ public class MonitorGridOverlay {
             if (state.knobSendCooldown <= 0) {
                 state.knobSendCooldown = KNOB_SEND_INTERVAL;
                 PacketDistributor.sendToServer(
-                        new ModuleKnobRotatePayload(pos, state.knobDragModuleId, newAngle));
+                        new ModuleKnobRotatePayload(pos, state.knobDragModuleId, sendAngle));
             }
         }
     }

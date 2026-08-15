@@ -103,6 +103,7 @@ com.zzy205.myfirstmod
 | `foundation/gui/widget/HoverTintIconButton.java` | 带悬停染色的图标按钮 |
 | `foundation/gui/widget/ToggleButton.java` | 可选中状态的图标切换按钮 |
 | `foundation/gui/widget/ScrollValueBar.java` | 滚轮数值输入条（频道/ID 滚轮选择） |
+| `foundation/gui/widget/TextInputBar.java` | 长文本输入条（横条 + 图标 + 长输入框 + 内嵌 EditBox） |
 
 GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送 `ModuleConfigPayload` → `CCPeripheraExtender` 在服务端调用 `MonitorBlockEntity.applyModuleConfig` → `GridState` 保存。
 

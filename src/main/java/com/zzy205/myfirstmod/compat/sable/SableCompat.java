@@ -7,6 +7,7 @@ import dev.ryanhcode.sable.api.physics.mass.MassData;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.ticket.SubLevelLoadingTicketType;
+import dev.ryanhcode.sable.companion.ClientSubLevelAccess;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
@@ -213,6 +214,42 @@ public final class SableCompat {
             return Sable.HELPER.projectOutOfSubLevel(level, pos.getCenter());
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    // ═══════════════ 客户端坐标变换（Outliner 渲染用） ═══════════════
+
+    /**
+     * 获取 SubLevel 用于交互/渲染的姿态。
+     * 客户端优先取插值后的 renderPose（与方块实体渲染一致），
+     * 服务端或无法插值时退回 logicalPose。
+     *
+     * @return 姿态；失败或 subLevel 为 null 时返回 null
+     */
+    public static Pose3dc getPose(SubLevel subLevel, float partialTick) {
+        if (subLevel == null) return null;
+        try {
+            if (subLevel instanceof ClientSubLevelAccess client) {
+                return client.renderPose(partialTick);
+            }
+            return subLevel.logicalPose();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * SubLevel 局部坐标 → 世界坐标。
+     * 用于把 Outliner 网格线 / 放置预览 / 悬停高亮的端点从子次元局部坐标系
+     * 投影回世界，使它们画在物理体真实渲染的位置上。
+     */
+    public static Vec3 toWorldPosition(SubLevel subLevel, float partialTick, Vec3 localPos) {
+        if (subLevel == null || localPos == null) return localPos;
+        try {
+            Pose3dc pose = getPose(subLevel, partialTick);
+            return pose != null ? pose.transformPosition(localPos) : localPos;
+        } catch (Exception e) {
+            return localPos;
         }
     }
 

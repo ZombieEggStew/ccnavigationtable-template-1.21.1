@@ -32,6 +32,8 @@ public class MyIcons implements ScreenElement {
     public static final MyIcons SHOW_TOOLTIP = new MyIcons(1, 0);
     public static final MyIcons CHANNEL = new MyIcons(2, 0);
     public static final MyIcons BACKGROUND = new MyIcons(3, 0);
+    public static final MyIcons KNOB = new MyIcons(0, 1);
+    public static final MyIcons LEVER = new MyIcons(1, 1);
 
     private final int u;
     private final int v;
