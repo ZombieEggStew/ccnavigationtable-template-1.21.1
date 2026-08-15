@@ -13,13 +13,13 @@ import java.util.List;
 import java.util.ArrayList;
 
 /**
- * 14×12 棋盘网格状态。
+ * 12×10 棋盘网格状态（屏幕面板 14×12，四周各留 1 格边框）。
  * grid[x][y] = moduleId（-1 表示空格，-2 表示屏幕占用）。
  */
 public class GridState {
 
-    public static final int GRID_WIDTH = 14;
-    public static final int GRID_HEIGHT = 12;
+    public static final int GRID_WIDTH = 12;
+    public static final int GRID_HEIGHT = 10;
     /** 屏幕占用的格子标记（与 -1 空和 ≥0 moduleId 区分） */
     public static final int SCREEN_CELL_MARKER = -2;
     /** 屏幕最小尺寸（格） */

@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
+import com.zzy205.myfirstmod.monitor.MonitorBackground;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -12,6 +13,7 @@ import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -42,9 +44,6 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
     @Override
     public void render(MonitorBlockEntity be, float partialTick, PoseStack poseStack,
                        MultiBufferSource buffer, int light, int overlay) {
-        var grid = be.getGridState();
-        if (grid.isEmpty() && !grid.hasScreen()) return;
-
         BlockPos bePos = be.getBlockPos();
         Direction facing = be.getBlockState().getValue(MonitorBlock.FACING);
 
@@ -53,6 +52,11 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         poseStack.translate(c, c, c);
         poseStack.mulPose(Axis.YP.rotationDegrees(-facing.getOpposite().toYRot()));
         poseStack.translate(-c, -c, -c);
+
+        // ── 背景面板（始终渲染，覆盖原 screen 元素的面板贴图） ──
+        renderBackground(poseStack, buffer, be.getBackground(), light);
+
+        var grid = be.getGridState();
 
         // ── 渲染模块 ──
         var beAnims = animProgress.computeIfAbsent(bePos, k -> new HashMap<>());
@@ -81,8 +85,8 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
 
             poseStack.pushPose();
 
-            float px = (MonitorBlock.SCREEN_X_MIN + mod.gridX()) / 16f + bhv.offsetX();
-            float py = (MonitorBlock.SCREEN_Y_MIN + mod.gridY()) / 16f + bhv.offsetY();
+            float px = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + mod.gridX()) / 16f + bhv.offsetX();
+            float py = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + mod.gridY()) / 16f + bhv.offsetY();
             float pz = MonitorBlock.SCREEN_Z / 16f + bhv.offsetZ();
             if (bhv.usePressDepth()) pz += PRESS_DEPTH * next / 16f;
 
@@ -104,6 +108,37 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         }
 
         poseStack.popPose();
+    }
+
+    /**
+     * 渲染可更换的背景面板：在 screen 元素（z=5）前方 0.01px 处画一个 14×12 的朝北 quad，
+     * 用当前背景贴图覆盖原面板。模块（z=4 平面）仍在其前方，不受影响。
+     */
+    private static void renderBackground(PoseStack ps, MultiBufferSource buffer, String backgroundKey, int light) {
+        TextureAtlasSprite sprite = MonitorPreloadedModels.getBackgroundSprite(MonitorBackground.indexOf(backgroundKey));
+        if (sprite == null) return;
+
+        float x0 = MonitorBlock.SCREEN_X_MIN / 16f;
+        float x1 = MonitorBlock.SCREEN_X_MAX / 16f;
+        float y0 = MonitorBlock.SCREEN_Y_MIN / 16f;
+        float y1 = MonitorBlock.SCREEN_Y_MAX / 16f;
+        float z = (MonitorBlock.PANEL_Z - MonitorBlock.BACKGROUND_Z_OFFSET) / 16f;
+
+        float u0 = sprite.getU0(), v0 = sprite.getV0();
+        float u1 = sprite.getU1(), v1 = sprite.getV1();
+
+        VertexConsumer vc = buffer.getBuffer(Sheets.solidBlockSheet());
+        var pose = ps.last();
+
+        // 朝北的面（法线 -Z），顶点顺序与 MC 北面一致；v0=贴图顶部 → 面板顶部
+        vc.addVertex(pose.pose(), x0, y0, z).setColor(1f, 1f, 1f, 1f).setUv(u0, v1)
+                .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0f, 0f, -1f);
+        vc.addVertex(pose.pose(), x0, y1, z).setColor(1f, 1f, 1f, 1f).setUv(u0, v0)
+                .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0f, 0f, -1f);
+        vc.addVertex(pose.pose(), x1, y1, z).setColor(1f, 1f, 1f, 1f).setUv(u1, v0)
+                .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0f, 0f, -1f);
+        vc.addVertex(pose.pose(), x1, y0, z).setColor(1f, 1f, 1f, 1f).setUv(u1, v1)
+                .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0f, 0f, -1f);
     }
 
     private static void renderKnobAngle(PoseStack poseStack, MultiBufferSource buffer,
@@ -148,8 +183,8 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         float cellSize   = 1f / 16f;
         float borderSize = cellSize;   // 角模型占 1 格
 
-        float scrX = (MonitorBlock.SCREEN_X_MIN + scr.minX()) / 16f;
-        float scrY = (MonitorBlock.SCREEN_Y_MIN + scr.minY()) / 16f;
+        float scrX = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + scr.minX()) / 16f;
+        float scrY = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + scr.minY()) / 16f;
         float scrW = scr.width()  * cellSize;
         float scrH = scr.height() * cellSize;
         float scrZ = MonitorBlock.SCREEN_Z / 16f;

@@ -2,10 +2,13 @@ package com.zzy205.myfirstmod.block;
 
 import com.zzy205.myfirstmod.CCPeripheraExtender;
 import com.zzy205.myfirstmod.monitor.ModuleType;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.RandomSource;
 import net.neoforged.neoforge.client.event.ModelEvent;
+import net.neoforged.neoforge.client.model.data.ModelData;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.EnumMap;
@@ -35,6 +38,15 @@ public class MonitorPreloadedModels {
     public static final String SCREEN_EDGE   = "screen_edge";
     public static final String SCREEN_CENTER = "screen_center";
 
+    /** 背景面板贴图数量（对应 MonitorBackground.KEYS 的下标 0..4） */
+    public static final int BACKGROUND_COUNT = 5;
+    /** 背景贴图占位模型位置（用于把贴图缝到方块图集上） */
+    private static final ResourceLocation[] BG_LOC = new ResourceLocation[BACKGROUND_COUNT];
+    /** 缝好的背景贴图精灵，下标 = MonitorBackground.indexOf(key) */
+    private static final TextureAtlasSprite[] BG_SPRITE = new TextureAtlasSprite[BACKGROUND_COUNT];
+
+    private static final RandomSource RANDOM = RandomSource.create(42L);
+
     static {
         MAIN_LOC.put(ModuleType.BUTTON_1X1, rl("block/button_1/button_1_base"));
         MAIN_LOC.put(ModuleType.TOGGLE_SWITCH, rl("block/toggle/toggle_base"));
@@ -46,6 +58,9 @@ public class MonitorPreloadedModels {
         EXTRA_LOC.put(SCREEN_CORNER, rl("block/screen/screen_corner"));
         EXTRA_LOC.put(SCREEN_EDGE,   rl("block/screen/screen_edge"));
         EXTRA_LOC.put(SCREEN_CENTER, rl("block/screen/screen_center"));
+        for (int i = 0; i < BACKGROUND_COUNT; i++) {
+            BG_LOC[i] = rl("block/monitor_bg/bg_" + i);
+        }
     }
 
     private static ResourceLocation rl(String path) {
@@ -57,6 +72,9 @@ public class MonitorPreloadedModels {
     public static void registerAdditional(ModelEvent.RegisterAdditional event) {
         MAIN_LOC.values().forEach(loc -> event.register(ModelResourceLocation.standalone(loc)));
         EXTRA_LOC.values().forEach(loc -> event.register(ModelResourceLocation.standalone(loc)));
+        for (ResourceLocation loc : BG_LOC) {
+            event.register(ModelResourceLocation.standalone(loc));
+        }
     }
 
     public static void bakingCompleted(ModelEvent.BakingCompleted event) {
@@ -70,6 +88,19 @@ public class MonitorPreloadedModels {
             if (m != null) { EXTRA_MODEL.put(e.getKey(), m); }
             else CCPeripheraExtender.LOGGER.error("[Models] MISSING extra: {}", e.getKey());
         }
+        for (int i = 0; i < BACKGROUND_COUNT; i++) {
+            BakedModel m = event.getModels().get(ModelResourceLocation.standalone(BG_LOC[i]));
+            if (m == null) {
+                CCPeripheraExtender.LOGGER.error("[Models] MISSING bg: {}", i);
+                continue;
+            }
+            var quads = m.getQuads(null, null, RANDOM, ModelData.EMPTY, null);
+            if (!quads.isEmpty()) {
+                BG_SPRITE[i] = quads.get(0).getSprite();
+            } else {
+                CCPeripheraExtender.LOGGER.error("[Models] bg has no quad: {}", i);
+            }
+        }
     }
 
     @Nullable
@@ -77,4 +108,11 @@ public class MonitorPreloadedModels {
 
     @Nullable
     public static BakedModel getExtra(String key) { return EXTRA_MODEL.get(key); }
+
+    /** 按下标取背景贴图精灵（下标来自 {@code MonitorBackground.indexOf(key)}）。 */
+    @Nullable
+    public static TextureAtlasSprite getBackgroundSprite(int index) {
+        if (index < 0 || index >= BACKGROUND_COUNT) return BG_SPRITE[0];
+        return BG_SPRITE[index];
+    }
 }

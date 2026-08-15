@@ -283,8 +283,8 @@ public class MonitorGridOverlay {
             interact.knobDragging = true;
             interact.knobDragFacing = facing;
             interact.knobDragModuleId = hoveredModule.id();
-            interact.knobCenterX = MonitorBlock.SCREEN_X_MIN + hoveredModule.gridX() + hoveredModule.getWidth() / 2f;
-            interact.knobCenterY = MonitorBlock.SCREEN_Y_MIN + hoveredModule.gridY() + hoveredModule.getHeight() / 2f;
+            interact.knobCenterX = MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + hoveredModule.gridX() + hoveredModule.getWidth() / 2f;
+            interact.knobCenterY = MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + hoveredModule.gridY() + hoveredModule.getHeight() / 2f;
             var be = level.getBlockEntity(pos);
             if (be instanceof MonitorBlockEntity monitorBE) {
                 interact.knobAccumAngle = monitorBE.getGridState().getKnobAngle(hoveredModule.id());
@@ -402,19 +402,19 @@ public class MonitorGridOverlay {
 
     private static void drawGridLines(Outliner o, BlockPos pos, Direction f, String keyPrefix) {
         float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;
-        float x0 = MonitorBlock.SCREEN_X_MIN / 16f;
-        float x1 = MonitorBlock.SCREEN_X_MAX / 16f;
-        float y0 = MonitorBlock.SCREEN_Y_MIN / 16f;
-        float y1 = MonitorBlock.SCREEN_Y_MAX / 16f;
+        float x0 = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET) / 16f;
+        float x1 = (MonitorBlock.SCREEN_X_MAX - MonitorBlock.GRID_INSET) / 16f;
+        float y0 = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET) / 16f;
+        float y1 = (MonitorBlock.SCREEN_Y_MAX - MonitorBlock.GRID_INSET) / 16f;
         float lw = (float) (1 / 256f * Config.MONITOR_GRID_LINE_WIDTH.get());
 
-        for (int i = 0; i <= 14; i++) {
+        for (int i = 0; i <= GridState.GRID_WIDTH; i++) {
             float x = x0 + i / 16f;
             Vec3 from = world(pos, x, y0, z, f);
             Vec3 to = world(pos, x, y1, z, f);
             o.showLine(keyPrefix + "/grid_v" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
-        for (int i = 0; i <= 12; i++) {
+        for (int i = 0; i <= GridState.GRID_HEIGHT; i++) {
             float y = y0 + i / 16f;
             Vec3 from = world(pos, x0, y, z, f);
             Vec3 to = world(pos, x1, y, z, f);
@@ -426,8 +426,8 @@ public class MonitorGridOverlay {
 
     private static void drawModuleOutline(Outliner o, BlockPos pos,
                                            int gx, int gy, int w, int h, String slot, int color, Direction f) {
-        float x0 = MonitorBlock.SCREEN_X_MIN / 16f + gx / 16f;
-        float y0 = MonitorBlock.SCREEN_Y_MIN / 16f + gy / 16f;
+        float x0 = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + gx) / 16f;
+        float y0 = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + gy) / 16f;
         float x1 = x0 + w / 16f;
         float y1 = y0 + h / 16f;
         float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;

@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
+import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.network.PlaceModulePayload;
 import com.zzy205.myfirstmod.network.RemoveModulePayload;
@@ -32,7 +33,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 显示器方块 — 实体部件。14×12 屏幕网格，手持模块物品右键直接装配。
+ * 显示器方块 — 实体部件。12×10 屏幕网格（14×12 面板四周留 1 格边框），手持模块物品右键直接装配。
  */
 public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
 
@@ -45,6 +46,13 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
     public static final float SCREEN_X_MAX = 15f;
     public static final float SCREEN_Y_MIN = 2f;
     public static final float SCREEN_Y_MAX = 14f;
+
+    /** 面板（screen 元素: box(1,2,5,15,14,5)）在模型中的 z 坐标（1/16 格单位） */
+    public static final float PANEL_Z = 5f;
+    /** 背景 quad 相对面板向前（朝向玩家）的偏移量，覆盖原面板并避免 z-fighting（0.01px） */
+    public static final float BACKGROUND_Z_OFFSET = 0.01f;
+    /** 棋盘网格相对屏幕面板每侧的内缩（格），形成 1 格边框（14×12 面板 → 12×10 网格） */
+    public static final float GRID_INSET = 1f;
 
     /** VoxelShaper.forHorizontal 旋转原点：Y=8, 水平中心=8 */
     public static final float ROT_ORIGIN = 8f;
@@ -119,12 +127,13 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
         rx *= 16.0; ry *= 16.0;
 
         // 不检查 Z —— 射线打在方块外表面而非凹入的屏幕
-        if (rx < SCREEN_X_MIN - 0.5 || rx > SCREEN_X_MAX + 0.5) return null;
-        if (ry < SCREEN_Y_MIN - 0.5 || ry > SCREEN_Y_MAX + 0.5) return null;
+        // 命中区域为内缩后的 12×10 网格（四周 1 格边框不属于可放置区域）
+        if (rx < SCREEN_X_MIN + GRID_INSET - 0.5 || rx > SCREEN_X_MAX - GRID_INSET + 0.5) return null;
+        if (ry < SCREEN_Y_MIN + GRID_INSET - 0.5 || ry > SCREEN_Y_MAX - GRID_INSET + 0.5) return null;
 
-        int gx = (int) Math.floor(rx - SCREEN_X_MIN);
-        int gy = (int) Math.floor(ry - SCREEN_Y_MIN);
-        if (gx < 0 || gx >= 14 || gy < 0 || gy >= 12) return null;
+        int gx = (int) Math.floor(rx - SCREEN_X_MIN - GRID_INSET);
+        int gy = (int) Math.floor(ry - SCREEN_Y_MIN - GRID_INSET);
+        if (gx < 0 || gx >= GridState.GRID_WIDTH || gy < 0 || gy >= GridState.GRID_HEIGHT) return null;
         return new int[]{gx, gy};
     }
 

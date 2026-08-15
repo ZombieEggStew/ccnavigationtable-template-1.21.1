@@ -30,7 +30,7 @@ public class MonitorBlockEntity extends BlockEntity {
 
     /** 显示器屏幕文字 */
     private String screenText = "";
-    /** 14×12 棋盘网格 */
+    /** 12×10 棋盘网格 */
     private final GridState gridState = new GridState();
     /** 全局频道号（-1 表示尚未注册，注册时自动分配） */
     private int channel = -1;
@@ -171,7 +171,7 @@ public class MonitorBlockEntity extends BlockEntity {
         setChanged();
         if (level != null && !level.isClientSide) {
             level.playSound(null, worldPosition, SoundEvents.WOODEN_BUTTON_CLICK_ON,
-                    SoundSource.BLOCKS, 0.2f, 0.5f);
+                    SoundSource.BLOCKS, 0.3f, 0.5f);
             syncGridToClients();
         }
     }
@@ -182,7 +182,7 @@ public class MonitorBlockEntity extends BlockEntity {
         setChanged();
         if (level != null && !level.isClientSide) {
             level.playSound(null, worldPosition, SoundEvents.WOODEN_BUTTON_CLICK_OFF,
-                    SoundSource.BLOCKS, 0.2f, 0.5f);
+                    SoundSource.BLOCKS, 0.3f, 0.5f);
             syncGridToClients();
         }
     }
