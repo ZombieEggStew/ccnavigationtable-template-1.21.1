@@ -25,7 +25,7 @@ public class ScrollValueBar extends AbstractWidget implements TooltipWidget {
 
     // 相对横条左上角的布局偏移（与 MonitorModuleScreen 的 bar_id 一致）
     private static final int ICON_X = 22;
-    private static final int ICON_Y = 6;
+    private static final int ICON_Y = 5;
     private static final int INPUT_Y = 5;
     private static final int VALUE_X = 50;
     private static final int VALUE_Y = 10;

@@ -54,9 +54,10 @@ com.zzy205.myfirstmod
 |---|---|---|
 | `block/MonitorBlock.java` | Monitor 方块状态、朝向、放置/拆除、右键入口和射线到网格坐标的转换 | 方块交互、朝向、命中检测、GUI 打开入口 |
 | `block/MonitorBlockEntity.java` | 持有 `GridState`；服务端执行放置、移除、按压、旋钮、屏幕和配置修改，并同步客户端；负责 NBT 和 BE 更新包 | Monitor 状态、持久化、服务端行为、同步问题 |
-| `block/MonitorRenderer.java` | Monitor 方块实体的模型/底板渲染 | Monitor 本体渲染 |
+| `block/MonitorRenderer.java` | Monitor 方块实体的模型/底板渲染；屏幕 9 宫格 + 屏幕字符/矩形（委托 `ScreenTextRenderer`） | Monitor 本体渲染、屏幕文本/矩形渲染 |
 | `block/MonitorPreloadedModels.java` | 预加载 Monitor 动态渲染所需模型 | 模型加载或资源找不到 |
 | `client/MonitorGridOverlay.java` | 客户端 Monitor 网格、模块边框、预览、鼠标交互、按钮/旋钮 payload 发送和配置 GUI 打开 | 网格显示、命中检测、模块交互、放置预览、多 Monitor 状态隔离 |
+| `client/ScreenTextRenderer.java` | 屏幕字符（vanilla ascii.png 位图字体，`RenderType.text`）与矩形（纯色 `POSITION_COLOR` quad）渲染 | 屏幕字符/矩形渲染、字体 UV/环绕顺序/深度/镜像问题 |
 
 ### 独立方块
 
@@ -79,10 +80,11 @@ com.zzy205.myfirstmod
 
 | 文件 | 职责 | 修改场景 |
 |---|---|---|
-| `monitor/GridState.java` | 14×12 网格的核心状态；模块/屏幕占用、ID、按压状态、旋钮角度、配置、NBT 序列化 | 任何 Monitor 数据结构或状态转移 |
+| `monitor/GridState.java` | 14×12 网格的核心状态；模块/屏幕占用、ID、按压状态、旋钮角度、配置、屏幕字符缓冲（`screenTexts`）、NBT 序列化 | 任何 Monitor 数据结构或状态转移 |
 | `monitor/MonitorModule.java` | 不可变模块记录：ID、类型和网格坐标 |
 | `monitor/ModuleType.java` | 模块类型、尺寸、名称和物品映射 | 新模块类型、尺寸或物品关联 |
 | `monitor/MonitorBackground.java` | Monitor 背景选项（五个字符串）与默认值 | 背景选项/默认值变更 |
+| `monitor/ScreenText.java` | 每个屏幕的字符缓冲与矩形指令：文本行、光标、前景/背景色、字号、`OverflowMode`、`Rect` 列表；NBT 序列化 | 屏幕文本/矩形数据结构、溢出模式 |
 | `block/ModuleRenderBehavior.java` | 按模块类型选择渲染行为；包含 Button、Toggle、Knob 行为 | 模块动态渲染、按压/旋钮视觉状态 |
 
 重要约束：模块和屏幕在同一 Monitor 内共享 `0..9999` ID 命名空间。`GridState.trySetId` 修改 ID 时必须同步网格、按压状态、旋钮角度和模块配置。
@@ -145,7 +147,13 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/GlobalChannelRegistry.java` | 传感器+显示器共享的全局频道注册表 |
 | `compat/cc/PeripheralExtenderRegistry.java` | 传感器频道登记表（委托全局注册表） |
 | `compat/cc/MonitorRegistry.java` | Monitor 频道登记表（委托全局注册表） |
-| `compat/cc/MonitorPeripheral.java` | Monitor 的 `IPeripheral` 实现（空外设） |
+| `compat/cc/MonitorPeripheral.java` | Monitor 的 `IPeripheral` 实现（模块/屏幕查询入口） |
+| `compat/cc/ModuleHandle.java` | 模块/屏幕 Lua 实例的抽象基类（通用 get/set/tooltip） |
+| `compat/cc/ModuleHandleRegistry.java` | 按模块类型把 Java 记录包装成对应的 Lua handle |
+| `compat/cc/ButtonModuleHandle.java` | 按钮的 Lua API（按下/弹起/点击检测/灯带/玩家锁） |
+| `compat/cc/ToggleSwitchModuleHandle.java` | 钮子开关的 Lua API（锁存状态） |
+| `compat/cc/KnobModuleHandle.java` | 旋钮的 Lua API（角度读写） |
+| `compat/cc/ScreenModuleHandle.java` | 屏幕的 Lua API（tooltip/文本渲染/矩形绘制） |
 | `compat/cc/RedstoneTransceiverPeripheral.java` | Redstone Transceiver 的 `IPeripheral` 实现 |
 | `compat/cc/RedstoneTransceiverRegistry.java` | Receiver 频道和外设实例登记 |
 | `compat/create/CreateRedstoneCompat.java` | Create 红石链接兼容，建立虚拟红石连接 |
@@ -177,6 +185,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | 修改传感器 GUI 或数据 | `PeripheralExtenderScreen.java` / `Menu.java` / `BlockEntity.java` | `SensorFilterPayload.java`、`SensorNbtPayload.java`、CC registry |
 | 修改 Receiver GUI 或数据 | `RedstoneTransceiverScreen.java` / `Menu.java` / `BlockEntity.java` | `ReceiverSyncPayload.java`、`RedstoneTransceiverPeripheral.java` |
 | 修改 CC:Tweaked Lua API | `compat/cc/PeripheralExtenderAPI.java` | `CCPeripheralExtenderSetup.java`、相关 BlockEntity 和 registry |
+| 修改屏幕文本/矩形渲染或 Lua API | `monitor/ScreenText.java`、`compat/cc/ScreenModuleHandle.java`、`client/ScreenTextRenderer.java` | `MonitorBlockEntity.java`（screenWrite/screenDrawRect 等）、`MonitorRenderer.java`、`SyncGridPayload` |
 | 修改 Create 兼容或传动渲染 | `compat/create/CreateRedstoneCompat.java` / `TransmissionPeripheral*` | Create 源码参考和客户端注册 |
 | 修改资源模型、纹理或语言 | `src/main/resources/assets/ccpe/` | 对应 Java 注册/渲染类、资源 instruction |
 
@@ -215,3 +224,4 @@ flowchart LR
 - `MonitorBlockEntity` 的 `getUpdatePacket()` 不能恢复为默认实现，否则方块更新时 BE 快照不会同步。
 - 多个 Monitor 的客户端交互缓存必须按 `BlockPos` 隔离。
 - 修改 NBT 字段时同时检查 `GridState.save/load`、`MonitorBlockEntity.saveAdditional/loadAdditional` 以及客户端同步 payload。
+- 屏幕字符用 `RenderType.text(ascii.png)` 渲染：其顶点格式含 UV2（必须 `.setLight`），且「北面局部 X 轴与逻辑列轴相反」（字形/矩形需水平翻转、文本列锚定右缘），详见 `memo/record_screen_text.md`。

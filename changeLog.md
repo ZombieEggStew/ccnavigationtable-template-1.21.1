@@ -16,3 +16,8 @@
 
 1.0.4
 - Added optional integration with Aeroworks: Toggle Throttle Quadrant module (4 toggle latches)
+
+- Added screen (screen module) character/rectangle rendering with CC:T Lua API:
+  write / clear / setCursorPos / setTextScale / setTextColour / setZIndex /
+  setOverflowMode / drawRect / clearRects / getSize
+  (text has no background colour; use drawRect for backgrounds; write/drawRect accept an optional z layer)

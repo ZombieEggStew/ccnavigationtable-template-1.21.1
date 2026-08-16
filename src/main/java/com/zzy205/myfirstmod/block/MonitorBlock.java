@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
+import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.network.PlaceModulePayload;
@@ -52,6 +53,8 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
     public static final float PANEL_Z = 5f;
     /** 背景 quad 相对面板向前（朝向玩家）的偏移量，覆盖原面板并避免 z-fighting（0.01px） */
     public static final float BACKGROUND_Z_OFFSET = 0.01f;
+    /** 背景绘制平面的模型空间 z 坐标（1/16 格单位）。射线与 Monitor 求交须使用同一平面，保证命中点与所绘制背景对齐。 */
+    public static final float BACKGROUND_PLANE_Z = PANEL_Z - BACKGROUND_Z_OFFSET;
     /** 棋盘网格相对屏幕面板每侧的内缩（格），形成 1 格边框（14×12 面板 → 12×10 网格） */
     public static final float GRID_INSET = 1f;
 
@@ -116,12 +119,11 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 世界空间命中点 → 屏幕网格坐标（客户端使用）。
-     * 注意：射线命中方块外表面，非凹入的屏幕面，故不校验 Z。
-     * @return [gridX, gridY] 或 null 表示未命中屏幕区域。
+     * 局部/世界命中点 → 屏幕局部坐标（1/16 格单位，不裁剪边界）。
+     * @return [screenX, screenY]（1/16 格单位）或 null（朝向非法）
      */
     @Nullable
-    public static int[] worldHitToGrid(BlockPos pos, Direction facing, double hitX, double hitY, double hitZ) {
+    public static double[] worldHitToScreenLocal(BlockPos pos, Direction facing, double hitX, double hitY, double hitZ) {
         double lx = hitX - pos.getX();
         double ly = hitY - pos.getY();
         double lz = hitZ - pos.getZ();
@@ -135,10 +137,20 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
             case WEST:  rx = 2*c-lz; break;
             default: return null;
         }
-        rx *= 16.0; ry *= 16.0;
+        return new double[]{ rx * 16.0, ry * 16.0 };
+    }
 
-        // 不检查 Z —— 射线打在方块外表面而非凹入的屏幕
-        // 命中区域为内缩后的 12×10 网格（四周 1 格边框不属于可放置区域）
+    /**
+     * 局部/世界命中点 → 屏幕网格坐标。
+     * 命中区域为内缩后的 12×10 网格（四周 1 格边框不属于可放置区域）。
+     * @return [gridX, gridY] 或 null 表示未命中屏幕区域。
+     */
+    @Nullable
+    public static int[] worldHitToGrid(BlockPos pos, Direction facing, double hitX, double hitY, double hitZ) {
+        double[] sc = worldHitToScreenLocal(pos, facing, hitX, hitY, hitZ);
+        if (sc == null) return null;
+        double rx = sc[0], ry = sc[1];
+
         if (rx < SCREEN_X_MIN + GRID_INSET - 0.5 || rx > SCREEN_X_MAX - GRID_INSET + 0.5) return null;
         if (ry < SCREEN_Y_MIN + GRID_INSET - 0.5 || ry > SCREEN_Y_MAX - GRID_INSET + 0.5) return null;
 
@@ -149,17 +161,38 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 玩家视线 → 屏幕平面交点 → 网格坐标。
-     * 平面偏移 +0.025（内凹，在屏幕面与网格线间），与视觉一致。
+     * 玩家视线 → 背景平面交点 → 网格坐标。
+     * 求交平面与背景绘制平面（{@link #BACKGROUND_PLANE_Z}）一致，保证命中点与所绘制背景对齐。
+     * eyePos/lookVec 须处于同一坐标系（普通世界 = 世界坐标；Sable 子次元 = 局部坐标）。
      * @return [gridX, gridY] 或 null
      */
     @Nullable
-    public static int[] rayToGrid(BlockPos pos, Direction facing,
-                                   Vec3 eyePos, Vec3 lookVec) {
-        float c = ROT_ORIGIN / 16f;
-        float planeZ = SCREEN_Z / 16f + 0.025f;
+    public static int[] rayToGrid(BlockPos pos, Direction facing, Vec3 eyePos, Vec3 lookVec) {
+        Vec3 hit = intersectBackgroundPlane(pos, facing, eyePos, lookVec);
+        if (hit == null) return null;
+        return worldHitToGrid(pos, facing, hit.x, hit.y, hit.z);
+    }
 
-        // 屏幕面在世界空间中的法向量和一点
+    /**
+     * 玩家视线 → 背景平面交点 → 屏幕局部坐标（1/16 格单位，不裁剪边界）。
+     * 用于旋钮拖拽等需要连续坐标的场景。
+     * @return [screenX, screenY] 或 null
+     */
+    @Nullable
+    public static double[] rayToScreenLocal(BlockPos pos, Direction facing, Vec3 eyePos, Vec3 lookVec) {
+        Vec3 hit = intersectBackgroundPlane(pos, facing, eyePos, lookVec);
+        if (hit == null) return null;
+        return worldHitToScreenLocal(pos, facing, hit.x, hit.y, hit.z);
+    }
+
+    /** 射线与背景平面求交，返回交点（eyePos/lookVec 同坐标系），未命中返回 null。 */
+    @Nullable
+    private static Vec3 intersectBackgroundPlane(BlockPos pos, Direction facing, Vec3 origin, Vec3 dir) {
+        float c = ROT_ORIGIN / 16f;
+        // 快速测试：反转探测平面方向（内凹 4.99 → 外凸 3.01），确认偏移方向后再定最终值
+        float planeZ = (2 * SCREEN_Z - BACKGROUND_PLANE_Z) / 16f;
+
+        // 背景平面在模型空间中的法向量和一点
         Vec3 normal, point;
         switch (facing) {
             case NORTH:
@@ -181,14 +214,13 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
             default: return null;
         }
 
-        // 射线-平面求交: t = ((point - eye) · normal) / (look · normal)
-        double denom = lookVec.dot(normal);
+        // 射线-平面求交: t = ((point - origin) · normal) / (dir · normal)
+        double denom = dir.dot(normal);
         if (Math.abs(denom) < 1e-6) return null;
-        double t = point.subtract(eyePos).dot(normal) / denom;
+        double t = point.subtract(origin).dot(normal) / denom;
         if (t < 0) return null;
 
-        Vec3 hit = eyePos.add(lookVec.scale(t));
-        return worldHitToGrid(pos, facing, hit.x, hit.y, hit.z);
+        return origin.add(dir.scale(t));
     }
 
     @Override
@@ -200,10 +232,12 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
         if (!level.isClientSide) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 
         Direction facing = state.getValue(FACING);
-        // 直接使用 hitResult.getLocation()：它在 Sable 子次元中已经是局部（plot）坐标系，
-        // 与 pos 同空间，避免了自算射线-平面求交带来的内凹平面视差。
-        int[] gp = worldHitToGrid(pos, facing,
-                hitResult.getLocation().x, hitResult.getLocation().y, hitResult.getLocation().z);
+        // 在子次元局部空间自算射线与背景平面求交（与 Aeroworks/control-panels 同款做法），
+        // 不依赖 hitResult.getLocation() 的坐标，正常世界与 Sable 物理体内都消除斜视视差。
+        var subLevel = SableCompat.getContainingSubLevel(level, pos);
+        Vec3 eyeLocal = SableCompat.toLocalPosition(subLevel, 0f, player.getEyePosition());
+        Vec3 lookLocal = SableCompat.toLocalDirection(subLevel, 0f, player.getViewVector(1.0f));
+        int[] gp = rayToGrid(pos, facing, eyeLocal, lookLocal);
 
         // ── 模块放置 ──
         ModuleType type = ModuleType.fromItem(stack);

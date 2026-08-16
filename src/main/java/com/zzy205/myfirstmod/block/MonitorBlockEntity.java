@@ -7,6 +7,7 @@ import com.zzy205.myfirstmod.compat.cc.MonitorRegistry;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.monitor.MonitorBackground;
+import com.zzy205.myfirstmod.monitor.ScreenText;
 import com.zzy205.myfirstmod.network.SyncGridPayload;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import org.jetbrains.annotations.Nullable;
@@ -176,6 +177,19 @@ public class MonitorBlockEntity extends BlockEntity {
         }
     }
 
+    /** 玩家点击按钮按下（服务端调用）：始终记录玩家点击；锁定时不改变按下状态、不播放音效（音效由 Lua press/release 触发）。 */
+    public void pressModuleByPlayer(int id) {
+        gridState.recordPlayerClick(id);
+        if (gridState.isPlayerLocked(id)) return;
+        gridState.press(id);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            level.playSound(null, worldPosition, SoundEvents.WOODEN_BUTTON_CLICK_ON,
+                    SoundSource.BLOCKS, 0.3f, 0.5f);
+            syncGridToClients();
+        }
+    }
+
     /** 按钮释放（服务端调用，自动同步客户端） */
     public void releaseModule(int id) {
         gridState.release(id);
@@ -183,6 +197,40 @@ public class MonitorBlockEntity extends BlockEntity {
         if (level != null && !level.isClientSide) {
             level.playSound(null, worldPosition, SoundEvents.WOODEN_BUTTON_CLICK_OFF,
                     SoundSource.BLOCKS, 0.3f, 0.5f);
+            syncGridToClients();
+        }
+    }
+
+    /** 玩家释放按钮（服务端调用）：锁定时不改变状态、不播放音效（音效由 Lua press/release 触发）。 */
+    public void releaseModuleByPlayer(int id) {
+        if (gridState.isPlayerLocked(id)) return;
+        releaseModule(id);
+    }
+
+    /** 设置按钮玩家互动开关（服务端调用）。enabled=false 时玩家无法按下，但点击仍被记录。 */
+    public void setButtonPlayerControl(int id, boolean enabled) {
+        gridState.setPlayerLocked(id, !enabled);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            syncGridToClients();
+        }
+    }
+
+    /** 设置按钮灯带亮度（0..1）并切换为代码控制（服务端调用）。 */
+    public void setButtonLight(int id, float brightness) {
+        gridState.setLightBrightness(id, brightness);
+        gridState.setLightCodeControlled(id, true);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            syncGridToClients();
+        }
+    }
+
+    /** 设置按钮灯带是否由代码控制（服务端调用）。 */
+    public void setButtonLightControl(int id, boolean codeControlled) {
+        gridState.setLightCodeControlled(id, codeControlled);
+        setChanged();
+        if (level != null && !level.isClientSide) {
             syncGridToClients();
         }
     }
@@ -295,6 +343,133 @@ public class MonitorBlockEntity extends BlockEntity {
             return true;
         }
         return false;
+    }
+
+    // ── 屏幕文本（Lua 控制） ──
+
+    /** 屏幕文本/矩形相对 9 宫格边框的四周内缩（MC 像素），每侧为 1/64 块。 */
+    private static final float SCREEN_TEXT_INSET_PX = 0.25f;
+
+    /** 计算屏幕可显示的行列数（按当前字号自动计算）。 */
+    public int[] getScreenSize(int id) {
+        GridState.ScreenRegion scr = gridState.getScreenById(id);
+        if (scr == null) return null;
+        double innerW = scr.width() - 2 * SCREEN_TEXT_INSET_PX;
+        double innerH = scr.height() - 2 * SCREEN_TEXT_INSET_PX;
+        ScreenText text = gridState.getScreenText(id);
+        double scale = text != null ? text.getTextScale() : ScreenText.DEFAULT_SCALE;
+        return new int[] { ScreenText.colsFor(innerW, scale), ScreenText.rowsFor(innerH, scale) };
+    }
+
+    /** 服务端能否修改指定屏幕。 */
+    private boolean canMutateScreen(int id) {
+        if (level == null || level.isClientSide) return false;
+        return gridState.getScreenById(id) != null;
+    }
+
+    /** 在光标处写入文本（z 为空时用 ScreenText 的默认层级）。 */
+    public void screenWrite(int id, String text, @Nullable Double z) {
+        if (!canMutateScreen(id)) return;
+        GridState.ScreenRegion scr = gridState.getScreenById(id);
+        double innerW = (scr.width() - 2 * SCREEN_TEXT_INSET_PX) * ScreenText.RECT_UNITS_PER_PX;
+        ScreenText t = gridState.getOrCreateScreenText(id);
+        t.write(text, innerW, z != null ? z : t.getZIndex());
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 清空屏幕文本。 */
+    public void screenClear(int id) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).clear();
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 设置光标（drawRect 坐标，原点在内区左上角，1 单位 = 1/128 块）。 */
+    public void screenSetCursor(int id, double x, double y) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).setCursor(x, y);
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 设置整块屏幕的字号（仅影响之后写入的字形大小与换行推进量）。 */
+    public void screenSetTextScale(int id, double scale) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).setTextScale(scale);
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 设置前景色（0xRRGGBB）。 */
+    public void screenSetTextColour(int id, int colour) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).setTextColour(colour);
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 设置之后 write/drawRect 未显式指定 z 时使用的默认层级。 */
+    public void screenSetZIndex(int id, double z) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).setZIndex(z);
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 设置超出一行时的处理模式（"truncate" / "ellipsis" / "wrap"）。 */
+    public void screenSetOverflowMode(int id, String mode) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).setOverflowMode(ScreenText.OverflowMode.byName(mode));
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 在屏幕内区追加一个矩形（1/128 块坐标，原点在内区左上角；z 为空时用默认层级）。 */
+    public void screenDrawRect(int id, double x, double y, double w, double h,
+                               int colour, boolean solid, double lineWidth, @Nullable Double z) {
+        if (!canMutateScreen(id)) return;
+        ScreenText t = gridState.getOrCreateScreenText(id);
+        t.addRect(x, y, w, h, colour, solid, lineWidth, z != null ? z : t.getZIndex());
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 清空屏幕上的所有矩形。 */
+    public void screenClearRects(int id) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).clearRects();
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 在屏幕内区追加一条线段（1/128 块坐标；z 为空时用默认层级）。 */
+    public void screenDrawLine(int id, double x1, double y1, double x2, double y2,
+                               int colour, double lineWidth, @Nullable Double z) {
+        if (!canMutateScreen(id)) return;
+        ScreenText t = gridState.getOrCreateScreenText(id);
+        t.addLine(x1, y1, x2, y2, colour, lineWidth, z != null ? z : t.getZIndex());
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 在屏幕内区追加一个圆（1/128 块坐标；z 为空时用默认层级）。 */
+    public void screenDrawCircle(int id, double cx, double cy, double radius, int colour,
+                                 boolean solid, double lineWidth, int segments, @Nullable Double z) {
+        if (!canMutateScreen(id)) return;
+        ScreenText t = gridState.getOrCreateScreenText(id);
+        t.addCircle(cx, cy, radius, colour, solid, lineWidth, segments, z != null ? z : t.getZIndex());
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 清空屏幕上的所有图形（矩形 + 线段 + 圆），不影响文本。 */
+    public void screenClearShapes(int id) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).clearShapes();
+        setChanged();
+        syncGridToClients();
     }
 
     @Override

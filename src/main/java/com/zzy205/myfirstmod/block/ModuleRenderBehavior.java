@@ -55,8 +55,12 @@ public abstract class ModuleRenderBehavior {
     /** 弹起动画速度（每帧），默认 0.1 */
     public float animReleaseSpeed() { return 0.1f; }
 
-    /** 渲染额外部件（如拉杆）。anim 0=弹起, 1=按下 */
-    public void renderExtra(PoseStack ps, MultiBufferSource buffer, float anim, int light, int overlay) {}
+    /**
+     * 渲染额外部件（如拉杆）。anim 0=弹起, 1=按下；lightLevel 为灯带亮度（0=灭, 1=最亮），
+     * 普通模块可忽略该参数。
+     */
+    public void renderExtra(PoseStack ps, MultiBufferSource buffer, float anim, float lightLevel,
+                            int light, int overlay) {}
 
     // ── 渲染工具 ──
 
@@ -106,7 +110,8 @@ public abstract class ModuleRenderBehavior {
         @Override public float animReleaseSpeed() { return 0.3f; }
 
         @Override
-        public void renderExtra(PoseStack ps, MultiBufferSource buffer, float anim, int light, int overlay) {
+        public void renderExtra(PoseStack ps, MultiBufferSource buffer, float anim, float lightLevel,
+                                int light, int overlay) {
             // ① 按钮主体：按下沿 z 轴凹陷
             if (headKey != null) {
                 BakedModel head = MonitorPreloadedModels.getExtra(headKey);
@@ -118,17 +123,17 @@ public abstract class ModuleRenderBehavior {
                 }
             }
 
-            // ② 灯带：绿色渐变荧光，跟随按钮主体一起凹陷
-            if (indicatorKey != null && anim > 0.01f) {
+            // ② 灯带：绿色渐变荧光，亮度由 lightLevel（自动跟随按下 / 代码控制）决定
+            if (indicatorKey != null && lightLevel > 0.01f) {
                 BakedModel indicator = MonitorPreloadedModels.getExtra(indicatorKey);
                 if (indicator != null) {
                     ps.pushPose();
                     if (headKey != null) ps.translate(0, 0, PRESS_DEPTH * anim / 16f);
-                    // 绿色渐变：暗绿 → 亮绿（仿电源指示灯），anim 已在 MonitorRenderer 平滑插值
-                    float r = Mth.lerp(anim, 0.03f, 0.22f);
-                    float g = Mth.lerp(anim, 0.18f, 1.00f);
-                    float b = Mth.lerp(anim, 0.05f, 0.36f);
-                    // FULL_BRIGHT 不受环境光；additive 加法混合 = 荧光；顶点色随按下变亮
+                    // 绿色渐变：暗绿 → 亮绿（仿电源指示灯），lightLevel 已在 MonitorRenderer 计算
+                    float r = Mth.lerp(lightLevel, 0.03f, 0.22f);
+                    float g = Mth.lerp(lightLevel, 0.18f, 1.00f);
+                    float b = Mth.lerp(lightLevel, 0.05f, 0.36f);
+                    // FULL_BRIGHT 不受环境光；additive 加法混合 = 荧光；顶点色随亮度变亮
                     renderModelColored(ps, buffer.getBuffer(RenderTypes.additive()), indicator,
                             r, g, b, 1f, LightTexture.FULL_BRIGHT, overlay);
                     ps.popPose();
@@ -149,7 +154,8 @@ public abstract class ModuleRenderBehavior {
             ps.mulPose(Axis.XP.rotationDegrees(-90));               // 竖→横
         }
         @Override
-        public void renderExtra(PoseStack ps, MultiBufferSource buffer, float anim, int light, int overlay) {
+        public void renderExtra(PoseStack ps, MultiBufferSource buffer, float anim, float lightLevel,
+                                int light, int overlay) {
             BakedModel lever = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.TOGGLE_LEVER);
             if (lever == null) return;
             ps.pushPose();
@@ -172,7 +178,8 @@ public abstract class ModuleRenderBehavior {
             ps.mulPose(Axis.XP.rotationDegrees(-90));
         }
         @Override
-        public void renderExtra(PoseStack ps, MultiBufferSource buffer, float anim, int light, int overlay) {
+        public void renderExtra(PoseStack ps, MultiBufferSource buffer, float anim, float lightLevel,
+                                int light, int overlay) {
             BakedModel handle = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.KNOB_HANDLE);
             if (handle == null) return;
             ps.pushPose();

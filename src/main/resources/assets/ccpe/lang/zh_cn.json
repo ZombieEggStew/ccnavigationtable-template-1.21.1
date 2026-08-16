@@ -24,7 +24,7 @@
   "gui.ccpe.module_config.id_title": "模块 ID",
   "gui.ccpe.module_config.button_latch": "锁存模式",
   "gui.ccpe.module_config.knob_detent": "卡位",
-  "gui.ccpe.module_config.knob_detent_tip": "开启后旋钮吸附到档位角度",
+  "gui.ccpe.module_config.knob_detent_tip": "开启后旋钮吸附到设定角度",
   "gui.ccpe.module_config.knob_detent_on": "开启",
   "gui.ccpe.module_config.knob_detent_off": "关闭",
   "gui.ccpe.module_config.knob_angle": "角度范围",

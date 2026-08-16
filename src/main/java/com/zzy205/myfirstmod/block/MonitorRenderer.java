@@ -6,7 +6,9 @@ import com.mojang.math.Axis;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.monitor.MonitorBackground;
+import com.zzy205.myfirstmod.monitor.ScreenText;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
+import com.zzy205.myfirstmod.client.ScreenTextRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.Sheets;
@@ -102,8 +104,13 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
 
             // 底座
             renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), model, light, overlay);
-            // 额外部件（拉杆等）
-            bhv.renderExtra(poseStack, buffer, next, light, overlay);
+            // 额外部件（拉杆等）。按钮灯带亮度：代码控制时用 Lua 亮度，否则跟随按下动画
+            float lightLevel = next;
+            if (mod.type() == ModuleType.BUTTON_1X1) {
+                lightLevel = grid.isLightCodeControlled(mod.id())
+                        ? grid.getLightBrightness(mod.id()) : next;
+            }
+            bhv.renderExtra(poseStack, buffer, next, lightLevel, light, overlay);
             if (isKnob) renderKnobAngle(poseStack, buffer, bePos, mod.id(), light, grid.getKnobAngle(mod.id()));
 
             poseStack.popPose();
@@ -111,7 +118,7 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
 
         // ── 渲染所有屏幕 9 宫格 ──
         for (var screen : grid.getScreenRegions()) {
-            renderScreen(poseStack, buffer, screen, light, overlay);
+            renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay);
         }
 
         poseStack.popPose();
@@ -129,7 +136,7 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         float x1 = MonitorBlock.SCREEN_X_MAX / 16f;
         float y0 = MonitorBlock.SCREEN_Y_MIN / 16f;
         float y1 = MonitorBlock.SCREEN_Y_MAX / 16f;
-        float z = (MonitorBlock.PANEL_Z - MonitorBlock.BACKGROUND_Z_OFFSET) / 16f;
+        float z = MonitorBlock.BACKGROUND_PLANE_Z / 16f;
 
         float u0 = sprite.getU0(), v0 = sprite.getV0();
         float u1 = sprite.getU1(), v1 = sprite.getV1();
@@ -187,7 +194,7 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
     // ── 屏幕 9 宫格渲染 ──
 
     private void renderScreen(PoseStack ps, MultiBufferSource buffer,
-                              GridState.ScreenRegion scr, int light, int overlay) {
+                              GridState.ScreenRegion scr, ScreenText text, int light, int overlay) {
         BakedModel corner = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_CORNER);
         BakedModel edge   = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_EDGE);
         BakedModel center = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_CENTER);
@@ -244,6 +251,37 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
             renderModel(ps, vc, center, light, overlay);
             ps.popPose();
         }
+
+        // ── 屏幕字符 / 图形 ──
+        if (text != null && (!text.getChars().isEmpty() || !text.getRects().isEmpty()
+                || !text.getLines().isEmpty() || !text.getCircles().isEmpty())) {
+            renderScreenText(ps, buffer, scr, text);
+        }
+    }
+
+    /** 在屏幕内区渲染字符缓冲（位图字体，字号由 ScreenText 控制）。 */
+    private void renderScreenText(PoseStack ps, MultiBufferSource buffer,
+                                  GridState.ScreenRegion scr, ScreenText text) {
+        float borderInset = 1f / 64f;
+        float cellSize = 1f / 16f;
+
+        float scrX = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + scr.minX()) / 16f;
+        float scrY = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + scr.minY()) / 16f;
+        float scrW = scr.width() * cellSize;
+        float scrH = scr.height() * cellSize;
+
+        // 内容原点：边框内缩已包含在这里，字符串和 drawRect 共用这组边界。
+        float contentRight = scrX + scrW - borderInset;
+        float contentTop = scrY + scrH - borderInset;
+        // 内容基准面 = 屏幕 9 宫格中心面（screen_center 模型 north 面在 z=0.7px）
+        float zBase = (MonitorBlock.SCREEN_Z + 0.7f) / 16f;
+
+        // 文本（每字符自带 drawRect 局部坐标与 z 层级，与矩形共用同一组内区边界映射）
+        ScreenTextRenderer.draw(ps, buffer, text, contentRight, contentTop, zBase);
+        // 矩形 / 线段 / 圆（1/128 块逻辑单位 → 世界，用同一组内区边界映射）
+        ScreenTextRenderer.drawRects(ps, buffer, text, contentRight, contentTop, zBase);
+        ScreenTextRenderer.drawLines(ps, buffer, text, contentRight, contentTop, zBase);
+        ScreenTextRenderer.drawCircles(ps, buffer, text, contentRight, contentTop, zBase);
     }
 
     /** 渲染一个角模型，绕格子中心 Z 轴旋转（法线安全） */

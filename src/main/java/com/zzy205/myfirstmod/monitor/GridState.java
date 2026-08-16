@@ -31,6 +31,16 @@ public class GridState {
     private final int[][] grid = new int[GRID_WIDTH][GRID_HEIGHT];
     private final Map<Integer, MonitorModule> modules = new LinkedHashMap<>();
     private final Set<Integer> pressedModules = new HashSet<>();
+    /** 按钮模块的玩家点击计数，moduleId → 累计点击次数（瞬时态，不持久化） */
+    private final Map<Integer, Integer> buttonClickCounts = new java.util.HashMap<>();
+    /** 按钮模块存在未读玩家点击的集合（边沿检测，Lua wasClicked() 读取后清除） */
+    private final Set<Integer> clickedModules = new HashSet<>();
+    /** 玩家互动锁定的按钮集合（true = Lua 控制，玩家按下/释放不改变按下状态） */
+    private final Set<Integer> playerLockedModules = new HashSet<>();
+    /** 按钮灯带亮度（0..1），moduleId → 亮度 */
+    private final Map<Integer, Float> lightBrightness = new java.util.HashMap<>();
+    /** 按钮灯带由代码控制的集合（true = 灯带亮度只随 Lua 变化） */
+    private final Set<Integer> lightCodeControlledModules = new HashSet<>();
     /** 旋钮模块的角度（度），moduleId → Y 轴旋转角度 */
     private final Map<Integer, Float> knobAngles = new java.util.HashMap<>();
     /** 每个模块的额外配置（tooltip 文本 + 各类型专属键），moduleId → config */
@@ -38,6 +48,8 @@ public class GridState {
 
     /** 屏幕区域列表（一个 Monitor 可放置多个屏幕） */
     private final List<ScreenRegion> screenRegions = new ArrayList<>();
+    /** 每个屏幕的字符缓冲（显示文本），screenId → ScreenText */
+    private final Map<Integer, ScreenText> screenTexts = new java.util.HashMap<>();
 
     public GridState() {
         for (int x = 0; x < GRID_WIDTH; x++) {
@@ -155,6 +167,13 @@ public class GridState {
         }
 
         if (pressedModules.remove(oldId)) pressedModules.add(newId);
+        Integer cc = buttonClickCounts.remove(oldId);
+        if (cc != null) buttonClickCounts.put(newId, cc);
+        if (clickedModules.remove(oldId)) clickedModules.add(newId);
+        if (playerLockedModules.remove(oldId)) playerLockedModules.add(newId);
+        Float lb = lightBrightness.remove(oldId);
+        if (lb != null) lightBrightness.put(newId, lb);
+        if (lightCodeControlledModules.remove(oldId)) lightCodeControlledModules.add(newId);
         Float ka = knobAngles.remove(oldId);
         if (ka != null) knobAngles.put(newId, ka);
         CompoundTag cfg = moduleConfigs.remove(oldId);
@@ -168,6 +187,11 @@ public class GridState {
         MonitorModule mod = modules.remove(moduleId);
         if (mod == null) return null;
         pressedModules.remove(moduleId);
+        buttonClickCounts.remove(moduleId);
+        clickedModules.remove(moduleId);
+        playerLockedModules.remove(moduleId);
+        lightBrightness.remove(moduleId);
+        lightCodeControlledModules.remove(moduleId);
         knobAngles.remove(moduleId);
         moduleConfigs.remove(moduleId);
         for (int dx = 0; dx < mod.getWidth(); dx++) {
@@ -199,6 +223,71 @@ public class GridState {
 
     public boolean isPressed(int moduleId) {
         return pressedModules.contains(moduleId);
+    }
+
+    // ── 玩家点击检测（按钮） ──
+
+    /** 记录一次玩家点击（按钮按下边沿），累计计数并置位"未读点击"标志。 */
+    public void recordPlayerClick(int moduleId) {
+        if (!modules.containsKey(moduleId)) return;
+        buttonClickCounts.put(moduleId, buttonClickCounts.getOrDefault(moduleId, 0) + 1);
+        clickedModules.add(moduleId);
+    }
+
+    /** 玩家累计点击次数（Lua 调 press() 不计数）。 */
+    public int getClickCount(int moduleId) {
+        return buttonClickCounts.getOrDefault(moduleId, 0);
+    }
+
+    /** 读取并清除"未读点击"标志（边沿检测）。 */
+    public boolean consumeClick(int moduleId) {
+        return clickedModules.remove(moduleId);
+    }
+
+    /** 清除"未读点击"标志（不读取）。 */
+    public void clearClick(int moduleId) {
+        clickedModules.remove(moduleId);
+    }
+
+    // ── 玩家互动锁（按钮） ──
+
+    /** 设置按钮是否锁定玩家互动（true = Lua 控制，玩家按下/释放不改变状态，但点击仍记录）。 */
+    public void setPlayerLocked(int moduleId, boolean locked) {
+        if (!modules.containsKey(moduleId)) return;
+        if (locked) playerLockedModules.add(moduleId);
+        else playerLockedModules.remove(moduleId);
+    }
+
+    public boolean isPlayerLocked(int moduleId) {
+        return playerLockedModules.contains(moduleId);
+    }
+
+    // ── 灯带控制（按钮） ──
+
+    /** 设置按钮灯带亮度（0..1，自动 clamp）。 */
+    public void setLightBrightness(int moduleId, float brightness) {
+        if (!modules.containsKey(moduleId)) return;
+        lightBrightness.put(moduleId, clamp01(brightness));
+    }
+
+    /** 当前灯带亮度（0..1，默认 0）。 */
+    public float getLightBrightness(int moduleId) {
+        return lightBrightness.getOrDefault(moduleId, 0f);
+    }
+
+    /** 设置按钮灯带是否由代码控制。 */
+    public void setLightCodeControlled(int moduleId, boolean controlled) {
+        if (!modules.containsKey(moduleId)) return;
+        if (controlled) lightCodeControlledModules.add(moduleId);
+        else lightCodeControlledModules.remove(moduleId);
+    }
+
+    public boolean isLightCodeControlled(int moduleId) {
+        return lightCodeControlledModules.contains(moduleId);
+    }
+
+    private static float clamp01(float v) {
+        return Math.max(0f, Math.min(1f, v));
     }
 
     // ── 旋钮角度 ──
@@ -262,6 +351,22 @@ public class GridState {
 
     public boolean hasScreen() { return !screenRegions.isEmpty(); }
 
+    /** 屏幕的字符缓冲，不存在返回 null（只读用）。 */
+    @javax.annotation.Nullable
+    public ScreenText getScreenText(int id) {
+        return screenTexts.get(id);
+    }
+
+    /** 屏幕的字符缓冲，不存在则创建（写入用）。 */
+    public ScreenText getOrCreateScreenText(int id) {
+        ScreenText text = screenTexts.get(id);
+        if (text == null) {
+            text = new ScreenText();
+            screenTexts.put(id, text);
+        }
+        return text;
+    }
+
     /** 根据格子坐标查找所属屏幕，未找到返回 null */
     @javax.annotation.Nullable
     public ScreenRegion getScreenAt(int gx, int gy) {
@@ -293,6 +398,10 @@ public class GridState {
             if (isIdUsed(newId)) return false;
         }
         screenRegions.set(idx, new ScreenRegion(newId, sr.minX(), sr.minY(), sr.maxX(), sr.maxY(), tooltipText));
+        if (newId != oldId) {
+            ScreenText text = screenTexts.remove(oldId);
+            if (text != null) screenTexts.put(newId, text);
+        }
         return true;
     }
 
@@ -313,6 +422,7 @@ public class GridState {
 
         ScreenRegion sr = new ScreenRegion(id, minX, minY, maxX, maxY);
         screenRegions.add(sr);
+        screenTexts.put(id, new ScreenText());
         for (int x = minX; x <= maxX; x++)
             for (int y = minY; y <= maxY; y++)
                 grid[x][y] = SCREEN_CELL_MARKER;
@@ -324,6 +434,7 @@ public class GridState {
         ScreenRegion sr = getScreenAt(gx, gy);
         if (sr == null) return false;
         screenRegions.remove(sr);
+        screenTexts.remove(sr.id());
         for (int x = sr.minX(); x <= sr.maxX(); x++)
             for (int y = sr.minY(); y <= sr.maxY(); y++)
                 if (grid[x][y] == SCREEN_CELL_MARKER)
@@ -339,6 +450,7 @@ public class GridState {
                     if (grid[x][y] == SCREEN_CELL_MARKER)
                         grid[x][y] = -1;
         screenRegions.clear();
+        screenTexts.clear();
     }
 
     // ── NBT ──
@@ -356,6 +468,10 @@ public class GridState {
             modTag.putBoolean("pressed", pressedModules.contains(mod.id()));
             if (mod.type() == ModuleType.KNOB)
                 modTag.putFloat("knobAngle", getKnobAngle(mod.id()));
+            if (playerLockedModules.contains(mod.id())) modTag.putBoolean("playerLocked", true);
+            if (lightCodeControlledModules.contains(mod.id())) modTag.putBoolean("lightCodeControlled", true);
+            float lb = lightBrightness.getOrDefault(mod.id(), 0f);
+            if (lb > 0f) modTag.putFloat("lightBrightness", lb);
             CompoundTag cfg = moduleConfigs.get(mod.id());
             if (cfg != null && !cfg.isEmpty()) modTag.put("config", cfg);
             modList.add(modTag);
@@ -376,15 +492,32 @@ public class GridState {
         }
         tag.put("screens", scrList);
 
+        // 屏幕字符缓冲
+        ListTag txtList = new ListTag();
+        for (var sr : screenRegions) {
+            ScreenText text = screenTexts.get(sr.id());
+            if (text == null) continue;
+            CompoundTag txtTag = text.save();
+            txtTag.putInt("id", sr.id());
+            txtList.add(txtTag);
+        }
+        tag.put("screenTexts", txtList);
+
         return tag;
     }
 
     public void load(HolderLookup.Provider registries, CompoundTag tag) {
         modules.clear();
         pressedModules.clear();
+        buttonClickCounts.clear();
+        clickedModules.clear();
+        playerLockedModules.clear();
+        lightBrightness.clear();
+        lightCodeControlledModules.clear();
         knobAngles.clear();
         moduleConfigs.clear();
         screenRegions.clear();
+        screenTexts.clear();
         for (int x = 0; x < GRID_WIDTH; x++) {
             for (int y = 0; y < GRID_HEIGHT; y++) {
                 grid[x][y] = -1;
@@ -402,6 +535,9 @@ public class GridState {
             MonitorModule mod = new MonitorModule(id, type, x, y);
             modules.put(id, mod);
             if (modTag.getBoolean("pressed")) pressedModules.add(id);
+            if (modTag.getBoolean("playerLocked")) playerLockedModules.add(id);
+            if (modTag.getBoolean("lightCodeControlled")) lightCodeControlledModules.add(id);
+            if (modTag.contains("lightBrightness")) lightBrightness.put(id, clamp01(modTag.getFloat("lightBrightness")));
             if (type == ModuleType.KNOB) {
                 float angle = modTag.contains("knobAngle")
                         ? modTag.getFloat("knobAngle") : 0f;
@@ -430,6 +566,18 @@ public class GridState {
                 for (int x = minX; x <= maxX; x++)
                     for (int y = minY; y <= maxY; y++)
                         grid[x][y] = SCREEN_CELL_MARKER;
+            }
+        }
+
+        // 恢复屏幕字符缓冲
+        if (tag.contains("screenTexts")) {
+            ListTag txtList = tag.getList("screenTexts", Tag.TAG_COMPOUND);
+            for (int i = 0; i < txtList.size(); i++) {
+                CompoundTag txtTag = txtList.getCompound(i);
+                int id = txtTag.getInt("id");
+                ScreenText text = new ScreenText();
+                text.load(txtTag);
+                screenTexts.put(id, text);
             }
         }
     }

@@ -204,9 +204,9 @@ public class CCPeripheraExtender {
                             boolean isToggle = mod != null && mod.type() == ModuleType.TOGGLE_SWITCH;
                             if (payload.pressed()) {
                                 if (isToggle) monitorBE.toggleModule(payload.moduleId());
-                                else monitorBE.pressModule(payload.moduleId());
+                                else monitorBE.pressModuleByPlayer(payload.moduleId());
                             } else {
-                                if (!isToggle) monitorBE.releaseModule(payload.moduleId());
+                                if (!isToggle) monitorBE.releaseModuleByPlayer(payload.moduleId());
                             }
                         }
                     }

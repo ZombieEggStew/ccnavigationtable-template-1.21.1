@@ -1,0 +1,91 @@
+{
+  "version": 2,
+  "sessionId": "session-7e5a8447-ba61-44eb-97cf-5006f4c5bfb9",
+  "cwd": "D:\\aMyMCMods\\ccnavigationtable-template-1.21.1",
+  "updatedAt": 1786869696776,
+  "checkpoints": [
+    {
+      "turn": 1,
+      "commit": "7d7f8bf0ca6dd50df8eac5f33425fa02fda668e0",
+      "parent": "bda19af29ce2fc6e8d45d97d6f842baf6ddfa8d0",
+      "time": 1786856696729,
+      "untracked": [
+        "instruction_temp.md"
+      ],
+      "truncated": false
+    },
+    {
+      "turn": 7,
+      "commit": "edba0a11e471c61aea2c7cc7e07e92f40166102e",
+      "parent": "7d7f8bf0ca6dd50df8eac5f33425fa02fda668e0",
+      "time": 1786863655275,
+      "untracked": [
+        "instruction_temp.md",
+        "src/main/java/com/zzy205/myfirstmod/client/ScreenTextRenderer.java",
+        "src/main/java/com/zzy205/myfirstmod/monitor/ScreenText.java"
+      ],
+      "truncated": false
+    },
+    {
+      "turn": 8,
+      "commit": "f6654d70edf582e8dbc0b71ed359cd320117e95a",
+      "parent": "edba0a11e471c61aea2c7cc7e07e92f40166102e",
+      "time": 1786863900130,
+      "untracked": [
+        "instruction_temp.md",
+        "src/main/java/com/zzy205/myfirstmod/client/ScreenTextRenderer.java",
+        "src/main/java/com/zzy205/myfirstmod/monitor/ScreenText.java"
+      ],
+      "truncated": false
+    },
+    {
+      "turn": 9,
+      "commit": "9511acd0728bd7f33fc2da994249fb560d9abe33",
+      "parent": "f6654d70edf582e8dbc0b71ed359cd320117e95a",
+      "time": 1786865310140,
+      "untracked": [
+        "instruction_temp.md",
+        "src/main/java/com/zzy205/myfirstmod/client/ScreenTextRenderer.java",
+        "src/main/java/com/zzy205/myfirstmod/monitor/ScreenText.java"
+      ],
+      "truncated": false
+    },
+    {
+      "turn": 11,
+      "commit": "2603c3a7df4c2c28ce073cab46ed08c74835a77e",
+      "parent": "9511acd0728bd7f33fc2da994249fb560d9abe33",
+      "time": 1786868513884,
+      "untracked": [
+        "instruction_temp.md",
+        "src/main/java/com/zzy205/myfirstmod/client/ScreenTextRenderer.java",
+        "src/main/java/com/zzy205/myfirstmod/monitor/ScreenText.java"
+      ],
+      "truncated": false
+    },
+    {
+      "turn": 12,
+      "commit": "bfc35341181039d88dfe8a95feabd6738459953a",
+      "parent": "2603c3a7df4c2c28ce073cab46ed08c74835a77e",
+      "time": 1786869067710,
+      "untracked": [
+        "instruction_temp.md",
+        "src/main/java/com/zzy205/myfirstmod/client/ScreenTextRenderer.java",
+        "src/main/java/com/zzy205/myfirstmod/monitor/ScreenText.java"
+      ],
+      "truncated": false
+    },
+    {
+      "turn": 13,
+      "commit": "c0fdf8eeb08fff77f199d8ad5f984590798af6b7",
+      "parent": "bfc35341181039d88dfe8a95feabd6738459953a",
+      "time": 1786869696113,
+      "untracked": [
+        "instruction_temp.md",
+        "src/main/java/com/zzy205/myfirstmod/client/ScreenTextRenderer.java",
+        "src/main/java/com/zzy205/myfirstmod/monitor/ScreenText.java"
+      ],
+      "truncated": false
+    }
+  ],
+  "rolls": []
+}
