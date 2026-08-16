@@ -254,35 +254,6 @@ public final class SableCompat {
     }
 
     /**
-     * 世界坐标 → SubLevel 局部坐标。
-     * 用于把玩家眼睛位置投影回子次元，使其与 hitResult/blockPos 处于同一局部坐标系。
-     */
-    public static Vec3 toLocalPosition(SubLevel subLevel, float partialTick, Vec3 worldPos) {
-        if (subLevel == null || worldPos == null) return worldPos;
-        try {
-            Pose3dc pose = getPose(subLevel, partialTick);
-            return pose != null ? pose.transformPositionInverse(worldPos) : worldPos;
-        } catch (Exception e) {
-            return worldPos;
-        }
-    }
-
-    /**
-     * 世界方向 → SubLevel 局部方向（只做旋转与逆缩放，忽略平移）。
-     * 与 {@link #toLocalPosition} 配套，在子次元局部空间自算射线求交，
-     * 避免依赖 mc.hitResult 的坐标（其 pose 可能与当前渲染帧不一致）。
-     */
-    public static Vec3 toLocalDirection(SubLevel subLevel, float partialTick, Vec3 worldDir) {
-        if (subLevel == null || worldDir == null) return worldDir;
-        try {
-            Pose3dc pose = getPose(subLevel, partialTick);
-            return pose != null ? pose.transformNormalInverse(worldDir) : worldDir;
-        } catch (Exception e) {
-            return worldDir;
-        }
-    }
-
-    /**
      * 获取指定位置所在物理结构的世界空间线速度。
      */
     public static Vec3 getVelocity(Level level, BlockPos pos) {

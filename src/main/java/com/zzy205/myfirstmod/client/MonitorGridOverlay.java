@@ -160,6 +160,7 @@ public class MonitorGridOverlay {
             return;
         }
 
+        BlockHitResult bhr = (BlockHitResult) hit;
         Level level = player.level();
         BlockState state = level.getBlockState(pos);
 
@@ -191,13 +192,13 @@ public class MonitorGridOverlay {
                 | Config.MONITOR_OUTLINE_B.get();
 
         // 鼠标命中位置 → 网格坐标。
-        // 在子次元局部空间自算射线与背景平面求交（与 Aeroworks/control-panels 同款做法），
-        // 不依赖 mc.hitResult 的坐标，正常世界与 Sable 物理体内都消除斜视视差。
+        // 关键点：Sable 的 clip mixin 返回的 BlockHitResult 已经是子次元局部（plot）坐标系，
+        // 因此直接用 hitResult.getLocation()（与 pos 同空间）即可得到准确的屏幕命中点，
+        // 无需再自行做射线-平面求交（那会因屏幕面内凹 0.025 而在斜视时产生视差偏移）。
         float partialTick = (float) event.getPartialTick().getGameTimeDeltaTicks();
         SubLevel subLevel = SableCompat.getContainingSubLevel(level, pos);
-        Vec3 eyeLocal = SableCompat.toLocalPosition(subLevel, partialTick, player.getEyePosition(partialTick));
-        Vec3 lookLocal = SableCompat.toLocalDirection(subLevel, partialTick, player.getViewVector(partialTick));
-        int[] gp = MonitorBlock.rayToGrid(pos, facing, eyeLocal, lookLocal);
+        int[] gp = MonitorBlock.worldHitToGrid(pos, facing,
+                bhr.getLocation().x, bhr.getLocation().y, bhr.getLocation().z);
         MonitorModule hoveredModule = null;
         if (gp != null) {
             hoveredModule = grid.getModule(grid.getCell(gp[0], gp[1]));
@@ -341,7 +342,7 @@ public class MonitorGridOverlay {
                 interact.knobAccumAngle = monitorBE.getGridState().getKnobAngle(hoveredModule.id());
                 detentStep = monitorBE.getGridState().getDetentStep(hoveredModule.id());
             }
-            interact.knobPrevRawAngle = computeCrosshairAngle(pos, facing, eyeLocal, lookLocal, interact.knobCenterX, interact.knobCenterY);
+            interact.knobPrevRawAngle = computeCrosshairAngle(pos, facing, bhr.getLocation(), interact.knobCenterX, interact.knobCenterY);
             interact.knobUnwrappedDelta = 0f;
             interact.knobLastSoundAngle = interact.knobAccumAngle;
             interact.knobDisplayAngle = normalizeDisplayAngle(interact.knobAccumAngle);
@@ -508,12 +509,25 @@ public class MonitorGridOverlay {
 
     // ── 旋钮拖拽：准心绕旋钮中心旋转 → 旋钮跟随 ──
 
-    /** 计算视线与背景平面交点相对旋钮中心的角度（弧度）。eyeLocal/lookLocal 须同坐标系。 */
-    private static float computeCrosshairAngle(BlockPos pos, Direction facing, Vec3 eyeLocal, Vec3 lookLocal,
+    /** 计算屏幕命中点相对旋钮中心的角度（弧度）。hitLocation 为子次元局部空间命中点。 */
+    private static float computeCrosshairAngle(BlockPos pos, Direction facing, Vec3 hitLocation,
                                                 float knobCx, float knobCy) {
-        double[] sc = MonitorBlock.rayToScreenLocal(pos, facing, eyeLocal, lookLocal);
-        if (sc == null) return 0f;
-        return (float) Math.atan2(sc[1] - knobCy, sc[0] - knobCx);
+        float c = MonitorBlock.ROT_ORIGIN / 16f;
+        double lx = hitLocation.x - pos.getX();
+        double ly = hitLocation.y - pos.getY();
+        double lz = hitLocation.z - pos.getZ();
+        double rx;
+        switch (facing) {
+            case NORTH: rx = lx;        break;
+            case SOUTH: rx = 2*c - lx;  break;
+            case EAST:  rx = lz;        break;
+            case WEST:  rx = 2*c - lz;  break;
+            default: return 0f;
+        }
+        float sx = (float)(rx * 16.0);
+        float sy = (float)(ly * 16.0);
+
+        return (float) Math.atan2(sy - knobCy, sx - knobCx);
     }
 
     public static void onClientTick(ClientTickEvent.Pre event) {
@@ -542,11 +556,8 @@ public class MonitorGridOverlay {
                 continue;
             }
 
-            // 当前 raw 角度 → 解缠绕（与 onRenderLevel 一致：子次元局部空间自算射线）
-            var subLevel = SableCompat.getContainingSubLevel(mc.level, pos);
-            Vec3 eyeLocal = SableCompat.toLocalPosition(subLevel, 0f, mc.player.getEyePosition());
-            Vec3 lookLocal = SableCompat.toLocalDirection(subLevel, 0f, mc.player.getViewVector(1.0f));
-            float rawAngle = computeCrosshairAngle(pos, state.knobDragFacing, eyeLocal, lookLocal,
+            // 当前 raw 角度 → 解缠绕
+            float rawAngle = computeCrosshairAngle(pos, state.knobDragFacing, bhr.getLocation(),
                     state.knobCenterX, state.knobCenterY);
             float diff = rawAngle - state.knobPrevRawAngle;
             if (diff > Math.PI) diff -= (float)(2 * Math.PI);
