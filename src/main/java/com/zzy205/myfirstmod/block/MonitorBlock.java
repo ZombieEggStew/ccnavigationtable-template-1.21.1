@@ -26,7 +26,6 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -116,26 +115,38 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
+     * 世界(子次元局部)空间命中点 → NORTH 基准的屏幕局部坐标（1/16 格单位）。
+     * 按 facing 反旋转，供网格命中与旋钮拖拽共用同一套坐标口径。
+     * @return [sx, sy]（sx 为屏幕横向、sy 为屏幕纵向）；facing 非水平时返回 null。
+     */
+    @Nullable
+    public static float[] hitToScreenLocal(BlockPos pos, Direction facing, double hitX, double hitY, double hitZ) {
+        double lx = hitX - pos.getX();
+        double ly = hitY - pos.getY();
+        double lz = hitZ - pos.getZ();
+
+        double rx;
+        float c = ROT_ORIGIN / 16f;
+        switch (facing) {
+            case NORTH: rx = lx;        break;
+            case SOUTH: rx = 2*c - lx;  break;
+            case EAST:  rx = lz;        break;
+            case WEST:  rx = 2*c - lz;  break;
+            default: return null;
+        }
+        return new float[]{(float) (rx * 16.0), (float) (ly * 16.0)};
+    }
+
+    /**
      * 世界空间命中点 → 屏幕网格坐标（客户端使用）。
      * 注意：射线命中方块外表面，非凹入的屏幕面，故不校验 Z。
      * @return [gridX, gridY] 或 null 表示未命中屏幕区域。
      */
     @Nullable
     public static int[] worldHitToGrid(BlockPos pos, Direction facing, double hitX, double hitY, double hitZ) {
-        double lx = hitX - pos.getX();
-        double ly = hitY - pos.getY();
-        double lz = hitZ - pos.getZ();
-
-        double rx, ry = ly;
-        float c = ROT_ORIGIN / 16f;
-        switch (facing) {
-            case NORTH: rx = lx;     break;
-            case SOUTH: rx = 2*c-lx; break;
-            case EAST:  rx = lz;     break;
-            case WEST:  rx = 2*c-lz; break;
-            default: return null;
-        }
-        rx *= 16.0; ry *= 16.0;
+        float[] local = hitToScreenLocal(pos, facing, hitX, hitY, hitZ);
+        if (local == null) return null;
+        float rx = local[0], ry = local[1];
 
         // 不检查 Z —— 射线打在方块外表面而非凹入的屏幕
         // 命中区域为内缩后的 12×10 网格（四周 1 格边框不属于可放置区域）
@@ -146,49 +157,6 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
         int gy = (int) Math.floor(ry - SCREEN_Y_MIN - GRID_INSET);
         if (gx < 0 || gx >= GridState.GRID_WIDTH || gy < 0 || gy >= GridState.GRID_HEIGHT) return null;
         return new int[]{gx, gy};
-    }
-
-    /**
-     * 玩家视线 → 屏幕平面交点 → 网格坐标。
-     * 平面偏移 +0.025（内凹，在屏幕面与网格线间），与视觉一致。
-     * @return [gridX, gridY] 或 null
-     */
-    @Nullable
-    public static int[] rayToGrid(BlockPos pos, Direction facing,
-                                   Vec3 eyePos, Vec3 lookVec) {
-        float c = ROT_ORIGIN / 16f;
-        float planeZ = SCREEN_Z / 16f + 0.025f;
-
-        // 屏幕面在世界空间中的法向量和一点
-        Vec3 normal, point;
-        switch (facing) {
-            case NORTH:
-                normal = new Vec3(0, 0, 1);
-                point = new Vec3(pos.getX() + c, pos.getY() + c, pos.getZ() + planeZ);
-                break;
-            case SOUTH:
-                normal = new Vec3(0, 0, -1);
-                point = new Vec3(pos.getX() + c, pos.getY() + c, pos.getZ() + (1 - planeZ));
-                break;
-            case EAST:
-                normal = new Vec3(-1, 0, 0);
-                point = new Vec3(pos.getX() + (1 - planeZ), pos.getY() + c, pos.getZ() + c);
-                break;
-            case WEST:
-                normal = new Vec3(1, 0, 0);
-                point = new Vec3(pos.getX() + planeZ, pos.getY() + c, pos.getZ() + c);
-                break;
-            default: return null;
-        }
-
-        // 射线-平面求交: t = ((point - eye) · normal) / (look · normal)
-        double denom = lookVec.dot(normal);
-        if (Math.abs(denom) < 1e-6) return null;
-        double t = point.subtract(eyePos).dot(normal) / denom;
-        if (t < 0) return null;
-
-        Vec3 hit = eyePos.add(lookVec.scale(t));
-        return worldHitToGrid(pos, facing, hit.x, hit.y, hit.z);
     }
 
     @Override

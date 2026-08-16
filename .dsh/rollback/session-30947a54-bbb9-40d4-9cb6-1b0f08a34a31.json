@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "sessionId": "session-30947a54-bbb9-40d4-9cb6-1b0f08a34a31",
+  "cwd": "D:\\aMyMCMods\\ccnavigationtable-template-1.21.1",
+  "checkpoints": [
+    {
+      "turn": 1,
+      "commit": "87da308f76b09c658ecca08a2eb5d6113339b1d5",
+      "parent": "30b640ea2b23062985e3db3853a08e73009afddf",
+      "time": 1786889753926,
+      "untracked": [],
+      "truncated": false
+    }
+  ],
+  "rolls": [],
+  "updatedAt": 1786889754456
+}

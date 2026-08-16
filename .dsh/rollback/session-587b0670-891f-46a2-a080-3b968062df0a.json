@@ -2,7 +2,7 @@
   "version": 2,
   "sessionId": "session-587b0670-891f-46a2-a080-3b968062df0a",
   "cwd": "D:\\aMyMCMods\\ccnavigationtable-template-1.21.1",
-  "updatedAt": 1786888839871,
+  "updatedAt": 1786889196754,
   "checkpoints": [
     {
       "turn": 1,
@@ -67,6 +67,22 @@
         "src/main/java/com/zzy205/myfirstmod/client/ScreenTextRenderer.java",
         "src/main/java/com/zzy205/myfirstmod/monitor/ScreenText.java"
       ],
+      "truncated": false
+    },
+    {
+      "turn": 8,
+      "commit": "4a0b27093a6dec24e00a8bbbd4ad020ebe9a868f",
+      "parent": "7e0ba459f86772ed1439ad3f5011fd2417f48644",
+      "time": 1786889126414,
+      "untracked": [],
+      "truncated": false
+    },
+    {
+      "turn": 9,
+      "commit": "612b730cf05346f8342dc9e91617358c8c73430d",
+      "parent": "4a0b27093a6dec24e00a8bbbd4ad020ebe9a868f",
+      "time": 1786889196239,
+      "untracked": [],
       "truncated": false
     }
   ],

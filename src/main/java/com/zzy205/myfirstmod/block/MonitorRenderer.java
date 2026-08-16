@@ -136,7 +136,7 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         float x1 = MonitorBlock.SCREEN_X_MAX / 16f;
         float y0 = MonitorBlock.SCREEN_Y_MIN / 16f;
         float y1 = MonitorBlock.SCREEN_Y_MAX / 16f;
-        float z = MonitorBlock.BACKGROUND_PLANE_Z / 16f;
+        float z = (MonitorBlock.PANEL_Z - MonitorBlock.BACKGROUND_Z_OFFSET) / 16f;
 
         float u0 = sprite.getU0(), v0 = sprite.getV0();
         float u1 = sprite.getU1(), v1 = sprite.getV1();

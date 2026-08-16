@@ -512,22 +512,10 @@ public class MonitorGridOverlay {
     /** 计算屏幕命中点相对旋钮中心的角度（弧度）。hitLocation 为子次元局部空间命中点。 */
     private static float computeCrosshairAngle(BlockPos pos, Direction facing, Vec3 hitLocation,
                                                 float knobCx, float knobCy) {
-        float c = MonitorBlock.ROT_ORIGIN / 16f;
-        double lx = hitLocation.x - pos.getX();
-        double ly = hitLocation.y - pos.getY();
-        double lz = hitLocation.z - pos.getZ();
-        double rx;
-        switch (facing) {
-            case NORTH: rx = lx;        break;
-            case SOUTH: rx = 2*c - lx;  break;
-            case EAST:  rx = lz;        break;
-            case WEST:  rx = 2*c - lz;  break;
-            default: return 0f;
-        }
-        float sx = (float)(rx * 16.0);
-        float sy = (float)(ly * 16.0);
-
-        return (float) Math.atan2(sy - knobCy, sx - knobCx);
+        float[] local = MonitorBlock.hitToScreenLocal(pos, facing,
+                hitLocation.x, hitLocation.y, hitLocation.z);
+        if (local == null) return 0f;
+        return (float) Math.atan2(local[1] - knobCy, local[0] - knobCx);
     }
 
     public static void onClientTick(ClientTickEvent.Pre event) {
