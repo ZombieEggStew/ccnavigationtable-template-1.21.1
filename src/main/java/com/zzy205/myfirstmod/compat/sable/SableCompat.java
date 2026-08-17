@@ -254,6 +254,35 @@ public final class SableCompat {
     }
 
     /**
+     * SubLevel 世界坐标 → 局部（plot）坐标。
+     * 与 Sable 的 clip mixin 一致：把世界空间的射线端点投影回子次元，
+     * 使它们与 {@link BlockEntity#getBlockPos()}（plot 坐标）处于同一坐标系。
+     */
+    public static Vec3 toLocalPosition(SubLevel subLevel, float partialTick, Vec3 worldPos) {
+        if (subLevel == null || worldPos == null) return worldPos;
+        try {
+            Pose3dc pose = getPose(subLevel, partialTick);
+            return pose != null ? pose.transformPositionInverse(worldPos) : worldPos;
+        } catch (Exception e) {
+            return worldPos;
+        }
+    }
+
+    /**
+     * SubLevel 世界方向 → 局部（plot）方向。
+     * 用于把玩家视线方向投影回子次元，配合 {@link #toLocalPosition} 做射线求交。
+     */
+    public static Vec3 toLocalDirection(SubLevel subLevel, float partialTick, Vec3 worldDir) {
+        if (subLevel == null || worldDir == null) return worldDir;
+        try {
+            Pose3dc pose = getPose(subLevel, partialTick);
+            return pose != null ? pose.transformNormalInverse(worldDir) : worldDir;
+        } catch (Exception e) {
+            return worldDir;
+        }
+    }
+
+    /**
      * 获取指定位置所在物理结构的世界空间线速度。
      */
     public static Vec3 getVelocity(Level level, BlockPos pos) {

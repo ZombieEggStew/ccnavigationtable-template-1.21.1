@@ -7,6 +7,7 @@
   "block.ccpe.redstone_transceiver": "Redstone Transceiver",
   "block.ccpe.transmission_peripheral": "Electronic Transmission",
   "block.ccpe.my_monitor": "Monitor",
+  "block.ccpe.test_pitch_monitor": "Pitch Monitor Test",
 
   "gui.ccpe.monitor_assembly": "Monitor Assembly",
   "gui.ccpe.monitor.module_info": "%s at (%s, %s) size %s×%s",

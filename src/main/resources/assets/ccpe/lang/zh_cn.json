@@ -7,6 +7,7 @@
   "block.ccpe.redstone_transceiver": "红石收发器",
   "block.ccpe.transmission_peripheral": "电子变速箱",
   "block.ccpe.my_monitor": "显示器",
+  "block.ccpe.test_pitch_monitor": "俯仰显示器测试",
 
   "gui.ccpe.monitor_assembly": "仪表装配",
   "gui.ccpe.monitor.module_info": "%s 位于 (%s, %s) 尺寸 %s×%s",

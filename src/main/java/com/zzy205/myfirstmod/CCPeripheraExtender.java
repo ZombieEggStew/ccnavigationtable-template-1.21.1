@@ -5,6 +5,7 @@ import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
+import com.zzy205.myfirstmod.block.PitchMonitorTestBlockEntity;
 import com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralBlockEntity;
 import com.zzy205.myfirstmod.monitor.ModuleType;
@@ -26,6 +27,7 @@ import com.zzy205.myfirstmod.network.RemoveModulePayload;
 import com.zzy205.myfirstmod.network.ModuleKnobRotatePayload;
 import com.zzy205.myfirstmod.network.MonitorBackgroundPayload;
 import com.zzy205.myfirstmod.network.MonitorChannelPayload;
+import com.zzy205.myfirstmod.network.PitchMonitorAnglePayload;
 import com.zzy205.myfirstmod.network.PlaceScreenPayload;
 import com.zzy205.myfirstmod.network.RemoveScreenPayload;
 import com.zzy205.myfirstmod.screen.MyModMenus;
@@ -152,6 +154,19 @@ public class CCPeripheraExtender {
                         var be = level.getBlockEntity(payload.monitorPos());
                         if (be instanceof MonitorBlockEntity monitorBE) {
                             monitorBE.setBackground(payload.background());
+                        }
+                    }
+            );
+
+            // 客户端→服务端：保存测试 monitor 的俯仰 / 偏航角度
+            registrar.playToServer(
+                    PitchMonitorAnglePayload.TYPE,
+                    PitchMonitorAnglePayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.monitorPos());
+                        if (be instanceof PitchMonitorTestBlockEntity monitorBE) {
+                            monitorBE.setAngles(payload.pitch(), payload.yaw());
                         }
                     }
             );
