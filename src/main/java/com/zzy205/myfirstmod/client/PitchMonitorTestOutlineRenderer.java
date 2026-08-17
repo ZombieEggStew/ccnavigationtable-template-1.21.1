@@ -31,6 +31,8 @@ public final class PitchMonitorTestOutlineRenderer {
                 ? monitor.getPitchAngle() : 0f;
         float yaw = minecraft.level.getBlockEntity(pos) instanceof PitchMonitorTestBlockEntity monitor
                 ? monitor.getYawAngle() : 0f;
+        int offset = minecraft.level.getBlockEntity(pos) instanceof PitchMonitorTestBlockEntity monitor
+                ? monitor.getOffset() : 0;
 
         PoseStack poseStack = event.getPoseStack();
         Vec3 camera = event.getCamera().getPosition();
@@ -41,15 +43,21 @@ public final class PitchMonitorTestOutlineRenderer {
         VertexConsumer lines = event.getMultiBufferSource().getBuffer(RenderType.lines());
 
         // 底座：固定，不随 yaw/pitch
-        drawBox(poseStack.last(), lines, 0f, 0f, 0f, 1f, 2f / 16f, 13f / 16f, 0f);
+        drawBox(poseStack.last(), lines, 0f, 0f, 0f, 1f, 2f / 16f, 1f, 0f);
 
-        // case：先绕颈部 yaw（PoseStack），pitch 烘焙进角点
+        // bearing + case：都随 offset + yaw；case 额外随 pitch
         poseStack.pushPose();
+        PitchMonitorTransform.applyOffset(poseStack, offset);
         PitchMonitorTransform.applyYaw(poseStack, yaw);
-        drawBox(poseStack.last(), lines, 1f / 16f, 2f / 16f, 4f / 16f,
-                15f / 16f, 14f / 16f, 9f / 16f, pitch);
-        poseStack.popPose();
+        PoseStack.Pose yawedPose = poseStack.last();
 
+        // bearing（不随 pitch）
+        drawBox(yawedPose, lines, 0f, 2f / 16f, 6f / 16f, 1f, 11f / 16f, 10f / 16f, 0f);
+        // case（随 pitch）
+        drawBox(yawedPose, lines, 1f / 16f, 3f / 16f, 4f / 16f,
+                15f / 16f, 15f / 16f, 9f / 16f, pitch);
+
+        poseStack.popPose();
         poseStack.popPose();
     }
 
@@ -74,11 +82,13 @@ public final class PitchMonitorTestOutlineRenderer {
 
     private static Vec3 rotatePitch(float x, float y, float z, float pitchDegrees) {
         double radians = Math.toRadians(pitchDegrees);
-        float localY = y - PitchMonitorTransform.HINGE_Y;
-        float localZ = z - PitchMonitorTransform.HINGE_Z;
-        float rotatedY = PitchMonitorTransform.HINGE_Y + localY * (float) Math.cos(radians)
+        float hingeY = PitchMonitorTestBlock.HINGE_Y / 16f;
+        float hingeZ = PitchMonitorTestBlock.HINGE_Z / 16f;
+        float localY = y - hingeY;
+        float localZ = z - hingeZ;
+        float rotatedY = hingeY + localY * (float) Math.cos(radians)
                 - localZ * (float) Math.sin(radians);
-        float rotatedZ = PitchMonitorTransform.HINGE_Z + localY * (float) Math.sin(radians)
+        float rotatedZ = hingeZ + localY * (float) Math.sin(radians)
                 + localZ * (float) Math.cos(radians);
         return new Vec3(x, rotatedY, rotatedZ);
     }

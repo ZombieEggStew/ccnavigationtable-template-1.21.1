@@ -55,11 +55,13 @@ public class CCPeripheralExtenderClient {
 
             int pitch = 0;
             int yaw = 0;
+            int offset = 0;
             if (level.getBlockEntity(pos) instanceof PitchMonitorTestBlockEntity be) {
                 pitch = Math.round(be.getPitchAngle());
                 yaw = Math.round(be.getYawAngle());
+                offset = be.getOffset();
             }
-            Minecraft.getInstance().setScreen(new PitchMonitorTestScreen(pos, pitch, yaw));
+            Minecraft.getInstance().setScreen(new PitchMonitorTestScreen(pos, pitch, yaw, offset));
             event.setCanceled(true);
         });
 

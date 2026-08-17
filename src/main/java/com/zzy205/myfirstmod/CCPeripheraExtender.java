@@ -166,7 +166,7 @@ public class CCPeripheraExtender {
                         var level = ctx.player().level();
                         var be = level.getBlockEntity(payload.monitorPos());
                         if (be instanceof PitchMonitorTestBlockEntity monitorBE) {
-                            monitorBE.setAngles(payload.pitch(), payload.yaw());
+                            monitorBE.setAngles(payload.pitch(), payload.yaw(), payload.offset());
                         }
                     }
             );

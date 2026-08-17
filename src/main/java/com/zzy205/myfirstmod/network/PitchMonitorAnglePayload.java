@@ -9,9 +9,9 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 客户端→服务端：保存测试 monitor 的俯仰 / 偏航角度（度）。
+ * 客户端→服务端：保存测试 monitor 的俯仰 / 偏航角度（度）与前后偏移（像素）。
  */
-public record PitchMonitorAnglePayload(BlockPos monitorPos, float pitch, float yaw) implements CustomPacketPayload {
+public record PitchMonitorAnglePayload(BlockPos monitorPos, float pitch, float yaw, int offset) implements CustomPacketPayload {
 
     public static final Type<PitchMonitorAnglePayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, "pitch_monitor_angle"));
@@ -21,6 +21,7 @@ public record PitchMonitorAnglePayload(BlockPos monitorPos, float pitch, float y
                     BlockPos.STREAM_CODEC, PitchMonitorAnglePayload::monitorPos,
                     ByteBufCodecs.FLOAT, PitchMonitorAnglePayload::pitch,
                     ByteBufCodecs.FLOAT, PitchMonitorAnglePayload::yaw,
+                    ByteBufCodecs.INT, PitchMonitorAnglePayload::offset,
                     PitchMonitorAnglePayload::new
             );
 

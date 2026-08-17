@@ -38,6 +38,7 @@ public class MonitorPreloadedModels {
     public static final String SCREEN_EDGE   = "screen_edge";
     public static final String SCREEN_CENTER = "screen_center";
     public static final String PITCH_TEST_CASE = "pitch_test_case";
+    public static final String PITCH_TEST_BEARING = "pitch_test_bearing";
 
     /** 背景面板贴图数量（对应 MonitorBackground.KEYS 的下标 0..4） */
     public static final int BACKGROUND_COUNT = 5;
@@ -60,6 +61,7 @@ public class MonitorPreloadedModels {
         EXTRA_LOC.put(SCREEN_EDGE,   rl("block/screen/screen_edge"));
         EXTRA_LOC.put(SCREEN_CENTER, rl("block/screen/screen_center"));
         EXTRA_LOC.put(PITCH_TEST_CASE, rl("block/monitor/my_monitor_case"));
+        EXTRA_LOC.put(PITCH_TEST_BEARING, rl("block/monitor/my_monitor_bearing"));
         for (int i = 0; i < BACKGROUND_COUNT; i++) {
             BG_LOC[i] = rl("block/monitor_bg/bg_" + i);
         }
@@ -113,6 +115,9 @@ public class MonitorPreloadedModels {
 
     @Nullable
     public static BakedModel getPitchTestCase() { return EXTRA_MODEL.get(PITCH_TEST_CASE); }
+
+    @Nullable
+    public static BakedModel getPitchTestBearing() { return EXTRA_MODEL.get(PITCH_TEST_BEARING); }
 
     /** 按下标取背景贴图精灵（下标来自 {@code MonitorBackground.indexOf(key)}）。 */
     @Nullable

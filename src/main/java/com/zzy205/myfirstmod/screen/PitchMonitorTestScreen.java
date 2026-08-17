@@ -13,7 +13,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * 测试 monitor 的菜单 —— 布局复制 {@link MonitorMenuScreen}：
- * 相同背景面板与标题，但内容为两条滚轮数值条（俯仰 / 偏航）。
+ * 相同背景面板与标题，内容为三条滚轮数值条（俯仰 / 偏航 / 前后偏移）。
  */
 public class PitchMonitorTestScreen extends AbstractMonitorScreen {
 
@@ -44,17 +44,20 @@ public class PitchMonitorTestScreen extends AbstractMonitorScreen {
     private final BlockPos monitorPos;
     private final int initialPitch;
     private final int initialYaw;
+    private final int initialOffset;
 
     private int winLeft;
     private int winTop;
     private ScrollValueBar pitchBar;
     private ScrollValueBar yawBar;
+    private ScrollValueBar offsetBar;
 
-    public PitchMonitorTestScreen(BlockPos monitorPos, int pitch, int yaw) {
+    public PitchMonitorTestScreen(BlockPos monitorPos, int pitch, int yaw, int offset) {
         super(Component.empty());
         this.monitorPos = monitorPos;
         this.initialPitch = pitch;
         this.initialYaw = yaw;
+        this.initialOffset = offset;
     }
 
     @Override
@@ -71,7 +74,7 @@ public class PitchMonitorTestScreen extends AbstractMonitorScreen {
                 .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"));
         this.addRenderableWidget(this.pitchBar);
 
-        // 偏航角度条：-180 ~ +180（暂未实装到渲染）
+        // 偏航角度条：-180 ~ +180
         this.yawBar = new ScrollValueBar(
                 winLeft, winTop + BAR_ID_Y + BAR_TEX_H + BAR_MARGIN_Y, BAR_TEX_W, BAR_TEX_H,
                 initialYaw, 0, new int[0])
@@ -80,7 +83,16 @@ public class PitchMonitorTestScreen extends AbstractMonitorScreen {
                 .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"));
         this.addRenderableWidget(this.yawBar);
 
-        // 右下角"完成"按钮（点击后保存角度并关闭）
+        // 前后偏移条：-6 ~ +6（单位 1/16 方块 = 1px）
+        this.offsetBar = new ScrollValueBar(
+                winLeft, winTop + BAR_ID_Y + 2 * (BAR_TEX_H + BAR_MARGIN_Y), BAR_TEX_W, BAR_TEX_H,
+                initialOffset, 0, new int[0])
+                .range(-6, 6)
+                .addToolTipTitle(Component.literal("Offset"))
+                .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"));
+        this.addRenderableWidget(this.offsetBar);
+
+        // 右下角"完成"按钮（点击后保存并关闭）
         HoverTintIconButton doneBtn = new HoverTintIconButton(
                 winLeft + WIN_W - DONE_BTN_RIGHT,
                 winTop + WIN_H - DONE_BTN_BOTTOM,
@@ -104,7 +116,7 @@ public class PitchMonitorTestScreen extends AbstractMonitorScreen {
     @Override
     public void onClose() {
         PacketDistributor.sendToServer(new PitchMonitorAnglePayload(
-                monitorPos, (float) pitchBar.getValue(), (float) yawBar.getValue()));
+                monitorPos, (float) pitchBar.getValue(), (float) yawBar.getValue(), offsetBar.getValue()));
         super.onClose();
     }
 }

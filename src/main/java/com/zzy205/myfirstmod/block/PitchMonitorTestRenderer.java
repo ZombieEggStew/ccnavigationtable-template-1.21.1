@@ -30,11 +30,11 @@ public class PitchMonitorTestRenderer implements BlockEntityRenderer<PitchMonito
 
     private static final RandomSource RANDOM = RandomSource.create(42L);
 
-    // Grid geometry, matching the static Monitor screen (case front face box(1,2,4,15,14,9)).
+    // Grid geometry, matching the test Monitor screen (case front face box(1,3,4,15,15,9)).
     private static final float SCREEN_X_MIN = 1f;
     private static final float SCREEN_X_MAX = 15f;
-    private static final float SCREEN_Y_MIN = 2f;
-    private static final float SCREEN_Y_MAX = 14f;
+    private static final float SCREEN_Y_MIN = 3f;
+    private static final float SCREEN_Y_MAX = 15f;
     private static final float SCREEN_Z = 4f;
     private static final float GRID_INSET = 1f;
     private static final int GRID_W = 12;
@@ -67,9 +67,18 @@ public class PitchMonitorTestRenderer implements BlockEntityRenderer<PitchMonito
         Direction facing = blockEntity.getBlockState().getValue(PitchMonitorTestBlock.FACING);
 
         poseStack.pushPose();
-        // facing → yaw → pitch（外层到内层，与检测的逆序一致）
+        // facing → offset → yaw（外层到内层）
         PitchMonitorTransform.applyFacing(poseStack, facing);
+        PitchMonitorTransform.applyOffset(poseStack, blockEntity.getOffset());
         PitchMonitorTransform.applyYaw(poseStack, blockEntity.getYawAngle());
+
+        // bearing：只受 yaw，不随 pitch
+        BakedModel bearingModel = MonitorPreloadedModels.getPitchTestBearing();
+        if (bearingModel != null) {
+            renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), bearingModel, light, overlay);
+        }
+
+        // case + 棋盘：受 yaw + pitch
         PitchMonitorTransform.applyPitch(poseStack, blockEntity.getPitchAngle());
 
         BakedModel caseModel = MonitorPreloadedModels.getPitchTestCase();
@@ -112,7 +121,8 @@ public class PitchMonitorTestRenderer implements BlockEntityRenderer<PitchMonito
         double[] d = { dir.x, dir.y, dir.z };
 
         Direction facing = blockEntity.getBlockState().getValue(PitchMonitorTestBlock.FACING);
-        PitchMonitorTransform.inverseToModel(o, d, facing, blockEntity.getYawAngle(), blockEntity.getPitchAngle());
+        PitchMonitorTransform.inverseToModel(o, d, facing, blockEntity.getYawAngle(),
+                blockEntity.getPitchAngle(), blockEntity.getOffset());
 
         double planeZ = SCREEN_Z / 16.0;
         if (Math.abs(d[2]) < 1e-6) return null;
