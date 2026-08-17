@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod;
 
+import com.simibubi.create.content.logistics.packagerLink.WiFiParticle;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
@@ -13,6 +14,7 @@ import com.zzy205.myfirstmod.compat.cc.RedstoneTransceiverRegistry;
 import com.zzy205.myfirstmod.compat.cc.PeripheralExtenderRegistry;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
+import com.zzy205.myfirstmod.network.PlayOrderEffectPayload;
 import com.zzy205.myfirstmod.network.ReceiverSyncPayload;
 import com.zzy205.myfirstmod.network.SensorFilterPayload;
 import com.zzy205.myfirstmod.network.SensorNbtPayload;
@@ -80,6 +82,18 @@ public class CCPeripheraExtender {
                         if (be instanceof PeripheralExtenderBlockEntity sensorBE) {
                             sensorBE.setCachedAttachedNBT(payload.nbt());
                         }
+                    }
+            );
+
+            // 服务端→客户端：播放下单 WiFi 粒子（WiFiParticle.Data 无法走网络编码，
+            // 只能由客户端本地 level.addParticle 生成）
+            registrar.playToClient(
+                    PlayOrderEffectPayload.TYPE,
+                    PlayOrderEffectPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var vec3 = net.minecraft.world.phys.Vec3.atCenterOf(payload.pos());
+                        level.addParticle(new WiFiParticle.Data(), vec3.x, vec3.y, vec3.z, 1, 1, 1);
                     }
             );
 

@@ -48,6 +48,40 @@ local mod = monitor.getModule(7)
 if mod then print(mod.getType()) end
 ```
 
+### `monitor.playNiceSound()`
+
+播放 Create 风格的下单音效 + WiFi 粒子（效果位置在方块中心，音效为 `create:stock_ticker_request`）。
+音效在服务端广播给附近玩家；WiFi 粒子走自定义 clientbound 包（`ccpe:play_order_effect`）广播给 32 格内的客户端，由客户端本地生成（Create 的 `WiFiParticle` 数据无法走粒子网络通道编码）。
+
+```lua
+monitor.playNiceSound()
+```
+
+### `monitor.playSound(sound)`
+
+播放指定的 Create 音效（在方块位置广播给附近玩家，音效由服务端播放，附近玩家都能听到）。
+
+- **参数**：`sound`——音效名称字符串，当前支持：
+
+| 名称 | Create 音效资源 | 说明 |
+|---|---|---|
+| `"bonk"` | `create:cardboard_bonk` | 纸板剑"梆" |
+| `"bell"` | `create:desk_bell` | 前台铃 |
+| `"confirm"` | `create:confirm_2` | 确认"叮" |
+| `"fwoomp"` | `create:fwoomp` | 低沉"嗡" |
+| `"trade"` | `create:stock_ticker_trade` | 收银 |
+| `"request"` | `create:stock_ticker_request` | 下单 |
+
+- **返回**：`boolean`——是否找到并播放了该音效；未知名称返回 `false`（不会抛 Lua 错误）
+
+```lua
+if monitor.playSound("bell") then
+    print("响了")
+end
+```
+
+> 音效类方法依赖 Create 模组（运行时存在 `create` 模组，音效资源来自 `create` 命名空间）。
+
 ---
 
 ## 2. 模块实例通用方法（所有 handle 都有）

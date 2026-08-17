@@ -1,0 +1,97 @@
+{
+  "version": 2,
+  "sessionId": "session-4544ac67-737c-4bea-8c77-58e5c95c369a",
+  "cwd": "D:\\aMyMCMods\\ccnavigationtable-template-1.21.1",
+  "updatedAt": 1786944414665,
+  "checkpoints": [
+    {
+      "turn": 1,
+      "commit": "31f99487a916bdb4322f10571daa90c08bcb1655",
+      "parent": "d84d6cbc4d10f2154491667cd32cdf1a304c5d00",
+      "time": 1786941171118,
+      "untracked": [],
+      "truncated": false
+    },
+    {
+      "turn": 2,
+      "commit": "31f99487a916bdb4322f10571daa90c08bcb1655",
+      "parent": "31f99487a916bdb4322f10571daa90c08bcb1655",
+      "time": 1786941868127,
+      "untracked": [],
+      "truncated": false,
+      "after": {
+        "commit": "e99189bc0f709d8d3f3078afb55d7caf32b904f8",
+        "time": 1786942176500
+      }
+    },
+    {
+      "turn": 3,
+      "commit": "e99189bc0f709d8d3f3078afb55d7caf32b904f8",
+      "parent": "e99189bc0f709d8d3f3078afb55d7caf32b904f8",
+      "time": 1786942780425,
+      "untracked": [],
+      "truncated": false,
+      "after": {
+        "commit": "08b465ca9e59d14c9239896375cb739000b93963",
+        "time": 1786943153255
+      }
+    },
+    {
+      "turn": 4,
+      "commit": "08b465ca9e59d14c9239896375cb739000b93963",
+      "parent": "08b465ca9e59d14c9239896375cb739000b93963",
+      "time": 1786943344553,
+      "untracked": [
+        ".research/mc-src/Level.java",
+        ".research/mc-src/ServerLevel.java"
+      ],
+      "truncated": false,
+      "after": {
+        "commit": "9a2da030f7d9697533009f9441e332828d60096b",
+        "time": 1786943616458
+      }
+    },
+    {
+      "turn": 5,
+      "commit": "98bcdac797471088364b5601e689c7f08161b141",
+      "parent": "9a2da030f7d9697533009f9441e332828d60096b",
+      "time": 1786944033216,
+      "untracked": [
+        ".research/mc-src/ClientboundLevelParticlesPacket.java",
+        ".research/mc-src/Level.java",
+        ".research/mc-src/PacketDistributor.java",
+        ".research/mc-src/ParticleOptions.java",
+        ".research/mc-src/ParticleType.java",
+        ".research/mc-src/ServerLevel.java",
+        "src/main/java/com/zzy205/myfirstmod/network/PlayOrderEffectPayload.java"
+      ],
+      "truncated": false,
+      "after": {
+        "commit": "98336145576c65c09b4d5854ba30e6bdd8f5067a",
+        "time": 1786944096984
+      }
+    },
+    {
+      "turn": 6,
+      "commit": "40f82a53157cb086d09e4933b5a0474f7eb29173",
+      "parent": "98336145576c65c09b4d5854ba30e6bdd8f5067a",
+      "time": 1786944388309,
+      "untracked": [
+        ".research/mc-src/ClientboundLevelParticlesPacket.java",
+        ".research/mc-src/Level.java",
+        ".research/mc-src/PacketDistributor.java",
+        ".research/mc-src/ParticleOptions.java",
+        ".research/mc-src/ParticleType.java",
+        ".research/mc-src/ServerLevel.java",
+        "src/main/java/com/zzy205/myfirstmod/network/PlayOrderEffectPayload.java"
+      ],
+      "truncated": false,
+      "after": {
+        "commit": "274a5af2791f6611f8a39d344692c77d0fc11a44",
+        "time": 1786944414269
+      }
+    }
+  ],
+  "rolls": [],
+  "undos": []
+}

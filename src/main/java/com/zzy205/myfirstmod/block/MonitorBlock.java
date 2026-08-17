@@ -62,7 +62,7 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
             Shapes.or(
                     Block.box(0, 0, 3, 16, 2, 13),
                     Block.box(0, 2, 6, 16, 10, 10),
-                    Block.box(1, 2, 4, 15, 14, 9),
+                    Block.box(1, 2, 4.9, 15, 14, 9),
                     Block.box(3, 4, 9, 13, 12, 12)
             ),
             Direction.NORTH
