@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.compat.cc;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
 import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.lua.MethodResult;
 
 /**
  * 按钮模块（button_1）的 Lua 模块实例。
@@ -115,5 +116,103 @@ public final class ButtonModuleHandle extends ModuleHandle {
     @LuaFunction
     public final boolean isLightControlled() {
         return be.getGridState().isLightCodeControlled(id);
+    }
+
+    // ── 表面标签 ──
+
+    /**
+     * 在按钮表面写文字（参考旋钮角度文字的渲染方式，默认居中、字号与旋钮角度一致、白色）。
+     * <p>
+     * 传入空串 {@code ""} 可清除显示，但会保留之前设置的位置/字号/颜色，
+     * 下次写入文字时继续沿用。
+     *
+     * <pre>{@code
+     * btn.setLabel("START")
+     * btn.setLabelPosition(0.2, 0.1)   -- 相对原点：右移 0.2px、上移 0.1px
+     * btn.setLabelScale(1 / 256)       -- 字号放大为旋钮角度的 2 倍
+     * btn.setLabelColour(0xFF0000)     -- 红色
+     * }</pre>
+     */
+    @LuaFunction(mainThread = true)
+    public final void setLabel(String text) {
+        be.setButtonLabelText(id, text);
+    }
+
+    /** 读取按钮表面文字（未设置时返回空串）。 */
+    @LuaFunction
+    public final String getLabel() {
+        return be.getGridState().getButtonLabel(id).text();
+    }
+
+    /**
+     * 设置标签相对标签原点的位置偏移。
+     * <p>
+     * 单位：MC 像素（1px = 1/16 块）；{@code x} 向右为正、{@code y} 向上为正，
+     * {@code (0, 0)} 表示标签原点（按钮表面视觉中心，默认）。
+     */
+    @LuaFunction(mainThread = true)
+    public final void setLabelPosition(double x, double y) {
+        be.setButtonLabelPosition(id, x, y);
+    }
+
+    /** 读取标签位置偏移，返回 {@code x, y}（MC 像素）。 */
+    @LuaFunction
+    public final MethodResult getLabelPosition() {
+        var label = be.getGridState().getButtonLabel(id);
+        return MethodResult.of(label.x(), label.y());
+    }
+
+    /**
+     * 设置标签字号（块/字体像素）。
+     * <p>
+     * 默认 {@code 1/512}（与旋钮角度显示完全一致）；值越大字越大，例如 {@code 1/256} 为两倍大。
+     */
+    @LuaFunction(mainThread = true)
+    public final void setLabelScale(double scale) {
+        be.setButtonLabelScale(id, scale);
+    }
+
+    /** 读取标签字号（块/字体像素，默认 1/512）。 */
+    @LuaFunction
+    public final double getLabelScale() {
+        return be.getGridState().getButtonLabel(id).scale();
+    }
+
+    /**
+     * 设置标签颜色（0xRRGGBB，默认白色 0xFFFFFF）。
+     *
+     * <pre>{@code
+     * btn.setLabelColour(0xFF0000)  -- 红色
+     * }</pre>
+     */
+    @LuaFunction(mainThread = true)
+    public final void setLabelColour(int colour) {
+        be.setButtonLabelColor(id, colour);
+    }
+
+    /** 读取标签颜色（0xRRGGBB，默认 0xFFFFFF）。 */
+    @LuaFunction
+    public final int getLabelColour() {
+        return be.getGridState().getButtonLabel(id).color();
+    }
+
+    /**
+     * 设置标签是否绘制投影（drawInBatch 的 dropShadow 参数）。
+     * <p>
+     * 默认开启（true，与旋钮角度文字一致）；关闭（false）可去掉文字下方的阴影。
+     *
+     * <pre>{@code
+     * btn.setDropShadow(false)
+     * }</pre>
+     */
+    @LuaFunction(mainThread = true)
+    public final void setDropShadow(boolean dropShadow) {
+        be.setButtonLabelDropShadow(id, dropShadow);
+    }
+
+    /** 标签当前是否绘制投影（默认 true）。 */
+    @LuaFunction
+    public final boolean getDropShadow() {
+        return be.getGridState().getButtonLabel(id).dropShadow();
     }
 }

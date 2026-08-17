@@ -235,6 +235,58 @@ public class MonitorBlockEntity extends BlockEntity {
         }
     }
 
+    // ── 按钮表面标签（Lua 控制） ──
+
+    /** 设置按钮表面标签文字（服务端调用，空串清除显示）。 */
+    public void setButtonLabelText(int id, String text) {
+        if (gridState.getModule(id) == null) return;
+        gridState.setButtonLabelText(id, text);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            syncGridToClients();
+        }
+    }
+
+    /** 设置按钮表面标签位置偏移（服务端调用，MC 像素，0,0 = 居中）。 */
+    public void setButtonLabelPosition(int id, double x, double y) {
+        if (gridState.getModule(id) == null) return;
+        gridState.setButtonLabelPosition(id, x, y);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            syncGridToClients();
+        }
+    }
+
+    /** 设置按钮表面标签字号（服务端调用，块/字体像素，默认 1/512）。 */
+    public void setButtonLabelScale(int id, double scale) {
+        if (gridState.getModule(id) == null) return;
+        gridState.setButtonLabelScale(id, scale);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            syncGridToClients();
+        }
+    }
+
+    /** 设置按钮表面标签颜色（服务端调用，0xRRGGBB）。 */
+    public void setButtonLabelColor(int id, int color) {
+        if (gridState.getModule(id) == null) return;
+        gridState.setButtonLabelColor(id, color);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            syncGridToClients();
+        }
+    }
+
+    /** 设置按钮表面标签是否绘制投影（服务端调用）。 */
+    public void setButtonLabelDropShadow(int id, boolean dropShadow) {
+        if (gridState.getModule(id) == null) return;
+        gridState.setButtonLabelDropShadow(id, dropShadow);
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            syncGridToClients();
+        }
+    }
+
     /** 反转锁存状态（钮子开关等，服务端调用） */
     public void toggleModule(int id) {
         gridState.toggle(id);

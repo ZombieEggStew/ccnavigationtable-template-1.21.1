@@ -45,6 +45,8 @@ public class GridState {
     private final Map<Integer, Float> knobAngles = new java.util.HashMap<>();
     /** 每个模块的额外配置（tooltip 文本 + 各类型专属键），moduleId → config */
     private final Map<Integer, CompoundTag> moduleConfigs = new java.util.HashMap<>();
+    /** 按钮模块表面的标签文字，moduleId → 标签数据（仅 button_1 使用） */
+    private final Map<Integer, ButtonLabel> buttonLabels = new java.util.HashMap<>();
 
     /** 屏幕区域列表（一个 Monitor 可放置多个屏幕） */
     private final List<ScreenRegion> screenRegions = new ArrayList<>();
@@ -178,6 +180,8 @@ public class GridState {
         if (ka != null) knobAngles.put(newId, ka);
         CompoundTag cfg = moduleConfigs.remove(oldId);
         if (cfg != null) moduleConfigs.put(newId, cfg);
+        ButtonLabel bl = buttonLabels.remove(oldId);
+        if (bl != null) buttonLabels.put(newId, bl);
 
         return true;
     }
@@ -194,6 +198,7 @@ public class GridState {
         lightCodeControlledModules.remove(moduleId);
         knobAngles.remove(moduleId);
         moduleConfigs.remove(moduleId);
+        buttonLabels.remove(moduleId);
         for (int dx = 0; dx < mod.getWidth(); dx++) {
             for (int dy = 0; dy < mod.getHeight(); dy++) {
                 grid[mod.gridX() + dx][mod.gridY() + dy] = -1;
@@ -335,6 +340,57 @@ public class GridState {
         knobAngles.put(moduleId, snapToDetent(getKnobAngle(moduleId), step));
     }
 
+    // ── 按钮表面标签 ──
+
+    /** 按钮表面标签（不存在时返回空标签）。 */
+    public ButtonLabel getButtonLabel(int moduleId) {
+        return buttonLabels.getOrDefault(moduleId, ButtonLabel.EMPTY);
+    }
+
+    private ButtonLabel requireButtonLabel(int moduleId) {
+        return buttonLabels.getOrDefault(moduleId, ButtonLabel.EMPTY);
+    }
+
+    /** 设置按钮标签文字（空串清除显示，但保留位置/字号/颜色/投影）。 */
+    public void setButtonLabelText(int moduleId, String text) {
+        if (!modules.containsKey(moduleId)) return;
+        ButtonLabel l = requireButtonLabel(moduleId);
+        buttonLabels.put(moduleId, new ButtonLabel(
+                text == null ? "" : text, l.x(), l.y(), l.scale(), l.color(), l.dropShadow()));
+    }
+
+    /** 设置按钮标签位置偏移（MC 像素，+x 右、+y 上，0,0 = 标签原点）。 */
+    public void setButtonLabelPosition(int moduleId, double x, double y) {
+        if (!modules.containsKey(moduleId)) return;
+        ButtonLabel l = requireButtonLabel(moduleId);
+        buttonLabels.put(moduleId, new ButtonLabel(
+                l.text(), x, y, l.scale(), l.color(), l.dropShadow()));
+    }
+
+    /** 设置按钮标签字号（块/字体像素，默认 1/512）。 */
+    public void setButtonLabelScale(int moduleId, double scale) {
+        if (!modules.containsKey(moduleId)) return;
+        ButtonLabel l = requireButtonLabel(moduleId);
+        buttonLabels.put(moduleId, new ButtonLabel(
+                l.text(), l.x(), l.y(), ButtonLabel.clampScale(scale), l.color(), l.dropShadow()));
+    }
+
+    /** 设置按钮标签颜色（0xRRGGBB）。 */
+    public void setButtonLabelColor(int moduleId, int color) {
+        if (!modules.containsKey(moduleId)) return;
+        ButtonLabel l = requireButtonLabel(moduleId);
+        buttonLabels.put(moduleId, new ButtonLabel(
+                l.text(), l.x(), l.y(), l.scale(), ButtonLabel.clampColor(color), l.dropShadow()));
+    }
+
+    /** 设置按钮标签是否绘制投影。 */
+    public void setButtonLabelDropShadow(int moduleId, boolean dropShadow) {
+        if (!modules.containsKey(moduleId)) return;
+        ButtonLabel l = requireButtonLabel(moduleId);
+        buttonLabels.put(moduleId, new ButtonLabel(
+                l.text(), l.x(), l.y(), l.scale(), l.color(), dropShadow));
+    }
+
     // ── 屏幕区域 ──
 
     /** 屏幕矩形。min 为左上角（较小坐标），max 为右下角（较大坐标）。 */
@@ -474,6 +530,17 @@ public class GridState {
             if (lb > 0f) modTag.putFloat("lightBrightness", lb);
             CompoundTag cfg = moduleConfigs.get(mod.id());
             if (cfg != null && !cfg.isEmpty()) modTag.put("config", cfg);
+            if (mod.type() == ModuleType.BUTTON_1X1) {
+                ButtonLabel label = buttonLabels.get(mod.id());
+                if (label != null && !label.isDefault()) {
+                    modTag.putString("labelText", label.text());
+                    modTag.putDouble("labelX", label.x());
+                    modTag.putDouble("labelY", label.y());
+                    modTag.putDouble("labelScale", label.scale());
+                    modTag.putInt("labelColor", label.color());
+                    modTag.putBoolean("labelDropShadow", label.dropShadow());
+                }
+            }
             modList.add(modTag);
         }
         tag.put("modules", modList);
@@ -516,6 +583,7 @@ public class GridState {
         lightCodeControlledModules.clear();
         knobAngles.clear();
         moduleConfigs.clear();
+        buttonLabels.clear();
         screenRegions.clear();
         screenTexts.clear();
         for (int x = 0; x < GRID_WIDTH; x++) {
@@ -544,6 +612,18 @@ public class GridState {
                 knobAngles.put(id, normalizeKnobAngle(angle));
             }
             if (modTag.contains("config")) moduleConfigs.put(id, modTag.getCompound("config"));
+            if (type == ModuleType.BUTTON_1X1 && modTag.contains("labelText")) {
+                buttonLabels.put(id, new ButtonLabel(
+                        modTag.getString("labelText"),
+                        modTag.getDouble("labelX"),
+                        modTag.getDouble("labelY"),
+                        ButtonLabel.clampScale(modTag.contains("labelScale")
+                                ? modTag.getDouble("labelScale") : ButtonLabel.DEFAULT_SCALE),
+                        ButtonLabel.clampColor(modTag.contains("labelColor")
+                                ? modTag.getInt("labelColor") : ButtonLabel.DEFAULT_COLOR),
+                        !modTag.contains("labelDropShadow")
+                                || modTag.getBoolean("labelDropShadow")));
+            }
             for (int dx = 0; dx < type.width; dx++) {
                 for (int dy = 0; dy < type.height; dy++) {
                     grid[x + dx][y + dy] = id;
