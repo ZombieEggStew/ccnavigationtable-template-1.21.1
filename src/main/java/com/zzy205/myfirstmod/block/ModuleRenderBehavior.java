@@ -1,12 +1,15 @@
 package com.zzy205.myfirstmod.block;
 
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.math.Axis;
-import com.simibubi.create.foundation.render.RenderTypes;
+import com.zzy205.myfirstmod.CCPeripheraExtender;
 import com.zzy205.myfirstmod.monitor.ModuleType;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderStateShard;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.resources.model.BakedModel;
@@ -26,6 +29,19 @@ public abstract class ModuleRenderBehavior {
 
     private static final RandomSource RANDOM = RandomSource.create(42L);
     private static final Map<ModuleType, ModuleRenderBehavior> REGISTRY = new EnumMap<>(ModuleType.class);
+
+    /** 灯带纯色面片渲染类型：POSITION_COLOR（无纹理、无光照贴图），与 screen 文字背景 SOLID_BG 完全同款 */
+    private static final RenderType INDICATOR_RENDER_TYPE = RenderType.create(
+            CCPeripheraExtender.MOD_ID + ":module_indicator",
+            DefaultVertexFormat.POSITION_COLOR,
+            VertexFormat.Mode.QUADS,
+            256, false, false,
+            RenderType.CompositeState.builder()
+                    .setShaderState(RenderStateShard.POSITION_COLOR_SHADER)
+                    .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
+                    .setCullState(RenderStateShard.NO_CULL)
+                    .createCompositeState(false)
+    );
 
     static {
         REGISTRY.put(ModuleType.BUTTON_1X1, new ButtonBehavior(MonitorPreloadedModels.BUTTON_1_HEAD, MonitorPreloadedModels.BUTTON_1_INDICATOR));
@@ -74,16 +90,16 @@ public abstract class ModuleRenderBehavior {
             consumer.putBulkData(pose, q, 1, 1, 1, 1, light, OverlayTexture.NO_OVERLAY);
     }
 
-    /** 带顶点色与自定义光照的模型渲染（用于发光部件：可指定颜色 + FULL_BRIGHT） */
-    protected static void renderModelColored(PoseStack ps, VertexConsumer consumer, BakedModel model,
-                                             float r, float g, float b, float a, int light, int overlay) {
-        var pose = ps.last();
-        for (Direction dir : Direction.values()) {
-            for (var q : model.getQuads(null, dir, RANDOM, ModelData.EMPTY, null))
-                consumer.putBulkData(pose, q, r, g, b, a, light, overlay);
-        }
-        for (var q : model.getQuads(null, null, RANDOM, ModelData.EMPTY, null))
-            consumer.putBulkData(pose, q, r, g, b, a, light, overlay);
+    /** 绘制一个纯色平面（POSITION_COLOR：无纹理、不受光照贴图影响，支持透明度）。坐标均为块单位。 */
+    protected static void renderFlatQuad(PoseStack ps, MultiBufferSource buffer,
+                                         float x0, float y0, float x1, float y1, float z,
+                                         float r, float g, float b, float a) {
+        VertexConsumer vc = buffer.getBuffer(INDICATOR_RENDER_TYPE);
+        var pose = ps.last().pose();
+        vc.addVertex(pose, x0, y0, z).setColor(r, g, b, a);
+        vc.addVertex(pose, x0, y1, z).setColor(r, g, b, a);
+        vc.addVertex(pose, x1, y1, z).setColor(r, g, b, a);
+        vc.addVertex(pose, x1, y0, z).setColor(r, g, b, a);
     }
 
     // ── 默认：按钮行为 ──
@@ -91,8 +107,14 @@ public abstract class ModuleRenderBehavior {
     public static class ButtonBehavior extends ModuleRenderBehavior {
         private static final float PRESS_DEPTH = 0.2f;
 
+        /** 灯带平面范围（模型像素，1px=1/16 块），与 button_1_indicator 模型一致 */
+        private static final float INDICATOR_X0 = 0.1875f, INDICATOR_X1 = 0.8125f;
+        private static final float INDICATOR_Y0 = 0.6875f, INDICATOR_Y1 = 0.8125f;
+        /** 灯带基准 z（模型像素）：head 前脸 0.625 前方 0.011px，避免 z-fighting */
+        private static final float INDICATOR_Z_PX = 0.614f;
+
         private final String headKey;      // 可空：独立按钮主体（按下凹陷）
-        private final String indicatorKey; // 可空：发光灯带
+        private final String indicatorKey; // 非空即绘制灯带
 
         public ButtonBehavior() { this(MonitorPreloadedModels.BUTTON_1_HEAD, MonitorPreloadedModels.BUTTON_1_INDICATOR); }
 
@@ -123,21 +145,17 @@ public abstract class ModuleRenderBehavior {
                 }
             }
 
-            // ② 灯带：绿色渐变荧光，亮度由 lightLevel（自动跟随按下 / 代码控制）决定
-            if (indicatorKey != null && lightLevel > 0.01f) {
-                BakedModel indicator = MonitorPreloadedModels.getExtra(indicatorKey);
-                if (indicator != null) {
-                    ps.pushPose();
-                    if (headKey != null) ps.translate(0, 0, PRESS_DEPTH * anim / 16f);
-                    // 绿色渐变：暗绿 → 亮绿（仿电源指示灯），lightLevel 已在 MonitorRenderer 计算
-                    float r = Mth.lerp(lightLevel, 0.03f, 0.22f);
-                    float g = Mth.lerp(lightLevel, 0.18f, 1.00f);
-                    float b = Mth.lerp(lightLevel, 0.05f, 0.36f);
-                    // FULL_BRIGHT 不受环境光；additive 加法混合 = 荧光；顶点色随亮度变亮
-                    renderModelColored(ps, buffer.getBuffer(RenderTypes.additive()), indicator,
-                            r, g, b, 1f, LightTexture.FULL_BRIGHT, overlay);
-                    ps.popPose();
-                }
+            // ② 灯带：常显不透明面片，颜色随 lightLevel 从灰(0x666666)渐变到纯绿，避免半透明透出背后世界
+            if (indicatorKey != null) {
+                ps.pushPose();
+                float iz = (INDICATOR_Z_PX + PRESS_DEPTH * anim) / 16f;
+                float r = Mth.lerp(lightLevel, 0.4f, 0.0f);
+                float g = Mth.lerp(lightLevel, 0.4f, 1.0f);
+                float b = Mth.lerp(lightLevel, 0.4f, 0.0f);
+                renderFlatQuad(ps, buffer,
+                        INDICATOR_X0 / 16f, INDICATOR_Y0 / 16f, INDICATOR_X1 / 16f, INDICATOR_Y1 / 16f, iz,
+                        r, g, b, 1f);
+                ps.popPose();
             }
         }
     }
