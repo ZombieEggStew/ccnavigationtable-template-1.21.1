@@ -50,10 +50,10 @@ public abstract class ModuleRenderBehavior {
     /** 是否对底座施加按下深度动画（按钮需要，钮子开关不需要） */
     public boolean usePressDepth() { return true; }
 
-    /** 按下动画速度（每帧），默认 0.1 */
-    public float animPressSpeed() { return 0.1f; }
-    /** 弹起动画速度（每帧），默认 0.1 */
-    public float animReleaseSpeed() { return 0.1f; }
+    /** 按下动画速度（20 TPS 下每 tick 的逼近比例）。 */
+    public float animPressSpeed() { return 0.25f; }
+    /** 弹起动画速度（20 TPS 下每 tick 的逼近比例）。 */
+    public float animReleaseSpeed() { return 0.25f; }
 
     /**
      * 渲染额外部件（如拉杆）。anim 0=弹起, 1=按下；lightLevel 为灯带亮度（0=灭, 1=最亮），
@@ -104,10 +104,10 @@ public abstract class ModuleRenderBehavior {
         /** 有独立 head 时主模型（底座）不凹陷，凹陷由 head/indicator 在 renderExtra 里自行处理 */
         @Override public boolean usePressDepth() { return headKey == null; }
 
-        /** 按下动画速度：每帧逼近目标的比例，值越大越快（默认 0.1） */
-        @Override public float animPressSpeed() { return 0.3f; }
+        /** 按下动画速度：值越大越快。 */
+        @Override public float animPressSpeed() { return 0.6f; }
 
-        @Override public float animReleaseSpeed() { return 0.3f; }
+        @Override public float animReleaseSpeed() { return 0.6f; }
 
         @Override
         public void renderExtra(PoseStack ps, MultiBufferSource buffer, float anim, float lightLevel,
@@ -147,8 +147,8 @@ public abstract class ModuleRenderBehavior {
     public static class ToggleBehavior extends ModuleRenderBehavior {
         @Override public float offsetZ() { return 1f / 16f; }       // z 微调
         @Override public boolean usePressDepth() { return false; }   // 底座不动
-        @Override public float animPressSpeed() { return 0.4f; }
-        @Override public float animReleaseSpeed() { return 0.4f; }
+        @Override public float animPressSpeed() { return 0.9f; }
+        @Override public float animReleaseSpeed() { return 0.9f; }
         @Override
         public void applyInitialRotation(PoseStack ps) {
             ps.mulPose(Axis.XP.rotationDegrees(-90));               // 竖→横
@@ -170,6 +170,8 @@ public abstract class ModuleRenderBehavior {
 
     public static class KnobBehavior extends ModuleRenderBehavior {
         @Override public boolean usePressDepth() { return false; }
+        @Override public float animPressSpeed() { return 0.5f; }
+        @Override public float animReleaseSpeed() { return 0.5f; }
         @Override public float offsetX() { return 1f / 16f; }       // x 微调
         @Override public float offsetY() { return 1f / 16f; }       // y 微调
         @Override public float offsetZ() { return 1f / 16f; }       // z 微调

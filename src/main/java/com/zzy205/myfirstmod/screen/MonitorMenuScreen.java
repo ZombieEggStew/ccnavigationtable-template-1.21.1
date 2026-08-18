@@ -7,6 +7,7 @@ import com.zzy205.myfirstmod.foundation.gui.widget.ScrollValueBar;
 import com.zzy205.myfirstmod.monitor.MonitorBackground;
 import com.zzy205.myfirstmod.network.MonitorBackgroundPayload;
 import com.zzy205.myfirstmod.network.MonitorChannelPayload;
+import com.zzy205.myfirstmod.network.MonitorTransformPayload;
 import net.createmod.catnip.gui.element.ScreenElement;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
@@ -17,12 +18,12 @@ import net.neoforged.neoforge.network.PacketDistributor;
 /**
  * Monitor 自身菜单 —— 蹲下+右键 Monitor 空白处打开。
  * 布局复制 {@link MonitorModuleScreen}：相同背景面板与第一行 bar_id（滚轮选择频道），
- * 不包含第二行 bar_tooltip、文本输入框与类型专属配置区。
+ * 并在原频道/背景两条横条下追加俯仰 / 偏航 / 前后偏移三条滚轮。
  */
 public class MonitorMenuScreen extends AbstractMonitorScreen {
 
     private static final int WIN_W = 192;
-    private static final int WIN_H = 159;
+    private static final int WIN_H = 200;
     private static final int TEX_W = 256;
     private static final int TEX_H = 384;
 
@@ -35,6 +36,11 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
 
     private static final int DONE_BTN_RIGHT = 25;
     private static final int DONE_BTN_BOTTOM = 24;
+
+    // ── 背景面板：原图窗口为 192×159，顶部 16px、底部 29px 边框，中部为纯色主体 ──
+    private static final int PANEL_TOP_H = 16;
+    private static final int PANEL_BOTTOM_H = 29;
+    private static final int PANEL_BODY_COLOR = 0xFF404040;
 
     // ── 横条尺寸（与 MonitorModuleScreen 的 bar_id 一致）──
     private static final int BAR_TEX_W = 256;
@@ -52,18 +58,29 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
     private final int[] occupiedChannels;
     /** 打开菜单时的背景选项 */
     private final String background;
+    /** 打开菜单时的可动变换 */
+    private final int initialPitch;
+    private final int initialYaw;
+    private final int initialOffset;
 
     private int winLeft;
     private int winTop;
     private ScrollValueBar channelBar;
     private ScrollValueBar backgroundBar;
+    private ScrollValueBar pitchBar;
+    private ScrollValueBar yawBar;
+    private ScrollValueBar offsetBar;
 
-    public MonitorMenuScreen(BlockPos monitorPos, int channel, int[] occupiedChannels, String background) {
+    public MonitorMenuScreen(BlockPos monitorPos, int channel, int[] occupiedChannels, String background,
+                             int pitch, int yaw, int offset) {
         super(Component.empty());
         this.monitorPos = monitorPos;
         this.originalChannel = channel;
         this.occupiedChannels = occupiedChannels;
         this.background = background;
+        this.initialPitch = pitch;
+        this.initialYaw = yaw;
+        this.initialOffset = offset;
     }
 
     @Override
@@ -88,8 +105,35 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
                 .addToolTipTitle(Component.translatable("gui.ccpe.monitor_menu.background_title"))
                 .addToolTipOptions()
                 .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"));
-                
+
         this.addRenderableWidget(this.backgroundBar);
+
+        // 俯仰角度条：-90 ~ +90
+        this.pitchBar = new ScrollValueBar(
+                winLeft, winTop + BAR_ID_Y + 2 * (BAR_TEX_H + BAR_MARGIN_Y), BAR_TEX_W, BAR_TEX_H,
+                initialPitch, 0, new int[0])
+                .range(-90, 90)
+                .addToolTipTitle(Component.translatable("gui.ccpe.monitor_menu.pitch_title"))
+                .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"));
+        this.addRenderableWidget(this.pitchBar);
+
+        // 偏航角度条：-180 ~ +180
+        this.yawBar = new ScrollValueBar(
+                winLeft, winTop + BAR_ID_Y + 3 * (BAR_TEX_H + BAR_MARGIN_Y), BAR_TEX_W, BAR_TEX_H,
+                initialYaw, 0, new int[0])
+                .range(-180, 180)
+                .addToolTipTitle(Component.translatable("gui.ccpe.monitor_menu.yaw_title"))
+                .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"));
+        this.addRenderableWidget(this.yawBar);
+
+        // 前后偏移条：-6 ~ +6（单位 1/16 方块 = 1px）
+        this.offsetBar = new ScrollValueBar(
+                winLeft, winTop + BAR_ID_Y + 4 * (BAR_TEX_H + BAR_MARGIN_Y), BAR_TEX_W, BAR_TEX_H,
+                initialOffset, 0, new int[0])
+                .range(-6, 6)
+                .addToolTipTitle(Component.translatable("gui.ccpe.monitor_menu.offset_title"))
+                .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"));
+        this.addRenderableWidget(this.offsetBar);
 
         // 右下角"完成"按钮（关闭时保存频道）
         HoverTintIconButton doneBtn = new HoverTintIconButton(
@@ -106,8 +150,16 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
 
     @Override
     protected void renderCustom(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // 自定义背景面板
-        g.blit(TEXTURE, winLeft, winTop, 0, 0, WIN_W, WIN_H, TEX_W, TEX_H);
+        // 自定义背景面板：顶部/底部边框 + 中部主体填充（原图窗口只有 159 高，加长到 200）
+        g.blit(TEXTURE, winLeft, winTop, 0, 0, WIN_W, PANEL_TOP_H, TEX_W, TEX_H);
+        int bodyTop = winTop + PANEL_TOP_H;
+        int bodyBottom = winTop + WIN_H - PANEL_BOTTOM_H;
+        g.fill(winLeft + 1, bodyTop, winLeft + WIN_W - 1, bodyBottom, PANEL_BODY_COLOR);
+        g.fill(winLeft + 1, bodyTop, winLeft + 2, bodyBottom, 0xFF000000);
+        g.fill(winLeft + 2, bodyTop, winLeft + 3, bodyBottom, 0xFFEAEAEA);
+        g.fill(winLeft + WIN_W - 2, bodyTop, winLeft + WIN_W - 1, bodyBottom, 0xFF000000);
+        g.fill(winLeft + WIN_W - 3, bodyTop, winLeft + WIN_W - 2, bodyBottom, 0xFFEAEAEA);
+        g.blit(TEXTURE, winLeft, winTop + WIN_H - PANEL_BOTTOM_H, 0, 130, WIN_W, PANEL_BOTTOM_H, TEX_W, TEX_H);
 
         // 标题
         Component title = Component.translatable("block.ccpe.my_monitor");
@@ -118,6 +170,8 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
     public void onClose() {
         PacketDistributor.sendToServer(new MonitorChannelPayload(monitorPos, channelBar.getValue()));
         PacketDistributor.sendToServer(new MonitorBackgroundPayload(monitorPos, MonitorBackground.keyAt(backgroundBar.getValue())));
+        PacketDistributor.sendToServer(new MonitorTransformPayload(
+                monitorPos, (float) pitchBar.getValue(), (float) yawBar.getValue(), offsetBar.getValue()));
         super.onClose();
     }
 }

@@ -10,7 +10,7 @@ import com.zzy205.myfirstmod.block.PitchMonitorTestBlock;
 import com.zzy205.myfirstmod.block.PitchMonitorTestBlockEntity;
 import com.zzy205.myfirstmod.block.MyModPartialModels;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
-import com.zzy205.myfirstmod.client.PitchMonitorTestOutlineRenderer;
+import com.zzy205.myfirstmod.client.MonitorOutlineRenderer;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import com.zzy205.myfirstmod.screen.RedstoneTransceiverScreen;
 import com.zzy205.myfirstmod.screen.PeripheralExtenderScreen;
@@ -43,7 +43,7 @@ public class CCPeripheralExtenderClient {
     public CCPeripheralExtenderClient(ModContainer container, IEventBus modEventBus) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         MonitorGridOverlay.register();
-        NeoForge.EVENT_BUS.addListener(PitchMonitorTestOutlineRenderer::onRenderHighlight);
+        NeoForge.EVENT_BUS.addListener(MonitorOutlineRenderer::onRenderHighlight);
 
         // 测试 monitor 右键打开俯仰/偏航菜单
         NeoForge.EVENT_BUS.addListener((PlayerInteractEvent.RightClickBlock event) -> {

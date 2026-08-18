@@ -9,6 +9,7 @@ import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.monitor.MonitorBackground;
 import com.zzy205.myfirstmod.monitor.ScreenText;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
+import com.zzy205.myfirstmod.client.MonitorTransform;
 import com.zzy205.myfirstmod.client.ScreenTextRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -60,10 +61,25 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         Direction facing = be.getBlockState().getValue(MonitorBlock.FACING);
 
         poseStack.pushPose();
-        float c = MonitorBlock.ROT_ORIGIN / 16f;
-        poseStack.translate(c, c, c);
-        poseStack.mulPose(Axis.YP.rotationDegrees(-facing.getOpposite().toYRot()));
-        poseStack.translate(-c, -c, -c);
+        // 底座由方块模型（blockstate → my_monitor_base）固定渲染，BER 只负责可动部分。
+        // facing → offset → yaw（外层到内层）
+        MonitorTransform.applyFacing(poseStack, facing);
+        MonitorTransform.applyOffset(poseStack, be.getOffset());
+        MonitorTransform.applyYaw(poseStack, be.getYawAngle());
+
+        // bearing：随 facing + offset + yaw，不随 pitch
+        BakedModel bearingModel = MonitorPreloadedModels.getMonitorBearing();
+        if (bearingModel != null) {
+            renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), bearingModel, light, overlay);
+        }
+
+        // case 与所有屏幕内容：随 facing + offset + yaw + pitch。
+        // case 模型带 render_type=cutout（前脸有屏幕开孔），必须用 cutout 片，否则背景/屏幕文字被不透明前脸遮挡。
+        MonitorTransform.applyPitch(poseStack, be.getPitchAngle());
+        BakedModel caseModel = MonitorPreloadedModels.getMonitorCase();
+        if (caseModel != null) {
+            renderModel(poseStack, buffer.getBuffer(Sheets.cutoutBlockSheet()), caseModel, light, overlay);
+        }
 
         // ── 背景面板（始终渲染，覆盖原 screen 元素的面板贴图） ──
         renderBackground(poseStack, buffer, be.getBackground(), light);
@@ -97,7 +113,9 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
                 else if (delta < -180f) delta += 360f;
             }
             float speed = delta >= 0f ? bhv.animPressSpeed() : bhv.animReleaseSpeed();
-            float next = current + delta * speed;
+            // 动画速度定义为 20 TPS 下的每 tick 逼近比例，按实际帧时间推进，避免重绘频率改变动画观感。
+            float frameTime = Math.min(Minecraft.getInstance().getTimer().getGameTimeDeltaTicks(), 2f);
+            float next = current + delta * (1f - (float) Math.pow(1f - speed, frameTime));
             if (!isKnob && Math.abs(next - target) < 0.01f) next = target;
             if (isKnob && Math.abs(delta) < 0.01f) next = current;
             beAnims.put(mod.id(), next);

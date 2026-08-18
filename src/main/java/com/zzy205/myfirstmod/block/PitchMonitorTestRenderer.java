@@ -5,7 +5,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.zzy205.myfirstmod.CCPeripheraExtender;
-import com.zzy205.myfirstmod.client.PitchMonitorTransform;
+import com.zzy205.myfirstmod.client.MonitorTransform;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -68,20 +68,20 @@ public class PitchMonitorTestRenderer implements BlockEntityRenderer<PitchMonito
 
         poseStack.pushPose();
         // facing → offset → yaw（外层到内层）
-        PitchMonitorTransform.applyFacing(poseStack, facing);
-        PitchMonitorTransform.applyOffset(poseStack, blockEntity.getOffset());
-        PitchMonitorTransform.applyYaw(poseStack, blockEntity.getYawAngle());
+        MonitorTransform.applyFacing(poseStack, facing);
+        MonitorTransform.applyOffset(poseStack, blockEntity.getOffset());
+        MonitorTransform.applyYaw(poseStack, blockEntity.getYawAngle());
 
         // bearing：只受 yaw，不随 pitch
-        BakedModel bearingModel = MonitorPreloadedModels.getPitchTestBearing();
+        BakedModel bearingModel = MonitorPreloadedModels.getMonitorBearing();
         if (bearingModel != null) {
             renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), bearingModel, light, overlay);
         }
 
         // case + 棋盘：受 yaw + pitch
-        PitchMonitorTransform.applyPitch(poseStack, blockEntity.getPitchAngle());
+        MonitorTransform.applyPitch(poseStack, blockEntity.getPitchAngle());
 
-        BakedModel caseModel = MonitorPreloadedModels.getPitchTestCase();
+        BakedModel caseModel = MonitorPreloadedModels.getMonitorCase();
         if (caseModel != null) {
             renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), caseModel, light, overlay);
         }
@@ -121,7 +121,7 @@ public class PitchMonitorTestRenderer implements BlockEntityRenderer<PitchMonito
         double[] d = { dir.x, dir.y, dir.z };
 
         Direction facing = blockEntity.getBlockState().getValue(PitchMonitorTestBlock.FACING);
-        PitchMonitorTransform.inverseToModel(o, d, facing, blockEntity.getYawAngle(),
+        MonitorBlock.inverseToModel(o, d, facing, blockEntity.getYawAngle(),
                 blockEntity.getPitchAngle(), blockEntity.getOffset());
 
         double planeZ = SCREEN_Z / 16.0;

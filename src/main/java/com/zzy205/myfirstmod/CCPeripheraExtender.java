@@ -27,6 +27,7 @@ import com.zzy205.myfirstmod.network.RemoveModulePayload;
 import com.zzy205.myfirstmod.network.ModuleKnobRotatePayload;
 import com.zzy205.myfirstmod.network.MonitorBackgroundPayload;
 import com.zzy205.myfirstmod.network.MonitorChannelPayload;
+import com.zzy205.myfirstmod.network.MonitorTransformPayload;
 import com.zzy205.myfirstmod.network.PitchMonitorAnglePayload;
 import com.zzy205.myfirstmod.network.PlaceScreenPayload;
 import com.zzy205.myfirstmod.network.RemoveScreenPayload;
@@ -166,6 +167,19 @@ public class CCPeripheraExtender {
                         var level = ctx.player().level();
                         var be = level.getBlockEntity(payload.monitorPos());
                         if (be instanceof PitchMonitorTestBlockEntity monitorBE) {
+                            monitorBE.setAngles(payload.pitch(), payload.yaw(), payload.offset());
+                        }
+                    }
+            );
+
+            // 客户端→服务端：保存正式 Monitor 的可动变换（俯仰 / 偏航 / 偏移）
+            registrar.playToServer(
+                    MonitorTransformPayload.TYPE,
+                    MonitorTransformPayload.STREAM_CODEC,
+                    (payload, ctx) -> {
+                        var level = ctx.player().level();
+                        var be = level.getBlockEntity(payload.monitorPos());
+                        if (be instanceof MonitorBlockEntity monitorBE) {
                             monitorBE.setAngles(payload.pitch(), payload.yaw(), payload.offset());
                         }
                     }

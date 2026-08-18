@@ -1,3 +1,3 @@
 {
-  "parent": "ccpe:block/my_monitor"
+  "parent": "ccpe:block/monitor/my_monitor_item"
 }

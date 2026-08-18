@@ -39,6 +39,12 @@ public class MonitorBlockEntity extends BlockEntity {
     private String background = MonitorBackground.DEFAULT;
     /** 所有已被占用的频道号快照（服务端设置，客户端通过 updateTag 同步） */
     private int[] occupiedChannels = new int[0];
+    /** 俯仰角（度，-90..90），仅影响 case */
+    private float pitchAngle;
+    /** 偏航角（度，-180..180），影响 bearing + case */
+    private float yawAngle;
+    /** 前后偏移（模型像素，-6..6），相对 facing 前后移动 bearing + case */
+    private int offset;
     /** CC:T 外设实例（懒加载），避免直接在 BE 上实现 IPeripheral 导致 getType() 冲突 */
     @Nullable
     private IPeripheral peripheral;
@@ -111,6 +117,27 @@ public class MonitorBlockEntity extends BlockEntity {
 
     /** 获取已占用频道号数组（客户端菜单用它跳过已占用频道）。 */
     public int[] getOccupiedChannels() { return occupiedChannels; }
+
+    // ── 可动变换（pitch / yaw / offset） ──
+
+    public float getPitchAngle() { return pitchAngle; }
+    public float getYawAngle() { return yawAngle; }
+    public int getOffset() { return offset; }
+
+    /** 设置可动变换（服务端调用）：钳制范围并通过 BE update 同步到客户端。 */
+    public void setAngles(float pitch, float yaw, int offset) {
+        this.pitchAngle = clamp(pitch, -90f, 90f);
+        this.yawAngle = clamp(yaw, -180f, 180f);
+        this.offset = Math.max(-6, Math.min(6, offset));
+        setChanged();
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
+    }
 
     /** 从全局注册表同步 occupiedChannels 快照到本 BE，并通知客户端。 */
     public void refreshOccupiedChannels() {
@@ -531,6 +558,9 @@ public class MonitorBlockEntity extends BlockEntity {
         tag.putInt("Channel", channel);
         tag.putString("Background", background);
         tag.putIntArray("OccupiedChannels", occupiedChannels);
+        tag.putFloat("PitchAngle", pitchAngle);
+        tag.putFloat("YawAngle", yawAngle);
+        tag.putInt("Offset", offset);
         tag.put("GridState", gridState.save(registries));
     }
 
@@ -544,6 +574,9 @@ public class MonitorBlockEntity extends BlockEntity {
             background = MonitorBackground.isValid(bg) ? bg : MonitorBackground.DEFAULT;
         }
         if (tag.contains("OccupiedChannels")) occupiedChannels = tag.getIntArray("OccupiedChannels");
+        if (tag.contains("PitchAngle")) pitchAngle = tag.getFloat("PitchAngle");
+        if (tag.contains("YawAngle")) yawAngle = tag.getFloat("YawAngle");
+        if (tag.contains("Offset")) offset = tag.getInt("Offset");
         if (tag.contains("GridState")) {
             gridState.load(registries, tag.getCompound("GridState"));
         }
@@ -555,6 +588,9 @@ public class MonitorBlockEntity extends BlockEntity {
         tag.putInt("Channel", channel);
         tag.putString("Background", background);
         tag.putIntArray("OccupiedChannels", occupiedChannels);
+        tag.putFloat("PitchAngle", pitchAngle);
+        tag.putFloat("YawAngle", yawAngle);
+        tag.putInt("Offset", offset);
         tag.put("GridState", gridState.save(registries));
         return tag;
     }

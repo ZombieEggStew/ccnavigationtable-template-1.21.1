@@ -11,6 +11,7 @@ import com.zzy205.myfirstmod.monitor.MonitorModule;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.network.ModuleKnobRotatePayload;
 import com.zzy205.myfirstmod.network.ModulePressPayload;
+import com.zzy205.myfirstmod.network.PlaceModulePayload;
 import com.zzy205.myfirstmod.network.PlaceScreenPayload;
 import com.zzy205.myfirstmod.network.RemoveModulePayload;
 import com.zzy205.myfirstmod.network.RemoveScreenPayload;
@@ -160,13 +161,13 @@ public class MonitorGridOverlay {
             return;
         }
 
-        BlockHitResult bhr = (BlockHitResult) hit;
         Level level = player.level();
         BlockState state = level.getBlockState(pos);
 
         Direction facing = state.getValue(MonitorBlock.FACING);
         GridState grid = null;
-        if (level.getBlockEntity(pos) instanceof MonitorBlockEntity be) grid = be.getGridState();
+        MonitorBlockEntity monitorBE = level.getBlockEntity(pos) instanceof MonitorBlockEntity m ? m : null;
+        if (monitorBE != null) grid = monitorBE.getGridState();
         if (grid == null) grid = new GridState();
 
         ItemStack held = player.getMainHandItem();
@@ -191,14 +192,15 @@ public class MonitorGridOverlay {
                 | (Config.MONITOR_OUTLINE_G.get() << 8)
                 | Config.MONITOR_OUTLINE_B.get();
 
-        // 鼠标命中位置 → 网格坐标。
-        // 关键点：Sable 的 clip mixin 返回的 BlockHitResult 已经是子次元局部（plot）坐标系，
-        // 因此直接用 hitResult.getLocation()（与 pos 同空间）即可得到准确的屏幕命中点，
-        // 无需再自行做射线-平面求交（那会因屏幕面内凹 0.025 而在斜视时产生视差偏移）。
+        // ── 动态射线命中：完整视线射线 → 模型空间屏幕平面求交（兼容可动 Monitor + Sable 子次元）──
         float partialTick = (float) event.getPartialTick().getGameTimeDeltaTicks();
         SubLevel subLevel = SableCompat.getContainingSubLevel(level, pos);
-        int[] gp = MonitorBlock.worldHitToGrid(pos, facing,
-                bhr.getLocation().x, bhr.getLocation().y, bhr.getLocation().z);
+        float monitorYaw = monitorBE != null ? monitorBE.getYawAngle() : 0f;
+        float monitorPitch = monitorBE != null ? monitorBE.getPitchAngle() : 0f;
+        int monitorOffset = monitorBE != null ? monitorBE.getOffset() : 0;
+
+        Vec3[] ray = crosshairRay(level, pos, player, partialTick);
+        int[] gp = MonitorBlock.rayToGrid(pos, facing, monitorYaw, monitorPitch, monitorOffset, ray[0], ray[1]);
         MonitorModule hoveredModule = null;
         if (gp != null) {
             hoveredModule = grid.getModule(grid.getCell(gp[0], gp[1]));
@@ -263,17 +265,21 @@ public class MonitorGridOverlay {
             return;
         }
 
-        // ── Shift+右键 Monitor 空白处 → 打开 Monitor 自身菜单（滚轮选择频道/背景）──
+        // ── Shift+右键 Monitor 空白处 → 打开 Monitor 自身菜单（频道/背景 + 俯仰/偏航/偏移）──
         if (shiftUseEdge && heldType == null && !holdingScreen && !holdingWrench) {
             int channel = 0;
             int[] occupied = new int[0];
             String background = MonitorBackground.DEFAULT;
-            if (level.getBlockEntity(pos) instanceof MonitorBlockEntity monitorBE) {
+            int pitch = 0, yaw = 0, offset = 0;
+            if (monitorBE != null) {
                 channel = monitorBE.getChannel();
                 occupied = monitorBE.getOccupiedChannels();
                 background = monitorBE.getBackground();
+                pitch = Math.round(monitorBE.getPitchAngle());
+                yaw = Math.round(monitorBE.getYawAngle());
+                offset = monitorBE.getOffset();
             }
-            mc.setScreen(new MonitorMenuScreen(pos, channel, occupied, background));
+            mc.setScreen(new MonitorMenuScreen(pos, channel, occupied, background, pitch, yaw, offset));
             return;
         }
 
@@ -295,6 +301,15 @@ public class MonitorGridOverlay {
                             new PlaceScreenPayload(pos, interact.screenAnchorX, interact.screenAnchorY, gp[0], gp[1]));
                 }
                 interact.screenPlacing = false;
+            }
+        }
+
+        // ── 模块放置：手持模块物品 + 点击空格子（动态射线命中）──
+        if (heldType != null && !holdingScreen && !holdingWrench && !interact.screenPlacing
+                && useEdge && gp != null) {
+            if (grid.canPlace(gp[0], gp[1], heldType.width, heldType.height)) {
+                PacketDistributor.sendToServer(new PlaceModulePayload(pos, gp[0], gp[1], heldType.name));
+                return;
             }
         }
 
@@ -336,13 +351,13 @@ public class MonitorGridOverlay {
             interact.knobDragModuleId = hoveredModule.id();
             interact.knobCenterX = MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + hoveredModule.gridX() + hoveredModule.getWidth() / 2f;
             interact.knobCenterY = MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + hoveredModule.gridY() + hoveredModule.getHeight() / 2f;
-            var be = level.getBlockEntity(pos);
             int detentStep = 0;
-            if (be instanceof MonitorBlockEntity monitorBE) {
+            if (monitorBE != null) {
                 interact.knobAccumAngle = monitorBE.getGridState().getKnobAngle(hoveredModule.id());
                 detentStep = monitorBE.getGridState().getDetentStep(hoveredModule.id());
             }
-            interact.knobPrevRawAngle = computeCrosshairAngle(pos, facing, bhr.getLocation(), interact.knobCenterX, interact.knobCenterY);
+            interact.knobPrevRawAngle = computeCrosshairAngle(pos, facing, monitorYaw, monitorPitch, monitorOffset,
+                    ray[0], ray[1], interact.knobCenterX, interact.knobCenterY);
             interact.knobUnwrappedDelta = 0f;
             interact.knobLastSoundAngle = interact.knobAccumAngle;
             interact.knobDisplayAngle = normalizeDisplayAngle(interact.knobAccumAngle);
@@ -360,7 +375,7 @@ public class MonitorGridOverlay {
 
         // 1. 网格线（手持模块或屏幕物品时）
         if (showGrid) {
-            drawGridLines(outliner, pos, facing, keyPrefix, subLevel, partialTick);
+            drawGridLines(outliner, pos, facing, monitorYaw, monitorPitch, monitorOffset, keyPrefix, subLevel, partialTick);
         }
 
         // 1.5 屏幕放置预览
@@ -374,7 +389,8 @@ public class MonitorGridOverlay {
             boolean bigEnough = w >= GridState.SCREEN_MIN_SIZE && h >= GridState.SCREEN_MIN_SIZE;
             boolean canPlace = grid.canPlaceScreen(minX, minY, maxX, maxY);
             int color = (bigEnough && canPlace) ? 0x4CDA64 : 0xFF5E5E;
-            drawModuleOutline(outliner, pos, minX, minY, w, h, keyPrefix + "/screen_preview", color, facing, subLevel, partialTick);
+            drawModuleOutline(outliner, pos, minX, minY, w, h, keyPrefix + "/screen_preview", color, facing,
+                    monitorYaw, monitorPitch, monitorOffset, subLevel, partialTick);
         }
 
         // 2. 放置预览 / 对准高亮
@@ -383,11 +399,13 @@ public class MonitorGridOverlay {
                 boolean ok = grid.canPlace(gp[0], gp[1], heldType.width, heldType.height);
                 int color = ok ? 0x4CDA64 : 0xFF5E5E;
                 drawModuleOutline(outliner, pos, gp[0], gp[1],
-                        heldType.width, heldType.height, keyPrefix + "/preview", color, facing, subLevel, partialTick);
+                        heldType.width, heldType.height, keyPrefix + "/preview", color, facing,
+                        monitorYaw, monitorPitch, monitorOffset, subLevel, partialTick);
             } else if (hoveredModule != null) {
                 drawModuleOutline(outliner, pos, hoveredModule.gridX(), hoveredModule.gridY(),
                         hoveredModule.getWidth(), hoveredModule.getHeight(),
-                        keyPrefix + "/hover", moduleColor, facing, subLevel, partialTick);
+                        keyPrefix + "/hover", moduleColor, facing,
+                        monitorYaw, monitorPitch, monitorOffset, subLevel, partialTick);
             } else if (onScreenCell) {
                 // 悬停在屏幕上 → 高亮整个屏幕区域
                 var scr = grid.getScreenAt(gp[0], gp[1]);
@@ -398,7 +416,8 @@ public class MonitorGridOverlay {
                             | (Config.MONITOR_OUTLINE_G.get() << 8)
                             | Config.MONITOR_OUTLINE_B.get();
                     drawModuleOutline(outliner, pos, scr.minX(), scr.minY(),
-                            scr.width(), scr.height(), keyPrefix + "/screen_hover", screenColor, facing, subLevel, partialTick);
+                            scr.width(), scr.height(), keyPrefix + "/screen_hover", screenColor, facing,
+                            monitorYaw, monitorPitch, monitorOffset, subLevel, partialTick);
                 }
             }
         }
@@ -441,6 +460,18 @@ public class MonitorGridOverlay {
 
     // ── 坐标旋转：NORTH 局部 → 世界局部 ──
 
+    /** 获取准心视线射线，投影回 plot 空间（Sable 子次元兼容）。返回 [origin, dir]。 */
+    private static Vec3[] crosshairRay(Level level, BlockPos pos, Player player, float partialTick) {
+        Vec3 origin = player.getEyePosition(partialTick);
+        Vec3 dir = player.getViewVector(partialTick);
+        SubLevel subLevel = SableCompat.getContainingSubLevel(level, pos);
+        if (subLevel != null) {
+            origin = SableCompat.toLocalPosition(subLevel, partialTick, origin);
+            dir = SableCompat.toLocalDirection(subLevel, partialTick, dir);
+        }
+        return new Vec3[]{origin, dir};
+    }
+
     private static Vec3 rot(float x, float y, float z, Direction f) {
         float c = MonitorBlock.ROT_ORIGIN / 16f;
         return switch (f) {
@@ -453,15 +484,19 @@ public class MonitorGridOverlay {
     }
 
     private static Vec3 world(BlockPos pos, float x, float y, float z, Direction f,
-                              SubLevel subLevel, float partialTick) {
-        Vec3 r = rot(x, y, z, f);
+                              float yaw, float pitch, int offset, SubLevel subLevel, float partialTick) {
+        // 模型空间 → 块局部（pitch → yaw → offset），再 facing + 方块偏移
+        double[] p = { x, y, z };
+        MonitorBlock.transformPointToLocal(p, yaw, pitch, offset);
+        Vec3 r = rot((float) p[0], (float) p[1], (float) p[2], f);
         Vec3 local = new Vec3(pos.getX() + r.x, pos.getY() + r.y, pos.getZ() + r.z);
         return SableCompat.toWorldPosition(subLevel, partialTick, local);
     }
 
     // ── 网格线 ──
 
-    private static void drawGridLines(Outliner o, BlockPos pos, Direction f, String keyPrefix,
+    private static void drawGridLines(Outliner o, BlockPos pos, Direction f,
+                                      float yaw, float pitch, int offset, String keyPrefix,
                                       SubLevel subLevel, float partialTick) {
         float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;
         float x0 = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET) / 16f;
@@ -472,14 +507,14 @@ public class MonitorGridOverlay {
 
         for (int i = 0; i <= GridState.GRID_WIDTH; i++) {
             float x = x0 + i / 16f;
-            Vec3 from = world(pos, x, y0, z, f, subLevel, partialTick);
-            Vec3 to = world(pos, x, y1, z, f, subLevel, partialTick);
+            Vec3 from = world(pos, x, y0, z, f, yaw, pitch, offset, subLevel, partialTick);
+            Vec3 to = world(pos, x, y1, z, f, yaw, pitch, offset, subLevel, partialTick);
             o.showLine(keyPrefix + "/grid_v" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
         for (int i = 0; i <= GridState.GRID_HEIGHT; i++) {
             float y = y0 + i / 16f;
-            Vec3 from = world(pos, x0, y, z, f, subLevel, partialTick);
-            Vec3 to = world(pos, x1, y, z, f, subLevel, partialTick);
+            Vec3 from = world(pos, x0, y, z, f, yaw, pitch, offset, subLevel, partialTick);
+            Vec3 to = world(pos, x1, y, z, f, yaw, pitch, offset, subLevel, partialTick);
             o.showLine(keyPrefix + "/grid_h" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
     }
@@ -488,7 +523,7 @@ public class MonitorGridOverlay {
 
     private static void drawModuleOutline(Outliner o, BlockPos pos,
                                            int gx, int gy, int w, int h, String slot, int color, Direction f,
-                                           SubLevel subLevel, float partialTick) {
+                                           float yaw, float pitch, int offset, SubLevel subLevel, float partialTick) {
         float x0 = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + gx) / 16f;
         float y0 = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + gy) / 16f;
         float x1 = x0 + w / 16f;
@@ -496,10 +531,10 @@ public class MonitorGridOverlay {
         float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;
         float lw = (float) (1 / 128f * Config.MONITOR_OUTLINE_LINE_WIDTH.get());
 
-        Vec3 p00 = world(pos, x0, y0, z, f, subLevel, partialTick);
-        Vec3 p10 = world(pos, x1, y0, z, f, subLevel, partialTick);
-        Vec3 p11 = world(pos, x1, y1, z, f, subLevel, partialTick);
-        Vec3 p01 = world(pos, x0, y1, z, f, subLevel, partialTick);
+        Vec3 p00 = world(pos, x0, y0, z, f, yaw, pitch, offset, subLevel, partialTick);
+        Vec3 p10 = world(pos, x1, y0, z, f, yaw, pitch, offset, subLevel, partialTick);
+        Vec3 p11 = world(pos, x1, y1, z, f, yaw, pitch, offset, subLevel, partialTick);
+        Vec3 p01 = world(pos, x0, y1, z, f, yaw, pitch, offset, subLevel, partialTick);
 
         o.showLine(slot + "_top",    p00, p10).colored(color).lineWidth(lw);
         o.showLine(slot + "_right",  p10, p11).colored(color).lineWidth(lw);
@@ -509,11 +544,10 @@ public class MonitorGridOverlay {
 
     // ── 旋钮拖拽：准心绕旋钮中心旋转 → 旋钮跟随 ──
 
-    /** 计算屏幕命中点相对旋钮中心的角度（弧度）。hitLocation 为子次元局部空间命中点。 */
-    private static float computeCrosshairAngle(BlockPos pos, Direction facing, Vec3 hitLocation,
-                                                float knobCx, float knobCy) {
-        float[] local = MonitorBlock.hitToScreenLocal(pos, facing,
-                hitLocation.x, hitLocation.y, hitLocation.z);
+    /** 计算准心视线射线在屏幕上的命中点相对旋钮中心的角度（弧度）。origin/dir 为 plot 空间。 */
+    private static float computeCrosshairAngle(BlockPos pos, Direction facing, float yaw, float pitch, int offset,
+                                                Vec3 origin, Vec3 dir, float knobCx, float knobCy) {
+        float[] local = MonitorBlock.rayToScreenLocal(pos, facing, yaw, pitch, offset, origin, dir);
         if (local == null) return 0f;
         return (float) Math.atan2(local[1] - knobCy, local[0] - knobCx);
     }
@@ -544,9 +578,14 @@ public class MonitorGridOverlay {
                 continue;
             }
 
-            // 当前 raw 角度 → 解缠绕
-            float rawAngle = computeCrosshairAngle(pos, state.knobDragFacing, bhr.getLocation(),
-                    state.knobCenterX, state.knobCenterY);
+            // 当前 raw 角度 → 解缠绕（用动态射线求交，兼容可动 Monitor）
+            MonitorBlockEntity knobMonitorBE = (mc.level != null && mc.level.getBlockEntity(pos) instanceof MonitorBlockEntity m) ? m : null;
+            float knobYaw = knobMonitorBE != null ? knobMonitorBE.getYawAngle() : 0f;
+            float knobPitch = knobMonitorBE != null ? knobMonitorBE.getPitchAngle() : 0f;
+            int knobOffset = knobMonitorBE != null ? knobMonitorBE.getOffset() : 0;
+            Vec3[] ray = crosshairRay(mc.level, pos, mc.player, 1.0f);
+            float rawAngle = computeCrosshairAngle(pos, state.knobDragFacing, knobYaw, knobPitch, knobOffset,
+                    ray[0], ray[1], state.knobCenterX, state.knobCenterY);
             float diff = rawAngle - state.knobPrevRawAngle;
             if (diff > Math.PI) diff -= (float)(2 * Math.PI);
             else if (diff < -Math.PI) diff += (float)(2 * Math.PI);

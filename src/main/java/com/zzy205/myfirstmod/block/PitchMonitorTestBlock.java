@@ -36,14 +36,7 @@ public class PitchMonitorTestBlock extends BaseEntityBlock {
     public static final MapCodec<PitchMonitorTestBlock> CODEC = simpleCodec(PitchMonitorTestBlock::new);
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
 
-    /** facing 旋转原点（Y=8, 水平中心=8），与模型 y 旋转 / VoxelShaper 的中心一致 */
-    public static final float ROT_ORIGIN = 8f;
-    /** 俯仰铰链（绕 X 轴，模型像素），位于 case 侧轴承中心 */
-    public static final float HINGE_Y = 9f;
-    public static final float HINGE_Z = 8f;
-    /** 偏航颈部（绕 Y 轴，模型像素），位于 bearing 水平中心 */
-    public static final float NECK_X = 8f;
-    public static final float NECK_Z = 8f;
+    // 变换枢轴常量统一由 MonitorBlock 提供（HINGE_Y/HINGE_Z/NECK_X/NECK_Z/ROT_ORIGIN）。
 
     private static final VoxelShape BASE_SHAPE = Block.box(0, 0, 0, 16, 2, 16);
     private static final VoxelShape CASE_FLAT_SHAPE = Block.box(1, 3, 4, 15, 15, 9);
@@ -131,8 +124,8 @@ public class PitchMonitorTestBlock extends BaseEntityBlock {
             double minZ = Double.POSITIVE_INFINITY, maxZ = Double.NEGATIVE_INFINITY;
             for (double y : new double[]{y0, y1}) {
                 for (double z : new double[]{z0, z1}) {
-                    double ry = HINGE_Y + (y - HINGE_Y) * cos - (z - HINGE_Z) * sin;
-                    double rz = HINGE_Z + (y - HINGE_Y) * sin + (z - HINGE_Z) * cos;
+                    double ry = MonitorBlock.HINGE_Y + (y - MonitorBlock.HINGE_Y) * cos - (z - MonitorBlock.HINGE_Z) * sin;
+                    double rz = MonitorBlock.HINGE_Z + (y - MonitorBlock.HINGE_Y) * sin + (z - MonitorBlock.HINGE_Z) * cos;
                     minY = Math.min(minY, ry);
                     maxY = Math.max(maxY, ry);
                     minZ = Math.min(minZ, rz);
