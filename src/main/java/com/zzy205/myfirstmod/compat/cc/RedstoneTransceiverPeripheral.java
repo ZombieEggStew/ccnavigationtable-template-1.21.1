@@ -4,10 +4,9 @@ import com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity;
 import com.zzy205.myfirstmod.compat.create.CreateRedstoneCompat;
 import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
@@ -104,34 +103,101 @@ public class RedstoneTransceiverPeripheral implements IPeripheral {
                 level, be.getBlockPos(), ghosts[0], ghosts[1], signal);
     }
 
+    // ════════════════════ 频率 / banner 管理 ════════════════════
+
+    /**
+     * 设置指定频道的 Create 红石链接频率物品（幽灵槽）。
+     *
+     * <pre>{@code
+     * -- 频道 7 的频率设为 (红石, 红石)
+     * r.setFrequency(7, "minecraft:redstone")
+     *
+     * -- 频道 7 的频率设为 (红石, 石头)
+     * r.setFrequency(7, "minecraft:redstone", "minecraft:stone")
+     *
+     * -- 只新建一个空 banner（频道 7）
+     * r.setFrequency(7)
+     * }</pre>
+     *
+     * @param channel 频道号
+     * @param freq1   槽位 1 的物品 ID（如 "minecraft:redstone"，裸名默认 minecraft 命名空间；nil/空串 = 空槽）
+     * @param freq2   槽位 2 的物品 ID；留空时与槽位 1 相同
+     * @return 是否成功（物品 ID 非法返回 false）
+     */
+    @LuaFunction(mainThread = true)
+    public final boolean setFrequency(int channel, Optional<String> freq1, Optional<String> freq2) {
+        ItemStack g0 = parseFrequencyItem(freq1.orElse(null));
+        if (g0 == null) return false;
+
+        ItemStack g1;
+        if (freq2.isEmpty()) {
+            g1 = g0; // 参数三留空：槽位 2 与槽位 1 相同
+        } else {
+            g1 = parseFrequencyItem(freq2.get());
+            if (g1 == null) return false;
+        }
+        return be.setBannerFrequency(channel, g0, g1);
+    }
+
+    /**
+     * 删除指定频道的 banner。
+     *
+     * @return 是否删除成功（频道不存在返回 false）
+     */
+    @LuaFunction(mainThread = true)
+    public final boolean removeChannel(int channel) {
+        return be.removeBanner(channel);
+    }
+
+    /**
+     * 读取指定频道的两个频率物品 ID。
+     *
+     * @return {@code {freq1="minecraft:redstone", freq2="minecraft:stone"}}；空槽对应的键省略；频道不存在返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Object> getFrequency(int channel) {
+        ItemStack[] ghosts = be.getBannerGhosts(channel);
+        if (ghosts == null) return null;
+
+        Map<String, Object> result = new HashMap<>();
+        if (!ghosts[0].isEmpty()) result.put("freq1", itemIdString(ghosts[0]));
+        if (!ghosts[1].isEmpty()) result.put("freq2", itemIdString(ghosts[1]));
+        return result;
+    }
+
+    /** 列出当前所有 banner 的频道号（返回 Lua 数组表） */
+    @LuaFunction
+    public final List<Integer> getChannels() {
+        int[] channels = be.getBannerChannels();
+        List<Integer> list = new ArrayList<>(channels.length);
+        for (int ch : channels) list.add(ch);
+        return list;
+    }
+
+    /**
+     * 解析物品 ID 字符串为 ItemStack。
+     *
+     * @return ItemStack；nil/空串 → ItemStack.EMPTY；非法 ID → null（调用方应判错）
+     */
+    private static @Nullable ItemStack parseFrequencyItem(@Nullable String str) {
+        if (str == null || str.isBlank()) return ItemStack.EMPTY;
+        ResourceLocation rl = ResourceLocation.tryParse(str);
+        if (rl == null) return null;
+        Item item = BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
+        if (item == null) return null;
+        return new ItemStack(item);
+    }
+
+    private static String itemIdString(ItemStack stack) {
+        return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+    }
+
     /**
      * 根据频道号获取 banner 的两个幽灵物品。
      *
      * @return ItemStack[2]，找不到时返回 null
      */
     private @Nullable ItemStack[] getGhostItemsByChannel(int channel) {
-        CompoundTag data = be.getBannerData();
-        if (data.isEmpty()) return null;
-
-        ListTag channels = data.getList("Channels", Tag.TAG_INT);
-        ListTag ghosts = data.getList("Ghosts", Tag.TAG_COMPOUND);
-
-        // 查找匹配频道号的 banner 索引
-        int bannerIndex = -1;
-        for (int i = 0; i < channels.size(); i++) {
-            if (((net.minecraft.nbt.IntTag) channels.get(i)).getAsInt() == channel) {
-                bannerIndex = i;
-                break;
-            }
-        }
-        if (bannerIndex < 0 || bannerIndex >= ghosts.size()) return null;
-
-        // 解析两个幽灵槽的物品
-        HolderLookup.Provider registries = be.getLevel().registryAccess();
-        CompoundTag itemData = ghosts.getCompound(bannerIndex);
-        ItemStack slot0 = ItemStack.parseOptional(registries, itemData.getCompound("G0"));
-        ItemStack slot1 = ItemStack.parseOptional(registries, itemData.getCompound("G1"));
-
-        return new ItemStack[]{slot0, slot1};
+        return be.getBannerGhosts(channel);
     }
 }

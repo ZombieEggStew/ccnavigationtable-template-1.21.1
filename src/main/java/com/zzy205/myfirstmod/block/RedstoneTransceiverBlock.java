@@ -4,6 +4,7 @@ import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.zzy205.myfirstmod.screen.RedstoneTransceiverMenu;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -11,17 +12,20 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jspecify.annotations.NonNull;
+
+import java.util.List;
 
 public class RedstoneTransceiverBlock
 extends BaseEntityBlock
@@ -50,26 +54,24 @@ implements IWrenchable {
         return RenderShape.MODEL;
     }
 
+    // ═══════════════ 掉落（含扳手拆卸）保留 banner 配置 ═══════════════
+    // 扳手拆卸走 Create 默认的 IWrenchable.onSneakWrenched，它会：
+    //   1. 调用本 getDrops 拿掉落物（带配置）
+    //   2. spawnAfterBreak + destroyBlock
+    //   3. 播放 WRENCH_REMOVE 拆卸音效
     @Override
-    public InteractionResult onWrenched(BlockState state, UseOnContext context) {
-        return useWithoutItem(state, context.getLevel(), context.getClickedPos(), context.getPlayer(),
-                new BlockHitResult(context.getClickLocation(), context.getClickedFace(), context.getClickedPos(), true));
-    }
-    
-
-    @Override
-    public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
-        Level level = context.getLevel();
-        BlockPos pos = context.getClickedPos();
-        Player player = context.getPlayer();
-        if (!level.isClientSide) {
+    public List<ItemStack> getDrops(BlockState state, LootParams.Builder builder) {
+        BlockEntity be = builder.getOptionalParameter(LootContextParams.BLOCK_ENTITY);
+        if (be instanceof RedstoneTransceiverBlockEntity receiverBE
+                && receiverBE.getLevel() != null && !receiverBE.getBannerData().isEmpty()) {
+            CompoundTag tag = new CompoundTag();
+            receiverBE.saveAdditional(tag, receiverBE.getLevel().registryAccess());
+            BlockEntity.addEntityType(tag, MyModBlockEntities.redstone_transceiver_entity.get());
             ItemStack stack = new ItemStack(this);
-            level.destroyBlock(pos, false, player);
-            if (player == null || !player.getInventory().add(stack)) {
-                Block.popResource(level, pos, stack);
-            }
+            stack.set(DataComponents.BLOCK_ENTITY_DATA, CustomData.of(tag.copy()));
+            return List.of(stack);
         }
-        return InteractionResult.sidedSuccess(level.isClientSide);
+        return super.getDrops(state, builder);
     }
 
     // ────────────────────────────────────────
@@ -82,6 +84,10 @@ implements IWrenchable {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hitResult) {
+        // 蹲下右键时放行，交给扳手处理拆卸（与 create:redstone_requester 的 be.use(player) 一致）
+        if (player.isCrouching()) {
+            return InteractionResult.PASS;
+        }
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
             BlockEntity be = level.getBlockEntity(pos);
             CompoundTag bannerData = be instanceof RedstoneTransceiverBlockEntity receiverBE

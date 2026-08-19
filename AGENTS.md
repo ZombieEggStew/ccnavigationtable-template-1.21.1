@@ -26,3 +26,18 @@
 - 不要过早确定解决方案；收集到足够的具体信息之后再开始解决问题。
 - 重大改动前，先说明将要改动的文件与原因，征得用户同意。
 - 参考其他 mod 源码解决问题时，记录参考来源。
+
+## Java 源码规则（仅修改 `src/main/java/**/*.java` 时适用）
+
+- 这是一个 Minecraft 1.21.1 NeoForge mod，Java 源码位于 `src/main/java`，目标 Java 21、NeoForge 21.1.235。
+- 只改当前请求相关的代码。将 `build/`、`bin/`、`run/`、`sources/`、`reference/`、`libs/` 视为只读，仅在需要时作为参考。
+- 优先复用项目已有模式，不引入新抽象。
+- 先读直接相关的类、最近的调用方或测试。需要确认外部 API 或参考实现时，使用 `minecraft-mod-source-lookup` 技能。
+- 用 `./gradlew.bat classes` 验证 Java 改动，除非存在更窄的相关检查。
+
+## 资源与数据规则（仅修改 `src/main/resources/**/*.{json,lang,mcmeta,png}` 时适用）
+
+- 这是一个 Minecraft 1.21.1 NeoForge mod，资源与数据文件位于 `src/main/resources`。
+- 只改当前请求直接需要的资源或数据。
+- 保持现有命名空间、JSON 布局与模型约定。
+- 将 `build/`、`bin/`、`run/`、`sources/`、`reference/`、`libs/` 视为只读参考目录，不要编辑。
