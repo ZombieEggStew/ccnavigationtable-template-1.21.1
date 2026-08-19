@@ -147,7 +147,7 @@ public class ScrollValueBar extends AbstractWidget implements TooltipWidget {
         int dir = scrollY > 0 ? 1 : -1;
         int newValue;
         if (optionLabels != null) {
-            newValue = Math.floorMod(value + dir, optionLabels.length);
+            newValue = Math.floorMod(value - dir, optionLabels.length);
         } else {
             int jump = Screen.hasShiftDown() ? 10 : 1;
             newValue = min != null && max != null

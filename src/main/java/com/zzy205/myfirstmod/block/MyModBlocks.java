@@ -47,13 +47,6 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
-    public static final DeferredBlock<PitchMonitorTestBlock> pitch_monitor_test =
-            registerBlocks("test_pitch_monitor", () -> new PitchMonitorTestBlock(BlockBehaviour.Properties.of()
-                    .sound(SoundType.METAL)
-                    .strength(1.5f, 6.0f)
-                    .noOcclusion()
-            ));
-
 
 
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {

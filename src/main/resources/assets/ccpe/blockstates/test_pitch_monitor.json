@@ -1,8 +1,0 @@
-{
-  "variants": {
-    "facing=north": { "model": "ccpe:block/monitor/my_monitor_base", "y": 0 },
-    "facing=east":  { "model": "ccpe:block/monitor/my_monitor_base", "y": 90 },
-    "facing=south": { "model": "ccpe:block/monitor/my_monitor_base", "y": 180 },
-    "facing=west":  { "model": "ccpe:block/monitor/my_monitor_base", "y": 270 }
-  }
-}

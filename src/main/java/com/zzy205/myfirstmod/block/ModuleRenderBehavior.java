@@ -165,8 +165,8 @@ public abstract class ModuleRenderBehavior {
     public static class ToggleBehavior extends ModuleRenderBehavior {
         @Override public float offsetZ() { return 1f / 16f; }       // z 微调
         @Override public boolean usePressDepth() { return false; }   // 底座不动
-        @Override public float animPressSpeed() { return 0.9f; }
-        @Override public float animReleaseSpeed() { return 0.9f; }
+        @Override public float animPressSpeed() { return 0.95f; }
+        @Override public float animReleaseSpeed() { return 0.95f; }
         @Override
         public void applyInitialRotation(PoseStack ps) {
             ps.mulPose(Axis.XP.rotationDegrees(-90));               // 竖→横

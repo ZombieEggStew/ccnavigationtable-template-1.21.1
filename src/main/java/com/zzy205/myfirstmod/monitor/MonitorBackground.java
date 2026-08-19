@@ -10,7 +10,7 @@ public final class MonitorBackground {
 
     /** 内部键（持久化用，稳定不变） */
     public static final String[] KEYS = {
-            "cardboard", "black_checkerboard", "brown_checkerboard", "blue_checkerboard", "wood"
+            "cardboard", "black_checkerboard", "brown_checkerboard", "blue_checkerboard", "wood", "black"
     };
     public static final String DEFAULT = "blue_checkerboard";
 

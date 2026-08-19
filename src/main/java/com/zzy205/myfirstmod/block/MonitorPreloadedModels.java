@@ -41,8 +41,8 @@ public class MonitorPreloadedModels {
     public static final String MONITOR_CASE = "monitor_case";
     public static final String MONITOR_BEARING = "monitor_bearing";
 
-    /** 背景面板贴图数量（对应 MonitorBackground.KEYS 的下标 0..4） */
-    public static final int BACKGROUND_COUNT = 5;
+    /** 背景面板贴图数量（对应 MonitorBackground.KEYS 的下标 0..5） */
+    public static final int BACKGROUND_COUNT = 6;
     /** 背景贴图占位模型位置（用于把贴图缝到方块图集上） */
     private static final ResourceLocation[] BG_LOC = new ResourceLocation[BACKGROUND_COUNT];
     /** 缝好的背景贴图精灵，下标 = MonitorBackground.indexOf(key) */

@@ -7,7 +7,6 @@
   "block.ccpe.redstone_transceiver": "红石收发器",
   "block.ccpe.transmission_peripheral": "电子变速箱",
   "block.ccpe.my_monitor": "显示器",
-  "block.ccpe.test_pitch_monitor": "俯仰显示器测试",
 
   "gui.ccpe.monitor_assembly": "仪表装配",
   "gui.ccpe.monitor.module_info": "%s 位于 (%s, %s) 尺寸 %s×%s",
@@ -22,6 +21,7 @@
   "gui.ccpe.monitor_menu.background.brown_checkerboard": "棕色棋盘",
   "gui.ccpe.monitor_menu.background.blue_checkerboard": "蓝色棋盘",
   "gui.ccpe.monitor_menu.background.wood": "木头",
+  "gui.ccpe.monitor_menu.background.black": "纯黑",
   "gui.ccpe.module_config": "模块配置",
   "gui.ccpe.module_config.title": "%s #%s",
   "gui.ccpe.module_config.done": "完成",

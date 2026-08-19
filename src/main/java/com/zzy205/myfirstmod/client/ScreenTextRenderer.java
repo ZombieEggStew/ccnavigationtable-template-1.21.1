@@ -57,6 +57,15 @@ public final class ScreenTextRenderer {
 
     private ScreenTextRenderer() {}
 
+    /** 在同一平面绘制缓冲中的全部字符和图形。 */
+    public static void drawAll(PoseStack ps, MultiBufferSource buffer, ScreenText text,
+                               float fullRight, float fullTop, float zBase) {
+        draw(ps, buffer, text, fullRight, fullTop, zBase);
+        drawRects(ps, buffer, text, fullRight, fullTop, zBase);
+        drawLines(ps, buffer, text, fullRight, fullTop, zBase);
+        drawCircles(ps, buffer, text, fullRight, fullTop, zBase);
+    }
+
     /** 字形深度（块）。z 越大越靠前。 */
     private static float glyphDepth(float zBase, double z) {
         return zBase - GLYPH_FRONT - (float) z * Z_STEP;

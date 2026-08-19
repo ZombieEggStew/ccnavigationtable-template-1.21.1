@@ -189,22 +189,59 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 视线射线（块局部 / plot 空间，含方向）→ NORTH 基准屏幕局部坐标 [sx, sy]（1/16 格单位）。
-     * @return [sx, sy]；射线与屏幕平面平行或相交于视线后方时返回 null。
+     * 视线射线（块局部 / plot 空间，含方向）→ NORTH 基准屏幕面板正面求交。
+     * <p>
+     * 相比 {@link #rayToScreenLocal} 增加了三点：
+     * <ul>
+     *   <li>背面剔除：屏幕在模型空间朝向 -Z，视线从背面看时不命中；</li>
+     *   <li>返回射线参数 t（单位：格），供多候选 Monitor 取最近命中；</li>
+     *   <li>距离受限：t 超过 maxDistance 视为不可达。</li>
+     * </ul>
+     *
+     * @return {@code [t, sx, sy]}（sx/sy 单位 1/16 格）；未命中返回 null。
      */
     @Nullable
-    public static float[] rayToScreenLocal(BlockPos pos, Direction facing, float yaw, float pitch, int offset,
-                                           Vec3 origin, Vec3 dir) {
+    public static double[] intersectScreen(BlockPos pos, Direction facing, float yaw, float pitch, int offset,
+                                           Vec3 origin, Vec3 dir, double maxDistance) {
         Vec3 block = Vec3.atLowerCornerOf(pos);
         double[] o = { origin.x - block.x, origin.y - block.y, origin.z - block.z };
         double[] d = { dir.x, dir.y, dir.z };
         inverseToModel(o, d, facing, yaw, pitch, offset);
 
         double planeZ = PANEL_Z / 16.0;
-        if (Math.abs(d[2]) < 1e-6) return null;
+        if (d[2] <= 1e-6) return null;   // 平行或从背面看 → 剔除
         double t = (planeZ - o[2]) / d[2];
-        if (t < 0) return null;
-        return new float[]{(float) ((o[0] + t * d[0]) * 16.0), (float) ((o[1] + t * d[1]) * 16.0)};
+        if (t < 0 || t > maxDistance) return null;
+        return new double[]{ t, (o[0] + t * d[0]) * 16.0, (o[1] + t * d[1]) * 16.0 };
+    }
+
+    /** 屏幕局部坐标 [sx, sy]（1/16 格）是否落在屏幕面板表面（不含内缩边框）。 */
+    public static boolean isOnPanel(float sx, float sy) {
+        return sx >= SCREEN_X_MIN && sx <= SCREEN_X_MAX && sy >= SCREEN_Y_MIN && sy <= SCREEN_Y_MAX;
+    }
+
+    /** 屏幕局部坐标 [sx, sy]（1/16 格）→ 网格坐标 [gridX, gridY]；不在网格区域时返回 null。 */
+    @Nullable
+    public static int[] localToGrid(float sx, float sy) {
+        // 命中区域为内缩后的 12×10 网格（四周 1 格边框不属于可放置区域）
+        if (sx < SCREEN_X_MIN + GRID_INSET || sx > SCREEN_X_MAX - GRID_INSET) return null;
+        if (sy < SCREEN_Y_MIN + GRID_INSET || sy > SCREEN_Y_MAX - GRID_INSET) return null;
+
+        int gx = (int) Math.floor(sx - SCREEN_X_MIN - GRID_INSET);
+        int gy = (int) Math.floor(sy - SCREEN_Y_MIN - GRID_INSET);
+        if (gx < 0 || gx >= GridState.GRID_WIDTH || gy < 0 || gy >= GridState.GRID_HEIGHT) return null;
+        return new int[]{ gx, gy };
+    }
+
+    /**
+     * 视线射线（块局部 / plot 空间，含方向）→ NORTH 基准屏幕局部坐标 [sx, sy]（1/16 格单位）。
+     * @return [sx, sy]；射线与屏幕平面平行或相交于视线后方时返回 null。
+     */
+    @Nullable
+    public static float[] rayToScreenLocal(BlockPos pos, Direction facing, float yaw, float pitch, int offset,
+                                           Vec3 origin, Vec3 dir) {
+        double[] hit = intersectScreen(pos, facing, yaw, pitch, offset, origin, dir, Double.MAX_VALUE);
+        return hit == null ? null : new float[]{ (float) hit[1], (float) hit[2] };
     }
 
     /**
@@ -213,18 +250,8 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
     @Nullable
     public static int[] rayToGrid(BlockPos pos, Direction facing, float yaw, float pitch, int offset,
                                   Vec3 origin, Vec3 dir) {
-        float[] local = rayToScreenLocal(pos, facing, yaw, pitch, offset, origin, dir);
-        if (local == null) return null;
-        float rx = local[0], ry = local[1];
-
-        // 命中区域为内缩后的 12×10 网格（四周 1 格边框不属于可放置区域）
-        if (rx < SCREEN_X_MIN + GRID_INSET || rx > SCREEN_X_MAX - GRID_INSET) return null;
-        if (ry < SCREEN_Y_MIN + GRID_INSET || ry > SCREEN_Y_MAX - GRID_INSET) return null;
-
-        int gx = (int) Math.floor(rx - SCREEN_X_MIN - GRID_INSET);
-        int gy = (int) Math.floor(ry - SCREEN_Y_MIN - GRID_INSET);
-        if (gx < 0 || gx >= GridState.GRID_WIDTH || gy < 0 || gy >= GridState.GRID_HEIGHT) return null;
-        return new int[]{gx, gy};
+        double[] hit = intersectScreen(pos, facing, yaw, pitch, offset, origin, dir, Double.MAX_VALUE);
+        return hit == null ? null : localToGrid((float) hit[1], (float) hit[2]);
     }
 
     @Override

@@ -49,6 +49,8 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
     /** 标签坐标原点 Y（模型像素）：按钮 head 的视觉垂直中心。 */
     private static final float BUTTON_LABEL_ORIGIN_Y_PX = 0.35f;
 
+    private static final float RENDER_INSET = 1f / 16f; // 屏幕内容相对屏幕边框的内缩距离（块单位）
+
     /** 每个 Monitor 独立的动画进度表，外层 key=BlockPos，内层 key=moduleId */
     private final Map<BlockPos, Map<Integer, Float>> animProgress = new HashMap<>();
 
@@ -83,6 +85,7 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
 
         // ── 背景面板（始终渲染，覆盖原 screen 元素的面板贴图） ──
         renderBackground(poseStack, buffer, be.getBackground(), light);
+        renderMonitorDisplay(poseStack, buffer, be.getMonitorDisplayText());
 
         var grid = be.getGridState();
 
@@ -184,6 +187,17 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
                 .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0f, 0f, -1f);
         vc.addVertex(pose.pose(), x1, y0, z).setColor(1f, 1f, 1f, 1f).setUv(u1, v1)
                 .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0f, 0f, -1f);
+    }
+
+    /** 在背景 quad 朝玩家一侧绘制 monitor 自身的字符和图形。 */
+    private static void renderMonitorDisplay(PoseStack ps, MultiBufferSource buffer, ScreenText text) {
+        if (text.getChars().isEmpty() && text.getRects().isEmpty()
+                && text.getLines().isEmpty() && text.getCircles().isEmpty()) return;
+
+        float contentRight = MonitorBlock.SCREEN_X_MAX / 16f - RENDER_INSET;
+        float contentTop = MonitorBlock.SCREEN_Y_MAX / 16f - RENDER_INSET;
+        float backgroundZ = (MonitorBlock.PANEL_Z - MonitorBlock.BACKGROUND_Z_OFFSET) / 16f;
+        ScreenTextRenderer.drawAll(ps, buffer, text, contentRight, contentTop, backgroundZ);
     }
 
     private static void renderKnobAngle(PoseStack poseStack, MultiBufferSource buffer,
@@ -345,14 +359,9 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         float contentRight = scrX + scrW - borderInset;
         float contentTop = scrY + scrH - borderInset;
         // 内容基准面 = 屏幕 9 宫格中心面（screen_center 模型 north 面在 z=0.7px）
-        float zBase = (MonitorBlock.SCREEN_Z + 0.7f) / 16f;
+        float zBase = (MonitorBlock.SCREEN_Z + 0.709f) / 16f;
 
-        // 文本（每字符自带 drawRect 局部坐标与 z 层级，与矩形共用同一组内区边界映射）
-        ScreenTextRenderer.draw(ps, buffer, text, contentRight, contentTop, zBase);
-        // 矩形 / 线段 / 圆（1/128 块逻辑单位 → 世界，用同一组内区边界映射）
-        ScreenTextRenderer.drawRects(ps, buffer, text, contentRight, contentTop, zBase);
-        ScreenTextRenderer.drawLines(ps, buffer, text, contentRight, contentTop, zBase);
-        ScreenTextRenderer.drawCircles(ps, buffer, text, contentRight, contentTop, zBase);
+        ScreenTextRenderer.drawAll(ps, buffer, text, contentRight, contentTop, zBase);
     }
 
     /** 渲染一个角模型，绕格子中心 Z 轴旋转（法线安全） */

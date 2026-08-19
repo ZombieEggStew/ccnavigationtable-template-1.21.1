@@ -4,8 +4,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.zzy205.myfirstmod.block.MonitorBlock;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
-import com.zzy205.myfirstmod.block.PitchMonitorTestBlock;
-import com.zzy205.myfirstmod.block.PitchMonitorTestBlockEntity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
@@ -17,7 +15,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RenderHighlightEvent;
 
 /**
- * 为可动 Monitor（正式 + 测试）绘制精确跟随 offset/yaw/pitch 的外壳描边，
+ * 为可动 Monitor 绘制精确跟随 offset/yaw/pitch 的外壳描边，
  * 因为原版 VoxelShape 只能表示轴对齐盒，无法表示连续旋转。碰撞体仍由静态底座承担。
  */
 public final class MonitorOutlineRenderer {
@@ -41,11 +39,6 @@ public final class MonitorOutlineRenderer {
             pitch = be instanceof MonitorBlockEntity m ? m.getPitchAngle() : 0f;
             yaw = be instanceof MonitorBlockEntity m ? m.getYawAngle() : 0f;
             offset = be instanceof MonitorBlockEntity m ? m.getOffset() : 0;
-        } else if (state.getBlock() instanceof PitchMonitorTestBlock) {
-            facing = state.getValue(PitchMonitorTestBlock.FACING);
-            pitch = be instanceof PitchMonitorTestBlockEntity m ? m.getPitchAngle() : 0f;
-            yaw = be instanceof PitchMonitorTestBlockEntity m ? m.getYawAngle() : 0f;
-            offset = be instanceof PitchMonitorTestBlockEntity m ? m.getOffset() : 0;
         } else {
             return;
         }

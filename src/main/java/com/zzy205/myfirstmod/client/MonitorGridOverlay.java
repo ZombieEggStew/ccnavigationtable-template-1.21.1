@@ -27,9 +27,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.sounds.SoundEvents;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
@@ -142,29 +140,63 @@ public class MonitorGridOverlay {
         var player = mc.player;
         if (player == null) return;
 
-        HitResult hit = mc.hitResult;
-        BlockPos pos = null;
-        boolean isMonitor = false;
-        if (hit instanceof BlockHitResult bhr) {
-            pos = bhr.getBlockPos();
-            Level level = player.level();
-            BlockState state = level.getBlockState(pos);
-            isMonitor = state.getBlock() instanceof MonitorBlock;
+        Level level = player.level();
+        float partialTick = (float) event.getPartialTick().getGameTimeDeltaTicks();
+
+        // ── 独立动态命中检测：不依赖原版 mc.hitResult，屏幕旋出方块范围后仍可交互 ──
+        MonitorHitDetector.MonitorHit hit = MonitorHitDetector.find(level, player, partialTick);
+
+        // ── 底座命中：屏幕未命中时，退回原版 pick 判断准心是否在 Monitor 底座（碰撞体 y 0..2/16）上 ──
+        BlockPos basePos = null;
+        MonitorBlockEntity baseBE = null;
+        if (hit == null && mc.hitResult instanceof BlockHitResult bhr) {
+            BlockPos p = bhr.getBlockPos();
+            if (level.getBlockState(p).getBlock() instanceof MonitorBlock) {
+                double localY = bhr.getLocation().y - p.getY();
+                if (localY >= -0.01 && localY <= 2.0 / 16.0 + 0.01) {
+                    basePos = p;
+                    baseBE = level.getBlockEntity(p) instanceof MonitorBlockEntity m ? m : null;
+                }
+            }
         }
 
         // ── 释放所有非当前 Monitor 的活跃按钮按下 ──
-        releaseStalePressesExcept(player, isMonitor ? pos : null);
+        releaseStalePressesExcept(player, hit != null ? hit.pos() : basePos);
 
-        if (!isMonitor || pos == null) {
+        // ── 底座交互：蹲下+右键底座打开 Monitor 配置菜单 ──
+        if (hit == null && basePos != null) {
+            var baseInteract = interactions.computeIfAbsent(basePos, k -> new InteractionState());
+            boolean useDown = mc.options.keyUse.isDown();
+            boolean shiftHeld = player.isShiftKeyDown();
+            boolean shiftUseEdge = useDown && shiftHeld && !baseInteract.shiftUseLastDown;
+            baseInteract.shiftUseLastDown = useDown && shiftHeld;
+
+            ItemStack held = player.getMainHandItem();
+            ModuleType heldType = ModuleType.fromItem(held);
+            boolean holdingScreen = held.getItem().toString().equals("ccpe:module_screen");
+            boolean holdingWrench = held.getItem().toString().contains("create") && held.getItem().toString().contains("wrench");
+
+            if (shiftUseEdge && heldType == null && !holdingScreen && !holdingWrench) {
+                openMonitorMenu(mc, basePos, baseBE);
+            }
+
             hoveredKnobPos = null;
             hoveredKnobModuleId = -1;
             return;
         }
 
-        Level level = player.level();
-        BlockState state = level.getBlockState(pos);
+        if (hit == null) {
+            hoveredKnobPos = null;
+            hoveredKnobModuleId = -1;
+            return;
+        }
 
-        Direction facing = state.getValue(MonitorBlock.FACING);
+        BlockPos pos = hit.pos();
+        Direction facing = hit.facing();
+        float monitorYaw = hit.yaw();
+        float monitorPitch = hit.pitch();
+        int monitorOffset = hit.offset();
+
         GridState grid = null;
         MonitorBlockEntity monitorBE = level.getBlockEntity(pos) instanceof MonitorBlockEntity m ? m : null;
         if (monitorBE != null) grid = monitorBE.getGridState();
@@ -178,8 +210,8 @@ public class MonitorGridOverlay {
         // ── 获取此 Monitor 的独立交互状态 ──
         var interact = interactions.computeIfAbsent(pos, k -> new InteractionState());
 
-        // ── 屏幕放置：切换物品或看向其他方块则取消 ──
-        if (interact.screenPlacing && (!holdingScreen || !pos.equals(pos))) {
+        // ── 屏幕放置：切换物品则取消 ──
+        if (interact.screenPlacing && !holdingScreen) {
             interact.screenPlacing = false;
         }
 
@@ -192,15 +224,10 @@ public class MonitorGridOverlay {
                 | (Config.MONITOR_OUTLINE_G.get() << 8)
                 | Config.MONITOR_OUTLINE_B.get();
 
-        // ── 动态射线命中：完整视线射线 → 模型空间屏幕平面求交（兼容可动 Monitor + Sable 子次元）──
-        float partialTick = (float) event.getPartialTick().getGameTimeDeltaTicks();
+        // ── 动态射线命中：网格坐标已由检测器算好；旋钮拖拽仍需 plot 空间射线 ──
         SubLevel subLevel = SableCompat.getContainingSubLevel(level, pos);
-        float monitorYaw = monitorBE != null ? monitorBE.getYawAngle() : 0f;
-        float monitorPitch = monitorBE != null ? monitorBE.getPitchAngle() : 0f;
-        int monitorOffset = monitorBE != null ? monitorBE.getOffset() : 0;
-
         Vec3[] ray = crosshairRay(level, pos, player, partialTick);
-        int[] gp = MonitorBlock.rayToGrid(pos, facing, monitorYaw, monitorPitch, monitorOffset, ray[0], ray[1]);
+        int[] gp = hit.grid();
         MonitorModule hoveredModule = null;
         if (gp != null) {
             hoveredModule = grid.getModule(grid.getCell(gp[0], gp[1]));
@@ -267,19 +294,7 @@ public class MonitorGridOverlay {
 
         // ── Shift+右键 Monitor 空白处 → 打开 Monitor 自身菜单（频道/背景 + 俯仰/偏航/偏移）──
         if (shiftUseEdge && heldType == null && !holdingScreen && !holdingWrench) {
-            int channel = 0;
-            int[] occupied = new int[0];
-            String background = MonitorBackground.DEFAULT;
-            int pitch = 0, yaw = 0, offset = 0;
-            if (monitorBE != null) {
-                channel = monitorBE.getChannel();
-                occupied = monitorBE.getOccupiedChannels();
-                background = monitorBE.getBackground();
-                pitch = Math.round(monitorBE.getPitchAngle());
-                yaw = Math.round(monitorBE.getYawAngle());
-                offset = monitorBE.getOffset();
-            }
-            mc.setScreen(new MonitorMenuScreen(pos, channel, occupied, background, pitch, yaw, offset));
+            openMonitorMenu(mc, pos, monitorBE);
             return;
         }
 
@@ -433,6 +448,23 @@ public class MonitorGridOverlay {
         graphics.renderTooltip(mc.font, hoveredTooltip, x, y);
     }
 
+    /** 打开 Monitor 配置菜单（频道/背景 + 俯仰/偏航/偏移）。 */
+    private static void openMonitorMenu(Minecraft mc, BlockPos pos, MonitorBlockEntity monitorBE) {
+        int channel = 0;
+        int[] occupied = new int[0];
+        String background = MonitorBackground.DEFAULT;
+        int pitch = 0, yaw = 0, offset = 0;
+        if (monitorBE != null) {
+            channel = monitorBE.getChannel();
+            occupied = monitorBE.getOccupiedChannels();
+            background = monitorBE.getBackground();
+            pitch = Math.round(monitorBE.getPitchAngle());
+            yaw = Math.round(monitorBE.getYawAngle());
+            offset = monitorBE.getOffset();
+        }
+        mc.setScreen(new MonitorMenuScreen(pos, channel, occupied, background, pitch, yaw, offset));
+    }
+
     /** 释放所有非 exceptPos 的 Monitor 上仍处于按下状态的按钮，清理过期条目 */
     private static void releaseStalePressesExcept(Player player, BlockPos exceptPos) {
         var it = interactions.entrySet().iterator();
@@ -571,8 +603,9 @@ public class MonitorGridOverlay {
                 continue;
             }
 
-            // 准心不在任何方块上，或看向的方块与拖拽起始 Monitor 不同 → 取消拖拽
-            if (!(mc.hitResult instanceof BlockHitResult bhr) || !bhr.getBlockPos().equals(pos)) {
+            // 独立动态命中检测：准心不再对准该 Monitor 的屏幕 → 取消拖拽
+            var knobHit = mc.level == null ? null : MonitorHitDetector.find(mc.level, mc.player, 1.0f);
+            if (knobHit == null || !knobHit.pos().equals(pos)) {
                 state.knobDragging = false;
                 state.knobDragModuleId = -1;
                 continue;

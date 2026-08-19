@@ -5,22 +5,16 @@ import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
 import com.zzy205.myfirstmod.block.MonitorPreloadedModels;
 import com.zzy205.myfirstmod.block.MonitorRenderer;
-import com.zzy205.myfirstmod.block.PitchMonitorTestRenderer;
-import com.zzy205.myfirstmod.block.PitchMonitorTestBlock;
-import com.zzy205.myfirstmod.block.PitchMonitorTestBlockEntity;
 import com.zzy205.myfirstmod.block.MyModPartialModels;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
 import com.zzy205.myfirstmod.client.MonitorOutlineRenderer;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import com.zzy205.myfirstmod.screen.RedstoneTransceiverScreen;
 import com.zzy205.myfirstmod.screen.PeripheralExtenderScreen;
-import com.zzy205.myfirstmod.screen.PitchMonitorTestScreen;
 
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import dev.engine_room.flywheel.lib.visualization.SimpleBlockEntityVisualizer;
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.InteractionHand;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -34,7 +28,6 @@ import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
 @Mod(value = CCPeripheraExtender.MOD_ID, dist = Dist.CLIENT)
@@ -44,26 +37,6 @@ public class CCPeripheralExtenderClient {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         MonitorGridOverlay.register();
         NeoForge.EVENT_BUS.addListener(MonitorOutlineRenderer::onRenderHighlight);
-
-        // 测试 monitor 右键打开俯仰/偏航菜单
-        NeoForge.EVENT_BUS.addListener((PlayerInteractEvent.RightClickBlock event) -> {
-            var level = event.getLevel();
-            if (!level.isClientSide()) return;
-            BlockPos pos = event.getPos();
-            if (!(level.getBlockState(pos).getBlock() instanceof PitchMonitorTestBlock)) return;
-            if (event.getHand() != InteractionHand.MAIN_HAND) return;
-
-            int pitch = 0;
-            int yaw = 0;
-            int offset = 0;
-            if (level.getBlockEntity(pos) instanceof PitchMonitorTestBlockEntity be) {
-                pitch = Math.round(be.getPitchAngle());
-                yaw = Math.round(be.getYawAngle());
-                offset = be.getOffset();
-            }
-            Minecraft.getInstance().setScreen(new PitchMonitorTestScreen(pos, pitch, yaw, offset));
-            event.setCanceled(true);
-        });
 
         // 预加载 Monitor 模块模型（仿 control-panels PreLoadedModel 模式）
         MonitorPreloadedModels.init();
@@ -94,9 +67,6 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.monitor_entity.get(),
                 MonitorRenderer::new);
-        event.registerBlockEntityRenderer(
-            MyModBlockEntities.pitch_monitor_test_entity.get(),
-            PitchMonitorTestRenderer::new);
     }
 
     @SubscribeEvent

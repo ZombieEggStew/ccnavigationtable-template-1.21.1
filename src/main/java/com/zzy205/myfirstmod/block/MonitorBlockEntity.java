@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.client.MonitorClientRegistry;
 import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
 import com.zzy205.myfirstmod.compat.cc.MonitorPeripheral;
 import com.zzy205.myfirstmod.compat.cc.MonitorRegistry;
@@ -31,6 +32,8 @@ public class MonitorBlockEntity extends BlockEntity {
 
     /** 显示器屏幕文字 */
     private String screenText = "";
+    /** monitor 背景平面上的字符和图形缓冲。 */
+    private final ScreenText monitorDisplayText = new ScreenText();
     /** 12×10 棋盘网格 */
     private final GridState gridState = new GridState();
     /** 全局频道号（-1 表示尚未注册，注册时自动分配） */
@@ -56,6 +59,10 @@ public class MonitorBlockEntity extends BlockEntity {
     @Override
     public void onLoad() {
         super.onLoad();
+        if (this.level != null && this.level.isClientSide) {
+            // 客户端命中检测注册表：独立动态命中（屏幕旋出方块后仍可交互）依赖它枚举候选 Monitor
+            MonitorClientRegistry.add(this.getBlockPos());
+        }
         if (this.level != null && !this.level.isClientSide) {
             int assigned = MonitorRegistry.register(this.channel, this);
             if (assigned != this.channel) {
@@ -68,16 +75,29 @@ public class MonitorBlockEntity extends BlockEntity {
 
     @Override
     public void setRemoved() {
+        if (this.level != null && this.level.isClientSide) {
+            MonitorClientRegistry.remove(this.getBlockPos());
+        }
         if (this.level != null && !this.level.isClientSide) {
             MonitorRegistry.unregister(this.channel, this);
         }
         super.setRemoved();
     }
 
+    @Override
+    public void onChunkUnloaded() {
+        if (this.level != null && this.level.isClientSide) {
+            MonitorClientRegistry.remove(this.getBlockPos());
+        }
+        super.onChunkUnloaded();
+    }
+
     public String getScreenText() { return screenText; }
     public void setScreenText(String text) { this.screenText = text; setChanged(); }
 
     public GridState getGridState() { return gridState; }
+
+    public ScreenText getMonitorDisplayText() { return monitorDisplayText; }
 
     /** 全局频道号。 */
     public int getChannel() { return channel; }
@@ -551,10 +571,114 @@ public class MonitorBlockEntity extends BlockEntity {
         syncGridToClients();
     }
 
+    // ── monitor 背景平面文本（Lua 控制） ──
+
+    private boolean canMutateMonitorDisplay() {
+        return level != null && !level.isClientSide;
+    }
+
+    private void monitorDisplayChanged() {
+        setChanged();
+        blockChanged();
+    }
+
+    /** Monitor 背景显示区：14×12 面板去除四周 1px 边框后为 12×10px。 */
+    private static final double MONITOR_DISPLAY_WIDTH_PX = MonitorBlock.SCREEN_X_MAX
+            - MonitorBlock.SCREEN_X_MIN - 2 * MonitorBlock.GRID_INSET;
+    private static final double MONITOR_DISPLAY_HEIGHT_PX = MonitorBlock.SCREEN_Y_MAX
+            - MonitorBlock.SCREEN_Y_MIN - 2 * MonitorBlock.GRID_INSET;
+
+    public int[] getMonitorDisplaySize() {
+        double innerW = MONITOR_DISPLAY_WIDTH_PX;
+        double innerH = MONITOR_DISPLAY_HEIGHT_PX;
+        return new int[] { ScreenText.colsFor(innerW, monitorDisplayText.getTextScale()),
+                ScreenText.rowsFor(innerH, monitorDisplayText.getTextScale()) };
+    }
+
+    public void monitorDisplayWrite(String text, @Nullable Double z) {
+        if (!canMutateMonitorDisplay()) return;
+        double innerW = MONITOR_DISPLAY_WIDTH_PX * ScreenText.RECT_UNITS_PER_PX;
+        monitorDisplayText.write(text, innerW, z != null ? z : monitorDisplayText.getZIndex());
+        monitorDisplayChanged();
+    }
+
+    public void monitorDisplayClear() {
+        if (!canMutateMonitorDisplay()) return;
+        monitorDisplayText.clear();
+        monitorDisplayChanged();
+    }
+
+    public void monitorDisplaySetCursor(double x, double y) {
+        if (!canMutateMonitorDisplay()) return;
+        monitorDisplayText.setCursor(x, y);
+        monitorDisplayChanged();
+    }
+
+    public void monitorDisplaySetTextScale(double scale) {
+        if (!canMutateMonitorDisplay()) return;
+        monitorDisplayText.setTextScale(scale);
+        monitorDisplayChanged();
+    }
+
+    public void monitorDisplaySetTextColour(int colour) {
+        if (!canMutateMonitorDisplay()) return;
+        monitorDisplayText.setTextColour(colour);
+        monitorDisplayChanged();
+    }
+
+    public void monitorDisplaySetZIndex(double z) {
+        if (!canMutateMonitorDisplay()) return;
+        monitorDisplayText.setZIndex(z);
+        monitorDisplayChanged();
+    }
+
+    public void monitorDisplaySetOverflowMode(String mode) {
+        if (!canMutateMonitorDisplay()) return;
+        monitorDisplayText.setOverflowMode(ScreenText.OverflowMode.byName(mode));
+        monitorDisplayChanged();
+    }
+
+    public void monitorDisplayDrawRect(double x, double y, double w, double h,
+                                       int colour, boolean solid, double lineWidth, @Nullable Double z) {
+        if (!canMutateMonitorDisplay()) return;
+        monitorDisplayText.addRect(x, y, w, h, colour, solid, lineWidth,
+                z != null ? z : monitorDisplayText.getZIndex());
+        monitorDisplayChanged();
+    }
+
+    public void monitorDisplayClearRects() {
+        if (!canMutateMonitorDisplay()) return;
+        monitorDisplayText.clearRects();
+        monitorDisplayChanged();
+    }
+
+    public void monitorDisplayDrawLine(double x1, double y1, double x2, double y2,
+                                       int colour, double lineWidth, @Nullable Double z) {
+        if (!canMutateMonitorDisplay()) return;
+        monitorDisplayText.addLine(x1, y1, x2, y2, colour, lineWidth,
+                z != null ? z : monitorDisplayText.getZIndex());
+        monitorDisplayChanged();
+    }
+
+    public void monitorDisplayDrawCircle(double cx, double cy, double radius, int colour,
+                                         boolean solid, double lineWidth, int segments, @Nullable Double z) {
+        if (!canMutateMonitorDisplay()) return;
+        monitorDisplayText.addCircle(cx, cy, radius, colour, solid, lineWidth, segments,
+                z != null ? z : monitorDisplayText.getZIndex());
+        monitorDisplayChanged();
+    }
+
+    public void monitorDisplayClearShapes() {
+        if (!canMutateMonitorDisplay()) return;
+        monitorDisplayText.clearShapes();
+        monitorDisplayChanged();
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putString("ScreenText", screenText);
+        tag.put("MonitorDisplayText", monitorDisplayText.save());
         tag.putInt("Channel", channel);
         tag.putString("Background", background);
         tag.putIntArray("OccupiedChannels", occupiedChannels);
@@ -568,6 +692,7 @@ public class MonitorBlockEntity extends BlockEntity {
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         screenText = tag.getString("ScreenText");
+        if (tag.contains("MonitorDisplayText")) monitorDisplayText.load(tag.getCompound("MonitorDisplayText"));
         if (tag.contains("Channel")) channel = tag.getInt("Channel");
         if (tag.contains("Background")) {
             String bg = tag.getString("Background");
@@ -587,6 +712,7 @@ public class MonitorBlockEntity extends BlockEntity {
         CompoundTag tag = super.getUpdateTag(registries);
         tag.putInt("Channel", channel);
         tag.putString("Background", background);
+        tag.put("MonitorDisplayText", monitorDisplayText.save());
         tag.putIntArray("OccupiedChannels", occupiedChannels);
         tag.putFloat("PitchAngle", pitchAngle);
         tag.putFloat("YawAngle", yawAngle);
