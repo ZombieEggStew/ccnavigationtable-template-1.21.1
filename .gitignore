@@ -52,5 +52,10 @@ tools/
 .mymemo.md
 
 .dsh/
-.research
+.research/
 api/
+
+### Wiki ###
+wiki/.venv/
+wiki/site/
+wiki/.tmp/

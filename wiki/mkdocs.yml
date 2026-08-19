@@ -1,0 +1,16 @@
+# MkDocs 站点配置
+# 参考文档: https://squidfunk.github.io/mkdocs-material/
+
+site_name: CCNavigationTable Wiki
+site_description: CC Navigation Table (导航电脑) Mod 的文档站点
+site_url: https://ZombieEggStew.github.io/ccnavigationtable-template-1.21.1/
+
+theme:
+  name: material        # Material 主题
+  language: zh          # 界面语言: 中文
+  palette:
+    scheme: slate       # 暗色主题 (Minecraft 风格)
+
+# 导航结构: 决定侧边栏顺序。新页面必须在这里登记，否则不会出现在导航里。
+nav:
+  - 首页: index.md
