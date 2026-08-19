@@ -10,6 +10,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.IntTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -35,6 +36,10 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity implements Parti
     public void setBannerData(CompoundTag data) {
         this.bannerData = data.copy();
         setChanged();
+        // 同步客户端（quill 保存读的是客户端 BE，客户端陈旧会保存出旧配置）
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
     }
 
     // ════════════════════ Banner 操作（CC API 服务端入口） ════════════════════
@@ -208,6 +213,12 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity implements Parti
         return tag;
     }
 
+    /** 让 sendBlockUpdated 真正把 BE 数据推给客户端（默认返回 null 会导致客户端快照陈旧，quill 保存读的是客户端 BE）。 */
+    @Override
+    public ClientboundBlockEntityDataPacket getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
+    }
+
     // ════════════════════ 加载模式 ════════════════════
 
     public int getLoadMode() { return loadMode; }
@@ -217,6 +228,9 @@ public class RedstoneTransceiverBlockEntity extends BlockEntity implements Parti
         if (this.loadMode == clamped) return;
         this.loadMode = clamped;
         this.setChanged();
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
     }
 
     /** 检查 receiver 是否在 Sable 物理体上 */

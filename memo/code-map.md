@@ -17,8 +17,8 @@ com.zzy205.myfirstmod
 ├── CCPeripheralExtenderClient.java 客户端注册入口
 ├── Config.java                    COMMON / CLIENT 配置
 ├── block/                         方块、方块实体、动态模型和渲染
-├── channel/                       频道分配与滚轮选择
-├── client/                        客户端事件、Monitor 交互和物品渲染
+├── channel/                       通用频道注册表与滚轮选择
+├── client/                        客户端命中检测/描边/变换/背景/交互与物品渲染
 ├── compat/cc/                     CC:Tweaked 外设与 Lua API
 ├── compat/create/                 Create 红石兼容
 ├── compat/jei/                    JEI 配方/幽灵物品集成
@@ -34,9 +34,9 @@ com.zzy205.myfirstmod
 
 | 文件 | 职责 | 修改场景 |
 |---|---|---|
-| `src/main/java/com/zzy205/myfirstmod/CCPeripheraExtender.java` | 模组主入口；注册物品、方块、方块实体、菜单、payload、能力和配置；payload 的服务端处理逻辑也集中在这里 | 新注册表、网络处理器、能力注册、通用初始化 |
-| `src/main/java/com/zzy205/myfirstmod/CCPeripheralExtenderClient.java` | 客户端专属初始化，注册 Monitor 渲染器、GUI、客户端事件和物品渲染 | 客户端注册或服务端崩溃排查 |
-| `src/main/java/com/zzy205/myfirstmod/Config.java` | 模组 COMMON / CLIENT 配置项 | 新增配置或修改配置默认值 |
+| `src/main/java/com/zzy205/myfirstmod/CCPeripheraExtender.java` | 模组主入口；注册物品、方块、方块实体、菜单、payload、能力和配置；payload 的服务端处理逻辑也集中在这里（含 `MonitorTransformPayload` 应用 `setAngles`、`PlayOrderEffectPayload` 广播等） | 新注册表、网络处理器、能力注册、通用初始化 |
+| `src/main/java/com/zzy205/myfirstmod/CCPeripheralExtenderClient.java` | 客户端专属初始化：注册 Monitor 渲染器与预加载模型、MonitorGridOverlay/OutlineRenderer 事件、Flywheel Visual、PartialModels、外部背景扫描和 GUI | 客户端注册或服务端崩溃排查 |
+| `src/main/java/com/zzy205/myfirstmod/Config.java` | 模组 COMMON / CLIENT 配置项（含 Monitor 网格线/预览颜色） | 新增配置或修改配置默认值 |
 
 ## 方块与方块实体
 
@@ -46,18 +46,25 @@ com.zzy205.myfirstmod
 |---|---|
 | `block/MyModBlocks.java` | DeferredRegister 中的方块注册；新增方块先看这里 |
 | `block/MyModBlockEntities.java` | 方块实体类型注册及方块实体与方块的绑定 |
-| `block/MyModPartialModels.java` | Create/Catnip 部分模型资源位置集中定义 |
+| `block/MyModPartialModels.java` | Create/Catnip 部分模型资源位置集中定义（传动外设等） |
 
 ### Monitor
 
+Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯仰（pitch，-90..90）+ 前后偏移（offset，-6..6）。渲染正向与射线求交共用同一套枢轴常量（定义在 `MonitorBlock`），严格互逆、单一来源。
+
 | 文件 | 职责 | 修改场景 |
 |---|---|---|
-| `block/MonitorBlock.java` | Monitor 方块状态、朝向、放置/拆除、右键入口和射线到网格坐标的转换 | 方块交互、朝向、命中检测、GUI 打开入口 |
-| `block/MonitorBlockEntity.java` | 持有 `GridState`；服务端执行放置、移除、按压、旋钮、屏幕和配置修改，并同步客户端；负责 NBT 和 BE 更新包 | Monitor 状态、持久化、服务端行为、同步问题 |
-| `block/MonitorRenderer.java` | Monitor 方块实体的模型/底板渲染；屏幕 9 宫格 + 屏幕字符/矩形（委托 `ScreenTextRenderer`） | Monitor 本体渲染、屏幕文本/矩形渲染 |
-| `block/MonitorPreloadedModels.java` | 预加载 Monitor 动态渲染所需模型 | 模型加载或资源找不到 |
-| `client/MonitorGridOverlay.java` | 客户端 Monitor 网格、模块边框、预览、鼠标交互、按钮/旋钮 payload 发送和配置 GUI 打开 | 网格显示、命中检测、模块交互、放置预览、多 Monitor 状态隔离 |
-| `client/ScreenTextRenderer.java` | 屏幕字符（vanilla ascii.png 位图字体，`RenderType.text`）与矩形（纯色 `POSITION_COLOR` quad）渲染 | 屏幕字符/矩形渲染、字体 UV/环绕顺序/深度/镜像问题 |
+| `block/MonitorBlock.java` | Monitor 方块：水平朝向、放置/掉落、右键消费；可动变换的枢轴常量（`ROT_ORIGIN`/`HINGE_*`/`NECK_*`）与纯数学（`inverseToModel`/`transformPointToLocal`/`intersectScreen`/`isOnPanel`/`localToGrid`/`rayToGrid`）；碰撞体仅静态底座，选择框为静态 case（轴对齐） | 方块交互、朝向、枢轴常量、动态射线命中、掉落 |
+| `block/MonitorBlockEntity.java` | 持有 `GridState`；服务端执行放置、移除、按压/释放（含玩家锁定与点击计数）、钮子开关、旋钮（含卡位吸附）、屏幕、模块/屏幕配置修改、按钮标签与灯带；保存 pitch/yaw/offset（`setAngles`）；屏幕文本（`screen*`）与 Monitor 背景文本（`monitorDisplay*`）入口；NBT 和 BE 更新包；注册/注销 `MonitorClientRegistry` 与 `MonitorRegistry` | Monitor 状态、持久化、服务端行为、同步问题 |
+| `block/MonitorRenderer.java` | BER：用 `MonitorTransform` 渲染可动 bearing/case、背景 quad（内置贴图/外部图片）、Monitor 自身 `monitorDisplayText`、模块模型与动画（按 `(BlockPos,moduleId)` 隔离）、旋钮角度文字、按钮标签、屏幕 9 宫格 + 屏幕字符/图形（委托 `ScreenTextRenderer`） | Monitor 本体渲染、背景、模块动画、屏幕文本 |
+| `block/MonitorPreloadedModels.java` | 预加载 Monitor 动态渲染所需模型：模块主模型、额外部件（钮子拉杆/旋钮把手/按钮头/指示灯）、屏幕 9 宫格部件、可动 case/bearing、6 张背景贴图精灵 | 模型加载或资源找不到 |
+| `client/MonitorGridOverlay.java` | 客户端 Monitor 网格线、模块边框、放置预览（Catnip Outliner，key 按 BlockPos 前缀隔离）、鼠标交互（按钮/钮子/旋钮拖拽/屏幕两点放置）、payload 发送、打开模块配置与 Monitor 菜单；持有按 BlockPos 隔离的 `InteractionState` | 网格显示、模块交互、放置预览、多 Monitor 状态隔离 |
+| `client/MonitorHitDetector.java` | 独立动态命中检测：遍历 `MonitorClientRegistry` 的候选 Monitor，用实时变换做屏幕面板正面求交，含背面剔除、距离受限、遮挡检测与 Sable 子次元坐标回投；不依赖原版 `mc.hitResult` | 命中检测、屏幕旋出方块后的交互、遮挡 |
+| `client/MonitorOutlineRenderer.java` | 取消原版方块选择框（`RenderHighlightEvent.Block`），按 offset/yaw/pitch 自绘底座/bearing/case 描边（VoxelShape 无法表达连续旋转） | 选择框描边 |
+| `client/MonitorTransform.java` | 渲染正向变换 helper：facing → offset → yaw → pitch；枢轴常量单一来源在 `MonitorBlock` | 渲染变换、与检测互逆 |
+| `client/MonitorClientRegistry.java` | 客户端已加载 Monitor 坐标集合（`onLoad`/`setRemoved`/`onChunkUnloaded` 维护），供独立命中检测枚举候选 | 命中检测候选枚举 |
+| `client/MonitorBackgrounds.java` | 扫描运行目录 `ccpe_res/monitor_bg` 的外部背景图片，注册为动态纹理（键 `custom/xxx.png`） | 外部背景、纹理加载 |
+| `client/ScreenTextRenderer.java` | 屏幕字符（vanilla ascii.png 位图字体，`RenderType.text`）与矩形/线段/圆（纯色 `POSITION_COLOR` quad）渲染 | 屏幕字符/图形渲染、字体 UV/环绕顺序/深度/镜像问题 |
 
 ### 独立方块
 
@@ -80,34 +87,37 @@ com.zzy205.myfirstmod
 
 | 文件 | 职责 | 修改场景 |
 |---|---|---|
-| `monitor/GridState.java` | 14×12 网格的核心状态；模块/屏幕占用、ID、按压状态、旋钮角度、配置、屏幕字符缓冲（`screenTexts`）、NBT 序列化 | 任何 Monitor 数据结构或状态转移 |
-| `monitor/MonitorModule.java` | 不可变模块记录：ID、类型和网格坐标 |
-| `monitor/ModuleType.java` | 模块类型、尺寸、名称和物品映射 | 新模块类型、尺寸或物品关联 |
-| `monitor/MonitorBackground.java` | Monitor 背景选项（五个字符串）与默认值 | 背景选项/默认值变更 |
-| `monitor/ScreenText.java` | 每个屏幕的字符缓冲与矩形指令：文本行、光标、前景/背景色、字号、`OverflowMode`、`Rect` 列表；NBT 序列化 | 屏幕文本/矩形数据结构、溢出模式 |
-| `block/ModuleRenderBehavior.java` | 按模块类型选择渲染行为；包含 Button、Toggle、Knob 行为 | 模块动态渲染、按压/旋钮视觉状态 |
+| `monitor/GridState.java` | 12×10 网格核心状态（屏幕面板 14×12，四周各留 1 格边框，屏幕占用格标记 `-2`）；模块/屏幕占用、ID（`0..9999` 共享命名空间）、按压/点击计数、玩家锁定、灯带、旋钮角度（含卡位步长）、模块配置、按钮标签、`ScreenRegion` 与屏幕文本缓冲（`screenTexts`）、NBT 序列化 | 任何 Monitor 数据结构或状态转移 |
+| `monitor/MonitorModule.java` | 不可变模块记录：ID、类型和网格坐标（宽高取自类型） |
+| `monitor/ModuleType.java` | 模块类型：`button_1`(1×1)、`toggle_switch`(1×1)、`knob`(2×2)；名称/尺寸/物品映射（`byName`/`fromItem`） | 新模块类型、尺寸或物品关联 |
+| `monitor/MonitorBackground.java` | Monitor 背景选项（6 个内置键 + 外部 `custom/` 键）与默认值（蓝色棋盘）；显示名可翻译 | 背景选项/默认值变更 |
+| `monitor/ScreenText.java` | 单个屏幕的字符缓冲与绘制指令：字符（局部坐标 + 层级）、矩形（实心/描边 + 线宽）、线段、圆（多边形逼近）、光标、前景色、字号、`OverflowMode`（truncate/ellipsis/wrap）；NBT 序列化 | 屏幕文本/图形数据结构、溢出模式 |
+| `monitor/ButtonLabel.java` | 按钮（`button_1`）表面标签数据：文本、位置偏移、字号、颜色、投影；默认值与钳制 | 按钮标签数据或渲染 |
+| `block/ModuleRenderBehavior.java` | 按模块类型选择渲染行为：Button（按压深度 + 灯带指示灯）、Toggle、Knob（旋转）；含灯带纯色面片渲染类型 | 模块动态渲染、按压/旋钮视觉状态 |
 
-重要约束：模块和屏幕在同一 Monitor 内共享 `0..9999` ID 命名空间。`GridState.trySetId` 修改 ID 时必须同步网格、按压状态、旋钮角度和模块配置。
+重要约束：模块和屏幕在同一 Monitor 内共享 `0..9999` ID 命名空间。`GridState.trySetId` 修改 ID 时必须同步 re-key：`modules`、`grid[][]`、`pressedModules`、`knobAngles`、`moduleConfigs`、`buttonLabels`（新增字段时别漏）。
 
 ## GUI 与配置
 
 | 文件 | 职责 |
 |---|---|
-| `screen/MyModMenus.java` | 菜单类型注册 |
-| `screen/MonitorModuleScreen.java` | Monitor 模块/屏幕通用配置界面；汇总公共配置和类型专属配置后发送 `ModuleConfigPayload` |
-| `screen/MonitorMenuScreen.java` | Monitor 自身菜单（蹲下+右键空白处打开）；背景 + bar_id 滚轮选择全局频道，无 bar_tooltip |
+| `screen/MyModMenus.java` | 容器菜单类型注册（Peripheral Extender / Redstone Transceiver）；Monitor 的两个 GUI 不走菜单系统，由客户端直接 `mc.setScreen` 打开 |
+| `screen/AbstractMonitorScreen.java` | 中间层 Screen 基类：统一在控件之上渲染子控件 tooltip（`TooltipWidget` 与 Catnip `AbstractSimiWidget`），禁用原版渐变背景，非暂停界面 |
+| `screen/MonitorModuleScreen.java` | Monitor 模块/屏幕通用配置界面（继承 `AbstractMonitorScreen`）；ID 滚轮 + 悬浮文本输入条 + 类型专属配置区，汇总后发送 `ModuleConfigPayload` |
+| `screen/MonitorMenuScreen.java` | Monitor 自身菜单（蹲下+右键空白处/扳手右键打开，继承 `AbstractMonitorScreen`）；频道、背景、俯仰/偏航/偏移共五条滚轮，关闭时发送 `MonitorChannelPayload`/`MonitorBackgroundPayload`/`MonitorTransformPayload` |
 | `screen/ModuleConfigSection.java` | 模块专属配置区接口及空实现 |
-| `screen/ModuleConfigSections.java` | 按模块名称创建配置区的工厂；每次必须创建新实例 |
-| `screen/ButtonConfigSection.java` | Button 类型配置区 |
+| `screen/ModuleConfigSections.java` | 按模块名称创建配置区的工厂（目前仅 KNOB → `KnobConfigSection`，其余走 Empty）；每次必须创建新实例 |
+| `screen/KnobConfigSection.java` | 旋钮专属配置区：角度范围滚轮条（0-360）+ 卡位开关 |
 | `screen/LoadModeHelper.java` | GUI 中负载模式的显示和选择辅助逻辑 |
-| `foundation/gui/MyIcons.java` | Create 风格 GUI 图标定义 |
+| `foundation/gui/MyIcons.java` | Create 风格 GUI 图标定义（频道/背景/俯仰/偏航/偏移/ID/提示/旋钮等） |
 | `foundation/gui/MyUIElements.java` | GUI 背景元素（横条/输入框背景等）定义 |
+| `foundation/gui/widget/TooltipWidget.java` | 具备独立 tooltip 渲染能力的控件接口，由 Screen（如 `AbstractMonitorScreen`）统一调用 |
 | `foundation/gui/widget/HoverTintIconButton.java` | 带悬停染色的图标按钮 |
 | `foundation/gui/widget/ToggleButton.java` | 可选中状态的图标切换按钮 |
-| `foundation/gui/widget/ScrollValueBar.java` | 滚轮数值输入条（频道/ID 滚轮选择） |
+| `foundation/gui/widget/ScrollValueBar.java` | 滚轮数值输入条：频道/ID 跳过占用、数值范围模式（`range`）、离散选项模式、内嵌开关（`withToggleButton`）、tooltip |
 | `foundation/gui/widget/TextInputBar.java` | 长文本输入条（横条 + 图标 + 长输入框 + 内嵌 EditBox） |
 
-GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送 `ModuleConfigPayload` → `CCPeripheraExtender` 在服务端调用 `MonitorBlockEntity.applyModuleConfig` → `GridState` 保存。
+GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送 `ModuleConfigPayload` → `CCPeripheraExtender` 在服务端调用 `MonitorBlockEntity.applyModuleConfig` → `GridState` 保存。`MonitorMenuScreen` 关闭时发送频道/背景/可动变换三个 payload。
 
 ## 网络 payload
 
@@ -115,16 +125,18 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 
 | 文件 | 方向 | 用途 |
 |---|---|---|
-| `network/SyncGridPayload.java` | 服务端 → 客户端 | 同步 Monitor 的完整 GridState NBT |
+| `network/SyncGridPayload.java` | 服务端 → 客户端 | 同步 Monitor 的完整 GridState NBT（含模块/屏幕/文本/配置） |
 | `network/ModulePressPayload.java` | 客户端 → 服务端 | Button 按下/释放或 Toggle 切换 |
 | `network/ModuleKnobRotatePayload.java` | 客户端 → 服务端 | 同步旋钮累计角度 |
 | `network/PlaceModulePayload.java` | 客户端 → 服务端 | 请求放置模块 |
 | `network/RemoveModulePayload.java` | 客户端 → 服务端 | 请求移除模块 |
-| `network/ModuleConfigPayload.java` | 客户端 → 服务端 | 修改模块/屏幕 ID 和配置 |
+| `network/ModuleConfigPayload.java` | 客户端 → 服务端 | 修改模块/屏幕 ID 和配置（name/oldId/newId/config） |
 | `network/PlaceScreenPayload.java` | 客户端 → 服务端 | 请求放置矩形屏幕 |
 | `network/RemoveScreenPayload.java` | 客户端 → 服务端 | 请求移除屏幕 |
 | `network/MonitorChannelPayload.java` | 客户端 → 服务端 | 保存 Monitor 全局频道号 |
 | `network/MonitorBackgroundPayload.java` | 客户端 → 服务端 | 保存 Monitor 背景选项 |
+| `network/MonitorTransformPayload.java` | 客户端 → 服务端 | 保存 Monitor 俯仰/偏航角度与前后偏移（`setAngles`） |
+| `network/PlayOrderEffectPayload.java` | 服务端 → 客户端 | 广播下单 WiFi 粒子播放位置；客户端本地 `addParticle`（`WiFiParticle.Data` 无法走网络编码） |
 | `network/SensorFilterPayload.java` | 客户端 → 服务端 | 保存传感器频道和负载模式 |
 | `network/SensorNbtPayload.java` | 服务端 → 客户端 | 推送传感器缓存 NBT |
 | `network/ReceiverSyncPayload.java` | 客户端 → 服务端 | 保存 Receiver 数据和负载模式 |
@@ -133,10 +145,10 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 
 | 文件 | 职责 |
 |---|---|
-| `channel/ChannelRegistry.java` | 按频道登记、查询和释放外围设备；处理频道占用关系 |
-| `channel/ChannelScrollHelper.java` | GUI 滚轮选择频道/ID，跳过已占用值并支持 Shift 步进 |
+| `channel/ChannelRegistry.java` | 通用频道注册表 `ChannelRegistry<O>`：按频道登记、查询和释放外围设备；最小空闲分配、冲突顺延、僵尸清理、占用变化回调 |
+| `channel/ChannelScrollHelper.java` | GUI 滚轮选择频道/ID：钳位 → 跳过占用 → 边界反向再跳占，支持 Shift 步进 |
 
-传感器与显示器共享同一全局频道命名空间（`compat/cc/GlobalChannelRegistry`），保证频道全局唯一。
+传感器与显示器共享同一全局频道命名空间（`compat/cc/GlobalChannelRegistry`，内部是同一个 `ChannelRegistry` 实例），保证频道全局唯一。
 
 ## CC:Tweaked 与其他兼容层
 
@@ -150,15 +162,15 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/MonitorPeripheral.java` | Monitor 的 `IPeripheral` 实现（模块/屏幕查询入口） |
 | `compat/cc/ModuleHandle.java` | 模块/屏幕 Lua 实例的抽象基类（通用 get/set/tooltip） |
 | `compat/cc/ModuleHandleRegistry.java` | 按模块类型把 Java 记录包装成对应的 Lua handle |
-| `compat/cc/ButtonModuleHandle.java` | 按钮的 Lua API（按下/弹起/点击检测/灯带/玩家锁） |
+| `compat/cc/ButtonModuleHandle.java` | 按钮的 Lua API（按下/弹起/点击检测/玩家锁/灯带/标签 setLabel 系列） |
 | `compat/cc/ToggleSwitchModuleHandle.java` | 钮子开关的 Lua API（锁存状态） |
 | `compat/cc/KnobModuleHandle.java` | 旋钮的 Lua API（角度读写） |
-| `compat/cc/ScreenModuleHandle.java` | 屏幕的 Lua API（tooltip/文本渲染/矩形绘制） |
+| `compat/cc/ScreenModuleHandle.java` | 屏幕的 Lua API（tooltip/文本渲染/矩形/线段/圆/点/光标/字号/层级/溢出模式） |
 | `compat/cc/RedstoneTransceiverPeripheral.java` | Redstone Transceiver 的 `IPeripheral` 实现 |
 | `compat/cc/RedstoneTransceiverRegistry.java` | Receiver 频道和外设实例登记 |
 | `compat/create/CreateRedstoneCompat.java` | Create 红石链接兼容，建立虚拟红石连接 |
 | `compat/jei/AddonJEIPlugin.java` | JEI 分类/配方及 Receiver 的幽灵物品处理 |
-| `compat/sable/SableCompat.java` | Sable 模组兼容入口 |
+| `compat/sable/SableCompat.java` | Sable 模组兼容入口（子次元 plot/world 坐标互转，命中检测用） |
 
 ## 物品
 
@@ -173,19 +185,23 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | 需求 | 首先查看 | 通常还要检查 |
 |---|---|---|
 | 新增方块/物品 | `block/MyModBlocks.java` / `item/MyModItems.java` | `MyModBlockEntities.java`、资源模型、语言文件、创造模式物品栏 |
-| 修改 Monitor 右键或射线命中 | `block/MonitorBlock.java` | `client/MonitorGridOverlay.java` |
+| 修改 Monitor 右键或射线命中 | `block/MonitorBlock.java`（`intersectScreen`/`rayToGrid`）、`client/MonitorHitDetector.java` | `client/MonitorGridOverlay.java`、`MonitorClientRegistry.java` |
+| 修改可动变换（俯仰/偏航/偏移） | `block/MonitorBlock.java`（枢轴常量）、`client/MonitorTransform.java` | `MonitorBlockEntity.setAngles`、`MonitorTransformPayload`、`MonitorMenuScreen`、`MonitorRenderer` |
+| 修改 Monitor 选择框描边 | `client/MonitorOutlineRenderer.java` | `MonitorTransform`、`MonitorBlock` 枢轴常量 |
 | 修改模块放置/删除/按压/旋钮服务端行为 | `block/MonitorBlockEntity.java`、`monitor/GridState.java` | 对应 payload、`CCPeripheraExtender.java`、渲染行为 |
-| 新增 Monitor 模块类型 | `monitor/ModuleType.java` | `MyModItems.java`、`ModuleRenderBehavior.java`、`MonitorGridOverlay.java`、资源模型、GUI 配置工厂 |
+| 新增 Monitor 模块类型 | `monitor/ModuleType.java` | `MyModItems.java`、`ModuleRenderBehavior.java`、`ModuleConfigSections.java`、`MonitorGridOverlay.java`、资源模型 |
+| 新增模块专属配置 | `screen/ModuleConfigSection.java`、`ModuleConfigSections.java` | 新配置 section、`MonitorModuleScreen.java`、`GridState.java` |
 | 修改网格尺寸、占用或 ID | `monitor/GridState.java` | Monitor 渲染、客户端命中检测、NBT 兼容、`ChannelScrollHelper` |
 | 修改模块动态模型/角度/按压外观 | `block/ModuleRenderBehavior.java` | `MonitorRenderer.java`、`MonitorPreloadedModels.java`、模型资源 |
-| 修改 Monitor 网格线、预览或鼠标交互 | `client/MonitorGridOverlay.java` | 相关 payload、`Config.java`、Outliner/Catnip 规则 |
-| 修改 Monitor GUI 布局或公共配置 | `screen/MonitorModuleScreen.java` | `ModuleConfigPayload.java`、`MonitorBlockEntity.java`、语言文件 |
-| 新增模块专属配置 | `screen/ModuleConfigSection.java`、`ModuleConfigSections.java` | 新配置 section、`MonitorModuleScreen.java`、`GridState.java` |
+| 修改 Monitor 网格线、预览或鼠标交互 | `client/MonitorGridOverlay.java` | `MonitorHitDetector.java`、相关 payload、`Config.java`、Outliner/Catnip 规则 |
+| 修改 Monitor 背景或外部图片 | `monitor/MonitorBackground.java`、`client/MonitorBackgrounds.java` | `MonitorRenderer`（renderBackground）、`MonitorPreloadedModels`（bg 精灵）、`MonitorMenuScreen` |
+| 修改按钮标签 | `monitor/ButtonLabel.java`、`compat/cc/ButtonModuleHandle.java` | `MonitorBlockEntity`（setButtonLabel*）、`MonitorRenderer`（renderButtonLabel） |
+| 修改 Monitor GUI 布局或公共配置 | `screen/MonitorModuleScreen.java` / `MonitorMenuScreen.java` | 对应 payload、`MonitorBlockEntity.java`、语言文件 |
 | 修改客户端/服务端同步 | `CCPeripheraExtender.java`、`MonitorBlockEntity.java` | 对应 payload 的 codec、NBT 字段、客户端接收逻辑 |
 | 修改传感器 GUI 或数据 | `PeripheralExtenderScreen.java` / `Menu.java` / `BlockEntity.java` | `SensorFilterPayload.java`、`SensorNbtPayload.java`、CC registry |
 | 修改 Receiver GUI 或数据 | `RedstoneTransceiverScreen.java` / `Menu.java` / `BlockEntity.java` | `ReceiverSyncPayload.java`、`RedstoneTransceiverPeripheral.java` |
 | 修改 CC:Tweaked Lua API | `compat/cc/PeripheralExtenderAPI.java` | `CCPeripheralExtenderSetup.java`、相关 BlockEntity 和 registry |
-| 修改屏幕文本/矩形渲染或 Lua API | `monitor/ScreenText.java`、`compat/cc/ScreenModuleHandle.java`、`client/ScreenTextRenderer.java` | `MonitorBlockEntity.java`（screenWrite/screenDrawRect 等）、`MonitorRenderer.java`、`SyncGridPayload` |
+| 修改屏幕文本/图形渲染或 Lua API | `monitor/ScreenText.java`、`compat/cc/ScreenModuleHandle.java`、`client/ScreenTextRenderer.java` | `MonitorBlockEntity.java`（screenWrite/screenDrawRect 等）、`MonitorRenderer.java`、`SyncGridPayload` |
 | 修改 Create 兼容或传动渲染 | `compat/create/CreateRedstoneCompat.java` / `TransmissionPeripheral*` | Create 源码参考和客户端注册 |
 | 修改资源模型、纹理或语言 | `src/main/resources/assets/ccpe/` | 对应 Java 注册/渲染类、资源 instruction |
 
@@ -195,7 +211,8 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 
 ```mermaid
 flowchart TD
-    Input[客户端鼠标/准星] --> Overlay[MonitorGridOverlay]
+    Input[客户端鼠标/准星] --> Detector[MonitorHitDetector 动态射线求交]
+    Detector --> Overlay[MonitorGridOverlay]
     Overlay -->|放置/按压/旋钮/配置| Payload[network payload]
     Payload --> Entry[CCPeripheraExtender 注册的处理器]
     Entry --> BE[MonitorBlockEntity]
@@ -204,6 +221,7 @@ flowchart TD
     BE --> Sync[SyncGridPayload / BE update packet]
     Sync --> ClientGrid[客户端 GridState]
     ClientGrid --> Render[MonitorRenderer / MonitorGridOverlay]
+    BE -->|pitch/yaw/offset| Draw[MonitorTransform 渲染正向 / MonitorOutlineRenderer 描边]
 ```
 
 ### 独立外设
@@ -222,6 +240,10 @@ flowchart LR
 - `client/`、`screen/` 中具体的 `*Screen` 类、渲染器和客户端事件不得在专用服务端加载路径中被直接引用；`*Menu` 类是服务端菜单逻辑，不属于此限制。
 - 服务端是 Monitor 状态的权威来源；客户端交互类负责命中检测和发送请求，不能只修改客户端 `GridState`。
 - `MonitorBlockEntity` 的 `getUpdatePacket()` 不能恢复为默认实现，否则方块更新时 BE 快照不会同步。
-- 多个 Monitor 的客户端交互缓存必须按 `BlockPos` 隔离。
+- 多个 Monitor 的客户端交互缓存（`MonitorGridOverlay.InteractionState`、`MonitorRenderer.animProgress`、Outliner key）必须按 `BlockPos` 隔离。
 - 修改 NBT 字段时同时检查 `GridState.save/load`、`MonitorBlockEntity.saveAdditional/loadAdditional` 以及客户端同步 payload。
+- 可动变换的枢轴常量统一定义在 `MonitorBlock`；渲染正向（`client/MonitorTransform`）与射线求交（`MonitorBlock.inverseToModel`/`intersectScreen`）必须严格互逆、单一来源。
+- Monitor 碰撞体只有静态底座（case 不参与碰撞）；选择框由 `client/MonitorOutlineRenderer` 取消原版事件后自绘，因为 `VoxelShape` 无法表达连续旋转。
+- 客户端命中检测不依赖原版 `mc.hitResult`：`MonitorHitDetector` 遍历 `MonitorClientRegistry` 枚举候选，Sable 子次元下需把视线射线回投到 plot 坐标（`SableCompat.toLocalPosition/toLocalDirection`）再求交。
+- Monitor 背景平面文本（`monitorDisplay*`）走 BE update 同步，屏幕文本（`screen*`）走 `SyncGridPayload`；两者都经 `ScreenTextRenderer` 渲染。
 - 屏幕字符用 `RenderType.text(ascii.png)` 渲染：其顶点格式含 UV2（必须 `.setLight`），且「北面局部 X 轴与逻辑列轴相反」（字形/矩形需水平翻转、文本列锚定右缘），详见 `memo/record_screen_text.md`。

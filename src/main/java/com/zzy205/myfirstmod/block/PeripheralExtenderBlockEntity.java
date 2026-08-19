@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
+import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.compat.cc.PeripheralExtenderRegistry;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
@@ -7,6 +8,7 @@ import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.world.item.ItemStack;
@@ -18,7 +20,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
 
-public class PeripheralExtenderBlockEntity extends BlockEntity {
+public class PeripheralExtenderBlockEntity extends BlockEntity implements PartialSafeNBT {
 
     /** 当前活跃的强制加载传感器数量 */
     private static int activeChunkLoaders = 0;
@@ -487,7 +489,12 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
 
         if (attachedBE != null && !attachedBE.isRemoved()) {
             this.cachedAttachedBE = attachedBE;
-            this.cachedAttachedCompoundTag = PeripheralExtenderBlock.getAttachedBlockNBT(level, state, this.worldPosition);
+            // 同一个快照同时刷新两个缓存字段：cachedAttachedCompoundTag 供 Lua API 读取，
+            // cachedAttachedNBT 用于 getUpdateTag 同步与旧版 getCachedAttachedNBT（GUI 兜底）。
+            // 之前 cachedAttachedNBT 只在 GUI 轮询（refreshAndGet）时刷新，会导致存档/蓝图中出现陈旧 NBT。
+            CompoundTag freshAttachedNBT = PeripheralExtenderBlock.getAttachedBlockNBT(level, state, this.worldPosition);
+            this.cachedAttachedCompoundTag = freshAttachedNBT;
+            this.cachedAttachedNBT = freshAttachedNBT;
 
             // NavTable 专用缓存
             if (attachedBE instanceof dev.simulated_team.simulated.content.blocks.nav_table.NavTableBlockEntity nav) {
@@ -505,6 +512,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         } else {
             this.cachedAttachedBE = null;
             this.cachedAttachedCompoundTag = new CompoundTag();
+            this.cachedAttachedNBT = new CompoundTag();
             this.cachedNavTargetPos = null;
             this.cachedNavSelfPos = Vec3.ZERO;
             this.cachedNavDistance = 0.0;
@@ -586,6 +594,12 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         return tag;
     }
 
+    /** 让 sendBlockUpdated 真正把 BE 数据推给客户端（默认返回 null 会导致客户端快照陈旧，quill 保存读的是客户端 BE）。 */
+    @Override
+    public ClientboundBlockEntityDataPacket getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
+    }
+
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
@@ -612,9 +626,10 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        tag.put("AttachedNBT", cachedAttachedNBT);
+        // AttachedNBT / OccupiedChannels 是运行时缓存（分别由 refreshAllCaches / onLoad 重建），
+        // 不写入世界存档与蓝图。否则 Create 保存蓝图走的是原版 StructureTemplate
+        // （saveWithFullMetadata），会把陈旧的运行时快照带进 .nbt 文件。
         tag.putInt("ScrolledValue", scrolledValue);
-        tag.putIntArray("OccupiedChannels", occupiedChannels);
         tag.putInt("LoadMode", loadMode);
         tag.putInt("RedstoneOutput", redstoneOutput);
         if (!displayItem.isEmpty()) {
@@ -623,5 +638,26 @@ public class PeripheralExtenderBlockEntity extends BlockEntity {
         if (!displayItem2.isEmpty()) {
             tag.put("DisplayItem2", displayItem2.save(registries));
         }
+    }
+
+    /**
+     * Create 原理图 / 装置搬运时的「安全 NBT」。
+     * 不实现此接口的话，{@code BlockHelper.prepareBlockEntityData} 会返回 null，
+     * 导致 Schematicannon 打印时频道配置丢失。
+     * 只保存频道号、幽灵物品与加载模式；AttachedNBT / OccupiedChannels / RedstoneOutput
+     * 属于运行时数据，不写入原理图。保存路径（原版 StructureTemplate）由
+     * {@link #saveAdditional} 兜底——AttachedNBT / OccupiedChannels 同样不落盘。
+     * 部署时由 {@link #loadAdditional} 恢复，随后 {@link #onLoad} 会按恢复后的频道号重新注册（冲突自动顺延）。
+     */
+    @Override
+    public void writeSafe(CompoundTag compound, HolderLookup.Provider registries) {
+        compound.putInt("ScrolledValue", scrolledValue);
+        if (!displayItem.isEmpty()) {
+            compound.put("DisplayItem", displayItem.save(registries));
+        }
+        if (!displayItem2.isEmpty()) {
+            compound.put("DisplayItem2", displayItem2.save(registries));
+        }
+        compound.putInt("LoadMode", loadMode);
     }
 }

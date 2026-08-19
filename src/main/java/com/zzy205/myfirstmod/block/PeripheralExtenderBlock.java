@@ -13,7 +13,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
@@ -211,20 +210,9 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
                 new BlockHitResult(context.getClickLocation(), context.getClickedFace(), context.getClickedPos(), true));
     }
 
-    @Override
-    public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
-        Level level = context.getLevel();
-        BlockPos pos = context.getClickedPos();
-        Player player = context.getPlayer();
-        if (!level.isClientSide) {
-            ItemStack stack = new ItemStack(this);
-            level.destroyBlock(pos, false, player);
-            if (player == null || !player.getInventory().add(stack)) {
-                Block.popResource(level, pos, stack);
-            }
-        }
-        return InteractionResult.sidedSuccess(level.isClientSide);
-    }
+    // 蹲下扳手拆除：不重写 onSneakWrenched，直接走 Create 的 IWrenchable 默认实现
+    // （触发 BreakEvent → 按掉落表把物品放回玩家背包 → destroyBlock → WRENCH_REMOVE 音效），
+    // 与 redstone_transceiver 完全一致。拆除后不保存任何数据（掉落普通方块物品）。
 
     // ────────────────────────────────────────
     //  右键 GUI：显示附着方块的 NBT
@@ -236,6 +224,10 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hitResult) {
+        // 蹲下右键时放行，交给扳手处理拆除（与 redstone_transceiver 一致）
+        if (player.isCrouching()) {
+            return InteractionResult.PASS;
+        }
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
             // 读取附着方块的 NBT
             CompoundTag attachedNBT = getAttachedBlockNBT(level, state, pos);

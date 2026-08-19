@@ -39,7 +39,7 @@ run/
 repo/
 !**/src/**/repo/
 
-reference/
+references/
 sources/
 
 ### Local Maven dependencies (manually downloaded jars) ###
@@ -52,3 +52,5 @@ tools/
 .mymemo.md
 
 .dsh/
+.research
+api/
