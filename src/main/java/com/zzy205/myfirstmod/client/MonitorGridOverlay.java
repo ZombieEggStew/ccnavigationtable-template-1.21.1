@@ -163,20 +163,23 @@ public class MonitorGridOverlay {
         // ── 释放所有非当前 Monitor 的活跃按钮按下 ──
         releaseStalePressesExcept(player, hit != null ? hit.pos() : basePos);
 
-        // ── 底座交互：蹲下+右键底座打开 Monitor 配置菜单 ──
+        // ── 底座交互：蹲下+右键，或扳手+右键，打开 Monitor 配置菜单 ──
         if (hit == null && basePos != null) {
             var baseInteract = interactions.computeIfAbsent(basePos, k -> new InteractionState());
             boolean useDown = mc.options.keyUse.isDown();
             boolean shiftHeld = player.isShiftKeyDown();
             boolean shiftUseEdge = useDown && shiftHeld && !baseInteract.shiftUseLastDown;
             baseInteract.shiftUseLastDown = useDown && shiftHeld;
+            boolean useEdge = useDown && !baseInteract.screenLastUseDown;
+            baseInteract.screenLastUseDown = useDown;
 
             ItemStack held = player.getMainHandItem();
             ModuleType heldType = ModuleType.fromItem(held);
             boolean holdingScreen = held.getItem().toString().equals("ccpe:module_screen");
             boolean holdingWrench = held.getItem().toString().contains("create") && held.getItem().toString().contains("wrench");
 
-            if (shiftUseEdge && heldType == null && !holdingScreen && !holdingWrench) {
+            if ((shiftUseEdge && !holdingWrench || holdingWrench && useEdge)
+                    && heldType == null && !holdingScreen) {
                 openMonitorMenu(mc, basePos, baseBE);
             }
 

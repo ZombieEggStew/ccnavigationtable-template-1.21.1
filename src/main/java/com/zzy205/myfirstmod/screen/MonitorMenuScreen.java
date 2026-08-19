@@ -4,6 +4,7 @@ import com.simibubi.create.foundation.gui.AllIcons;
 import com.zzy205.myfirstmod.foundation.gui.MyIcons;
 import com.zzy205.myfirstmod.foundation.gui.widget.HoverTintIconButton;
 import com.zzy205.myfirstmod.foundation.gui.widget.ScrollValueBar;
+import com.zzy205.myfirstmod.client.MonitorBackgrounds;
 import com.zzy205.myfirstmod.monitor.MonitorBackground;
 import com.zzy205.myfirstmod.network.MonitorBackgroundPayload;
 import com.zzy205.myfirstmod.network.MonitorChannelPayload;
@@ -58,6 +59,7 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
     private final int[] occupiedChannels;
     /** 打开菜单时的背景选项 */
     private final String background;
+        private java.util.List<String> customBackgroundKeys;
     /** 打开菜单时的可动变换 */
     private final int initialPitch;
     private final int initialYaw;
@@ -100,7 +102,7 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
 
         this.backgroundBar = new ScrollValueBar(
                 winLeft, winTop + BAR_ID_Y + BAR_TEX_H + BAR_MARGIN_Y, BAR_TEX_W, BAR_TEX_H,
-                MonitorBackground.indexOf(background), MonitorBackground.displayNames())
+                backgroundIndex(), MonitorBackground.displayNames(customBackgroundKeys))
                 .withIcon(MyIcons.BACKGROUND)
                 .addToolTipTitle(Component.translatable("gui.ccpe.monitor_menu.background_title"))
                 .addToolTipOptions()
@@ -113,6 +115,7 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
                 winLeft, winTop + BAR_ID_Y + 2 * (BAR_TEX_H + BAR_MARGIN_Y), BAR_TEX_W, BAR_TEX_H,
                 initialPitch, 0, new int[0])
                 .range(-90, 90)
+                .withIcon(MyIcons.PITCH)
                 .addToolTipTitle(Component.translatable("gui.ccpe.monitor_menu.pitch_title"))
                 .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"));
         this.addRenderableWidget(this.pitchBar);
@@ -122,6 +125,7 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
                 winLeft, winTop + BAR_ID_Y + 3 * (BAR_TEX_H + BAR_MARGIN_Y), BAR_TEX_W, BAR_TEX_H,
                 initialYaw, 0, new int[0])
                 .range(-180, 180)
+                .withIcon(MyIcons.YAW)
                 .addToolTipTitle(Component.translatable("gui.ccpe.monitor_menu.yaw_title"))
                 .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"));
         this.addRenderableWidget(this.yawBar);
@@ -131,6 +135,7 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
                 winLeft, winTop + BAR_ID_Y + 4 * (BAR_TEX_H + BAR_MARGIN_Y), BAR_TEX_W, BAR_TEX_H,
                 initialOffset, 0, new int[0])
                 .range(-6, 6)
+                .withIcon(MyIcons.OFFSET)
                 .addToolTipTitle(Component.translatable("gui.ccpe.monitor_menu.offset_title"))
                 .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"));
         this.addRenderableWidget(this.offsetBar);
@@ -169,9 +174,16 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
     @Override
     public void onClose() {
         PacketDistributor.sendToServer(new MonitorChannelPayload(monitorPos, channelBar.getValue()));
-        PacketDistributor.sendToServer(new MonitorBackgroundPayload(monitorPos, MonitorBackground.keyAt(backgroundBar.getValue())));
+        PacketDistributor.sendToServer(new MonitorBackgroundPayload(
+                monitorPos, MonitorBackground.keyAt(backgroundBar.getValue(), customBackgroundKeys)));
         PacketDistributor.sendToServer(new MonitorTransformPayload(
                 monitorPos, (float) pitchBar.getValue(), (float) yawBar.getValue(), offsetBar.getValue()));
         super.onClose();
     }
+
+        private int backgroundIndex() {
+                this.customBackgroundKeys = MonitorBackgrounds.keys();
+                int customIndex = customBackgroundKeys.indexOf(background);
+                return customIndex >= 0 ? MonitorBackground.KEYS.length + customIndex : MonitorBackground.indexOf(background);
+        }
 }

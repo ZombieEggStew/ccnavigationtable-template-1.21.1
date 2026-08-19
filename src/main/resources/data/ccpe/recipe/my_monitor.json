@@ -2,26 +2,26 @@
   "type": "minecraft:crafting_shaped",
   "category": "misc",
   "key": {
+    "#": {
+      "item": "create:electron_tube"
+    },
     "X": {
-      "item": "create:redstone_link"
+      "item": "minecraft:note_block"
     },
     "Y": {
       "item": "create:andesite_casing"
     },
     "Z": {
-      "item": "create:transmitter"
-    },
-    "T": {
-      "item": "create:electron_tube"
+        "item": "create:transmitter"
     }
   },
   "pattern": [
     " Z ",
-    " T ",
-    "XYX"
+    " X ",
+    "#Y#"
   ],
   "result": {
     "count": 1,
-    "id": "ccpe:redstone_transceiver"
+    "id": "ccpe:my_monitor"
   }
 }

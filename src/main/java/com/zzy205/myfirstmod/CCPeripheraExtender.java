@@ -48,6 +48,8 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.fml.ModList;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(CCPeripheraExtender.MOD_ID)
@@ -214,7 +216,10 @@ public class CCPeripheraExtender {
                         if (be instanceof MonitorBlockEntity monitorBE) {
                             String removedType = monitorBE.tryRemoveModule(payload.moduleId());
                             if (removedType != null && !ctx.player().isCreative()) {
-                                // TODO: 后续把模块物品返还给玩家
+                                ItemStack stack = MyModItems.monitorModuleStack(ModuleType.byName(removedType));
+                                if (!stack.isEmpty() && !ctx.player().getInventory().add(stack)) {
+                                    Block.popResource(level, payload.pos(), stack);
+                                }
                             }
                         }
                     }
@@ -293,8 +298,12 @@ public class CCPeripheraExtender {
                         var level = ctx.player().level();
                         var be = level.getBlockEntity(payload.pos());
                         if (be instanceof MonitorBlockEntity monitorBE) {
-                            monitorBE.removeScreenAt(payload.gridX(), payload.gridY());
-                            // TODO: 归还屏幕物品
+                            if (monitorBE.removeScreenAt(payload.gridX(), payload.gridY()) && !ctx.player().isCreative()) {
+                                ItemStack stack = new ItemStack(MyModItems.MODULE_SCREEN.get());
+                                if (!ctx.player().getInventory().add(stack)) {
+                                    Block.popResource(level, payload.pos(), stack);
+                                }
+                            }
                         }
                     }
             );

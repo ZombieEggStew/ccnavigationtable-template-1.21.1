@@ -59,11 +59,14 @@ public final class ScreenTextRenderer {
 
     /** 在同一平面绘制缓冲中的全部字符和图形。 */
     public static void drawAll(PoseStack ps, MultiBufferSource buffer, ScreenText text,
-                               float fullRight, float fullTop, float zBase) {
-        draw(ps, buffer, text, fullRight, fullTop, zBase);
-        drawRects(ps, buffer, text, fullRight, fullTop, zBase);
-        drawLines(ps, buffer, text, fullRight, fullTop, zBase);
-        drawCircles(ps, buffer, text, fullRight, fullTop, zBase);
+                               float fullRight, float fullTop, float innerWidthUnits,
+                               float innerHeightUnits, float zBase) {
+        float left = fullRight - innerWidthUnits / 128f;
+        float bottom = fullTop - innerHeightUnits / 128f;
+        draw(ps, buffer, text, fullRight, fullTop, left, bottom, zBase);
+        drawRects(ps, buffer, text, fullRight, fullTop, left, bottom, zBase);
+        drawLines(ps, buffer, text, fullRight, fullTop, left, bottom, zBase);
+        drawCircles(ps, buffer, text, fullRight, fullTop, left, bottom, zBase);
     }
 
     /** 字形深度（块）。z 越大越靠前。 */
@@ -91,7 +94,7 @@ public final class ScreenTextRenderer {
      * @param zBase     内容基准面（面板中心面，世界坐标，块）
      */
     public static void draw(PoseStack ps, MultiBufferSource buffer, ScreenText text,
-                            float fullRight, float fullTop, float zBase) {
+                            float fullRight, float fullTop, float left, float bottom, float zBase) {
         int fg = text.getTextColour();
 
         float px = 1f / 128f;                        // 1 drawRect 单位 = 1/128 块
@@ -105,7 +108,17 @@ public final class ScreenTextRenderer {
             float yBottom = yTop - glyphBlocks;               // 物理下
 
             if (ch.ch() != ' ') {
-                glyphQuad(buffer, pose, ch.ch(), xLeft, yBottom, xRight, yTop,
+                float visibleLeft = Math.max(left, xLeft);
+                float visibleRight = Math.min(fullRight, xRight);
+                float visibleBottom = Math.max(bottom, yBottom);
+                float visibleTop = Math.min(fullTop, yTop);
+                if (visibleLeft >= visibleRight || visibleBottom >= visibleTop) continue;
+                float uLeft = (visibleRight - xLeft) / glyphBlocks;
+                float uRight = (visibleLeft - xLeft) / glyphBlocks;
+                float vTop = (visibleTop - yBottom) / glyphBlocks;
+                float vBottom = (visibleBottom - yBottom) / glyphBlocks;
+                glyphQuad(buffer, pose, ch.ch(), visibleLeft, visibleBottom, visibleRight, visibleTop,
+                    uLeft, uRight, vTop, vBottom,
                         glyphDepth(zBase, ch.z()), fg);
             }
         }
@@ -121,7 +134,7 @@ public final class ScreenTextRenderer {
      * @param zBase     内容基准面（面板中心面，世界坐标，块）
      */
     public static void drawRects(PoseStack ps, MultiBufferSource buffer, ScreenText text,
-                                 float fullRight, float fullTop, float zBase) {
+                                 float fullRight, float fullTop, float left, float bottom, float zBase) {
         Matrix4f pose = ps.last().pose();
         float px = 1f / 128f; // 1 Lua 单位 = 1/128 块
 
@@ -134,25 +147,30 @@ public final class ScreenTextRenderer {
             float depth = rectDepth(zBase, rect.z());
 
             if (rect.solid()) {
-                solidQuad(buffer, pose, x0, y0, x1, y1, depth, rect.colour());
+                solidQuad(buffer, pose, x0, y0, x1, y1, fullRight, left, fullTop, bottom,
+                        depth, rect.colour());
                 continue;
             }
 
             float lw = Math.max(0.001f, (float) rect.lineWidth()) * px; // 线宽（块）
             // 上边
-            solidQuad(buffer, pose, x0, y1 - lw, x1, y1, depth, rect.colour());
+                solidQuad(buffer, pose, x0, y1 - lw, x1, y1, fullRight, left, fullTop, bottom,
+                    depth, rect.colour());
             // 下边
-            solidQuad(buffer, pose, x0, y0, x1, y0 + lw, depth, rect.colour());
+                solidQuad(buffer, pose, x0, y0, x1, y0 + lw, fullRight, left, fullTop, bottom,
+                    depth, rect.colour());
             // 左边
-            solidQuad(buffer, pose, x0, y0, x0 + lw, y1, depth, rect.colour());
+                solidQuad(buffer, pose, x0, y0, x0 + lw, y1, fullRight, left, fullTop, bottom,
+                    depth, rect.colour());
             // 右边
-            solidQuad(buffer, pose, x1 - lw, y0, x1, y1, depth, rect.colour());
+                solidQuad(buffer, pose, x1 - lw, y0, x1, y1, fullRight, left, fullTop, bottom,
+                    depth, rect.colour());
         }
     }
 
     /** 绘制线段（1/128 块逻辑坐标，原点内区左上角）。 */
     public static void drawLines(PoseStack ps, MultiBufferSource buffer, ScreenText text,
-                                 float fullRight, float fullTop, float zBase) {
+                                 float fullRight, float fullTop, float left, float bottom, float zBase) {
         Matrix4f pose = ps.last().pose();
         float px = 1f / 128f;
 
@@ -160,13 +178,13 @@ public final class ScreenTextRenderer {
             float depth = rectDepth(zBase, line.z());
             lineQuad(buffer, pose, fullRight, fullTop, px,
                     line.x1(), line.y1(), line.x2(), line.y2(),
-                    Math.max(0, line.lineWidth()) / 2.0, depth, line.colour());
+                    Math.max(0, line.lineWidth()) / 2.0, fullRight, left, fullTop, bottom, depth, line.colour());
         }
     }
 
     /** 绘制圆（1/128 块逻辑坐标；正多边形逼近）。 */
     public static void drawCircles(PoseStack ps, MultiBufferSource buffer, ScreenText text,
-                                   float fullRight, float fullTop, float zBase) {
+                                   float fullRight, float fullTop, float left, float bottom, float zBase) {
         Matrix4f pose = ps.last().pose();
         float px = 1f / 128f;
 
@@ -186,7 +204,8 @@ public final class ScreenTextRenderer {
                     float p0y = fullTop - (float) (c.cy() + r * Math.sin(a0)) * px;
                     float p1x = fullRight - (float) (c.cx() + r * Math.cos(a1)) * px;
                     float p1y = fullTop - (float) (c.cy() + r * Math.sin(a1)) * px;
-                    quad(buffer, pose, ccx, ccy, p0x, p0y, p1x, p1y, ccx, ccy, depth, c.colour());
+                        quad(buffer, pose, ccx, ccy, p0x, p0y, p1x, p1y, ccx, ccy,
+                            fullRight, left, fullTop, bottom, depth, c.colour());
                 }
             } else {
                 // 圆环：内外两个同心多边形，逐段画梯形 quad（顶点共享，无缝隙/无重叠）
@@ -209,7 +228,8 @@ public final class ScreenTextRenderer {
                     float i1y = fullTop - (float) (c.cy() + rInner * Math.sin(a1)) * px;
 
                     // 梯形：外[i] → 内[i] → 内[i+1] → 外[i+1]
-                    quad(buffer, pose, o0x, o0y, i0x, i0y, i1x, i1y, o1x, o1y, depth, c.colour());
+                        quad(buffer, pose, o0x, o0y, i0x, i0y, i1x, i1y, o1x, o1y,
+                            fullRight, left, fullTop, bottom, depth, c.colour());
                 }
             }
         }
@@ -217,15 +237,21 @@ public final class ScreenTextRenderer {
 
     /** 绘制一个字形（带 UV 的 quad，采样 ascii.png 对应格）。 */
     private static void glyphQuad(MultiBufferSource buffer, Matrix4f pose, char ch,
-                                  float x0, float y0, float x1, float y1, float z, int colour) {
+                                  float x0, float y0, float x1, float y1,
+                                  float visibleULeft, float visibleURight,
+                                  float visibleVTop, float visibleVBottom, float z, int colour) {
         int code = ch & 0xFF; // 仅支持 ASCII / Latin-1
         int col = code % GLYPHS_PER_ROW;
         int row = code / GLYPHS_PER_ROW;
 
         float uLeft = col * GLYPH_UV_SIZE + UV_INSET;
         float uRight = (col + 1) * GLYPH_UV_SIZE - UV_INSET;
+        float uVisibleLeft = uLeft + (uRight - uLeft) * visibleULeft;
+        float uVisibleRight = uLeft + (uRight - uLeft) * visibleURight;
         float vTop = row * GLYPH_UV_SIZE + UV_INSET;
         float vBottom = (row + 1) * GLYPH_UV_SIZE - UV_INSET;
+        float vVisibleTop = vBottom + (vTop - vBottom) * visibleVTop;
+        float vVisibleBottom = vBottom + (vTop - vBottom) * visibleVBottom;
 
         VertexConsumer vc = buffer.getBuffer(RenderType.text(FONT_TEXTURE));
         float r = ((colour >> 16) & 0xFF) / 255f;
@@ -233,25 +259,34 @@ public final class ScreenTextRenderer {
         float b = (colour & 0xFF) / 255f;
 
         // 顶点环绕顺序与旋钮角度文字（font.drawInBatch 经 -Y 缩放）一致：左下→左上→右上→右下，
-        // 正面朝向玩家（此顺序才能通过 CULL 被看到）。北面局部 X 轴与字形纹理方向相反，故翻转 U。
+        // 正面朝向玩家（此顺序才能通过 CULL 被看到）。
         // RenderType.text 使用 POSITION_COLOR_TEX_LIGHTMAP 格式，必须补 UV2（fullbright 发光）
-        vc.addVertex(pose, x0, y0, z).setColor(r, g, b, 1f).setUv(uRight, vBottom).setLight(LightTexture.FULL_BRIGHT);
-        vc.addVertex(pose, x0, y1, z).setColor(r, g, b, 1f).setUv(uRight, vTop).setLight(LightTexture.FULL_BRIGHT);
-        vc.addVertex(pose, x1, y1, z).setColor(r, g, b, 1f).setUv(uLeft, vTop).setLight(LightTexture.FULL_BRIGHT);
-        vc.addVertex(pose, x1, y0, z).setColor(r, g, b, 1f).setUv(uLeft, vBottom).setLight(LightTexture.FULL_BRIGHT);
+        vc.addVertex(pose, x0, y0, z).setColor(r, g, b, 1f).setUv(uVisibleLeft, vVisibleBottom).setLight(LightTexture.FULL_BRIGHT);
+        vc.addVertex(pose, x0, y1, z).setColor(r, g, b, 1f).setUv(uVisibleLeft, vVisibleTop).setLight(LightTexture.FULL_BRIGHT);
+        vc.addVertex(pose, x1, y1, z).setColor(r, g, b, 1f).setUv(uVisibleRight, vVisibleTop).setLight(LightTexture.FULL_BRIGHT);
+        vc.addVertex(pose, x1, y0, z).setColor(r, g, b, 1f).setUv(uVisibleRight, vVisibleBottom).setLight(LightTexture.FULL_BRIGHT);
     }
 
     /** 绘制一个纯色轴对齐 quad。 */
     private static void solidQuad(MultiBufferSource buffer, Matrix4f pose,
-                                  float x0, float y0, float x1, float y1, float z, int colour) {
-        quad(buffer, pose, x0, y0, x0, y1, x1, y1, x1, y0, z, colour);
+                                  float x0, float y0, float x1, float y1,
+                                  float fullRight, float left, float fullTop, float bottom, float z, int colour) {
+        quad(buffer, pose, x0, y0, x0, y1, x1, y1, x1, y0, fullRight, left, fullTop, bottom, z, colour);
     }
 
     /** 绘制一个任意四边形的纯色 quad（SOLID_BG 为 NO_CULL，无需管绕序）。 */
     private static void quad(MultiBufferSource buffer, Matrix4f pose,
                              float x0, float y0, float x1, float y1,
                              float x2, float y2, float x3, float y3,
-                             float z, int colour) {
+                             float fullRight, float left, float fullTop, float bottom, float z, int colour) {
+        x0 = Math.max(left, Math.min(fullRight, x0));
+        x1 = Math.max(left, Math.min(fullRight, x1));
+        x2 = Math.max(left, Math.min(fullRight, x2));
+        x3 = Math.max(left, Math.min(fullRight, x3));
+        y0 = Math.max(bottom, Math.min(fullTop, y0));
+        y1 = Math.max(bottom, Math.min(fullTop, y1));
+        y2 = Math.max(bottom, Math.min(fullTop, y2));
+        y3 = Math.max(bottom, Math.min(fullTop, y3));
         VertexConsumer vc = buffer.getBuffer(SOLID_BG);
         float r = ((colour >> 16) & 0xFF) / 255f;
         float g = ((colour >> 8) & 0xFF) / 255f;
@@ -270,7 +305,7 @@ public final class ScreenTextRenderer {
     private static void lineQuad(MultiBufferSource buffer, Matrix4f pose,
                                  float fullRight, float fullTop, float px,
                                  double x1, double y1, double x2, double y2, double halfW,
-                                 float z, int colour) {
+                                 float right, float left, float top, float bottom, float z, int colour) {
         double dx = x2 - x1;
         double dy = y2 - y1;
         double len = Math.sqrt(dx * dx + dy * dy);
@@ -288,6 +323,7 @@ public final class ScreenTextRenderer {
         float dx2 = fullRight - (float) (x2 - nx) * px;
         float dy2 = fullTop - (float) (y2 - ny) * px;
 
-        quad(buffer, pose, ax, ay, bx, by, cx, cy, dx2, dy2, z, colour);
+        quad(buffer, pose, ax, ay, bx, by, cx, cy, dx2, dy2,
+            right, left, top, bottom, z, colour);
     }
 }

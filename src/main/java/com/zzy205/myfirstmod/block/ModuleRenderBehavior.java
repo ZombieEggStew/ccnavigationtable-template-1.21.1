@@ -149,9 +149,9 @@ public abstract class ModuleRenderBehavior {
             if (indicatorKey != null) {
                 ps.pushPose();
                 float iz = (INDICATOR_Z_PX + PRESS_DEPTH * anim) / 16f;
-                float r = Mth.lerp(lightLevel, 0.4f, 0.0f);
-                float g = Mth.lerp(lightLevel, 0.4f, 1.0f);
-                float b = Mth.lerp(lightLevel, 0.4f, 0.0f);
+                float r = Mth.lerp(lightLevel, 0.2f, 0.0f);
+                float g = Mth.lerp(lightLevel, 0.2f, 1.0f);
+                float b = Mth.lerp(lightLevel, 0.2f, 0.0f);
                 renderFlatQuad(ps, buffer,
                         INDICATOR_X0 / 16f, INDICATOR_Y0 / 16f, INDICATOR_X1 / 16f, INDICATOR_Y1 / 16f, iz,
                         r, g, b, 1f);

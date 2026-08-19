@@ -9,10 +9,12 @@ import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.monitor.MonitorBackground;
 import com.zzy205.myfirstmod.monitor.ScreenText;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
+import com.zzy205.myfirstmod.client.MonitorBackgrounds;
 import com.zzy205.myfirstmod.client.MonitorTransform;
 import com.zzy205.myfirstmod.client.ScreenTextRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
@@ -163,8 +165,20 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
      * 用当前背景贴图覆盖原面板。模块（z=4 平面）仍在其前方，不受影响。
      */
     private static void renderBackground(PoseStack ps, MultiBufferSource buffer, String backgroundKey, int light) {
+        var externalTexture = MonitorBackgrounds.getTexture(backgroundKey);
+        if (externalTexture != null) {
+            renderBackgroundQuad(ps, buffer.getBuffer(RenderType.entitySolid(externalTexture)), 0f, 1f, 0f, 1f, light);
+            return;
+        }
+
         TextureAtlasSprite sprite = MonitorPreloadedModels.getBackgroundSprite(MonitorBackground.indexOf(backgroundKey));
         if (sprite == null) return;
+        renderBackgroundQuad(ps, buffer.getBuffer(Sheets.solidBlockSheet()),
+                sprite.getU0(), sprite.getU1(), sprite.getV0(), sprite.getV1(), light);
+    }
+
+    private static void renderBackgroundQuad(PoseStack ps, VertexConsumer vc,
+                                             float u0, float u1, float v0, float v1, int light) {
 
         float x0 = MonitorBlock.SCREEN_X_MIN / 16f;
         float x1 = MonitorBlock.SCREEN_X_MAX / 16f;
@@ -172,10 +186,6 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         float y1 = MonitorBlock.SCREEN_Y_MAX / 16f;
         float z = (MonitorBlock.PANEL_Z - MonitorBlock.BACKGROUND_Z_OFFSET) / 16f;
 
-        float u0 = sprite.getU0(), v0 = sprite.getV0();
-        float u1 = sprite.getU1(), v1 = sprite.getV1();
-
-        VertexConsumer vc = buffer.getBuffer(Sheets.solidBlockSheet());
         var pose = ps.last();
 
         // 朝北的面（法线 -Z），顶点顺序与 MC 北面一致；v0=贴图顶部 → 面板顶部
@@ -197,7 +207,7 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         float contentRight = MonitorBlock.SCREEN_X_MAX / 16f - RENDER_INSET;
         float contentTop = MonitorBlock.SCREEN_Y_MAX / 16f - RENDER_INSET;
         float backgroundZ = (MonitorBlock.PANEL_Z - MonitorBlock.BACKGROUND_Z_OFFSET) / 16f;
-        ScreenTextRenderer.drawAll(ps, buffer, text, contentRight, contentTop, backgroundZ);
+        ScreenTextRenderer.drawAll(ps, buffer, text, contentRight, contentTop, 96f, 80f, backgroundZ);
     }
 
     private static void renderKnobAngle(PoseStack poseStack, MultiBufferSource buffer,
@@ -358,10 +368,15 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         // 内容原点：边框内缩已包含在这里，字符串和 drawRect 共用这组边界。
         float contentRight = scrX + scrW - borderInset;
         float contentTop = scrY + scrH - borderInset;
+        float innerWidthUnits = (float) ((scr.width() - 2f * borderInset * 16f)
+            * ScreenText.RECT_UNITS_PER_PX);
+        float innerHeightUnits = (float) ((scr.height() - 2f * borderInset * 16f)
+            * ScreenText.RECT_UNITS_PER_PX);
         // 内容基准面 = 屏幕 9 宫格中心面（screen_center 模型 north 面在 z=0.7px）
-        float zBase = (MonitorBlock.SCREEN_Z + 0.709f) / 16f;
+        float zBase = (MonitorBlock.SCREEN_Z + 0.7f) / 16f;
 
-        ScreenTextRenderer.drawAll(ps, buffer, text, contentRight, contentTop, zBase);
+        ScreenTextRenderer.drawAll(ps, buffer, text, contentRight, contentTop,
+            innerWidthUnits, innerHeightUnits, zBase);
     }
 
     /** 渲染一个角模型，绕格子中心 Z 轴旋转（法线安全） */
