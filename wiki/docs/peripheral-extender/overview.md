@@ -1,37 +1,20 @@
 # 外设扩展器概述
 
-外设扩展器（Peripheral Extender）是 CCPE 的核心组件，它打破了 CC:T 必须紧贴方块才能访问数据的限制。
+<div class="feature-row">
+  <div class="feature-text">
+    外设扩展器（Peripheral Extender）是 CCPE 的核心组件，整合多种读取信息与控制方式，并且支持区块加载和物理结构加载。
+  </div>
+  <div class="feature-img">
+    <img src="../img/micro_peripheral_extender.png" width="120" alt="外设扩展器">
+  </div>
+</div>
 
-## 核心特性
-
-### 📡 无线数据读取
-- 无需线缆连接
-- 不限距离（默认配置）
-- 实时数据刷新（50ms/tick）
-
-### 🔌 多功能合一
-一个传感器提供多种数据访问方式：
-
-- **NBT 数据读取** — 读取方块的完整或部分 NBT 数据
-- **外设代理** — 调用方块的 CC:T 外设方法
-- **无线红石** — 发送和接收红石信号
-- **导航桌集成** — 获取飞行器的位置和方位（需要 Simulated）
-- **物理数据** — 读取速度、质量、姿态等物理信息（需要 Sable）
 
 ## 工作原理
 
-```mermaid
-graph LR
-    A[传感器] -->|贴附| B[目标方块]
-    A -->|频道 1| C[无线网络]
-    C -->|Lua API| D[计算机]
-    D -->|pe.getAll 1| C
-    C -->|NBT 数据| D
-```
-
 1. 将传感器贴在目标方块上
 2. 设置唯一的频道号
-3. 在任意位置的计算机中通过频道号访问数据
+3. 在任意位置的计算机中通过频道号访问与控制
 
 ## 使用场景
 
@@ -61,9 +44,8 @@ graph LR
 
 ## 快速开始
 
-1. [安装与配置](../getting-started/installation.md)
-2. [第一个脚本](../getting-started/first-script.md) — 5 分钟上手
-3. [NBT 读取详细文档](nbt-reading.md)
+1. [第一个脚本](../getting-started/first-script.md) — 5 分钟上手
+2. [NBT 读取详细文档](nbt-reading.md)
 
 ## API 模块
 

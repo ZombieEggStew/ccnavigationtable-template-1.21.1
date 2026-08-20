@@ -27,11 +27,13 @@ markdown_extensions:
   - pymdownx.details
   - tables
 
+extra_css:
+  - stylesheets/extra.css
+
 # 导航结构
 nav:
   - 首页: index.md
   - 快速开始:
-    - 安装与配置: getting-started/installation.md
     - 第一个脚本: getting-started/first-script.md
   - 外设扩展器:
     - 概述: peripheral-extender/overview.md

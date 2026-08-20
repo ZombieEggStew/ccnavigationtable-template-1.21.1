@@ -1,0 +1,16 @@
+/* 图文并排：文字在左，图片在右 */
+.feature-row {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.feature-text {
+    flex: 1 1 55%;
+    min-width: 200px;
+}
+
+.feature-img {
+    flex: 0 0 auto;
+}

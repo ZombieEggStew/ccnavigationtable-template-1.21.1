@@ -295,7 +295,7 @@ while true do
             btn.release()  -- 弹起：播放弹起音效，灯带自动熄灭
         end
     end
-    os.sleep(0.05)
+    sleep(0.05)
 end
 ```
 
@@ -322,7 +322,7 @@ while true do
             btn.setLight(0)   -- 灯带熄灭 = 关
         end
     end
-    os.sleep(0.05)
+    sleep(0.05)
 end
 ```
 
