@@ -15,7 +15,7 @@
 - Added recipe for transmission peripheral
 
 1.0.4
-- Added wiki 
+- Added wiki https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/
 
 - **!?NEWNEW?!** Added the Monitor: a modular instrument panel with a 12×10 module grid.
   Module items (Button 1×1, Toggle Switch 1×1, Knob 2×2, Screen of any size) are
