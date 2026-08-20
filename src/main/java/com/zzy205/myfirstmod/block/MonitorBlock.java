@@ -8,11 +8,15 @@ import com.zzy205.myfirstmod.monitor.ModuleType;
 import net.createmod.catnip.math.VoxelShaper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.storage.loot.LootParams;
@@ -32,6 +36,8 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.level.BlockEvent;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -143,7 +149,53 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
-        return InteractionResult.sidedSuccess(context.getLevel().isClientSide);
+        Level level = context.getLevel();
+        BlockPos pos = context.getClickedPos();
+        Player player = context.getPlayer();
+
+        // 仅当命中底座（碰撞体 y 0..2/16）时拆卸整台 Monitor；
+        // 命中可动面板时放行，交给 MonitorGridOverlay 的模块/屏幕拆除 payload 处理。
+        double localY = context.getClickLocation().y - pos.getY();
+        boolean onBase = localY >= -0.01 && localY <= 2.0 / 16.0 + 0.01;
+        if (!onBase) {
+            return InteractionResult.sidedSuccess(level.isClientSide);
+        }
+
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return InteractionResult.SUCCESS;
+        }
+
+        BlockEvent.BreakEvent event = new BlockEvent.BreakEvent(level, pos, level.getBlockState(pos), player);
+        NeoForge.EVENT_BUS.post(event);
+        if (event.isCanceled()) {
+            return InteractionResult.SUCCESS;
+        }
+
+        // 与破坏不同：扳手拆卸掉落一个带完整 GridState 配置的 Monitor 物品，模块不单独掉落。
+        // 参考 RedstoneTransceiverBlock.getDrops 的做法：saveAdditional + addEntityType + BLOCK_ENTITY_DATA。
+        // 创造模式同样给物品：优先放入背包，放不下则掉落到世界。
+        if (player != null) {
+            BlockEntity be = level.getBlockEntity(pos);
+            if (be instanceof MonitorBlockEntity monitorBE) {
+                CompoundTag tag = new CompoundTag();
+                monitorBE.saveAdditional(tag, level.registryAccess());
+                BlockEntity.addEntityType(tag, MyModBlockEntities.monitor_entity.get());
+                ItemStack stack = new ItemStack(this);
+                stack.set(DataComponents.BLOCK_ENTITY_DATA, CustomData.of(tag.copy()));
+                if (player.isCreative()) {
+                    if (!player.getInventory().add(stack)) {
+                        Block.popResource(level, pos, stack);
+                    }
+                } else {
+                    player.getInventory().placeItemBackInInventory(stack);
+                }
+            }
+        }
+
+        state.spawnAfterBreak(serverLevel, pos, ItemStack.EMPTY, true);
+        level.destroyBlock(pos, false);
+        IWrenchable.playRemoveSound(level, pos);
+        return InteractionResult.SUCCESS;
     }
 
     // ═══════════════ 可动变换纯数学 + 动态射线命中 ═══════════════

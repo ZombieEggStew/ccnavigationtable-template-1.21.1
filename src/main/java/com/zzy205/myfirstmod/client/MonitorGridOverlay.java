@@ -178,7 +178,9 @@ public class MonitorGridOverlay {
             boolean holdingScreen = held.getItem().toString().equals("ccpe:module_screen");
             boolean holdingWrench = held.getItem().toString().contains("create") && held.getItem().toString().contains("wrench");
 
-            if ((shiftUseEdge && !holdingWrench || holdingWrench && useEdge)
+            // 扳手蹲下右键底座 → 拆卸整台 Monitor（由服务端 onSneakWrenched 处理），不再打开菜单；
+            // 扳手普通右键 / 空手蹲下右键 → 仍打开 Monitor 菜单。
+            if ((shiftUseEdge && !holdingWrench || holdingWrench && useEdge && !shiftHeld)
                     && heldType == null && !holdingScreen) {
                 openMonitorMenu(mc, basePos, baseBE);
             }
