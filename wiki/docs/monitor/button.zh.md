@@ -3,7 +3,7 @@
 ![按钮模块](../img/button_1_item.png)
 
 按钮本身为**瞬时型**：按下/弹起是分开的，`isPressed` 读取当前按下状态。
-此外还提供「玩家点击检测」「玩家互动锁」「灯带控制」三组能力，可组合出锁存按钮等自定义行为。
+此外还提供「玩家点击检测」「玩家互动锁」「灯带控制」「表面标签」四组能力，可组合出锁存按钮等自定义行为。
 `press()` / `release()` 会播放对应的按键音效——**音效由按钮的实际动作（运动）触发**，而不是玩家的原始鼠标输入。
 
 ## 操作说明
@@ -40,6 +40,8 @@ print(btn.isPressed())  -- true
 btn.release()
 print(btn.isPressed())  -- false
 ```
+
+---
 
 ## 玩家点击检测
 
@@ -83,6 +85,106 @@ end
 btn.clearClicked()
 ```
 
+---
+
+## 表面标签
+
+按钮表面可以显示文字标签（渲染方式参考旋钮角度文字：默认居中、白色、字号一致）。传入空串 `""` 可清除显示，但**会保留**之前设置的位置/字号/颜色，下次写入文字时继续沿用。
+
+### btn.setLabel(text)
+
+在按钮表面写入文字。传入空串 `""` 可清除显示（之前设置的位置/字号/颜色会被保留）。
+
+```lua
+btn.setLabel("START")
+```
+
+### btn.getLabel()
+
+读取按钮表面文字（未设置时返回空串）。
+
+```lua
+print(btn.getLabel())  -- START
+```
+
+### btn.setLabelPosition(x, y)
+
+设置标签相对标签原点的位置偏移。单位为 MC 像素（1px = 1/16 块）；`x` 向右为正、`y` 向上为正。`(0, 0)` 为标签原点——按钮表面视觉中心（默认）。
+
+```lua
+btn.setLabelPosition(0.2, 0.1)  -- 相对原点：右移 0.2px、上移 0.1px
+```
+
+### btn.getLabelPosition()
+
+读取标签位置偏移，返回 `x, y`（MC 像素）。
+
+```lua
+local x, y = btn.getLabelPosition()
+print(x, y)
+```
+
+### btn.setLabelScale(scale)
+
+设置标签字号（块/字体像素）。默认 `1/512`（与旋钮角度显示完全一致）；值越大字越大，例如 `1/256` 为两倍大。
+
+```lua
+btn.setLabelScale(1 / 256)  -- 放大为旋钮角度字号的 2 倍
+```
+
+### btn.getLabelScale()
+
+读取标签字号（默认 `1/512`）。
+
+```lua
+print(btn.getLabelScale())  -- 0.001953125
+```
+
+### btn.setLabelColour(colour)
+
+设置标签颜色（`0xRRGGBB`，默认白色 `0xFFFFFF`）。
+
+```lua
+btn.setLabelColour(0xFF0000)  -- 红色
+```
+
+### btn.getLabelColour()
+
+读取标签颜色（`0xRRGGBB`，默认 `0xFFFFFF`）。
+
+```lua
+print(btn.getLabelColour())  -- 16711680
+```
+
+### btn.setDropShadow(dropShadow)
+
+设置标签是否绘制投影（默认 `true`，与旋钮角度文字一致）。设为 `false` 可去掉文字下方的阴影。
+
+```lua
+btn.setDropShadow(false)
+```
+
+### btn.getDropShadow()
+
+读取标签当前是否绘制投影（默认 `true`）。
+
+```lua
+print(btn.getDropShadow())  -- true
+```
+
+组合使用：
+
+```lua
+btn.setLabel("START")
+btn.setLabelPosition(0.2, 0.1)  -- 相对原点：右移 0.2px、上移 0.1px
+btn.setLabelScale(1 / 256)      -- 放大为旋钮角度字号的 2 倍
+btn.setLabelColour(0xFF0000)    -- 红色
+btn.setDropShadow(false)
+```
+
+---
+
+
 ## 玩家互动锁（Lua 完全控制按钮）
 
 ### btn.setPlayerControl(enabled)
@@ -103,6 +205,8 @@ btn.setPlayerControl(false)
 ```lua
 print(btn.getPlayerControl())  -- true
 ```
+
+---
 
 ## 灯带控制
 
@@ -144,6 +248,8 @@ btn.setLightControl(false)
 ```lua
 print(btn.isLightControlled())  -- false
 ```
+
+---
 
 ## 示例
 

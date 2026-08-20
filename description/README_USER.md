@@ -2,7 +2,6 @@
 
 > Handy ComputerCraft: Tweaked peripherals for Create: Aeronautics on NeoForge
 
----
 
 ## → [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/) ←
 
@@ -13,7 +12,6 @@
 - 📻 Redstone Transceiver
 - 🎛️ Electronic Transmission
 
----
 
 ## Requirements
 
