@@ -2,12 +2,18 @@
 
 > 为 Create: Aeronautics 提供一些好用的 ComputerCraft: Tweaked 外设的 NeoForge 模组
 
-wiki:https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/
+---
+
+## → [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/) ←
+
 
 ## 包含内容
+- 📡外设扩展器
+- 🤪模块化监视器
+- 📻红石收发器
+- 🎛️电子变速箱
 
-
-
+---
 
 ## 要求
 
