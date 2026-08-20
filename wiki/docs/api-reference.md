@@ -1,6 +1,6 @@
-# Peripheral Extender Lua API Reference
+# CCPE Lua API Reference
 
-Complete API documentation for the Peripheral Extender module in CC:Tweaked integration.
+Complete API documentation for CCPE in CC:Tweaked integration.
 
 ## Module Import
 

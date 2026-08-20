@@ -14,3 +14,7 @@ local monitor = pe.getPeripheral(10) -- 获取频道为10的pe附着的外设
 
 assert(monitor , "未找到外设")
 ```
+
+## 下一步
+
+- [无线红石详细文档](wireless-redstone.md) — 发送和接收红石信号

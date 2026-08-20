@@ -19,3 +19,7 @@ print("Signal: " .. signal)
 pe.setRedstoneSignal(6, 10)
 
 ```
+
+## 下一步
+
+- [导航桌集成详细文档](navigation-table.md) — 将外设扩展器与导航桌集成
