@@ -29,7 +29,12 @@ markdown_extensions:
 
 # 导航结构
 nav:
-  - 首页: index.md
+  - 首页: 
+    - 概述: index.md
+    - 外设扩展器: peripheral-extender/overview.md
+    - 红石收发器: redstone-transceiver/overview.md
+    - 电子变速箱: electronic-transmission/overview.md
+    - 模块化监视器: monitor/overview.md
   - 外设扩展器:
     - 概述: peripheral-extender/overview.md
     - 频道设置: peripheral-extender/channel-setup.md

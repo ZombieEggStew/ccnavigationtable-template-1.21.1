@@ -20,7 +20,7 @@
 - **物理数据** — 读取 Sable 物理引擎的速度、质量、姿态
 - **区块加载** — 保持目标方块所在区域或者物理结构不被卸载
     
-### [🍑模块化监视器](monitor/overview.md)
+### [🤪模块化监视器](monitor/overview.md)
 12x10棋盘插槽，lua自由控制，满足不同场景下的互动和信息展示需求。
 
 ### [📻 红石收发器](redstone-transceiver/overview.md)

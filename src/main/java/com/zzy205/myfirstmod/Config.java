@@ -25,16 +25,16 @@ public class Config {
     private static final ModConfigSpec.Builder CLIENT_BUILDER = new ModConfigSpec.Builder();
 
     public static final ModConfigSpec.IntValue MONITOR_OUTLINE_R = CLIENT_BUILDER
-            .comment("Monitor 模块边框颜色 - 红 (0-255)。默认: 160")
-            .defineInRange("monitorOutlineR", 160, 0, 255);
+            .comment("Monitor 模块边框颜色 - 红 (0-255)。默认: 90")
+            .defineInRange("monitorOutlineR", 90, 0, 255);
 
     public static final ModConfigSpec.IntValue MONITOR_OUTLINE_G = CLIENT_BUILDER
-            .comment("Monitor 模块边框颜色 - 绿 (0-255)。默认: 160")
-            .defineInRange("monitorOutlineG", 160, 0, 255);
+            .comment("Monitor 模块边框颜色 - 绿 (0-255)。默认: 143")
+            .defineInRange("monitorOutlineG", 143, 0, 255);
 
     public static final ModConfigSpec.IntValue MONITOR_OUTLINE_B = CLIENT_BUILDER
-            .comment("Monitor 模块边框颜色 - 蓝 (0-255)。默认: 160")
-            .defineInRange("monitorOutlineB", 160, 0, 255);
+            .comment("Monitor 模块边框颜色 - 蓝 (0-255)。默认: 60")
+            .defineInRange("monitorOutlineB", 60, 0, 255);
 
     public static final ModConfigSpec.IntValue MONITOR_OUTLINE_A = CLIENT_BUILDER
             .comment("Monitor 模块边框颜色 - 透明度 (0-255)。默认: 255")
