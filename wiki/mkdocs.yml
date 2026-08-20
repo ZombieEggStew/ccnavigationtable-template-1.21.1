@@ -39,17 +39,19 @@ nav:
     - 航空学传感器集成: peripheral-extender/simulated-integration.md
     - 区块/物理结构加载: peripheral-extender/chunk-loading.md
     - Lua API 参考: api-reference.md
+    - 简单监控系统: peripheral-extender/example.md
   - 红石收发器:
     - 概述: redstone-transceiver/overview.md
-    - 配置频道: redstone-transceiver/channel-config.md
-    - Lua API 参考: redstone-transceiver/api-reference.md
   - 电子变速箱:
     - 概述: electronic-transmission/overview.md
-    - 使用指南: electronic-transmission/usage.md
-    - Lua API 参考: electronic-transmission/api-reference.md
+  - 模块化监视器:
+    - 概述: monitor/overview.md
+    - 监视器 : monitor/monitor.md
+    - 按钮模块 : monitor/button.md
+    - 开关模块 : monitor/switch.md
+    - 旋钮模块 : monitor/knob.md
+    - 屏幕模块 : monitor/screen.md
   - 示例与教程:
-    - 自动化监控系统: examples/monitoring-system.md
-    - 飞船姿态控制: examples/ship-attitude-control.md
-    - 远程红石网络: examples/remote-redstone-network.md
+    - 简单监控系统: peripheral-extender/example.md
   - 常见问题: faq.md
   - 更新日志: changelog.md
