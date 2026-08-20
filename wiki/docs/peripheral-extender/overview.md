@@ -17,7 +17,7 @@
 
 ## API
 
-完整 API 参考：[Lua API 参考](api-reference.md)
+完整 API 参考：[Lua API 参考](../api-reference.md)
 
 <a href="api-reference.md" download="peripheral-extender-api-reference.md" style="display: inline-block; padding: 8px 16px; background-color: #4051b5; color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">📥 下载 API 文档</a>
 

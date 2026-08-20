@@ -38,7 +38,7 @@ nav:
     - 无线红石: peripheral-extender/wireless-redstone.md
     - 导航桌集成: peripheral-extender/navigation-table.md
     - 物理数据读取: peripheral-extender/physics-data.md
-    - Lua API 参考: peripheral-extender/api-reference.md
+    - Lua API 参考: api-reference.md
   - 红石收发器:
     - 概述: redstone-transceiver/overview.md
     - 配置频道: redstone-transceiver/channel-config.md
