@@ -4,13 +4,7 @@
 
 模块化监视器（Monitor）是 CCPE 的互动信息终端：一块 **12×10** 的棋盘式插槽面板，可以在格子上安装按钮、开关、旋钮、屏幕等模块，并通过 CC:T 计算机用 Lua 自由控制它们。
 
-![](../img/monitor.png)
-
-
-## 操作说明
-- **配置模块**：手持扳手对准模块右键 或者 蹲下+右键 可以打开模块配置界面，配置模块 ID、tooltip等属性
-- **拆卸模块**：手持扳手蹲下右键 可以拆卸模块
-
+![Monitor](../img/monitor.png)
 
 
 ## 获取 Monitor 外设
@@ -26,7 +20,7 @@ local pe = require("ccpe.pe")
 local monitor = pe.getPeripheral(3)   -- 3 是 Monitor 的全局频道号
 ```
 
-### 方式 B：计算机紧贴 Monitor
+### 方式 B：cc:t 外设
 
 计算机紧贴 Monitor 放置时直接 wrap：
 
