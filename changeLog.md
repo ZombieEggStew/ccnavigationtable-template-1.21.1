@@ -39,3 +39,5 @@
     load-mode changes, keeping client block-entity data fresh (quill schematic saves read
     client-side block entities).
 
+- Added `getAxisVelocity(channel)` Lua API: returns the velocity component along the 
+  peripheral extender's mounted axis

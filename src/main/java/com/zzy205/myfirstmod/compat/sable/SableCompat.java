@@ -400,4 +400,19 @@ public final class SableCompat {
         }
     }
 
+    /**
+     * 将 body-frame 法线向量变换到世界空间。
+     */
+    public static Vec3 transformNormalToWorld(SubLevel subLevel, Vec3 bodyNormal) {
+        if (subLevel == null || bodyNormal == null) return null;
+        try {
+            Pose3dc pose = subLevel.logicalPose();
+            Vector3d jomlNormal = new Vector3d(bodyNormal.x, bodyNormal.y, bodyNormal.z);
+            Vector3d worldNormal = pose.transformNormal(jomlNormal, new Vector3d());
+            return new Vec3(worldNormal.x(), worldNormal.y(), worldNormal.z());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
 }

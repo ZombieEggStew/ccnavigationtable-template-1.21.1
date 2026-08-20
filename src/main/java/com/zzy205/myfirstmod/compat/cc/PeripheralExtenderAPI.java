@@ -193,6 +193,28 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     }
 
     @LuaFunction
+    public final double getAxisVelocity(int channel) {
+        PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
+        if (sensor == null) return 0.0;
+        Level level = sensor.getLevel();
+        if (level == null) return 0.0;
+        
+        SubLevel subLevel = sensor.getCachedSubLevel();
+        if (subLevel == null) return 0.0;
+        
+        Vec3 velocity = SableCompat.getVelocity(level, sensor.getBlockPos());
+        if (velocity == null) return 0.0;
+
+        Direction axis = getSensorSide(sensor.getBlockState());
+        Vec3 bodyNormal = Vec3.atLowerCornerOf(axis.getNormal());
+        Vec3 worldNormal = SableCompat.transformNormalToWorld(subLevel, bodyNormal);
+        if (worldNormal == null) return 0.0;
+
+        double component = velocity.dot(worldNormal);
+        return Math.abs(component) < 0.05 ? 0.0 : component;
+    }
+
+    @LuaFunction
     public final Map<String, Double> getPhysicsOrientation(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return Collections.emptyMap();

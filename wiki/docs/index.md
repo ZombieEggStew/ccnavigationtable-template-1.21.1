@@ -32,8 +32,7 @@
 ---
 ## 🚀 快速开始
 
-1. [第一个脚本](getting-started/first-script.md) — 5 分钟上手无线方块读取
-2. [示例与教程](examples/monitoring-system.md) — 查看实际应用案例
+[示例与教程](examples/monitoring-system.md) — 查看实际应用案例
 
 
 ## 🔗 相关链接
