@@ -1,16 +1,57 @@
 # MkDocs 站点配置
 # 参考文档: https://squidfunk.github.io/mkdocs-material/
 
-site_name: CCNavigationTable Wiki
-site_description: CC Navigation Table (导航电脑) Mod 的文档站点
+site_name: CCPE Wiki
+site_description: CC Peripheral Extender (CC 外设扩展器) Mod 文档站点
 site_url: https://ZombieEggStew.github.io/ccnavigationtable-template-1.21.1/
 
 theme:
-  name: material        # Material 主题
-  language: zh          # 界面语言: 中文
+  name: material
+  language: zh
   palette:
-    scheme: slate       # 暗色主题 (Minecraft 风格)
+    scheme: slate
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.code.copy
 
-# 导航结构: 决定侧边栏顺序。新页面必须在这里登记，否则不会出现在导航里。
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - tables
+
+# 导航结构
 nav:
   - 首页: index.md
+  - 快速开始:
+    - 安装与配置: getting-started/installation.md
+    - 第一个脚本: getting-started/first-script.md
+  - 外设扩展器:
+    - 概述: peripheral-extender/overview.md
+    - 方块 NBT 读取: peripheral-extender/nbt-reading.md
+    - 外设代理: peripheral-extender/peripheral-proxy.md
+    - 无线红石: peripheral-extender/wireless-redstone.md
+    - 导航桌集成: peripheral-extender/navigation-table.md
+    - 物理数据读取: peripheral-extender/physics-data.md
+    - Lua API 参考: peripheral-extender/api-reference.md
+  - 红石收发器:
+    - 概述: redstone-transceiver/overview.md
+    - 配置频道: redstone-transceiver/channel-config.md
+    - Lua API 参考: redstone-transceiver/api-reference.md
+  - 电子变速箱:
+    - 概述: electronic-transmission/overview.md
+    - 使用指南: electronic-transmission/usage.md
+    - Lua API 参考: electronic-transmission/api-reference.md
+  - 示例与教程:
+    - 自动化监控系统: examples/monitoring-system.md
+    - 飞船姿态控制: examples/ship-attitude-control.md
+    - 远程红石网络: examples/remote-redstone-network.md
+  - 常见问题: faq.md
+  - 更新日志: changelog.md
