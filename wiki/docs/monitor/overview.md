@@ -1,83 +1,83 @@
-# 监视器概述
+# Monitor Overview
 
-![监视器](../img/my_monitor_item.png)
+![Monitor](../img/my_monitor_item.png)
 
-模块化监视器（Monitor）是 CCPE 的互动信息终端：一块 **12×10** 的棋盘式插槽面板，可以在格子上安装按钮、开关、旋钮、屏幕等模块，并通过 CC:T 计算机用 Lua 自由控制它们。
+The Modular Monitor is CCPE's interactive information terminal: a **12×10** grid of module slots on which you can install buttons, switches, knobs, screens and other modules, freely controlled via Lua from a CC:T computer.
 
 ![Monitor](../img/monitor.png)
 
 
-## 获取 Monitor 外设
+## Getting the Monitor Peripheral
 
-Monitor 的 CC:T 外设类型名是 `"ccpe:monitor"`，获取方式有两种：
+The Monitor's CC:T peripheral type is `"ccpe:monitor"`, and there are two ways to get it:
 
-### 方式 A：通过频道获取（推荐，跨距离）
+### Method A: Via a Channel (recommended, works at any distance)
 
-借助外设扩展器的频道系统，在任意距离拿到 Monitor 外设：
+Using the Peripheral Extender's channel system, get the Monitor peripheral at any distance:
 
 ```lua
 local pe = require("ccpe.pe")
-local monitor = pe.getPeripheral(3)   -- 3 是 Monitor 的全局频道号
+local monitor = pe.getPeripheral(3)   -- 3 is the Monitor's global channel number
 ```
 
-### 方式 B：cc:t 外设
+### Method B: Direct CC:T Peripheral
 
-计算机紧贴 Monitor 放置时直接 wrap：
+When a computer is placed adjacent to the Monitor, wrap it directly:
 
 ```lua
 local monitor = peripheral.wrap("right")
--- 或
+-- or
 local monitor = peripheral.find("ccpe:monitor")
 ```
 
-`monitor` 本身提供模块/屏幕的查询方法与音效方法（见 [监视器](monitor.md)）。查到的「模块实例」再提供各自的 get/set 方法。
+`monitor` itself provides module/screen query methods and sound methods (see [Monitor](monitor.md)). The obtained "module instances" then provide their own get/set methods.
 
-## 模块类型
+## Module Types
 
-| 类型名 | 说明 | 文档 |
+| Type | Description | Docs |
 |---|---|---|
-| `button_1` | 按钮（瞬时型；支持玩家点击检测 / 互动锁 / 灯带控制） | [按钮模块](button.md) |
-| `toggle_switch` | 钮子开关（锁存型） | [开关模块](switch.md) |
-| `knob` | 旋钮（角度 0..360） | [旋钮模块](knob.md) |
-| `screen` | 屏幕（文本渲染 + 图形绘制） | [屏幕模块](screen.md) |
+| `button_1` | Button (momentary; player click detection / interaction lock / light strip control) | [Button Module](button.md) |
+| `toggle_switch` | Toggle switch (latching) | [Switch Module](switch.md) |
+| `knob` | Knob (angle 0..360) | [Knob Module](knob.md) |
+| `screen` | Screen (text rendering + graphics drawing) | [Screen Module](screen.md) |
 
 
-## 模块实例通用方法
+## Common Module Instance Methods
 
-以下方法对所有模块类型（`button_1` / `toggle_switch` / `knob`）以及屏幕（`screen`）都可用（`handle` 表示任意模块实例）。
+The following methods are available on all module types (`button_1` / `toggle_switch` / `knob`) as well as screens (`screen`) (`handle` denotes any module instance).
 
-| 方法 | 说明 |
+| Method | Description |
 |---|---|
-| `handle.getId()` | 返回该模块/屏幕在本 Monitor 内的唯一 ID（数字） |
-| `handle.getType()` | 返回类型名字符串：`"button_1"`、`"toggle_switch"`、`"knob"` 或 `"screen"` |
-| `handle.getX()` / `handle.getY()` | 返回模块/屏幕左上角所在格子的坐标（数字） |
-| `handle.getWidth()` / `handle.getHeight()` | 返回占用尺寸（格数，数字）。例如旋钮（knob）为 2×2 |
-| `handle.setTooltip(text)` | 设置该模块在配置界面/悬停时显示的 tooltip 文本（屏幕写入悬停说明文字 `tooltipText`） |
+| `handle.getId()` | Returns the unique ID (number) of this module/screen within the Monitor |
+| `handle.getType()` | Returns the type name string: `"button_1"`, `"toggle_switch"`, `"knob"` or `"screen"` |
+| `handle.getX()` / `handle.getY()` | Returns the grid coordinates of the module/screen's top-left corner (numbers) |
+| `handle.getWidth()` / `handle.getHeight()` | Returns the occupied size (in cells, numbers). E.g. the knob is 2×2 |
+| `handle.setTooltip(text)` | Sets the tooltip text shown for this module in the config GUI/on hover (for screens, writes the hover description text `tooltipText`) |
 
 ```lua
 print(mod.getId(), mod.getType())   -- 7  toggle_switch
-mod.setTooltip("喂料阀门")
-screen.setTooltip("压力表")
+mod.setTooltip("Feed valve")
+screen.setTooltip("Pressure gauge")
 ```
 
-## 约定与说明
+## Conventions & Notes
 
-- **mainThread 规则**：所有纯 **get** 方法 `mainThread = false`（计算机线程直接读，低延迟）；所有 **set / 动作** 方法 `mainThread = true`（服务器主线程写，安全）。注意 `wasClicked()` / `clearClicked()` 属于「读取并清除」，也算动作，走 `mainThread = true`。
-- **格子坐标**：`x` 0..11，`y` 0..9（12×10 网格）。
-- **模块 ID**：同一 Monitor 内唯一，模块与屏幕共用命名空间。
-- **返回 nil**：查询不到（空格 / 无效 ID）时返回 `nil`。
+- **mainThread rules**: all pure **get** methods are `mainThread = false` (read directly on the computer thread, low latency); all **set / action** methods are `mainThread = true` (written on the server main thread, safe). Note that `wasClicked()` / `clearClicked()` are "read-and-clear", so they count as actions and run on `mainThread = true`.
+- **Grid coordinates**: `x` 0..11, `y` 0..9 (12×10 grid).
+- **Module IDs**: unique within a Monitor; modules and screens share one namespace.
+- **Returns nil**: returns `nil` when not found (empty cell / invalid ID).
 
-## 完整示例
+## Complete Example
 
 ```lua
 local pe = require("ccpe.pe")
 local monitor = pe.getPeripheral(3)
 
--- 遍历一个格子上的模块
+-- Inspect the module on a cell
 local mod = monitor.getCellModule(3, 4)
 if mod then
     print("type:", mod.getType(), "id:", mod.getId())
-    mod.setTooltip("由 Lua 设置的说明")
+    mod.setTooltip("Description set from Lua")
 
     if mod.getType() == "toggle_switch" then
         mod.setToggleState(true)

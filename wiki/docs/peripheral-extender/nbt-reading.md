@@ -1,18 +1,18 @@
-# 方块 NBT 读取
+# Block NBT Reading
 
-外设扩展器的 NBT 读取功能允许你访问任何方块的内部数据，无需方块专门实现 CC:T 外设接口。
+The Peripheral Extender's NBT reading feature lets you access the internal data of any block, without the block needing to implement a CC:T peripheral interface.
 
-## 基础用法
+## Basic Usage
 
-### 读取完整 NBT 数据
+### Reading Full NBT Data
 
 ```lua
 local pe = require("ccpe.pe")
 
--- 读取频道 1 的外设扩展器附着方块的所有 NBT 数据
+-- Read all NBT data of the block the channel-1 pe is attached to
 local data = pe.getAll(1)
 
--- 示例：箱子的 NBT 结构
+-- Example: NBT structure of a chest
 -- {
 --   Items = {
 --     [1] = { count = 16, slot = 0, id = "minecraft:diamond" },
@@ -27,58 +27,57 @@ local data = pe.getAll(1)
 
 ---
 
-### 读取特定路径
+### Reading a Specific Path
 
-!!! info "快速获取路径"
-    在 pe 的右键菜单中，点击一行 NBT 数据即可复制该字段的路径。
+!!! info "Getting a path quickly"
+    In the pe right-click menu, click a line of NBT data to copy that field's path.
 
-    如果有▶符号，表示该字段是table，左键点击展开/收起，右键点击复制路径。
+    If there is a ▶ symbol, the field is a table; left-click to expand/collapse, right-click to copy the path.
 
-
-使用路径语法只读取你需要的字段，提高效率：
+Use path syntax to read only the fields you need, for better efficiency:
 
 ```lua
 local pe = require("ccpe.pe")
 
--- 读取第一个物品的 ID
+-- Read the ID of the first item
 local itemId = pe.get(1, "Items[0].id")
 print(itemId)  -- "minecraft:diamond"
 
--- 读取第一个物品的数量
+-- Read the count of the first item
 local count = pe.get(1, "Items[0].count")
 print(count)  -- 16
 
 ```
 
-#### 路径语法
+#### Path Syntax
 
-NBT 路径使用类似 JSON 的语法：
+NBT paths use JSON-like syntax:
 
-| 语法 | 说明 | 示例 |
+| Syntax | Description | Example |
 |---|---|---|
-| `.field` | 访问对象字段 | `id` |
-| `[index]` | 访问数组元素（从 0 开始） | `Items[0]` |
-| 组合 | 链式访问 | `Items[0].count` |
+| `.field` | Access an object field | `id` |
+| `[index]` | Access an array element (0-based) | `Items[0]` |
+| Combined | Chained access | `Items[0].count` |
 
 ---
 
 
-## 性能提示
+## Performance Tips
 
-!!! tip "优化建议"
-    1. **使用路径读取** — 只读取需要的字段，避免传输整个 NBT 结构
-    2. **合理设置刷新频率** — 根据实际需求调整 `sleep()` 时间
-    3. **缓存不变数据** — 如方块类型、槽位数等固定信息
+!!! tip "Optimization advice"
+    1. **Use path reads** — read only the fields you need and avoid transferring the whole NBT structure
+    2. **Set a sensible refresh rate** — adjust the `sleep()` time to your actual needs
+    3. **Cache invariant data** — such as fixed information like block type or slot count
 
 ```lua
--- ❌ 低效：每次都读取完整 NBT
+-- ❌ Inefficient: read the full NBT every time
 while true do
     local data = pe.getAll(1)
     print(data.Items[1].count)
     sleep(0.05)
 end
 
--- ✅ 高效：只读取需要的字段
+-- ✅ Efficient: read only the field you need
 while true do
     local count = pe.get(1, "Items[0].count")
     print(count)
@@ -86,19 +85,19 @@ while true do
 end
 ```
 
-## 故障排查
+## Troubleshooting
 
-### 返回 nil
-- 检查频道号是否正确
-- 确认传感器已贴在方块上
-- 确认路径语法正确（注意数组从 0 开始）
+### Returns nil
+- Check that the channel number is correct
+- Make sure the sensor is attached to the block
+- Make sure the path syntax is correct (note that arrays start at 0)
 
-### 数据不更新
-- 数据刷新频率为 50ms（1 tick）
-- 检查配置文件中的 `refresh_interval` 设置
+### Data does not update
+- The data refresh rate is 50ms (1 tick)
+- Check the `refresh_interval` setting in the config file
 
-## 下一步
+## Next Steps
 
-- [外设代理](peripheral-proxy.md) — 获取的 CC:T 外设
-- [Lua API 完整参考](api-reference.md)
-- [示例：自动化监控系统](../examples/monitoring-system.md)
+- [Peripheral Proxy](peripheral-proxy.md) — get CC:T peripherals
+- [Complete Lua API Reference](../api-reference.md)
+- [Example: Automated Monitoring System](../peripheral-extender/example.md)

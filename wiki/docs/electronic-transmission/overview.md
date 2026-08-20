@@ -1,35 +1,34 @@
-# 电子变速箱
+# Electronic Transmission
 
-![电子变速箱](../img/transmission_peripheral_v.png)
+![Electronic Transmission](../img/transmission_peripheral_v.png)
 
-> **与 create:RotationSpeedController 有什么不同?**
+> **What's the difference from create:RotationSpeedController?**
 
-> 使用机械动力的转速控制器作为外设执行 `getTargetSpeed()` 会触发 `RotationPropagator.handleRemoved()` 会级联清空整个下游子网络的 source，导致不符合预期的结果（比如在转速控制器的下游使用 aeroworks 的 stepper_servo，改变转速的同时激活步进电机，电机会乱转）。
-而 simulated 的 analog_transmission 难以精细调节。
+> When using Create's rotation speed controller as a peripheral and calling `getTargetSpeed()`, it triggers `RotationPropagator.handleRemoved()` which cascades and clears the source of the entire downstream sub-network, leading to unexpected results (e.g. using aeroworks' stepper_servo downstream of the speed controller — changing the speed while activating the stepper motor makes the motor spin erratically).
+> Meanwhile, simulated's analog_transmission is hard to fine-tune.
 
-**电子变速箱** 是纯 CC:T 外设控制的 Create 动能变速器。**不接受红石信号**，只能通过 Lua 控制。可放置在应力网络中间，实时调节下游转速。
+The **Electronic Transmission** is a Create kinetic transmission controlled purely by the CC:T peripheral. **It does not accept redstone signals** and can only be controlled via Lua. It can be placed in the middle of a stress network to adjust the downstream speed in real time.
 
-| 方法 | 说明 |
+| Method | Description |
 |---|---|
-| `setRatio(ratio)` | 设置变速比（≥0），比例模式 `mainThread=true` |
-| `getRatio()` | 获取当前变速比 |
-| `setTargetSpeed(speed)` | 直接设定下游转速（0~256.00）`mainThread=true` |
-| `getTargetSpeed()` | 获取目标转速 |
+| `setRatio(ratio)` | Set the gear ratio (≥0), ratio mode `mainThread=true` |
+| `getRatio()` | Get the current gear ratio |
+| `setTargetSpeed(speed)` | Directly set the downstream speed (0~256.00) `mainThread=true` |
+| `getTargetSpeed()` | Get the target speed |
 
 
 
 ```lua
 local t = peripheral.find("ccpe:transmission_peripheral")
 
--- 比率模式：下游 = 上游 × 比率
-t.setRatio(0.5)   -- 下游降速至 50%
-t.setRatio(3.0)   -- 下游加速至 3 倍（上限 256 RPM）
+-- Ratio mode: downstream = upstream × ratio
+t.setRatio(0.5)   -- Slow the downstream to 50%
+t.setRatio(3.0)   -- Speed the downstream up 3× (capped at 256 RPM)
 
--- 目标模式：直接设定下游转速（0~256，保留两位小数）
+-- Target mode: directly set the downstream speed (0~256, 2 decimal places)
 t.setTargetSpeed(128.56)
 print(t.getTargetSpeed())  -- 128.56
 
--- 查询当前状态
+-- Query the current state
 print(t.getRatio())
 ```
-

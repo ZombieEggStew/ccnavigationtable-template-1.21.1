@@ -1,67 +1,66 @@
-# 红石收发器
+# Redstone Transceiver
 
-![红石收发器](../img/temp.png)
+![Redstone Transceiver](../img/temp.png)
 
-使计算机可以直接读取和发送**机械动力无线红石终端网络**的信号，不需要再在计算机旁边摆上一堆 无线红石终端
+Lets your computer directly read and send signals on the **Create Wireless Redstone Link network**, without needing to pile up wireless redstone terminals next to the computer.
 
-支持create蓝图系统保存频道配置，但在部署的时候要注意频道重复
+Channel configuration is saved with Create's schematic system, but be careful about duplicate channels when deploying.
 
-每个收发器能够配置多个频道，每个频道绑定一个红石频率。Lua 端通过频道号操作：
+Each transceiver can be configured with multiple channels, and each channel is bound to one redstone frequency. The Lua side operates through the channel number:
 
-!!! tip "频道"
-    此频道与 [外设扩展器](../peripheral-extender/overview.md) 的频道号无关，互不干扰。
+!!! tip "Channels"
+    These channels are unrelated to the [Peripheral Extender](../peripheral-extender/overview.md) channel numbers and do not interfere with each other.
 
 ---
 
-## 红石信号
+## Redstone Signals
 
-| 方法 | 说明 |
+| Method | Description |
 |---|---|
-| `getRedstoneSignal(频道)` | 读取指定频道绑定的 Create Redstone Link 信号（0-15） |
-| `setRedstoneSignal(频道, 0-15)` | 向指定频道绑定的 Create 网络发送红石信号 |
+| `getRedstoneSignal(channel)` | Read the Create Redstone Link signal bound to the channel (0-15) |
+| `setRedstoneSignal(channel, 0-15)` | Send a redstone signal to the Create network bound to the channel |
 
 ```lua
 local r = peripheral.find("ccpe:redstone_transceiver")
 
--- 读取频道 3 对应的 Create 红石网络信号
+-- Read the Create redstone network signal on channel 3
 local signal = r.getRedstoneSignal(3)
 
--- 向频道 7 对应的 Create 网络发送满信号
+-- Send a full-strength signal to the Create network on channel 7
 r.setRedstoneSignal(7, 15)
 ```
 
 ---
 
-## 频道管理
+## Channel Management
 
-除了在游戏里手动配置频率，也可以用 Lua 直接管理频道：
+Besides configuring frequencies manually in-game, you can also manage channels directly from Lua:
 
-| 方法 | 说明 |
+| Method | Description |
 |---|---|
-| `setFrequency(频道, 物品1, 物品2)` | 新建/修改频道的频率物品。`物品2` 留空时与 `物品1` 相同，两个都留空则新建一个空频道 |
-| `getFrequency(频道)` | 读取频道的频率物品 ID，返回 `{freq1=..., freq2=...}`；频道不存在返回 `nil` |
-| `removeChannel(频道)` | 删除指定频道 |
-| `getChannels()` | 列出当前所有已配置的频道号 |
+| `setFrequency(channel, item1, item2)` | Create/modify the frequency items of a channel. When `item2` is empty it equals `item1`; when both are empty a new empty channel is created |
+| `getFrequency(channel)` | Read the frequency item IDs of a channel, returns `{freq1=..., freq2=...}`; returns `nil` if the channel doesn't exist |
+| `removeChannel(channel)` | Delete the specified channel |
+| `getChannels()` | List all currently configured channel numbers |
 
 ```lua
 local r = peripheral.find("ccpe:redstone_transceiver")
 
--- 新建频道 7，频率物品为 (红石, 红石)
+-- Create channel 7 with frequency items (redstone, redstone)
 r.setFrequency(7, "minecraft:redstone")
 
--- 频道 7 的频率改为 (红石, 石头) (省略前缀，判定为 minecraft:)
+-- Change channel 7's frequency to (redstone, stone) (prefix omitted, treated as minecraft:)
 r.setFrequency(7, "minecraft:redstone", "stone")
 
--- 读取频道 7 的频率物品
+-- Read the frequency items of channel 7
 local freq = r.getFrequency(7)
 print(freq.freq1, freq.freq2)
 
--- 列出所有频道
+-- List all channels
 for _, ch in ipairs(r.getChannels()) do
     print("channel: " .. ch)
 end
 
--- 删除频道 7
+-- Delete channel 7
 r.removeChannel(7)
 ```
-

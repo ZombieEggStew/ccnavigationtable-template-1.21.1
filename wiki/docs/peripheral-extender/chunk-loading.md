@@ -1,13 +1,13 @@
-# 区块/物理体加载
+# Chunk / Physics Body Loading
 
-在 pe 右键菜单的右下角使用滚轮设置加载模式
+Use the scroll wheel at the bottom-right of the pe right-click menu to set the loading mode.
 
-传感器支持保持目标方块所在区域不被卸载：
+The sensor can keep the area around the target block loaded:
 
-| 模式 | 说明 | 适用场景 |
+| Mode | Description | Use Case |
 |---|---|---|
-| 关闭 | 不加载 | 近距离使用 |
-| **加载区块** | 通过原版 `setChunkForced` 加载传感器所在区块 | 防止方块所在区块被卸载 |
-| **加载物理体** | 向 Sable 注册 force-load ticket + PORTAL ticket，随物理结构移动 | 防止飞行器/物理结构被 Sable 距离优化卸载 |
+| Off | No loading | Short-distance use |
+| **Load Chunk** | Force-loads the chunk the sensor is in via vanilla `setChunkForced` | Prevents the block's chunk from being unloaded |
+| **Load Physics Body** | Registers a force-load ticket + PORTAL ticket with Sable, follows the physics structure as it moves | Prevents the aircraft/physics structure from being unloaded by Sable's distance optimization |
 
-> 加载物理体模式会自动追踪物理结构的移动，将 PORTAL ticket 动态移动到物理体当前所在区块。每 5 秒刷新一次轴承连接链。
+> The "Load Physics Body" mode automatically tracks the movement of the physics structure and dynamically moves the PORTAL ticket to the chunk where the physics body currently is. The bearing connection chain is refreshed every 5 seconds.

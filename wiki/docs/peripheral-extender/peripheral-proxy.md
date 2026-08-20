@@ -1,20 +1,20 @@
-# 外设代理
+# Peripheral Proxy
 
-1. 将 pe 附着在 cc:t 外设上
-2. 使用 getPeripheral 获取外设对象
+1. Attach a pe to a CC:T peripheral
+2. Use getPeripheral to get the peripheral object
 
 !!! info "OP"
-    不需要线缆，无视距离，无重量
+    No cables needed, no distance limit, no weight
 
 
 ```lua
 local pe = require("ccpe.pe")
 
-local monitor = pe.getPeripheral(10) -- 获取频道为10的pe附着的外设
+local monitor = pe.getPeripheral(10) -- get the peripheral the channel-10 pe is attached to
 
-assert(monitor , "未找到外设")
+assert(monitor , "Peripheral not found")
 ```
 
-## 下一步
+## Next Steps
 
-- [无线红石详细文档](wireless-redstone.md) — 发送和接收红石信号
+- [Wireless Redstone](wireless-redstone.md) — send and receive redstone signals

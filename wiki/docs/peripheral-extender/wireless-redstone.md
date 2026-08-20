@@ -1,26 +1,26 @@
-## 无线红石
+## Wireless Redstone
 
-就像 机械动力 的 无线红石信号终端，但是使用频道控制
+Just like Create's Wireless Redstone Signal terminal, but controlled by channels.
 
-| 方法 | 说明 |
+| Method | Description |
 |---|---|
-| `pe.setRedstoneOutput(ch, 0-15)` | 无线红石发送 mainThread = true |
-| `pe.getRedstoneOutput(ch)` | 读取发送信号 |
-| `pe.getRedstoneInput(ch)` | 读取输入红石信号 |
+| `pe.setRedstoneOutput(ch, 0-15)` | Wireless redstone output, mainThread = true |
+| `pe.getRedstoneOutput(ch)` | Read the signal being sent |
+| `pe.getRedstoneInput(ch)` | Read the input redstone signal |
 
 
 ```lua
 local pe = require("ccpe.pe")
 
--- 读取频道为5的pe附近的红石信号
+-- Read the redstone signal near the channel-5 pe
 local signal = pe.getRedstoneInput(5)
 print("Signal: " .. signal)
 
--- 向频道为6的pe附近激活 10 级红石信号
+-- Activate a level-10 redstone signal near the channel-6 pe
 pe.setRedstoneOutput(6, 10)
 
 ```
 
-## 下一步
+## Next Steps
 
-- [导航桌集成详细文档](navigation-table.md) — 将外设扩展器与导航桌集成
+- [Aeronautics Sensor Integration](simulated-integration.md) — read velocity, mass and orientation from the Sable physics engine

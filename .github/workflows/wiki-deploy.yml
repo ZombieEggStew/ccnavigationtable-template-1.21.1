@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: '3.x'
       - name: Install MkDocs
-        run: pip install mkdocs-material
+        run: pip install -r wiki/requirements.txt
       - name: Build site
         working-directory: wiki
         run: mkdocs build

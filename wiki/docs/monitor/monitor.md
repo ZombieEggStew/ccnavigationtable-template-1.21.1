@@ -1,45 +1,45 @@
-# 监视器
+# Monitor
 
-![监视器](../img/my_monitor_item.png)
+![Monitor](../img/my_monitor_item.png)
 
-获得 Monitor 外设实例后（获取方式见 [概述](overview.md)），可以调用以下三类方法：
+After obtaining the Monitor peripheral instance (see [Overview](overview.md) for how to get it), you can call the following three categories of methods:
 
-| 类别 | 方法 |
+| Category | Methods |
 |---|---|
-| 模块 / 屏幕查询 | `getCellModule` / `getModule` |
-| 背景平面绘制（文本 + 图形） | `write` / `clear` / `setCursorPos` / `getCursorPos` / `setTextScale` / `getTextScale` / `setTextColour` / `getTextColour` / `setZIndex` / `getZIndex` / `setOverflowMode` / `getOverflowMode` / `drawRect` / `drawLine` / `drawCircle` / `drawPoint` / `clearRects` / `clearShapes` / `getSize` |
-| 音效 | `playNiceSound` / `playSound` |
+| Module / screen query | `getCellModule` / `getModule` |
+| Background plane drawing (text + graphics) | `write` / `clear` / `setCursorPos` / `getCursorPos` / `setTextScale` / `getTextScale` / `setTextColour` / `getTextColour` / `setZIndex` / `getZIndex` / `setOverflowMode` / `getOverflowMode` / `drawRect` / `drawLine` / `drawCircle` / `drawPoint` / `clearRects` / `clearShapes` / `getSize` |
+| Sound | `playNiceSound` / `playSound` |
 
 ---
 
-## 操作说明
+## Operation
 
-- **配置**：对准监视器底座 蹲下 + 右键 可以打开配置界面，可以配置以下选项：
-    - 频道：设置 Monitor 的全局频道号，与 外设扩展器 共用一个频道系统
-    - 背景：切换 Monitor 的背景图片
-    - 旋转与偏移：自由设置旋转与偏移
-- **拆卸**：手持扳手 **对准监视器底座** **蹲下右键** 可以拆卸，拆卸下来的监视器能够保持模块与设置。直接破坏会分离监视器与模块
+- **Configure**: sneak + right-click the Monitor base to open the config interface, where you can configure:
+    - Channel: set the Monitor's global channel number, sharing the same channel system as the Peripheral Extender
+    - Background: switch the Monitor's background image
+    - Rotation & offset: freely set rotation and offset
+- **Remove**: sneak + right-click the Monitor base while holding a wrench to remove it. A removed Monitor keeps its modules and settings. Breaking it directly separates the Monitor from its modules
 
 ---
 
-## 模块 / 屏幕查询
+## Module / Screen Query
 
 ### monitor.getCellModule(x, y)
 
-- **参数**：`x`（0..11）、`y`（0..9）——格子坐标
-- **返回**：该格子上的模块实例（`ModuleHandle`）；若格子被屏幕占用则返回屏幕实例；空格/越界返回 `nil`
+- **Parameters**: `x` (0..11), `y` (0..9) — grid coordinates
+- **Returns**: the module instance (`ModuleHandle`) on that cell; returns the screen instance if the cell is occupied by a screen; returns `nil` for empty/out-of-bounds cells
 
 ```lua
 local mod = monitor.getCellModule(3, 4)
 if mod then
-    print(mod.getId(), mod.getType())  -- 例：7  toggle_switch
+    print(mod.getId(), mod.getType())  -- e.g. 7  toggle_switch
 end
 ```
 
 ### monitor.getModule(id)
 
-- **参数**：`id`——模块/屏幕 ID（模块与屏幕共用同一 ID 命名空间）
-- **返回**：对应模块/屏幕实例；不存在返回 `nil`
+- **Parameters**: `id` — module/screen ID (modules and screens share the same ID namespace)
+- **Returns**: the corresponding module/screen instance; `nil` if it doesn't exist
 
 ```lua
 local mod = monitor.getModule(7)
@@ -49,12 +49,12 @@ if mod then print(mod.getType()) end
 ---
 
 
-## 音效
+## Sound
 
 ### monitor.playNiceSound()
 
-播放 Create 风格的下单音效 + WiFi 粒子（效果位置在方块中心，音效为 `create:stock_ticker_request`）。
-音效在服务端广播给附近玩家；WiFi 粒子走自定义 clientbound 包（`ccpe:play_order_effect`）广播给 32 格内的客户端，由客户端本地生成（Create 的 `WiFiParticle` 数据无法走粒子网络通道编码）。
+Plays the Create-style order sound + WiFi particles (effect position at the block center, sound is `create:stock_ticker_request`).
+The sound is broadcast to nearby players by the server; the WiFi particles go through a custom clientbound packet (`ccpe:play_order_effect`) broadcast to clients within 32 blocks, generated locally on the client (Create's `WiFiParticle` data cannot be encoded through the particle network channel).
 
 ```lua
 monitor.playNiceSound()
@@ -62,76 +62,76 @@ monitor.playNiceSound()
 
 ### monitor.playSound(sound)
 
-播放指定的 Create 音效（在方块位置广播给附近玩家，音效由服务端播放，附近玩家都能听到）。
+Plays a specified Create sound (broadcast to nearby players at the block position, played by the server, audible to all nearby players).
 
-- **参数**：`sound`——音效名称字符串，当前支持：
+- **Parameters**: `sound` — sound name string, currently supported:
 
-| 名称 | Create 音效资源 | 说明 |
+| Name | Create sound asset | Description |
 |---|---|---|
-| `"bonk"` | `create:cardboard_bonk` | 纸板剑"梆" |
-| `"bell"` | `create:desk_bell` | 前台铃 |
-| `"confirm"` | `create:confirm_2` | 确认"叮" |
-| `"fwoomp"` | `create:fwoomp` | 低沉"嗡" |
-| `"trade"` | `create:stock_ticker_trade` | 收银 |
-| `"request"` | `create:stock_ticker_request` | 下单 |
+| `"bonk"` | `create:cardboard_bonk` | Cardboard sword "bonk" |
+| `"bell"` | `create:desk_bell` | Front desk bell |
+| `"confirm"` | `create:confirm_2` | Confirmation "ding" |
+| `"fwoomp"` | `create:fwoomp` | Low "woomph" |
+| `"trade"` | `create:stock_ticker_trade` | Cash register |
+| `"request"` | `create:stock_ticker_request` | Order placed |
 
-- **返回**：`boolean`——是否找到并播放了该音效；未知名称返回 `false`（不会抛 Lua 错误）
+- **Returns**: `boolean` — whether the sound was found and played; unknown names return `false` (no Lua error thrown)
 
 ```lua
 if monitor.playSound("bell") then
-    print("响了")
+    print("Rang!")
 end
 ```
 
 ---
 
-## Monitor 背景平面绘制
+## Monitor Background Plane Drawing
 
-Monitor 本身自带一块**背景平面**显示区，可以直接在面板上写字、画矩形/线段/圆，无需安装屏幕模块。它与屏幕模块共用同一套文本/图形引擎（`ScreenText`）与坐标系，具体渲染语义与 [屏幕模块](screen.md) 一致。
+The Monitor has a built-in **background plane** display area — you can write text and draw rectangles/lines/circles directly on the panel without installing a screen module. It shares the same text/graphics engine (`ScreenText`) and coordinate system as the screen module; see [Screen Module](screen.md) for the exact rendering semantics.
 
-- **显示区**：Monitor 面板为 14×12px，去掉四周 1px 边框后，内区为 **12×10px**（正好对应 12×10 模块网格区域）。
-- **坐标单位**：1/128 块（`1px = 8 单位`），原点在内区左上角，`x` 向右、`y` 向下——与 `drawRect`、`setCursorPos` 完全一致。
-- **字号单位**：MC 像素（`1px = 1/16 块`），默认 `0.5`，范围 `0.05..8.0`，只影响之后写入的字符。
-- **文本**：只有前景色（默认 `0xFFFFFF`），**没有背景色**，需要背景时自己 `drawRect`。
-- **层级 z**：越大越靠前，默认 `0`；负值会被压到面板后面。
-- **溢出**：文本写到右缘时按 `setOverflowMode` 处理，默认 `"wrap"` 换行。
+- **Display area**: the Monitor panel is 14×12px; after removing the 1px border on each side, the inner area is **12×10px** (exactly matching the 12×10 module grid).
+- **Coordinate units**: 1/128 block (`1px = 8 units`), origin at the top-left of the inner area, `x` right, `y` down — identical to `drawRect` and `setCursorPos`.
+- **Font size units**: MC pixels (`1px = 1/16 block`), default `0.5`, range `0.05..8.0`, only affects characters written afterwards.
+- **Text**: foreground colour only (default `0xFFFFFF`), **no background colour** — use `drawRect` yourself when you need a background.
+- **Layer z**: higher = more in front, default `0`; negative values are pushed behind the panel.
+- **Overflow**: text reaching the right edge is handled per `setOverflowMode`, default `"wrap"`.
 
-!!! tip "层级提醒"
-    `z` 越大越靠前，但每 +1 前移约 0.01px，**建议 z 在 `[-1, 10]` 左右**；设太大侧面看会分层。
+!!! tip "Layer reminder"
+    The larger the `z`, the more in front, but each +1 moves forward roughly 0.01px; **z around `[-1, 10]` is recommended**. Setting it too large will visibly separate layers from the side.
 
 ### monitor.write(text, z?)
 
-在光标处写入文本到背景平面（支持 `\n` 换行、忽略 `\r`）。每个字符的位置用 `drawRect` 坐标直接定位：
-写一个字符光标向右推进一个字形宽（`字号 × 1.0 × 8`），`\n` 回行首并下移一行（`字号 × 1.2 × 8`）。
-写到内区右缘时按 `setOverflowMode` 处理（默认 `"wrap"` 换行）。
+Writes text at the cursor position on the background plane (supports `\n` line breaks, ignores `\r`). Each character's position is positioned directly with `drawRect` coordinates:
+writing one character advances the cursor right by one glyph width (`fontSize × 1.0 × 8`); `\n` returns to the line start and moves down one line (`fontSize × 1.2 × 8`).
+When reaching the right edge of the inner area, `setOverflowMode` applies (default `"wrap"`).
 
-- `text`：要写入的文本
-- `z`：可选，本次写入字符的层级（越大越靠前）；省略时使用 `setZIndex` 设置的默认层级
+- `text`: the text to write
+- `z`: optional, layer for the characters written this time (higher = more in front); when omitted, uses the default layer set by `setZIndex`
 
 ```lua
 monitor.write("Hello\nCCPE")
-monitor.write("Top", 2)          -- 层级 2
+monitor.write("Top", 2)          -- layer 2
 ```
 
 ### monitor.clear()
 
-清空背景平面上的文本和所有图形（矩形/线段/圆），并把光标重置到 `(0, 0)`。
+Clears all text and shapes (rectangles/lines/circles) on the background plane, and resets the cursor to `(0, 0)`.
 
 ### monitor.setCursorPos(x, y) / monitor.getCursorPos()
 
-设置/读取光标位置，坐标系统与 `drawRect` 的前两个参数完全一致：
-以内区左上角为原点，X 向右、Y 向下，1 单位 = 1/128 块（负值收拢为 0）。
-`getCursorPos` 返回 `x, y` 两个值。
+Sets/reads the cursor position, using exactly the same coordinate system as the first two parameters of `drawRect`:
+origin at the top-left of the inner area, X right, Y down, 1 unit = 1/128 block (negative values clamp to 0).
+`getCursorPos` returns two values, `x, y`.
 
 ```lua
-monitor.setCursorPos(0, 0)          -- 内区左上角
+monitor.setCursorPos(0, 0)          -- top-left of the inner area
 local x, y = monitor.getCursorPos()
 ```
 
 ### monitor.setTextScale(scale) / monitor.getTextScale()
 
-设置/读取整块背景平面的字号（字形高度，MC 像素，`1px = 1/16 块`，范围 `0.05..8.0`）。
-字号只影响之后 `write` 写入的字形大小与推进量，不影响已写入文本的位置（旧字符仍按各自位置渲染）。
+Sets/reads the font size of the whole background plane (glyph height, MC pixels, `1px = 1/16 block`, range `0.05..8.0`).
+The font size only affects the glyph size and advance of `write` calls afterwards; it does not affect the position of already written text (old characters still render at their own positions).
 
 ```lua
 monitor.setTextScale(0.5)
@@ -140,7 +140,7 @@ print(monitor.getTextScale())  -- 0.5
 
 ### monitor.setTextColour(colour) / monitor.getTextColour()
 
-设置/读取前景色（0xRRGGBB，默认 `0xFFFFFF`）。文本**没有背景色**，需要背景时自己用 `drawRect` 画。
+Sets/reads the foreground colour (0xRRGGBB, default `0xFFFFFF`). Text has **no background colour** — use `drawRect` yourself for backgrounds.
 
 ```lua
 monitor.setTextColour(0x00FF00)
@@ -148,23 +148,23 @@ monitor.setTextColour(0x00FF00)
 
 ### monitor.setZIndex(z) / monitor.getZIndex()
 
-设置/读取之后 `write` / `drawRect` 未显式指定 z 时使用的默认层级（默认 `0`，越大越靠前，负值会被压进面板后面）。
+Sets/reads the default layer used by subsequent `write` / `drawRect` calls when no z is explicitly given (default `0`, higher = more in front, negative values pushed behind the panel).
 
 ```lua
 monitor.setZIndex(2)
-monitor.write("Hello")           -- 用默认层级 2
-monitor.drawRect(0, 0, 4, 4, 0xFF0000, true, 1)   -- 也用层级 2
+monitor.write("Hello")           -- uses default layer 2
+monitor.drawRect(0, 0, 4, 4, 0xFF0000, true, 1)   -- also uses layer 2
 ```
 
 ### monitor.setOverflowMode(mode) / monitor.getOverflowMode()
 
-设置/读取文本超出一行宽度时的处理方式（未知名称会回退到 `"wrap"`）：
+Sets/reads how text overflowing one line width is handled (unknown names fall back to `"wrap"`):
 
-| mode | 含义 |
+| mode | Meaning |
 |---|---|
-| `"truncate"` | 直接截断，丢弃超出部分 |
-| `"ellipsis"` | 多截断一点，末尾补 `"..."` |
-| `"wrap"` | 自动换到下一行（默认） |
+| `"truncate"` | Truncate directly, discard the overflow |
+| `"ellipsis"` | Truncate a bit more, append `"..."` |
+| `"wrap"` | Wrap to the next line (default) |
 
 ```lua
 monitor.setOverflowMode("ellipsis")
@@ -173,29 +173,29 @@ print(monitor.getOverflowMode())  -- ellipsis
 
 ### monitor.drawRect(x, y, width, height, colour, solid, lineWidth, z?)
 
-在背景平面上画一个矩形。坐标与文本/光标共用同一套系统。
+Draws a rectangle on the background plane. Coordinates share the same system as text/cursor.
 
-- `x, y`：左上角（1/128 块，0 = 内区左/上缘，向右/下增大）
-- `width, height`：宽高（1/128 块，负值收拢为 0）
-- `colour`：颜色（0xRRGGBB）
-- `solid`：`true` = 实心，`false` = 只描边
-- `lineWidth`：线宽（1/128 块，仅描边时生效）
-- `z`：层级（越大越靠前，省略时使用 `setZIndex` 设置的默认层级）
+- `x, y`: top-left corner (1/128 block, 0 = left/top edge of the inner area, increasing right/down)
+- `width, height`: width and height (1/128 block, negative values clamp to 0)
+- `colour`: colour (0xRRGGBB)
+- `solid`: `true` = filled, `false` = outline only
+- `lineWidth`: line width (1/128 block, only applies to outlines)
+- `z`: layer (higher = more in front, when omitted uses the default layer set by `setZIndex`)
 
 ```lua
-monitor.drawRect(0, 0, 2, 2, 0xFF0000, true, 1)        -- 实心红块，默认层级
-monitor.drawRect(1, 1, 1, 1, 0x00FF00, false, 0.2)     -- 绿色描边，默认层级
-monitor.drawRect(0, 0, 8, 8, 0x0000FF, true, 1, 5)     -- 层级 5，盖在其它之上
+monitor.drawRect(0, 0, 2, 2, 0xFF0000, true, 1)        -- filled red square, default layer
+monitor.drawRect(1, 1, 1, 1, 0x00FF00, false, 0.2)     -- green outline, default layer
+monitor.drawRect(0, 0, 8, 8, 0x0000FF, true, 1, 5)     -- layer 5, on top of the others
 ```
 
 ### monitor.drawLine(x1, y1, x2, y2, colour, lineWidth, z?)
 
-画一条线段。坐标与 `drawRect` 共用同一套系统。
+Draws a line segment. Coordinates share the same system as `drawRect`.
 
-- `x1, y1` / `x2, y2`：起终点（1/128 块）
-- `colour`：颜色（0xRRGGBB）
-- `lineWidth`：线宽（1/128 块）
-- `z`：层级（越大越靠前，省略时用 `setZIndex` 默认层级）
+- `x1, y1` / `x2, y2`: start/end points (1/128 block)
+- `colour`: colour (0xRRGGBB)
+- `lineWidth`: line width (1/128 block)
+- `z`: layer (higher = more in front, when omitted uses the `setZIndex` default layer)
 
 ```lua
 monitor.drawLine(0, 0, 8, 8, 0xFFFFFF, 0.5)
@@ -203,28 +203,28 @@ monitor.drawLine(0, 0, 8, 8, 0xFFFFFF, 0.5)
 
 ### monitor.drawCircle(cx, cy, radius, colour, solid, lineWidth, segments?, z?)
 
-画一个圆（用正多边形逼近）。坐标与 `drawRect` 共用同一套系统。
+Draws a circle (approximated with a regular polygon). Coordinates share the same system as `drawRect`.
 
-- `cx, cy`：圆心（1/128 块）
-- `radius`：半径（1/128 块）
-- `colour`：颜色（0xRRGGBB）
-- `solid`：`true` = 实心圆，`false` = 圆环
-- `lineWidth`：线宽（1/128 块，仅 `solid=false` 时生效）
-- `segments`：逼近段数（默认 32，最小 3，越大越圆）
-- `z`：层级（越大越靠前，省略时用 `setZIndex` 默认层级）
+- `cx, cy`: center (1/128 block)
+- `radius`: radius (1/128 block)
+- `colour`: colour (0xRRGGBB)
+- `solid`: `true` = filled circle, `false` = ring
+- `lineWidth`: line width (1/128 block, only applies when `solid=false`)
+- `segments`: approximation segments (default 32, minimum 3, more = rounder)
+- `z`: layer (higher = more in front, when omitted uses the `setZIndex` default layer)
 
 ```lua
-monitor.drawCircle(8, 8, 4, 0xFFFF00, true, 1)          -- 实心圆
-monitor.drawCircle(8, 8, 4, 0x00FF00, false, 0.2, 48)   -- 48 段圆环
+monitor.drawCircle(8, 8, 4, 0xFFFF00, true, 1)          -- filled circle
+monitor.drawCircle(8, 8, 4, 0x00FF00, false, 0.2, 48)   -- 48-segment ring
 ```
 
 ### monitor.drawPoint(x, y, colour, z?)
 
-画一个点（等价于 1×1 单位的实心矩形）。坐标与 `drawRect` 共用同一套系统。
+Draws a point (equivalent to a 1×1 unit filled rectangle). Coordinates share the same system as `drawRect`.
 
-- `x, y`：左上角坐标（1/128 块）
-- `colour`：颜色（0xRRGGBB）
-- `z`：层级（越大越靠前，省略时用 `setZIndex` 默认层级）
+- `x, y`: top-left coordinates (1/128 block)
+- `colour`: colour (0xRRGGBB)
+- `z`: layer (higher = more in front, when omitted uses the `setZIndex` default layer)
 
 ```lua
 monitor.drawPoint(4, 4, 0xFF0000)
@@ -232,16 +232,16 @@ monitor.drawPoint(4, 4, 0xFF0000)
 
 ### monitor.clearRects()
 
-清空所有已画的矩形（不影响文本和其它图形）。
+Clears all drawn rectangles (does not affect text or other shapes).
 
 ### monitor.clearShapes()
 
-清空所有图形（矩形 + 线段 + 圆 + 点），不影响文本。
+Clears all shapes (rectangles + lines + circles + points), does not affect text.
 
 ### monitor.getSize()
 
-返回当前字号下背景平面内区能容纳的整字行列数（参考值，文本实际按坐标定位，不受此限制），返回 `cols, rows` 两个值。
-默认字号 `0.5` 时约为 `24 × 16`。
+Returns the number of whole character rows/columns that fit in the background plane's inner area at the current font size (reference value; text is actually positioned by coordinates and is not limited by this), returning two values `cols, rows`.
+At the default font size `0.5`, it is roughly `24 × 16`.
 
 ```lua
 local cols, rows = monitor.getSize()
@@ -250,22 +250,22 @@ print(cols, rows)
 
 ---
 
-## 线程模型（mainThread）
+## Thread Model (mainThread)
 
-| 方法 | mainThread |
+| Method | mainThread |
 |---|---|
-| `getCellModule` / `getModule` | ✅ `true`（查询也走服务器主线程） |
+| `getCellModule` / `getModule` | ✅ `true` (queries also go through the server main thread) |
 | `write` / `clear` / `setCursorPos` / `setTextScale` / `setTextColour` / `setZIndex` / `setOverflowMode` / `drawRect` / `drawLine` / `drawCircle` / `drawPoint` / `clearRects` / `clearShapes` / `playNiceSound` / `playSound` | ✅ `true` |
-| `getCursorPos` / `getTextScale` / `getTextColour` / `getZIndex` / `getOverflowMode` / `getSize` | ❌ `false`（计算机线程直接读，低延迟） |
+| `getCursorPos` / `getTextScale` / `getTextColour` / `getZIndex` / `getOverflowMode` / `getSize` | ❌ `false` (read directly on the computer thread, low latency) |
 
 ---
 
-## Monitor 自定义背景图片
+## Monitor Custom Background Images
 
-- **目录**：将图片放入游戏根目录下的 `ccpe_res/monitor_bg/`。该目录与 `mods/`、`resourcepacks/` 同级；只扫描该目录的第一层，不扫描子目录。
-- **支持格式**：支持 `.png`、`.jpg` 和 `.jpeg`，扩展名不区分大小写。
-- **文件名规则**：文件名必须以字母或数字开头，只能包含小写/大写字母、数字、下划线、连字符和点号，例如 `test_bg.png`、`cockpit-01.jpg`。不符合规则的文件会被忽略。
-- **选项名称**：客户端启动时扫描图片，并将文件名追加到 Monitor 右键菜单的背景切换选项中。菜单中的自定义背景名称显示为文件名，例如 `test_bg.png`。
-- **持久化键**：文件名会转换为小写，并以 `custom/` 作为前缀保存。例如 `Test_BG.PNG` 会保存为 `custom/test_bg.png`。
-- **加载时机**：图片在客户端启动时加载；添加、删除或替换图片后需要重启客户端才会重新扫描。
-- **缺失处理**：如果 Monitor 保存的自定义背景文件已经不存在，渲染时会回退到默认背景。
+- **Directory**: put images in the `ccpe_res/monitor_bg/` folder in the game root directory. This folder is a sibling of `mods/` and `resourcepacks/`; only the first level of this folder is scanned, subdirectories are not.
+- **Supported formats**: `.png`, `.jpg` and `.jpeg` are supported, extensions are case-insensitive.
+- **Filename rules**: filenames must start with a letter or digit and may only contain lowercase/uppercase letters, digits, underscores, hyphens and dots, e.g. `test_bg.png`, `cockpit-01.jpg`. Files that don't follow the rules are ignored.
+- **Option name**: the client scans images at startup and appends the filenames to the background switching options in the Monitor right-click menu. Custom background names in the menu show the filename, e.g. `test_bg.png`.
+- **Persistence key**: filenames are converted to lowercase and saved with a `custom/` prefix. E.g. `Test_BG.PNG` is saved as `custom/test_bg.png`.
+- **Load timing**: images load at client startup; after adding, deleting or replacing images you must restart the client for them to be rescanned.
+- **Missing handling**: if a custom background file saved on a Monitor no longer exists, rendering falls back to the default background.

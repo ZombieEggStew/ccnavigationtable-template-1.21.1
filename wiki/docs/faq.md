@@ -1,92 +1,92 @@
-# 常见问题
+# FAQ
 
-## 安装与配置
+## Installation & Setup
 
-### Q: 需要哪些前置模组？
+### Q: Which mods are required?
 🤪🤪🤪
 
-### Q: 如何确认模组已正确安装？
-🤪🤪🤪
-
----
-
-## 外设扩展器
-
-### Q: 为什么 pe.getAll() 返回 nil？
-🤪🤪🤪
-
-### Q: 路径语法返回 nil 但 getAll() 有数据？
-🤪🤪🤪
-
-### Q: 数据不实时更新？
-🤪🤪🤪
-
-### Q: 传感器有距离限制吗？
-🤪🤪🤪
-
-### Q: 可以在同一个频道上放多个传感器吗？
-🤪🤪🤪
-
-## 导航与物理数据
-
-### Q: getNavTargetPos() 返回 nil？
-🤪🤪🤪
-
-### Q: getPhysicsVelocity() 返回 nil？
+### Q: How do I verify the mod is installed correctly?
 🤪🤪🤪
 
 ---
 
-## 红石收发器
+## Peripheral Extender
 
-### Q: setRedstoneSignal() 不工作？
+### Q: Why does pe.getAll() return nil?
 🤪🤪🤪
 
-### Q: 如何配置红石收发器的频道？
+### Q: Path syntax returns nil but getAll() has data?
 🤪🤪🤪
 
-### Q: 最多支持多少个频道？
+### Q: The data is not updating in real time?
 🤪🤪🤪
 
----
-
-## 电子变速箱
-
-### Q: 与 Create 的转速控制器有什么区别？
+### Q: Do sensors have a distance limit?
 🤪🤪🤪
 
-### Q: 如何从 Lua 控制电子变速箱？
+### Q: Can I place multiple sensors on the same channel?
 🤪🤪🤪
 
----
+## Navigation & Physics Data
 
-## 性能与优化
-
-### Q: 监控大量传感器会影响性能吗？
+### Q: getNavTargetPos() returns nil?
 🤪🤪🤪
 
-### Q: 如何减少网络流量？
+### Q: getPhysicsVelocity() returns nil?
 🤪🤪🤪
 
 ---
 
-## 错误与调试
+## Redstone Transceiver
 
-### Q: 如何调试传感器连接问题？
+### Q: setRedstoneSignal() is not working?
 🤪🤪🤪
 
-### Q: 游戏崩溃或报错？
+### Q: How do I configure the channels of the Redstone Transceiver?
+🤪🤪🤪
+
+### Q: How many channels are supported at most?
 🤪🤪🤪
 
 ---
 
-## 其他问题
+## Electronic Transmission
 
-### Q: 支持多人服务器吗？
+### Q: What's the difference from Create's rotation speed controller?
 🤪🤪🤪
 
-### Q: 能否在维度间使用？
+### Q: How do I control the Electronic Transmission from Lua?
 🤪🤪🤪
 
-### Q: 如何获取帮助？
+---
+
+## Performance & Optimization
+
+### Q: Will monitoring many sensors affect performance?
+🤪🤪🤪
+
+### Q: How do I reduce network traffic?
+🤪🤪🤪
+
+---
+
+## Errors & Debugging
+
+### Q: How do I debug sensor connection issues?
+🤪🤪🤪
+
+### Q: The game crashes or shows errors?
+🤪🤪🤪
+
+---
+
+## Other Questions
+
+### Q: Is multiplayer supported?
+🤪🤪🤪
+
+### Q: Can it be used across dimensions?
+🤪🤪🤪
+
+### Q: How do I get help?
 🤪🤪🤪

@@ -1,25 +1,25 @@
-# 旋钮模块
+# Knob Module
 
-![旋钮模块](../img/knob.png)
+![Knob Module](../img/knob.png)
 
-角度单位为**度**，范围 0..360。
+Angles are in **degrees**, range 0..360.
 
-## 操作说明
-- **配置模块**：手持扳手对准模块右键 或者 蹲下+右键 可以打开模块配置界面，配置模块 ID、tooltip等属性
-- **拆卸模块**：手持扳手蹲下右键 可以拆卸模块
-- **卡位**：在配置界面中可以开启卡位功能，吸附到 设定角度 的 倍数角度 上
+## Operation
+- **Configure module**: hold a wrench and right-click the module, or sneak + right-click, to open the module config interface and configure properties such as module ID and tooltip
+- **Remove module**: hold a wrench and sneak + right-click to remove the module
+- **Detent**: enable the detent feature in the config interface to snap to multiples of the configured angle
 
 ---
 
-获取模块实例：
+Getting a module instance:
 
 ```lua
-local knob = monitor.getModule(7)   -- 7 是旋钮的模块 ID
+local knob = monitor.getModule(7)   -- 7 is the knob's module ID
 ```
 
 ## knob.getAngle()
 
-返回当前角度（数字，0..360）。
+Returns the current angle (number, 0..360).
 
 ```lua
 print(knob.getAngle())  -- 45.0
@@ -27,9 +27,9 @@ print(knob.getAngle())  -- 45.0
 
 ## knob.setAngle(angle)
 
-设置角度（数字，度）。自动归一化到 0..360；开启卡位（detent）时会吸附到最近档位。
+Sets the angle (number, degrees). Automatically normalized to 0..360; when detent is enabled, snaps to the nearest detent position.
 
 ```lua
 knob.setAngle(180)
-knob.setAngle(90)   -- 若开了 45° 卡位，会吸附到 90
+knob.setAngle(90)   -- with 45° detent enabled, snaps to 90
 ```

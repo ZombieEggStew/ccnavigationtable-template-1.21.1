@@ -1,13 +1,13 @@
-# 频道设置
+# Channel Setup
 
-放置 pe ，将自动分配一个频道
+Place a pe and it will be automatically assigned a channel.
 
-在右键菜单中可以使用滚轮设置频道号
+Use the scroll wheel in the right-click menu to set the channel number.
 
-频道不能重复
+Channels cannot be duplicated.
 
-频道范围0-9999
+Channel range is 0-9999.
 
-## 下一步
+## Next Steps
 
-- [NBT 读取详细文档](nbt-reading.md) — 读取方块 NBT 数据
+- [NBT Reading](nbt-reading.md) — read block NBT data

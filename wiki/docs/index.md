@@ -1,42 +1,40 @@
-# CCPE — CC 外设扩展器
+# CCPE — CC Peripheral Extender
 
-!!! info "欢迎"
-    CCPE (CC Peripheral Extender) 是一个为 Minecraft NeoForge 平台设计的模组，专为 Create: Aeronautics 和 ComputerCraft: Tweaked 用户提供强大的无线外设控制能力。
-
+!!! info "Welcome"
+    CCPE (CC Peripheral Extender) is a mod for Minecraft NeoForge, built for Create: Aeronautics and ComputerCraft: Tweaked users, providing powerful wireless peripheral control.
 
 ![img](img/overview.png)
 
+## ✨ Core Features
 
-## ✨ 核心功能
+### [📡 Peripheral Extender](peripheral-extender/overview.md)
 
-### [📡外设扩展器](peripheral-extender/overview.md)
+A versatile remote terminal that supports:
 
-多功能远程终端，支持：
+- **NBT data reading** — access block data wirelessly via channels
+- **Peripheral proxy** — call CC:T peripheral methods remotely
+- **Wireless redstone** — send and receive redstone signals
+- **Navigation table integration** — get the aircraft's position, bearing and distance
+- **Physics data** — read velocity, mass and orientation from the Sable physics engine
+- **Chunk loading** — keep the area around the target block or a physics structure loaded
 
-- **NBT 数据读取** — 通过频道无线访问方块数据
-- **外设代理** — 远程调用 CC:T 外设方法
-- **无线红石** — 发送和接收红石信号
-- **导航桌集成** — 获取飞行器位置、方位、距离
-- **物理数据** — 读取 Sable 物理引擎的速度、质量、姿态
-- **区块加载** — 保持目标方块所在区域或者物理结构不被卸载
-    
-### [🤪模块化监视器](monitor/overview.md)
-12x10棋盘插槽，lua自由控制，满足不同场景下的互动和信息展示需求。
+### [🤪 Modular Monitor](monitor/overview.md)
+A 12×10 grid of module slots, freely controllable from Lua, satisfying interaction and information display needs in various scenarios.
 
-### [📻 红石收发器](redstone-transceiver/overview.md)
-直接读取和发送 Create Redstone Link 信号，无需在计算机旁堆叠红石链接方块。
+### [📻 Redstone Transceiver](redstone-transceiver/overview.md)
+Directly read and send Create Redstone Link signals without stacking redstone link blocks next to your computer.
 
-### [🎛️ 电子变速箱](electronic-transmission/overview.md)
-专为 CC:T 控制优化的转速控制器，避免了 Create 原版控制器的网络级联问题。
+### [🎛️ Electronic Transmission](electronic-transmission/overview.md)
+A rotation speed controller optimized for CC:T control, avoiding the network cascade issues of Create's vanilla controller.
 
 ---
-## 🚀 快速开始
+## 🚀 Quick Start
 
-[示例与教程](examples/monitoring-system.md) — 查看实际应用案例
+[Examples & Tutorials](peripheral-extender/example.md) — see real-world use cases
 
 
-## 🔗 相关链接
+## 🔗 Related Links
 
-- [GitHub 仓库](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1)
-- [问题反馈](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/issues)
-- [更新日志](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/main/changeLog.md)
+- [GitHub Repository](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1)
+- [Issue Tracker](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/issues)
+- [Changelog](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/main/changeLog.md)

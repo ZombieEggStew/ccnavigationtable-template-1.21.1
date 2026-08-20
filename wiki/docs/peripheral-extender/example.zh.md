@@ -1,6 +1,6 @@
-# Real-world Example - Simple Monitoring System
+# 实战示例 - 简单监控系统
 
-## Example 1: Monitor Chest Capacity
+## 示例 1：监控箱子容量
 
 ```lua
 local pe = require("ccpe.pe")
@@ -14,7 +14,7 @@ local function getChestFillPercentage(channel)
         totalCount = totalCount + item.count
     end
 
-    -- Assume the chest has 27 slots, each holding up to 64 items
+    -- 假设箱子有 27 个槽位，每个槽位最多 64 个物品
     local maxCapacity = 27 * 64
     return (totalCount / maxCapacity) * 100
 end
@@ -31,7 +31,7 @@ while true do
 end
 ```
 
-## Example 2: Find a Specific Item
+## 示例 2：查找特定物品
 
 ```lua
 local pe = require("ccpe.pe")
@@ -50,7 +50,7 @@ local function findItem(channel, itemId)
     return totalCount
 end
 
--- Find the total number of diamonds
+-- 查找钻石的总数
 local diamonds = findItem(2, "minecraft:diamond")
 print("diamonds: " .. (diamonds or 0))
 ```
