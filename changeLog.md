@@ -15,15 +15,13 @@
 - Added recipe for transmission peripheral
 
 1.0.4
-- wiki coming soon
+- Added wiki 
 
-- Added the Monitor: a modular instrument panel with a 12×10 module grid.
+- **!?NEWNEW?!** Added the Monitor: a modular instrument panel with a 12×10 module grid.
   Module items (Button 1×1, Toggle Switch 1×1, Knob 2×2, Screen of any size) are
   placed by right-clicking the monitor face — and removed with a Wrench.
 
-- Added the `ccpe:monitor` CC:Tweaked peripheral
-
-- Added new redstone transceiver Lua methods: setFrequency / getFrequency /
+- **!?NEWNEW?!** Added new redstone transceiver Lua methods: setFrequency / getFrequency /
   removeChannel / getChannels to manage Create Redstone Link frequencies.
 
 - Fixed PeripheralExtender / RedstoneTransceiver configuration being lost or stale
