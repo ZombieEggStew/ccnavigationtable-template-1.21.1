@@ -15,7 +15,6 @@ import com.zzy205.myfirstmod.screen.PeripheralExtenderScreen;
 
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import dev.engine_room.flywheel.lib.visualization.SimpleBlockEntityVisualizer;
-import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -47,9 +46,6 @@ public class CCPeripheralExtenderClient {
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
-        CCPeripheraExtender.LOGGER.info("HELLO FROM CLIENT SETUP");
-        CCPeripheraExtender.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
-
         // 注册 Flywheel Visual（shaft 渲染）
         SimpleBlockEntityVisualizer.builder(MyModBlockEntities.transmission_peripheral_entity.get())
                 .factory(TransmissionPeripheralVisual::new)

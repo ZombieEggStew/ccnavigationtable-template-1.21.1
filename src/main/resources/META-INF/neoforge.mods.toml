@@ -13,10 +13,10 @@ displayName = "CC Peripheral Extender"
 authors = "ZombieEggStew"
 
 description = '''
-CCPE (CC Peripheral Extender) provides CC:Tweaked peripheral extensions,
-including the Electronic Transmission block that acts as a configurable
-rotation speed controller between two shafts with Lua-based ratio and
-target speed control.
+CCPE (CC Peripheral Extender) provides CC:Tweaked peripheral extensions:
+- Micro Peripheral Extender: exposes the NBT data of attached machines to Lua
+- Redstone Transceiver: wireless redstone through Create Redstone Link networks
+- Monitor: configurable control panel with buttons, toggle switches, knobs and screens
 '''
 
 # =========================================================================
@@ -30,7 +30,7 @@ versionRange = "[21.1,)"
 ordering = "NONE"
 side = "BOTH"
 
-# Create (required — we extend SplitShaftBlockEntity)
+# Create (required — we extend IWrenchable and use Create's Redstone Link API)
 [[dependencies.ccpe]]
 modId = "create"
 type = "required"
@@ -54,26 +54,26 @@ versionRange = "[1.0,)"
 ordering = "AFTER"
 side = "CLIENT"
 
-# Simulated (optional — only used when present, with runtime ModList check)
+# Simulated (required — NavTable caching in PeripheralExtenderBlockEntity)
 [[dependencies.ccpe]]
 modId = "simulated"
-type = "optional"
+type = "required"
 versionRange = "[1.3,)"
 ordering = "AFTER"
 side = "BOTH"
 
-# Sable (optional — runtime guarded via SableImpl)
+# Sable (required — physics anti-unload tickets and physics data API)
 [[dependencies.ccpe]]
 modId = "sable"
-type = "optional"
+type = "required"
 versionRange = "[2.0,)"
 ordering = "AFTER"
 side = "BOTH"
 
-# Sable Companion (optional — pulled by Sable)
+# Sable Companion (required — pulled by Sable)
 [[dependencies.ccpe]]
 modId = "sablecompanion"
-type = "optional"
+type = "required"
 versionRange = "[1.6,)"
 ordering = "AFTER"
 side = "BOTH"

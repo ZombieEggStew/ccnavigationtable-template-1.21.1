@@ -12,13 +12,8 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import java.util.function.Supplier;
 
 public class MyModBlocks {
-    public static final DeferredRegister.Blocks MyBlocks =
+    public static final DeferredRegister.Blocks BLOCKS =
             DeferredRegister.createBlocks(CCPeripheraExtender.MOD_ID);
-
-//     public static final DeferredBlock<Block> test_block =
-//             registerBlocks("test_block" , () -> new Block(BlockBehaviour.Properties.of().
-//                     strength(1.0f , 6.0f)
-//             ));
 
     public static final DeferredBlock<Block> micro_peripheral_extender =
             registerBlocks("micro_peripheral_extender" , () -> new PeripheralExtenderBlock(BlockBehaviour.Properties.of().
@@ -50,12 +45,12 @@ public class MyModBlocks {
 
 
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {
-        DeferredBlock<T> blocks = MyBlocks.register(name , block);
+        DeferredBlock<T> blocks = BLOCKS.register(name , block);
         MyModItems.registerBlockItems(name , blocks);
         return blocks;
     }
 
     public static void register(IEventBus modEventBus) {
-        MyBlocks.register(modEventBus);
+        BLOCKS.register(modEventBus);
     }
 }

@@ -22,12 +22,12 @@ sourceSets.main.resources {
 }
 
 repositories {
-    // 本地手动下载的依赖，优先�?libs/ 解析
+    // 本地手动下载的依赖，优先从 libs/ 解析
     maven {
         name = 'LocalLibs'
         url = file('libs')
     }
-    mavenLocal() // 也可�?%USERPROFILE%\.m2\repository
+    mavenLocal() // 也可以 %USERPROFILE%\.m2\repository
     maven {
         name = 'Create Maven'
         url = 'https://maven.createmod.net'
@@ -163,7 +163,7 @@ dependencies {
     compileOnly("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") {
         transitive = false
     }
-    // Ponder �?shades net.createmod.catnip.data.Couple, which Create's API
+    // Ponder — shades net.createmod.catnip.data.Couple, which Create's API
     // surface (RedstoneLinkNetworkHandler.Frequency, getNetworkKey()) references.
     // The standalone Catnip-NeoForge-* artifact has Couple in a different
     // package (net.createmod.catnip.utility) starting in 0.8.x, so we depend on
@@ -185,13 +185,13 @@ dependencies {
     // the extracted simulated-neoforge JAR explicitly on the compile classpath.
     compileOnly files("libs/simulated-neoforge-1.21.1-1.3.0.jar")
 
-    // ---- Sable (optional) -------------------------------------------------
-    // compileOnly because Sable is an OPTIONAL runtime dep. Our code path that
-    // touches Sable types is isolated in SableImpl, which is only class-loaded
-    // when ModList reports sable is present at runtime.
+    // ---- Sable (required) -------------------------------------------------
+    // Sable is a REQUIRED runtime dependency (declared in neoforge.mods.toml).
+    // We only need its API at compile time; the full jar comes from the user's
+    // modpack at runtime.
     //
     // transitive = false: Sable's POM pulls in sable-companion and veil-neoforge
-    // (graphics lib), neither of which we need to compile against �?we only
+    // (graphics lib), neither of which we need to compile against. We only
     // reference dev.ryanhcode.sable.sublevel.SubLevel and Pose3d from the main
     // jar. Skipping transitives avoids hauling in extra maven repos.
     compileOnly("dev.ryanhcode.sable:sable-neoforge-${minecraft_version}:${sable_version}") {

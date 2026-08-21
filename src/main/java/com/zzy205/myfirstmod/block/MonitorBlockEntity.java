@@ -30,8 +30,6 @@ import net.neoforged.neoforge.network.PacketDistributor;
  */
 public class MonitorBlockEntity extends BlockEntity {
 
-    /** 显示器屏幕文字 */
-    private String screenText = "";
     /** monitor 背景平面上的字符和图形缓冲。 */
     private final ScreenText monitorDisplayText = new ScreenText();
     /** 12×10 棋盘网格 */
@@ -91,9 +89,6 @@ public class MonitorBlockEntity extends BlockEntity {
         }
         super.onChunkUnloaded();
     }
-
-    public String getScreenText() { return screenText; }
-    public void setScreenText(String text) { this.screenText = text; setChanged(); }
 
     public GridState getGridState() { return gridState; }
 
@@ -162,11 +157,7 @@ public class MonitorBlockEntity extends BlockEntity {
     /** 从全局注册表同步 occupiedChannels 快照到本 BE，并通知客户端。 */
     public void refreshOccupiedChannels() {
         if (this.level == null || this.level.isClientSide) return;
-        var channels = GlobalChannelRegistry.occupiedChannels();
-        int[] arr = new int[channels.size()];
-        int i = 0;
-        for (int ch : channels) arr[i++] = ch;
-        this.occupiedChannels = arr;
+        this.occupiedChannels = GlobalChannelRegistry.occupiedChannelsArray();
         this.setChanged();
         this.level.sendBlockUpdated(this.getBlockPos(), this.getBlockState(), this.getBlockState(), 3);
     }
@@ -393,7 +384,7 @@ public class MonitorBlockEntity extends BlockEntity {
     /** 应用控件的 ID 与配置。name 为模块类型名或 "screen"。 */
     public void applyModuleConfig(String name, int oldId, int newId, CompoundTag config) {
         boolean changed;
-        if ("screen".equals(name)) {
+        if (GridState.SCREEN_NAME.equals(name)) {
             changed = gridState.updateScreen(oldId, newId, config.getString("text"));
         } else {
             changed = gridState.trySetId(oldId, newId);
@@ -677,7 +668,6 @@ public class MonitorBlockEntity extends BlockEntity {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        tag.putString("ScreenText", screenText);
         tag.put("MonitorDisplayText", monitorDisplayText.save());
         tag.putInt("Channel", channel);
         tag.putString("Background", background);
@@ -691,7 +681,6 @@ public class MonitorBlockEntity extends BlockEntity {
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        screenText = tag.getString("ScreenText");
         if (tag.contains("MonitorDisplayText")) monitorDisplayText.load(tag.getCompound("MonitorDisplayText"));
         if (tag.contains("Channel")) channel = tag.getInt("Channel");
         if (tag.contains("Background")) {

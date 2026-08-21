@@ -20,12 +20,9 @@ public class MyModCreativeModeTabs {
             .title(Component.translatable("itemGroup.ccpe.my_mod_tab"))
             .icon(() -> new ItemStack(MyModBlocks.micro_peripheral_extender.get()))
             .displayItems((parameters, output) -> {
-                // output.accept(MyModItems.test_item);
-                // output.accept(MyModBlocks.test_block);
                 output.accept(MyModBlocks.micro_peripheral_extender);
                 output.accept(MyModBlocks.redstone_transceiver);
                 output.accept(MyModBlocks.transmission_peripheral);
-                // output.accept(MyModBlocks.flight_console);
                 output.accept(MyModBlocks.monitor);
                 output.accept(MyModItems.MODULE_BUTTON_1);
                 output.accept(MyModItems.MODULE_TOGGLE_SWITCH);

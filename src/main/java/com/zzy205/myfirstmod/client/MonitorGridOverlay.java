@@ -1,10 +1,12 @@
 package com.zzy205.myfirstmod.client;
 
+import com.simibubi.create.AllItems;
 import com.zzy205.myfirstmod.CCPeripheraExtender;
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.block.MonitorBlock;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
+import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.MonitorBackground;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
@@ -175,8 +177,8 @@ public class MonitorGridOverlay {
 
             ItemStack held = player.getMainHandItem();
             ModuleType heldType = ModuleType.fromItem(held);
-            boolean holdingScreen = held.getItem().toString().equals("ccpe:module_screen");
-            boolean holdingWrench = held.getItem().toString().contains("create") && held.getItem().toString().contains("wrench");
+            boolean holdingScreen = held.is(MyModItems.MODULE_SCREEN.get());
+            boolean holdingWrench = held.is(AllItems.WRENCH.get());
 
             // 扳手蹲下右键底座 → 拆卸整台 Monitor（由服务端 onSneakWrenched 处理），不再打开菜单；
             // 扳手普通右键 / 空手蹲下右键 → 仍打开 Monitor 菜单。
@@ -209,8 +211,8 @@ public class MonitorGridOverlay {
 
         ItemStack held = player.getMainHandItem();
         ModuleType heldType = ModuleType.fromItem(held);
-        boolean holdingScreen = held.getItem().toString().equals("ccpe:module_screen");
-        boolean holdingWrench = held.getItem().toString().contains("create") && held.getItem().toString().contains("wrench");
+        boolean holdingScreen = held.is(MyModItems.MODULE_SCREEN.get());
+        boolean holdingWrench = held.is(AllItems.WRENCH.get());
 
         // ── 获取此 Monitor 的独立交互状态 ──
         var interact = interactions.computeIfAbsent(pos, k -> new InteractionState());
@@ -293,7 +295,7 @@ public class MonitorGridOverlay {
 
         if (screenAt != null && (shiftUseEdge || holdingWrench && useEdge)
             && heldType == null && !holdingScreen) {
-            mc.setScreen(new MonitorModuleScreen(pos, grid, "screen", screenAt.id(), screenAt.tooltipText()));
+            mc.setScreen(new MonitorModuleScreen(pos, grid, GridState.SCREEN_NAME, screenAt.id(), screenAt.tooltipText()));
             return;
         }
 

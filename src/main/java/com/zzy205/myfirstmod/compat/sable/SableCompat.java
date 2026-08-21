@@ -51,13 +51,6 @@ public final class SableCompat {
     // ═══════════════ 公开 API ═══════════════
 
     /**
-     * @return Sable 是否已加载（始终为 true，因为 Sable 是必需的编译依赖）
-     */
-    public static boolean isAvailable() {
-        return true;
-    }
-
-    /**
      * 获取包含指定 BlockEntity 的 Sable SubLevel。
      *
      * @return SubLevel，不在子次元中则返回 null

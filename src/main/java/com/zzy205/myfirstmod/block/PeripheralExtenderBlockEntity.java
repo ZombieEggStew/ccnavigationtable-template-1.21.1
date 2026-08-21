@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.block;
 
 import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
 import com.zzy205.myfirstmod.Config;
+import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
 import com.zzy205.myfirstmod.compat.cc.PeripheralExtenderRegistry;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dev.ryanhcode.sable.sublevel.SubLevel;
@@ -364,11 +365,7 @@ public class PeripheralExtenderBlockEntity extends BlockEntity implements Partia
     /** 从注册表同步 occupiedChannels 快照到本 BE，并通知客户端 */
     public void refreshOccupiedChannels() {
         if (this.level == null || this.level.isClientSide) return;
-        var channels = PeripheralExtenderRegistry.getOccupiedChannels();
-        int[] arr = new int[channels.size()];
-        int i = 0;
-        for (int ch : channels) arr[i++] = ch;
-        this.occupiedChannels = arr;
+        this.occupiedChannels = GlobalChannelRegistry.occupiedChannelsArray();
         this.setChanged();
         this.level.sendBlockUpdated(this.getBlockPos(), this.getBlockState(), this.getBlockState(), 3);
     }

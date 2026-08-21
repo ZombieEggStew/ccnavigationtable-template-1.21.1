@@ -22,7 +22,7 @@ import java.util.Optional;
 public final class ScreenModuleHandle extends ModuleHandle {
 
     public ScreenModuleHandle(MonitorBlockEntity be, GridState.ScreenRegion screen) {
-        super(be, screen.id(), "screen", screen.minX(), screen.minY(),
+        super(be, screen.id(), GridState.SCREEN_NAME, screen.minX(), screen.minY(),
                 screen.width(), screen.height());
     }
 

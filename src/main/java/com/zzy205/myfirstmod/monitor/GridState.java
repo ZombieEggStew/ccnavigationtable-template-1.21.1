@@ -20,6 +20,8 @@ public class GridState {
 
     public static final int GRID_WIDTH = 12;
     public static final int GRID_HEIGHT = 10;
+    /** 屏幕类型名（网络 payload / 配置 / Lua getType 共用的标识）。 */
+    public static final String SCREEN_NAME = "screen";
     /** 屏幕占用的格子标记（与 -1 空和 ≥0 moduleId 区分） */
     public static final int SCREEN_CELL_MARKER = -2;
     /** 屏幕最小尺寸（格） */

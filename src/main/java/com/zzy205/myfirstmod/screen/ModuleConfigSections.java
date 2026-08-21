@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.screen;
 
+import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 
 import java.util.EnumMap;
@@ -27,7 +28,7 @@ public final class ModuleConfigSections {
 
     /** name 为模块类型名或 "screen"。 */
     public static ModuleConfigSection create(String name) {
-        if ("screen".equals(name)) return ModuleConfigSection.Empty.INSTANCE;
+        if (GridState.SCREEN_NAME.equals(name)) return ModuleConfigSection.Empty.INSTANCE;
         ModuleType type = ModuleType.byName(name);
         if (type == null) return ModuleConfigSection.Empty.INSTANCE;
         Factory factory = REGISTRY.get(type);

@@ -4,6 +4,8 @@ import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
 import com.zzy205.myfirstmod.channel.ChannelRegistry;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Set;
 
@@ -14,6 +16,8 @@ import java.util.Set;
  */
 public final class GlobalChannelRegistry {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalChannelRegistry.class);
+
     private static final ChannelRegistry<BlockEntity> REGISTRY =
             ChannelRegistry.create(BlockEntity::isRemoved, GlobalChannelRegistry::broadcastRefresh);
 
@@ -23,9 +27,11 @@ public final class GlobalChannelRegistry {
     private static void broadcastRefresh() {
         for (BlockEntity be : REGISTRY.owners()) {
             if (be instanceof PeripheralExtenderBlockEntity sensor) {
-                try { sensor.refreshOccupiedChannels(); } catch (Exception ignored) {}
+                try { sensor.refreshOccupiedChannels(); }
+                catch (Exception e) { LOGGER.debug("Failed to refresh sensor channel snapshot", e); }
             } else if (be instanceof MonitorBlockEntity monitor) {
-                try { monitor.refreshOccupiedChannels(); } catch (Exception ignored) {}
+                try { monitor.refreshOccupiedChannels(); }
+                catch (Exception e) { LOGGER.debug("Failed to refresh monitor channel snapshot", e); }
             }
         }
     }
@@ -60,6 +66,15 @@ public final class GlobalChannelRegistry {
 
     public static Set<Integer> occupiedChannels() {
         return REGISTRY.occupiedChannels();
+    }
+
+    /** 已占用频道号数组快照（客户端菜单 / BE 快照同步用）。 */
+    public static int[] occupiedChannelsArray() {
+        Set<Integer> channels = REGISTRY.occupiedChannels();
+        int[] arr = new int[channels.size()];
+        int i = 0;
+        for (int ch : channels) arr[i++] = ch;
+        return arr;
     }
 
     public static int size() {

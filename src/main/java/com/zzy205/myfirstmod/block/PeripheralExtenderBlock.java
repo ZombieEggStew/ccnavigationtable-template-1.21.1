@@ -40,11 +40,15 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.EnumMap;
 import java.util.Map;
 
 public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrenchable {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PeripheralExtenderBlock.class);
+
     public static final MapCodec<PeripheralExtenderBlock> CODEC = PeripheralExtenderBlock.simpleCodec(PeripheralExtenderBlock::new);
     public static final EnumProperty<AttachFace> FACE = BlockStateProperties.ATTACH_FACE;
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
@@ -316,7 +320,6 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
      * 如果方块实体在 Sable 物理子次元中（航空学 mod 的物理组装），
      * 将 NBT 中的 x/y/z 坐标直接替换为真实世界坐标。
      */
-    @SuppressWarnings("CallToPrintStackTrace")
     static void tryAddRealWorldPos(Level level, BlockEntity be, CompoundTag nbt) {
         try {
             var subLevel = SableCompat.getContainingSubLevel(be);
@@ -332,7 +335,7 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.debug("Failed to project attached block to real world position", e);
         }
     }
 }
