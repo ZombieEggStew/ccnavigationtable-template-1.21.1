@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.client.MonitorClientRegistry;
 import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
 import com.zzy205.myfirstmod.compat.cc.MonitorPeripheral;

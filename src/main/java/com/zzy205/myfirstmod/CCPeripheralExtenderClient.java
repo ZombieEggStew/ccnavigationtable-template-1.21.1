@@ -30,8 +30,8 @@ import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
-@Mod(value = CCPeripheraExtender.MOD_ID, dist = Dist.CLIENT)
-@EventBusSubscriber(modid = CCPeripheraExtender.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
+@Mod(value = CCPeripheralExtender.MOD_ID, dist = Dist.CLIENT)
+@EventBusSubscriber(modid = CCPeripheralExtender.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
 public class CCPeripheralExtenderClient {
     public CCPeripheralExtenderClient(ModContainer container, IEventBus modEventBus) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);

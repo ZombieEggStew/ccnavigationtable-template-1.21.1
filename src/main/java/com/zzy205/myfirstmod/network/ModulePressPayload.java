@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.network;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 public record ModulePressPayload(BlockPos pos, int moduleId, boolean pressed) implements CustomPacketPayload {
 
     public static final Type<ModulePressPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, "module_press"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "module_press"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ModulePressPayload> STREAM_CODEC =
             StreamCodec.composite(

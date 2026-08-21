@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.item;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -13,7 +13,7 @@ import java.util.function.Supplier;
 
 public class MyModCreativeModeTabs {
     public static final DeferredRegister<CreativeModeTab> MY_MOD_TAB =
-            DeferredRegister.create(Registries.CREATIVE_MODE_TAB , CCPeripheraExtender.MOD_ID);
+            DeferredRegister.create(Registries.CREATIVE_MODE_TAB , CCPeripheralExtender.MOD_ID);
 
     public static final Supplier<CreativeModeTab> MY_MOD_TAB_SUPPLIER =
             MY_MOD_TAB.register("my_mod_tab", () -> CreativeModeTab.builder()

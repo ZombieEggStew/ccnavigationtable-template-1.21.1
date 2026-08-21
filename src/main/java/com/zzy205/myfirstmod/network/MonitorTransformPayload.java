@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.network;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 public record MonitorTransformPayload(BlockPos monitorPos, float pitch, float yaw, int offset) implements CustomPacketPayload {
 
     public static final Type<MonitorTransformPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, "monitor_transform"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "monitor_transform"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, MonitorTransformPayload> STREAM_CODEC =
             StreamCodec.composite(

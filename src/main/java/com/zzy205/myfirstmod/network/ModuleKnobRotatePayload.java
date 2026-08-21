@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.network;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 public record ModuleKnobRotatePayload(BlockPos pos, int moduleId, float angle) implements CustomPacketPayload {
 
     public static final Type<ModuleKnobRotatePayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, "module_knob_rotate"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "module_knob_rotate"));
 
     public static final StreamCodec<ByteBuf, ModuleKnobRotatePayload> STREAM_CODEC =
             StreamCodec.composite(

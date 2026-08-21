@@ -4,7 +4,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.monitor.ScreenText;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -36,7 +36,7 @@ public final class ScreenTextRenderer {
 
     /** 纯色 quad（矩形/描边，无纹理）。 */
     private static final RenderType SOLID_BG = RenderType.create(
-            CCPeripheraExtender.MOD_ID + ":screen_text_bg",
+            CCPeripheralExtender.MOD_ID + ":screen_text_bg",
             DefaultVertexFormat.POSITION_COLOR,
             VertexFormat.Mode.QUADS,
             256,

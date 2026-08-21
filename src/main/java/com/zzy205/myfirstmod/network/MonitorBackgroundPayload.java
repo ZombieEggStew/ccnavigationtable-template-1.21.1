@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.network;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 public record MonitorBackgroundPayload(BlockPos monitorPos, String background) implements CustomPacketPayload {
 
     public static final Type<MonitorBackgroundPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, "monitor_background"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "monitor_background"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, MonitorBackgroundPayload> STREAM_CODEC =
             StreamCodec.composite(

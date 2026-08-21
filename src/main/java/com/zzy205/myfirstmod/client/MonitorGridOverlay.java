@@ -1,7 +1,7 @@
 package com.zzy205.myfirstmod.client;
 
 import com.simibubi.create.AllItems;
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.block.MonitorBlock;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
@@ -130,7 +130,7 @@ public class MonitorGridOverlay {
         NeoForge.EVENT_BUS.addListener(MonitorGridOverlay::onRenderLevel);
         NeoForge.EVENT_BUS.addListener(MonitorGridOverlay::onRenderGui);
         NeoForge.EVENT_BUS.addListener(MonitorGridOverlay::onClientTick);
-        CCPeripheraExtender.LOGGER.info("MonitorGridOverlay registered with Catnip Outliner");
+        CCPeripheralExtender.LOGGER.info("MonitorGridOverlay registered with Catnip Outliner");
     }
 
     public static void onRenderLevel(RenderLevelStageEvent event) {

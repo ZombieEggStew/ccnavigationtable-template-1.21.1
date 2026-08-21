@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.network;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 public record RemoveModulePayload(BlockPos pos, int moduleId) implements CustomPacketPayload {
 
     public static final Type<RemoveModulePayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, "remove_module"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "remove_module"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, RemoveModulePayload> STREAM_CODEC =
             StreamCodec.composite(

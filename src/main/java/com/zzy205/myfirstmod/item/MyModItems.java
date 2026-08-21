@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.item;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
@@ -13,7 +13,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 public class MyModItems {
     public static final DeferredRegister.Items ITEMS =
-            DeferredRegister.createItems(CCPeripheraExtender.MOD_ID);
+            DeferredRegister.createItems(CCPeripheralExtender.MOD_ID);
 
     // ── 仪表模块物品 ──
     public static final DeferredItem<Item> MODULE_BUTTON_1 = ITEMS.register(

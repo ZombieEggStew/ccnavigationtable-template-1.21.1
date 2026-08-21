@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.client;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.monitor.MonitorBackground;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
@@ -43,9 +43,9 @@ public final class MonitorBackgrounds {
                         .forEach(MonitorBackgrounds::loadTexture);
             }
         } catch (IOException exception) {
-            CCPeripheraExtender.LOGGER.warn("[Monitor] Could not scan external background directory {}", DIRECTORY, exception);
+            CCPeripheralExtender.LOGGER.warn("[Monitor] Could not scan external background directory {}", DIRECTORY, exception);
         }
-        CCPeripheraExtender.LOGGER.info("[Monitor] Loaded {} external background image(s) from {}", KEYS.size(), DIRECTORY);
+        CCPeripheralExtender.LOGGER.info("[Monitor] Loaded {} external background image(s) from {}", KEYS.size(), DIRECTORY);
     }
 
     public static List<String> keys() {
@@ -65,19 +65,19 @@ public final class MonitorBackgrounds {
         String fileName = path.getFileName().toString();
         String key = MonitorBackground.customKey(fileName);
         if (key == null || TEXTURES.containsKey(key)) {
-            CCPeripheraExtender.LOGGER.warn("[Monitor] Ignoring external background with unsupported or duplicate name: {}", fileName);
+            CCPeripheralExtender.LOGGER.warn("[Monitor] Ignoring external background with unsupported or duplicate name: {}", fileName);
             return;
         }
 
         try (InputStream input = Files.newInputStream(path)) {
             NativeImage image = NativeImage.read(input);
             ResourceLocation texture = ResourceLocation.fromNamespaceAndPath(
-                    CCPeripheraExtender.MOD_ID, "dynamic/monitor_bg/" + Integer.toUnsignedString(key.hashCode(), 36));
+                    CCPeripheralExtender.MOD_ID, "dynamic/monitor_bg/" + Integer.toUnsignedString(key.hashCode(), 36));
             Minecraft.getInstance().getTextureManager().register(texture, new DynamicTexture(image));
             TEXTURES.put(key, texture);
             KEYS.add(key);
         } catch (IOException exception) {
-            CCPeripheraExtender.LOGGER.warn("[Monitor] Could not load external background image {}", path, exception);
+            CCPeripheralExtender.LOGGER.warn("[Monitor] Could not load external background image {}", path, exception);
         }
     }
 }

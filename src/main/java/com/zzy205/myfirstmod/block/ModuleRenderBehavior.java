@@ -5,7 +5,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.math.Axis;
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderStateShard;
@@ -32,7 +32,7 @@ public abstract class ModuleRenderBehavior {
 
     /** 灯带纯色面片渲染类型：POSITION_COLOR（无纹理、无光照贴图），与 screen 文字背景 SOLID_BG 完全同款 */
     private static final RenderType INDICATOR_RENDER_TYPE = RenderType.create(
-            CCPeripheraExtender.MOD_ID + ":module_indicator",
+            CCPeripheralExtender.MOD_ID + ":module_indicator",
             DefaultVertexFormat.POSITION_COLOR,
             VertexFormat.Mode.QUADS,
             256, false, false,

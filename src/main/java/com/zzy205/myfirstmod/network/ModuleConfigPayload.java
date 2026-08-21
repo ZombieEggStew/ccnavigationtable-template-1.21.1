@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.network;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -17,7 +17,7 @@ public record ModuleConfigPayload(BlockPos pos, String name, int oldId, int newI
         implements CustomPacketPayload {
 
     public static final Type<ModuleConfigPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, "module_config"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "module_config"));
 
     private static final StreamCodec<RegistryFriendlyByteBuf, CompoundTag> TAG_CODEC =
             StreamCodec.of(

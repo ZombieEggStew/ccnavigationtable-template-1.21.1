@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.item.MyModItems;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
@@ -13,7 +13,7 @@ import java.util.function.Supplier;
 
 public class MyModBlocks {
     public static final DeferredRegister.Blocks BLOCKS =
-            DeferredRegister.createBlocks(CCPeripheraExtender.MOD_ID);
+            DeferredRegister.createBlocks(CCPeripheralExtender.MOD_ID);
 
     public static final DeferredBlock<Block> micro_peripheral_extender =
             registerBlocks("micro_peripheral_extender" , () -> new PeripheralExtenderBlock(BlockBehaviour.Properties.of().

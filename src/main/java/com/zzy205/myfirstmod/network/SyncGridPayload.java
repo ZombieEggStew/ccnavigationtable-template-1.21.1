@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.network;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 public record SyncGridPayload(BlockPos pos, CompoundTag gridTag) implements CustomPacketPayload {
 
     public static final Type<SyncGridPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, "sync_grid"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "sync_grid"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SyncGridPayload> STREAM_CODEC =
             StreamCodec.of(

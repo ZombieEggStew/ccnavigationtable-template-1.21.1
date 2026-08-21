@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.BakedModel;
@@ -69,7 +69,7 @@ public class MonitorPreloadedModels {
     }
 
     private static ResourceLocation rl(String path) {
-        return ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, path);
+        return ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, path);
     }
 
     public static void init() {}
@@ -86,24 +86,24 @@ public class MonitorPreloadedModels {
         for (var e : MAIN_LOC.entrySet()) {
             BakedModel m = event.getModels().get(ModelResourceLocation.standalone(e.getValue()));
             if (m != null) { MAIN_MODEL.put(e.getKey(), m); }
-            else CCPeripheraExtender.LOGGER.error("[Models] MISSING main: {}", e.getKey());
+            else CCPeripheralExtender.LOGGER.error("[Models] MISSING main: {}", e.getKey());
         }
         for (var e : EXTRA_LOC.entrySet()) {
             BakedModel m = event.getModels().get(ModelResourceLocation.standalone(e.getValue()));
             if (m != null) { EXTRA_MODEL.put(e.getKey(), m); }
-            else CCPeripheraExtender.LOGGER.error("[Models] MISSING extra: {}", e.getKey());
+            else CCPeripheralExtender.LOGGER.error("[Models] MISSING extra: {}", e.getKey());
         }
         for (int i = 0; i < BACKGROUND_COUNT; i++) {
             BakedModel m = event.getModels().get(ModelResourceLocation.standalone(BG_LOC[i]));
             if (m == null) {
-                CCPeripheraExtender.LOGGER.error("[Models] MISSING bg: {}", i);
+                CCPeripheralExtender.LOGGER.error("[Models] MISSING bg: {}", i);
                 continue;
             }
             var quads = m.getQuads(null, null, RANDOM, ModelData.EMPTY, null);
             if (!quads.isEmpty()) {
                 BG_SPRITE[i] = quads.get(0).getSprite();
             } else {
-                CCPeripheraExtender.LOGGER.error("[Models] bg has no quad: {}", i);
+                CCPeripheralExtender.LOGGER.error("[Models] bg has no quad: {}", i);
             }
         }
     }

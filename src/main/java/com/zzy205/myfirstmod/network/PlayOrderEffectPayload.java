@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.network;
 
-import com.zzy205.myfirstmod.CCPeripheraExtender;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -19,7 +19,7 @@ import net.minecraft.resources.ResourceLocation;
 public record PlayOrderEffectPayload(BlockPos pos) implements CustomPacketPayload {
 
     public static final Type<PlayOrderEffectPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheraExtender.MOD_ID, "play_order_effect"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "play_order_effect"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PlayOrderEffectPayload> STREAM_CODEC =
             StreamCodec.composite(
