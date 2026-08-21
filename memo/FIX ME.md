@@ -1,11 +1,3 @@
-# 最需要处理的风险（P0）
-
-
-2. 主类 CCPeripheraExtender 职责过重
-368 行的构造函数里内联注册了 15 个 payload handler，每个都是"getBlockEntity(pos) → instanceof → 改状态"的重复骨架。以后每加一个功能，主类就再胖一圈，也不好单独测试。
-
-建议：把网络注册拆成独立的 ModPackets/NetworkHandler 类（static void register(PayloadRegistrar)），甚至按功能（Monitor / Sensor / Receiver）拆多个 handler 类；重复的"按 pos 取 BE 并 instanceof"可以提一个 findMonitor(level, pos) 之类的工具方法。15 个 payload record 本身是 idiomatic 的，样板可以保留，但 handler 应该搬走。
-
 
 # 性能与健壮性（P1）
 3. 传感器每 tick 全量 NBT 序列化
