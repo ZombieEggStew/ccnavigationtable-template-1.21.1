@@ -501,13 +501,29 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
     // ═══════════════ 应力 ═══════════════
 
     /**
-     * 应力影响 = Config.servoStressImpact（默认 4 SU/RPM）。
-     * Create 的应力网络与 goggle tooltip 都通过本方法取值，实际应力 = impact × |转速|。
+     * 应力影响：
+     * <ul>
+     *   <li>变速器模式：实际应力 = Config.servoStressImpact × |输入转速|；</li>
+     *   <li>舵机模式：实际应力 = Config.servoModeStressImpact × |输出转速|（输出可被 setServoSpeed 覆盖/加速）。</li>
+     * </ul>
+     * Create 的应力网络按 {@code impact × |输入转速|} 计费，goggle tooltip 也走同一公式；
+     * 因此舵机模式把 impact 反算为 {@code 2 × 输出转速 / 输入转速}，使网络与 tooltip 都落在输出转速上。
      */
     @Override
     public float calculateStressApplied() {
-        this.lastStressApplied = Config.SERVO_STRESS_IMPACT.get().floatValue();
-        return this.lastStressApplied;
+        float impact;
+        if (servoMode) {
+            float sourceSpeed = Math.abs(getTheoreticalSpeed());
+            if (sourceSpeed < 0.01f) {
+                impact = 0f;
+            } else {
+                impact = Config.SERVO_MODE_STRESS_IMPACT.get().floatValue() * getServoDriveSpeed() / sourceSpeed;
+            }
+        } else {
+            impact = Config.SERVO_STRESS_IMPACT.get().floatValue();
+        }
+        this.lastStressApplied = impact;
+        return impact;
     }
 
     // ═══════════════ 下游序列上下文 ═══════════════
