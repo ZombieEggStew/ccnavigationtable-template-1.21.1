@@ -58,31 +58,38 @@ public class PeripheralExtenderBlockEntity extends BlockEntity implements Partia
     /** CC:T 无线红石输出信号 (0-15) */
     private int redstoneOutput = 0;
 
-    // ════════════════ CC:T 快速查询缓存（serverTick 刷新，计算机线程安全读取） ════════════════
+    // ════════════════ CC:T 快速查询缓存（按需刷新，计算机线程安全读取） ════════════════
+
+    /**
+     * Lua 请求驱动的缓存刷新标志。
+     * 计算机线程通过 {@link #requestCacheRefresh()} 置位，服务端 tick 消费（置位才刷新一次）。
+     * volatile 保证跨线程可见性。
+     */
+    private volatile boolean cacheDirty = false;
 
     /** 缓存的附着方块 BE 引用 */
     @javax.annotation.Nullable
-    private BlockEntity cachedAttachedBE = null;
+    private volatile BlockEntity cachedAttachedBE = null;
 
-    /** 缓存的附着方块 NBT 快照（每个 tick 由 saveWithFullMetadata 生成新对象） */
-    private CompoundTag cachedAttachedCompoundTag = new CompoundTag();
+    /** 缓存的附着方块 NBT 快照（刷新时由 saveWithFullMetadata 生成新对象） */
+    private volatile CompoundTag cachedAttachedCompoundTag = new CompoundTag();
 
     /** 缓存的 Sable SubLevel */
     @javax.annotation.Nullable
-    private SubLevel cachedSubLevel = null;
+    private volatile SubLevel cachedSubLevel = null;
 
     /** 缓存的 NavTable 目标世界坐标 */
     @javax.annotation.Nullable
-    private Vec3 cachedNavTargetPos = null;
+    private volatile Vec3 cachedNavTargetPos = null;
 
     /** 缓存的 NavTable 自身世界坐标 */
-    private Vec3 cachedNavSelfPos = Vec3.ZERO;
+    private volatile Vec3 cachedNavSelfPos = Vec3.ZERO;
 
     /** 缓存的 NavTable 距离 */
-    private double cachedNavDistance = 0.0;
+    private volatile double cachedNavDistance = 0.0;
 
     /** 缓存的 NavTable 相对角度 */
-    private float cachedNavRelativeAngle = 0.0f;
+    private volatile float cachedNavRelativeAngle = 0.0f;
 
 
     public PeripheralExtenderBlockEntity(BlockPos pos, BlockState state) {
@@ -101,6 +108,10 @@ public class PeripheralExtenderBlockEntity extends BlockEntity implements Partia
                 this.setChanged();
             }
             refreshOccupiedChannels();
+
+            // 首个 tick 刷新一次缓存，保证即使 Lua 从未请求也至少有一份真实快照
+            // （getUpdateTag 兜底同步也需要有数据）
+            this.cacheDirty = true;
 
             // 根据 GUI 加载模式决定启用哪种加载
             applyLoadMode();
@@ -259,8 +270,12 @@ public class PeripheralExtenderBlockEntity extends BlockEntity implements Partia
         if (!(level instanceof ServerLevel serverLevel)) return;
         if (!level.isLoaded(pos)) return;  // 关服/卸载中跳过
 
-        // ★ 刷新所有 CC:T 快速查询缓存
-        be.refreshAllCaches(level, state);
+        // ★ 按需刷新 CC:T 快速查询缓存：仅在 Lua / GUI 请求过（cacheDirty）时刷新一次。
+        // 空闲时零序列化开销；同一 tick 内多次请求合并为一次刷新。
+        if (be.cacheDirty) {
+            be.cacheDirty = false;
+            be.refreshAllCaches(level, state);
+        }
 
         // SubLevel ticket 管理（原有逻辑）
         if (!be.sableTicketRegistered || be.sableRootSubLevelId == null) return;
@@ -386,10 +401,11 @@ public class PeripheralExtenderBlockEntity extends BlockEntity implements Partia
 
     /**
      * 对外暴露的读取接口：刷新并返回附着方块的最新 NBT。
-     * 仅在调用时读取，不会后台自动 tick。
+     * 由 GUI 轮询（菜单按钮 id=0）调用；统一走 {@link #refreshAllCaches}，
+     * 保证 GUI 与 Lua 读取的是同一份一致缓存。
      */
     public CompoundTag refreshAndGet(Level level, BlockState state) {
-        this.cachedAttachedNBT = PeripheralExtenderBlock.getAttachedBlockNBT(level, state, this.getBlockPos());
+        this.refreshAllCaches(level, state);
         this.setChanged();
         level.sendBlockUpdated(this.getBlockPos(), state, state, 3);
         return this.cachedAttachedNBT;
@@ -475,8 +491,14 @@ public class PeripheralExtenderBlockEntity extends BlockEntity implements Partia
         return this.level.getBestNeighborSignal(this.worldPosition);
     }
 
-    // ════════════════ 缓存刷新（serverTick 调用） ════════════════
+    // ════════════════ 缓存刷新（按需：Lua 置位 cacheDirty，服务端 tick 消费） ════════════════
 
+    /** Lua 读取前调用：请求下一次服务端 tick 刷新缓存（线程安全，只置位、不阻塞、不跨线程）。 */
+    public void requestCacheRefresh() {
+        this.cacheDirty = true;
+    }
+
+    /** 全量刷新所有缓存字段（必须在服务端主线程调用）。 */
     void refreshAllCaches(Level level, BlockState state) {
         BlockPos attachedPos = PeripheralExtenderBlock.getAttachedPos(state, this.worldPosition);
         BlockEntity attachedBE = level.getBlockEntity(attachedPos);

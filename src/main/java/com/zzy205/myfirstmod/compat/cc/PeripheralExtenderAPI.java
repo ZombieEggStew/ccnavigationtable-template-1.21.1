@@ -44,6 +44,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Object get(int channel, String path) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return null;
+        sensor.requestCacheRefresh();
         CompoundTag nbt = sensor.getCachedAttachedCompoundTag();
         if (nbt.isEmpty()) return null;
         return resolvePath(nbt, path);
@@ -53,6 +54,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Map<String, Object> getAll(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return Collections.emptyMap();
+        sensor.requestCacheRefresh();
         CompoundTag nbt = sensor.getCachedAttachedCompoundTag();
         if (nbt.isEmpty()) return Collections.emptyMap();
         return convertCompoundToMap(nbt);
@@ -64,6 +66,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final String getBlockId(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return "";
+        sensor.requestCacheRefresh();
         BlockEntity be = sensor.getCachedAttachedBE();
         if (be == null) return "";
         return be.getBlockState().getBlock().builtInRegistryHolder().key().location().toString();
@@ -73,6 +76,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Map<String, Double> getBlockPos(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return Collections.emptyMap();
+        sensor.requestCacheRefresh();
         SubLevel sub = sensor.getCachedSubLevel();
         if (sub == null) return Collections.emptyMap();
         Vec3 pos = SableCompat.getSubLevelWorldPos(sub);
@@ -86,6 +90,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final @Nullable Map<String, Double> getNavTargetPos(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return null;
+        sensor.requestCacheRefresh();
         Vec3 target = sensor.getCachedNavTargetPos();
         return target != null ? vec3ToMap(target) : null;
     }
@@ -94,6 +99,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Map<String, Double> getNavSelfPos(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return Collections.emptyMap();
+        sensor.requestCacheRefresh();
         return vec3ToMap(sensor.getCachedNavSelfPos());
     }
 
@@ -101,6 +107,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final double getNavDistance(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return 0.0;
+        sensor.requestCacheRefresh();
         return sensor.getCachedNavDistance();
     }
 
@@ -108,6 +115,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final float getNavRelativeAngle(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return 0.0f;
+        sensor.requestCacheRefresh();
         return sensor.getCachedNavRelativeAngle();
     }
 
@@ -142,6 +150,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Map<String, Double> getPhysicsPos(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return Collections.emptyMap();
+        sensor.requestCacheRefresh();
         SubLevel sub = sensor.getCachedSubLevel();
         if (sub == null) return Collections.emptyMap();
         Vec3 pos = SableCompat.getSubLevelWorldPos(sub);
@@ -153,6 +162,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Map<String, Double> getPhysicsVelocity(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return Collections.emptyMap();
+        sensor.requestCacheRefresh();
         BlockEntity be = sensor.getCachedAttachedBE();
         if (!(be instanceof dev.simulated_team.simulated.content.blocks.velocity_sensor.VelocitySensorBlockEntity))
             return Collections.emptyMap();
@@ -167,6 +177,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Map<String, Double> getPhysicsAirVelocity(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return Collections.emptyMap();
+        sensor.requestCacheRefresh();
         BlockEntity be = sensor.getCachedAttachedBE();
         if (!(be instanceof dev.simulated_team.simulated.content.blocks.velocity_sensor.VelocitySensorBlockEntity))
             return Collections.emptyMap();
@@ -181,6 +192,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Map<String, Double> getPhysicsAngularVelocity(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return Collections.emptyMap();
+        sensor.requestCacheRefresh();
         BlockEntity be = sensor.getCachedAttachedBE();
         if (!(be instanceof dev.simulated_team.simulated.content.blocks.velocity_sensor.VelocitySensorBlockEntity))
             return Collections.emptyMap();
@@ -196,6 +208,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final double getAxisVelocity(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return 0.0;
+        sensor.requestCacheRefresh();
         Level level = sensor.getLevel();
         if (level == null) return 0.0;
         
@@ -218,6 +231,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Map<String, Double> getPhysicsOrientation(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return Collections.emptyMap();
+        sensor.requestCacheRefresh();
         SubLevel sub = sensor.getCachedSubLevel();
         if (sub == null) return Collections.emptyMap();
         double[] quat = SableCompat.getSubLevelOrientation(sub);
@@ -234,6 +248,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Map<String, Double> getPhysicsCenterOfMass(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return Collections.emptyMap();
+        sensor.requestCacheRefresh();
         SubLevel sub = sensor.getCachedSubLevel();
         if (sub == null) return Collections.emptyMap();
         Vec3 com = SableCompat.getCenterOfMass(sub);
@@ -245,6 +260,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Double getPhysicsMass(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return null;
+        sensor.requestCacheRefresh();
         SubLevel sub = sensor.getCachedSubLevel();
         if (sub == null) return null;
         return SableCompat.getMass(sub);
@@ -254,6 +270,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
     public final Double getPhysicsChainMass(int channel) {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor == null) return null;
+        sensor.requestCacheRefresh();
         SubLevel sub = sensor.getCachedSubLevel();
         if (sub == null) return null;
         return SableCompat.getChainMass(sub);
@@ -285,6 +302,11 @@ public class PeripheralExtenderAPI implements ILuaAPI {
         PeripheralExtenderBlockEntity sensor = PeripheralExtenderRegistry.get(channel);
         if (sensor != null) {
             BlockEntity be = sensor.getCachedAttachedBE();
+            // 按需刷新模式下缓存可能尚未就绪：本方法运行在主线程，直接实时兜底查询附着方块
+            if (be == null && sensor.getLevel() != null) {
+                be = sensor.getLevel().getBlockEntity(
+                        PeripheralExtenderBlock.getAttachedPos(sensor.getBlockState(), sensor.getBlockPos()));
+            }
             if (be == null) return null;
             if (be instanceof IPeripheral p) return p;
             if (sensor.getLevel() == null) return null;
