@@ -22,11 +22,11 @@ public class Config {
             .defineInRange("sensorPortalTicketRadius", 3, 1, 32);
 
     public static final ModConfigSpec.DoubleValue SERVO_STRESS_IMPACT = BUILDER
-            .comment("Stress impact in SU per RPM for the Transmission Peripheral in transmission mode. Actual stress = impact * |RPM|.")
-            .defineInRange("servoStressImpact", 4.0, 0.0, 1024.0);
+            .comment("Stress coefficient for the Transmission Peripheral in transmission mode: actual stress = value × |output RPM − input RPM|.")
+            .defineInRange("servoStressImpact", 2.0, 0.0, 1024.0);
 
     public static final ModConfigSpec.DoubleValue SERVO_MODE_STRESS_IMPACT = BUILDER
-            .comment("Stress impact for the Transmission Peripheral in servo mode: actual stress = value × |output RPM| (the output speed may be overridden/accelerated by setServoSpeed).")
+            .comment("Stress coefficient for the Transmission Peripheral in servo mode: actual stress = value × |real output RPM| (the output speed may be overridden/accelerated by setServoSpeed).")
             .defineInRange("servoModeStressImpact", 2.0, 0.0, 1024.0);
 
     // ── 客户端：Monitor 模块渲染 ──

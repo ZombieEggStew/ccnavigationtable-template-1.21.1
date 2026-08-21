@@ -4,6 +4,7 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.transmission.SplitShaftBlockEntity;
 import com.simibubi.create.content.kinetics.transmission.sequencer.SequencedGearshiftBlockEntity.SequenceContext;
 import com.simibubi.create.content.kinetics.transmission.sequencer.SequencerInstructions;
+import com.simibubi.create.foundation.utility.CreateLang;
 import com.zzy205.myfirstmod.Config;
 import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
@@ -278,7 +279,21 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
     public void tick() {
         super.tick();
         if (level == null || level.isClientSide) return;
+        updateStressImpact();
         tickServoServer();
+    }
+
+    /**
+     * 每 tick 对账网络缓存的应力 impact：变速器目标模式下 impact 随输入转速变化
+     * （ratio 模式与舵机模式在段内基本恒定，此处为空操作）。网络缓存值变化时主动刷新。
+     */
+    private void updateStressImpact() {
+        if (!hasNetwork()) return;
+        float old = lastStressApplied;
+        float impact = calculateStressApplied();  // 同时写入 lastStressApplied
+        if (Math.abs(impact - old) > VALUE_EPSILON) {
+            getOrCreateNetwork().updateStressFor(this, impact);
+        }
     }
 
     /**
@@ -446,8 +461,28 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
         }
 
         tooltip.add(Component.empty());
-        super.addToGoggleTooltip(tooltip, isPlayerSneaking);
+        addStressImpactStats(tooltip, calculateStressApplied());
         return true;
+    }
+
+    @Override
+    protected void addStressImpactStats(List<Component> tooltip, float stressAtBase) {
+        CreateLang.translate("gui.goggles.kinetic_stats")
+            .forGoggles(tooltip);
+        
+        CreateLang.translate("tooltip.stressImpact")
+            .style(ChatFormatting.GRAY)
+            .forGoggles(tooltip);
+
+        float stressTotal = stressAtBase * Math.abs(getTheoreticalSpeed());
+
+        CreateLang.number(stressTotal)
+            .translate("generic.unit.stress")
+            .style(ChatFormatting.AQUA)
+            .space()
+            .add(CreateLang.translate("gui.goggles.at_current_speed")
+                .style(ChatFormatting.DARK_GRAY))
+            .forGoggles(tooltip, 1);
     }
 
     private Component angleLine(String key, float angle) {
@@ -501,26 +536,33 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
     // ═══════════════ 应力 ═══════════════
 
     /**
-     * 应力影响：
+     * 应力影响（Create 网络按 {@code impact × |输入转速|} 计费，tooltip 同公式）：
      * <ul>
-     *   <li>变速器模式：实际应力 = Config.servoStressImpact × |输入转速|；</li>
-     *   <li>舵机模式：实际应力 = Config.servoModeStressImpact × |输出转速|（输出可被 setServoSpeed 覆盖/加速）。</li>
+     *   <li>变速器模式：实际应力 = Config.servoStressImpact × |输出转速 − 输入转速|
+     *       （ratio = 1 时 Δ = 0 不耗应力），impact 反算为 {@code 系数 × Δ / |输入转速|}；</li>
+     *   <li>舵机模式：实际应力 = Config.servoModeStressImpact × |真实输出转速|
+     *       （输出可被 setServoSpeed 覆盖/加速；静止时输出为 0 不耗应力）。</li>
      * </ul>
-     * Create 的应力网络按 {@code impact × |输入转速|} 计费，goggle tooltip 也走同一公式；
-     * 因此舵机模式把 impact 反算为 {@code 2 × 输出转速 / 输入转速}，使网络与 tooltip 都落在输出转速上。
      */
     @Override
     public float calculateStressApplied() {
         float impact;
         if (servoMode) {
             float sourceSpeed = Math.abs(getTheoreticalSpeed());
-            if (sourceSpeed < 0.01f) {
+            if (sourceSpeed < 0.01f || !motion.isActive()) {
                 impact = 0f;
             } else {
-                impact = Config.SERVO_MODE_STRESS_IMPACT.get().floatValue() * getServoDriveSpeed() / sourceSpeed;
+                float realOutputSpeed = Math.abs(getRotationSpeedModifier(getSourceFacing().getOpposite()) * sourceSpeed);
+                impact = Config.SERVO_MODE_STRESS_IMPACT.get().floatValue() * realOutputSpeed / sourceSpeed;
             }
         } else {
-            impact = Config.SERVO_STRESS_IMPACT.get().floatValue();
+            float inputSpeed = Math.abs(getTheoreticalSpeed());
+            if (inputSpeed < 0.01f) {
+                impact = 0f;
+            } else {
+                float delta = Math.abs(getOutputSpeed() - inputSpeed);
+                impact = Config.SERVO_STRESS_IMPACT.get().floatValue() * delta / inputSpeed;
+            }
         }
         this.lastStressApplied = impact;
         return impact;
