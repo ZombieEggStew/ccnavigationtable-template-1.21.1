@@ -41,10 +41,16 @@ public class TransmissionPeripheralRenderer extends KineticBlockEntityRenderer<T
         float time = AnimationTickHolder.getRenderTime(level);
 
         for (Direction direction : Iterate.directionsInAxis(axis)) {
-            float speed = getDirectionalSpeed(be, direction);
-            float angle = (time * speed * 3f / 10f) % 360;
-            angle += getRotationOffsetForPosition(be, pos, axis);
-            angle = angle / 180f * (float) Math.PI;
+            float angleDeg;
+            if (be.isServoMode() && be.isServoOutputFace(direction)) {
+                // 舵机模式：输出端按服务器权威角度渲染（真实定位语义，不加随机 offset）
+                angleDeg = be.getServoDisplayAngle(partialTicks);
+            } else {
+                float speed = getDirectionalSpeed(be, direction);
+                angleDeg = (time * speed * 3f / 10f) % 360;
+                angleDeg += getRotationOffsetForPosition(be, pos, axis);
+            }
+            float angle = angleDeg / 180f * (float) Math.PI;
 
             SuperByteBuffer shaftBuffer = CachedBuffers.partialFacing(AllPartialModels.SHAFT_HALF, state, direction);
             kineticRotationTransform(shaftBuffer, be, axis, angle, light);

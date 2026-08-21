@@ -16,7 +16,8 @@
 | `setTargetSpeed(speed)` | 直接设定下游转速（0~256.00）`mainThread=true` |
 | `getTargetSpeed()` | 获取目标转速 |
 
-
+> 该方块还支持**舵机模式**：输出轴可经 Lua 绝对定位到指定角度（±180°，走最短路径）。
+> 详见 [舵机模式](servo-mode.zh.md)。
 
 ```lua
 local t = peripheral.find("ccpe:transmission_peripheral")

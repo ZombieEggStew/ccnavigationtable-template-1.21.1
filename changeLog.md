@@ -42,3 +42,6 @@
 - Fixed dedicated server crash: the Toggle Switch item referenced client-only rendering
   classes (BlockEntityWithoutLevelRenderer) at registration, failing mod load on dedicated
   servers. The item now uses a static OBJ model (Knob-style) — server-safe.
+
+1.0.6
+- Added servo mode to the Transmission Peripheral

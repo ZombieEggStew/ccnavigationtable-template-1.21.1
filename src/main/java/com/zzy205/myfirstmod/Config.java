@@ -21,6 +21,10 @@ public class Config {
             .comment("PORTAL ticket radius (in chunks) for Sable physics structures with sensors attached. Each sensor loads (2*R+1)² chunks around the structure's world position. Default: 3 (= 7×7 chunks).")
             .defineInRange("sensorPortalTicketRadius", 3, 1, 32);
 
+    public static final ModConfigSpec.DoubleValue SERVO_STRESS_IMPACT = BUILDER
+            .comment("Stress impact in SU per RPM for the Transmission Peripheral block (applies in both transmission and servo modes). Actual stress = impact * |RPM|.")
+            .defineInRange("servoStressImpact", 4.0, 0.0, 1024.0);
+
     // ── 客户端：Monitor 模块渲染 ──
     private static final ModConfigSpec.Builder CLIENT_BUILDER = new ModConfigSpec.Builder();
 

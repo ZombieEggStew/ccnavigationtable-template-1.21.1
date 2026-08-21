@@ -6,6 +6,16 @@
   "block.ccpe.transmission_peripheral": "Electronic Transmission",
   "block.ccpe.my_monitor": "Monitor",
 
+  "tooltip.ccpe.transmission_peripheral.header": "Electronic Transmission",
+  "tooltip.ccpe.transmission_peripheral.mode": "Mode:",
+  "tooltip.ccpe.transmission_peripheral.mode_transmission": "Transmission",
+  "tooltip.ccpe.transmission_peripheral.mode_servo": "Servo",
+  "tooltip.ccpe.transmission_peripheral.ratio": "Ratio:",
+  "tooltip.ccpe.transmission_peripheral.target_speed": "Target Speed:",
+  "tooltip.ccpe.transmission_peripheral.output_speed": "Output Speed:",
+  "tooltip.ccpe.transmission_peripheral.current_angle": "Current Angle:",
+  "tooltip.ccpe.transmission_peripheral.target_angle": "Target Angle:",
+
   "gui.ccpe.monitor.module_info": "%s at (%s, %s) size %s×%s",
   "gui.ccpe.monitor_menu.done": "Done",
   "gui.ccpe.monitor_menu.id_title": "Monitor Channel",

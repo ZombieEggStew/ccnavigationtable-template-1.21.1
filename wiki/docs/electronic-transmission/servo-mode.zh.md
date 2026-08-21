@@ -1,0 +1,65 @@
+# 舵机模式
+
+**电子变速箱** 可以作为舵机使用：不再是连续传递旋转，而是把输出轴**绝对定位**到
+±180° 内的指定角度（单圈、走最短路径），完全由 Lua 控制。
+
+舵机模式仍然需要输入动力：输出轴以输入转速（或被 Lua 覆盖的转速）运动，
+没有动力时舵机保持静止。
+
+## Lua 函数
+
+| 方法 | 说明 |
+|---|---|
+| `setServoMode(enabled)` | 开启 / 关闭舵机模式（`mainThread=true`）。**开启时自动归位到 0°**（当前位置重新定义为 0°，不旋转）——已在舵机模式时再次开启同样会归位。 |
+| `getServoMode()` | 是否处于舵机模式 |
+| `setServoAngle(degrees)` | 把输出轴定位到 `degrees` 度（±180，走最短路径）。在变速器模式下调用会自动切入舵机模式（同样先归位到 0° 再定位）。 |
+| `getServoAngle()` | 当前**服务器权威**角度（精确；每 tick 同步） |
+| `setServoSpeed(rpm)` | 输出转速（0~96 RPM）。`0` = 使用输入转速。超过 96 会自动钳到 96。 |
+| `getServoSpeed()` | 已设置的输出转速（`0` 表示"使用输入转速"） |
+| `resetServo()` | **重新归位**：把当前位置重新定义为 0°，目标也置 0°——**不产生任何旋转**。不在舵机模式时会先进入舵机模式。 |
+
+舵机模式下 `setRatio` / `setTargetSpeed` 会被拒绝并返回 `false`。
+调用 `setServoMode(false)` 切回变速器模式。
+
+## 行为说明（段式运动）
+
+舵机通过 Create `SequenceContext` 段式状态机（与 Create Propulsion Simulated
+的 tilt adapter 同思路）向下游精确传播转角，且不会触发 flicker 惩罚：
+
+- **±180° 是同一个位置**：`+180°` 与 `-180°` 是同一物理位置。输出轴已在 `-180°`
+  时调用 `setServoAngle(180)` 视为"已在原地"，不会旋转。
+- **运动过程中改目标会延迟到下一段生效**（每段最多 179°），而不是立即反向。
+  96 RPM 下一段约 6 tick，反应延迟最多约 0.3 秒。
+- **断电会恢复**：运动中失去输入动力时舵机停下，动力恢复后继续朝目标前进（不会忘记目标）。
+- **flicker 安全**：重新接入动力网络会延迟到 Create flicker 分数降到阈值以下，
+  快速连续定位不会导致方块被破坏。
+- **护目镜 tooltip**：戴 Create 护目镜查看时，变速箱模式显示变速比 / 目标转速与
+  输出转速，舵机模式显示当前角度与目标角度。
+
+## 为什么限制 96 RPM？
+
+定位场景下，转速只影响到达时间，不影响总转角（总转角由 `SequenceContext` 决定）。
+96 RPM 以上时 180° 移动仅需约 2 tick 即完成，肉眼无增益，反而给动力网络带来
+额外负担，因此有效转速被限制在 **96 RPM**：
+
+- `setServoSpeed(128)` → 自动钳到 96。
+- 输入动力转速超过 96 时，有效转速同样被钳到 96。
+
+## 示例
+
+```lua
+local t = peripheral.find("ccpe:transmission_peripheral")
+
+t.setServoMode(true)       -- 进入舵机模式并归位到 0°（不旋转）
+t.setServoSpeed(0)         -- 以输入转速运动
+t.setServoAngle(90)        -- 输出轴转到 +90°
+print(t.getServoAngle())   -- 90.0（服务器权威值）
+
+t.setServoAngle(-45)       -- 走最短路径转回
+
+t.resetServo()             -- 当前位置重新定义为 0°，不旋转
+print(t.getServoAngle())   -- 0.0
+
+t.setServoSpeed(96)        -- 最大转速；setServoSpeed(128) 会被钳到 96
+t.setServoMode(false)      -- 切回变速器模式
+```

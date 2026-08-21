@@ -36,7 +36,7 @@ com.zzy205.myfirstmod
 |---|---|---|
 | `src/main/java/com/zzy205/myfirstmod/CCPeripheraExtender.java` | 模组主入口；注册物品、方块、方块实体、菜单、payload、能力和配置；payload 的服务端处理逻辑也集中在这里（含 `MonitorTransformPayload` 应用 `setAngles`、`PlayOrderEffectPayload` 广播等） | 新注册表、网络处理器、能力注册、通用初始化 |
 | `src/main/java/com/zzy205/myfirstmod/CCPeripheralExtenderClient.java` | 客户端专属初始化：注册 Monitor 渲染器与预加载模型、MonitorGridOverlay/OutlineRenderer 事件、Flywheel Visual、PartialModels、外部背景扫描和 GUI | 客户端注册或服务端崩溃排查 |
-| `src/main/java/com/zzy205/myfirstmod/Config.java` | 模组 COMMON / CLIENT 配置项（含 Monitor 网格线/预览颜色） | 新增配置或修改配置默认值 |
+| `src/main/java/com/zzy205/myfirstmod/Config.java` | 模组 COMMON / CLIENT 配置项（含 Monitor 网格线/预览颜色、传动外设舵机应力 `servoStressImpact`） | 新增配置或修改配置默认值 |
 
 ## 方块与方块实体
 
@@ -78,10 +78,10 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `block/RedstoneTransceiverBlockEntity.java` | Receiver 的频道、横幅数据、负载模式和持久化状态 |
 | `screen/RedstoneTransceiverMenu.java` | Redstone Transceiver 服务端菜单 |
 | `screen/RedstoneTransceiverScreen.java` | Redstone Transceiver 客户端 GUI和输入处理 |
-| `block/TransmissionPeripheralBlock.java` | Create 传动外设方块及其朝向/轴行为 |
-| `block/TransmissionPeripheralBlockEntity.java` | 传动外设方块实体、转速相关逻辑和 CC 外设实例 |
-| `block/TransmissionPeripheralRenderer.java` | 传动外设的 Create 动态方块实体渲染 |
-| `block/TransmissionPeripheralVisual.java` | 传动外设的 Create Flywheel Visual 实现 |
+| `block/TransmissionPeripheralBlock.java` | Create 传动外设方块及其朝向/轴行为；`tick()` 在舵机输出 modifier 变化后重新接入动力网络 |
+| `block/TransmissionPeripheralBlockEntity.java` | 传动外设方块实体：变速器模式（ratio/targetSpeed）与舵机模式（服务器权威 ±180° 角度定位 + Lua 控制 + 每 tick 同步，类 TiltAdapter）及 CC 外设实例 |
+| `block/TransmissionPeripheralRenderer.java` | 传动外设的 Create 动态方块实体渲染（舵机模式下输出端按权威角度渲染） |
+| `block/TransmissionPeripheralVisual.java` | 传动外设的 Create Flywheel Visual 实现（OrientedInstance，舵机模式输出端角度渲染） |
 
 ## Monitor 状态与模块模型
 

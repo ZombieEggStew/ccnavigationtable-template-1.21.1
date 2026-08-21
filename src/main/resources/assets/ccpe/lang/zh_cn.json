@@ -6,6 +6,16 @@
   "block.ccpe.transmission_peripheral": "电子变速箱",
   "block.ccpe.my_monitor": "监视器",
 
+  "tooltip.ccpe.transmission_peripheral.header": "电子变速箱",
+  "tooltip.ccpe.transmission_peripheral.mode": "模式：",
+  "tooltip.ccpe.transmission_peripheral.mode_transmission": "变速箱",
+  "tooltip.ccpe.transmission_peripheral.mode_servo": "舵机",
+  "tooltip.ccpe.transmission_peripheral.ratio": "变速比：",
+  "tooltip.ccpe.transmission_peripheral.target_speed": "目标转速：",
+  "tooltip.ccpe.transmission_peripheral.output_speed": "输出转速：",
+  "tooltip.ccpe.transmission_peripheral.current_angle": "当前角度：",
+  "tooltip.ccpe.transmission_peripheral.target_angle": "目标角度：",
+
   "gui.ccpe.monitor.module_info": "%s 位于 (%s, %s) 尺寸 %s×%s",
   "gui.ccpe.monitor_menu.done": "完成",
   "gui.ccpe.monitor_menu.id_title": "监视器频道",

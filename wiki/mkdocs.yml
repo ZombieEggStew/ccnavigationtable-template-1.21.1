@@ -47,6 +47,7 @@ plugins:
             Peripheral Extender: 外设扩展器
             Redstone Transceiver: 红石收发器
             Electronic Transmission: 电子变速箱
+            Servo Mode: 舵机模式
             Modular Monitor: 模块化监视器
             Monitor: 监视器
             Button Module: 按钮模块
@@ -91,6 +92,7 @@ nav:
     - Overview: redstone-transceiver/overview.md
   - Electronic Transmission:
     - Overview: electronic-transmission/overview.md
+    - Servo Mode: electronic-transmission/servo-mode.md
   - Modular Monitor:
     - Overview: monitor/overview.md
     - Monitor: monitor/monitor.md

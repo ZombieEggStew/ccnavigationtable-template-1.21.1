@@ -16,7 +16,8 @@ The **Electronic Transmission** is a Create kinetic transmission controlled pure
 | `setTargetSpeed(speed)` | Directly set the downstream speed (0~256.00) `mainThread=true` |
 | `getTargetSpeed()` | Get the target speed |
 
-
+> This block also has a **servo mode**: the output shaft can be positioned at an
+> absolute angle (±180°, shortest path) via Lua. See [Servo Mode](servo-mode.md).
 
 ```lua
 local t = peripheral.find("ccpe:transmission_peripheral")

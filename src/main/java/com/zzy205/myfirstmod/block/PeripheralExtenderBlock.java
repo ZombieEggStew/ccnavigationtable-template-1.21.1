@@ -180,6 +180,12 @@ public class PeripheralExtenderBlock extends BaseEntityBlock implements IWrencha
         return SHAPES.get(face).get(state.getValue(FACING));
     }
 
+    /** 无碰撞：玩家/实体可穿过；保留 {@link #getShape} 用于选中框与交互 */
+    @Override
+    protected @NotNull VoxelShape getCollisionShape(@NotNull BlockState state, @NotNull BlockGetter worldIn, @NotNull BlockPos pos, @NotNull CollisionContext context) {
+        return Shapes.empty();
+    }
+
     @Override
     protected @NotNull MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
