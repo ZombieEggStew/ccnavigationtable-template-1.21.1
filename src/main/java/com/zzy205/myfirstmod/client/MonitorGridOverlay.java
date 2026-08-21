@@ -36,6 +36,7 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.HashMap;
@@ -133,6 +134,11 @@ public class MonitorGridOverlay {
         CCPeripheralExtender.LOGGER.info("MonitorGridOverlay registered with Catnip Outliner");
     }
 
+    /** 是否为扳手：Create 扳手，或加入了原版 {@code minecraft:tools/wrenches} tag 的其它扳手（与 Create 官方判断一致）。 */
+    private static boolean isWrench(ItemStack stack) {
+        return stack.is(AllItems.WRENCH.get()) || stack.is(Tags.Items.TOOLS_WRENCH);
+    }
+
     public static void onRenderLevel(RenderLevelStageEvent event) {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES) return;
 
@@ -178,7 +184,7 @@ public class MonitorGridOverlay {
             ItemStack held = player.getMainHandItem();
             ModuleType heldType = ModuleType.fromItem(held);
             boolean holdingScreen = held.is(MyModItems.MODULE_SCREEN.get());
-            boolean holdingWrench = held.is(AllItems.WRENCH.get());
+            boolean holdingWrench = isWrench(held);
 
             // 扳手蹲下右键底座 → 拆卸整台 Monitor（由服务端 onSneakWrenched 处理），不再打开菜单；
             // 扳手普通右键 / 空手蹲下右键 → 仍打开 Monitor 菜单。
@@ -212,7 +218,7 @@ public class MonitorGridOverlay {
         ItemStack held = player.getMainHandItem();
         ModuleType heldType = ModuleType.fromItem(held);
         boolean holdingScreen = held.is(MyModItems.MODULE_SCREEN.get());
-        boolean holdingWrench = held.is(AllItems.WRENCH.get());
+        boolean holdingWrench = isWrench(held);
 
         // ── 获取此 Monitor 的独立交互状态 ──
         var interact = interactions.computeIfAbsent(pos, k -> new InteractionState());
