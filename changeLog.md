@@ -45,3 +45,8 @@
 
 1.0.6
 - Added servo mode to the Transmission Peripheral
+
+1.0.7
+- 屏幕渲染重做
+- 旋钮 添加了物理限位功能
+- 
