@@ -31,7 +31,7 @@ public class TextInputBar extends AbstractWidget implements TooltipWidget {
 
     // 输入区命中区域（长输入框内部，与 ScrollValueBar 的滚轮命中区一致）
     private static final int HIT_X = 45;
-    private static final int HIT_W = 109;
+    private static final int HIT_W = 100;
     private static final int HIT_H = 18;
 
     /** 悬停高亮（半透明白） */

@@ -24,7 +24,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 public class MonitorModuleScreen extends AbstractMonitorScreen {
 
     private static final int WIN_W = 192;
-    private static final int WIN_H = 159;
+    private static final int WIN_H = 169;
     private static final int TEX_W = 256;
     private static final int TEX_H = 384;
 

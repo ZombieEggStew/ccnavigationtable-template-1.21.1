@@ -109,6 +109,24 @@ public class ToggleButton extends HoverTintIconButton {
         return this.selected;
     }
 
+    /** 设置禁用状态。禁用时按钮不可点击，但仍可显示 tooltip。 */
+    public ToggleButton setDisabled(boolean disabled) {
+        this.setActive(!disabled);
+        return this;
+    }
+
+    public boolean isDisabled() {
+        return !this.active;
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (this.isDisabled()) {
+            return false;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
     @Override
     protected void drawBg(GuiGraphics graphics, AllGuiTextures button) {
         if (this.selected) {

@@ -16,6 +16,7 @@ public class KnobConfigSection implements ModuleConfigSection {
 
     private ScrollValueBar angleBar;
     private ToggleButton detentToggle;
+    private ToggleButton detentDisplayToggle;
 
     @Override
     public void init(MonitorModuleScreen screen, int y, CompoundTag config) {
@@ -27,13 +28,30 @@ public class KnobConfigSection implements ModuleConfigSection {
             .addToolTipOnOff(
                 Component.translatable("gui.ccpe.module_config.knob_detent_on"),
                 Component.translatable("gui.ccpe.module_config.knob_detent_off"));
-        detentToggle.withCallback(() -> detentToggle.setSelected(!detentToggle.isSelected()));
+        detentToggle.withCallback(() -> {
+            detentToggle.setSelected(!detentToggle.isSelected());
+            if (!detentToggle.isSelected()) {
+                detentDisplayToggle.setSelected(false);
+            }
+            detentDisplayToggle.setDisabled(!detentToggle.isSelected());
+        });
+
+        detentDisplayToggle = new ToggleButton(0, 0, MyIcons.INDEX, MyIcons.INDEX, 0x80FF80);
+        detentDisplayToggle.setSelected(config.getBoolean("detent_display"));
+        detentDisplayToggle
+            .addToolTipTitle(Component.translatable("gui.ccpe.module_config.knob_detent_display"))
+            .addToolTipInstruction(Component.translatable("gui.ccpe.module_config.knob_detent_display_tip"))
+            .addToolTipInstruction(Component.translatable("gui.ccpe.module_config.knob_detent_display_requires_detent"));
+        detentDisplayToggle.withCallback(
+            () -> detentDisplayToggle.setSelected(!detentDisplayToggle.isSelected()));
+        detentDisplayToggle.setDisabled(!detentToggle.isSelected());
 
         int angle = clampAngle(config.getInt("angle"));
         angleBar = new ScrollValueBar(screen.getWinLeft(), y, BAR_W, BAR_H,
                 angle, angle, new int[0])
             .range(0, 360)
             .withToggleButton(detentToggle)
+            .withToggleButtonBackward(detentDisplayToggle)
             .addToolTipTitle(Component.translatable("gui.ccpe.module_config.knob_angle"))
             .addToolTipInstruction(Component.translatable("gui.ccpe.module_config.knob_angle_tip"));
         screen.addSectionWidget(angleBar);
@@ -43,6 +61,9 @@ public class KnobConfigSection implements ModuleConfigSection {
     public void save(CompoundTag config) {
         if (angleBar != null) config.putInt("angle", angleBar.getValue());
         if (detentToggle != null) config.putBoolean("detent", detentToggle.isSelected());
+        if (detentDisplayToggle != null) {
+            config.putBoolean("detent_display", detentDisplayToggle.isSelected());
+        }
     }
 
     private static int clampAngle(int angle) {

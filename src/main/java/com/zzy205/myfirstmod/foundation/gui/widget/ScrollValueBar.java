@@ -31,9 +31,11 @@ public class ScrollValueBar extends AbstractWidget implements TooltipWidget {
     private static final int VALUE_Y = 10;
     private static final int VALUE_COLOR = 0xFCFCEB;
 
+    private static final int BUTTON_BACK_X = 152;
+
     // 滚轮命中区（输入框区域）
     private static final int HIT_X = 45;
-    private static final int HIT_W = 109;
+    private static final int HIT_W = 100;
     private static final int HIT_H = 18;
 
     /** 悬停高亮（半透明白） */
@@ -41,6 +43,7 @@ public class ScrollValueBar extends AbstractWidget implements TooltipWidget {
 
     private ScreenElement icon;
     private ToggleButton toggleButton;
+    private ToggleButton toggleButtonBackward;
     /** 数值模式的自定义范围（非 null 时按 [min,max] 钳位，否则用频道跳过逻辑）。 */
     private Integer min;
     private Integer max;
@@ -94,6 +97,14 @@ public class ScrollValueBar extends AbstractWidget implements TooltipWidget {
         return this;
     }
 
+
+    public ScrollValueBar withToggleButtonBackward(ToggleButton button) {
+        this.toggleButtonBackward = button;
+        button.setPosition(getX() + BUTTON_BACK_X, getY() + ICON_Y);
+        return this;
+    }
+
+
     /** 设置数值模式的范围（滚动在该范围内钳位，不再跳过占用频道）。 */
     public ScrollValueBar range(int min, int max) {
         this.min = min;
@@ -119,6 +130,9 @@ public class ScrollValueBar extends AbstractWidget implements TooltipWidget {
         } else if (icon != null) {
             icon.render(g, x + ICON_X, y + ICON_Y);
         }
+        if (toggleButtonBackward != null) {
+            toggleButtonBackward.render(g, mouseX, mouseY, partialTick);
+        }
         inputBackground.render(g, x, y + INPUT_Y);
         // 悬停高亮
         if (isOverHitArea(mouseX, mouseY)) {
@@ -137,8 +151,16 @@ public class ScrollValueBar extends AbstractWidget implements TooltipWidget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return toggleButton != null && toggleButton.mouseClicked(mouseX, mouseY, button);
+        if (toggleButton != null && toggleButton.mouseClicked(mouseX, mouseY, button)) {
+            return true;
+        }
+        if (toggleButtonBackward != null && toggleButtonBackward.mouseClicked(mouseX, mouseY, button)) {
+            return true;
+        }
+        return false;
     }
+
+
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
@@ -197,6 +219,15 @@ public class ScrollValueBar extends AbstractWidget implements TooltipWidget {
             }
             return;
         }
+
+        if (toggleButtonBackward != null && toggleButtonBackward.isMouseOver(mouseX, mouseY)) {
+            var tooltip = toggleButtonBackward.getToolTip();
+            if (!tooltip.isEmpty()) {
+                g.renderComponentTooltip(Minecraft.getInstance().font, tooltip, mouseX, mouseY);
+            }
+            return;
+        }
+
         // 滚轮区域 tooltip
         if (!isOverHitArea(mouseX, mouseY)) return;
         List<Component> lines = new ArrayList<>(tooltipLines);
@@ -224,4 +255,13 @@ public class ScrollValueBar extends AbstractWidget implements TooltipWidget {
     protected void updateWidgetNarration(NarrationElementOutput narrationElementOutput) {
         this.defaultButtonNarrationText(narrationElementOutput);
     }
+
+
+    public void setBackwardButtonActive(boolean active) {
+        if (toggleButtonBackward != null) {
+            toggleButtonBackward.setActive(active);
+        }
+    }
+
+
 }

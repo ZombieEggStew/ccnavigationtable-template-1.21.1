@@ -13,15 +13,13 @@ public class MyUIElements implements ScreenElement{
     private static final int ATLAS_SIZE_Y = 384;
 
     // 黑色背景
-    public static final MyUIElements BAR_BACKGROUND = new MyUIElements(0, 160, 256, 28);
+    public static final MyUIElements BAR_BACKGROUND = new MyUIElements(0, 320, 256, 28);
     // 滚轮输入短框背景
     public static final MyUIElements SCROLL_INPUT_SHORT = new MyUIElements(0, 208, 256, 18);
     // 输入长框背景
     public static final MyUIElements INPUT_LONG = new MyUIElements(0, 240, 256, 18);
     // 滚轮输入长框背景
     public static final MyUIElements SCROLL_INPUT_LONG = new MyUIElements(0, 272, 256, 18);
-    // 双输入框背景
-    public static final MyUIElements DOUBLE_INPUT = new MyUIElements(0, 304, 24, 24);
 
     private final int x;
     private final int y;

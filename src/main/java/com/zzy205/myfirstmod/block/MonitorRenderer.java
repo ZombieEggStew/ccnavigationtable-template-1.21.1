@@ -23,6 +23,7 @@ import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.RandomSource;
 import net.neoforged.neoforge.client.model.data.ModelData;
@@ -141,7 +142,10 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
                         ? grid.getLightBrightness(mod.id()) : next;
             }
             bhv.renderExtra(poseStack, buffer, next, lightLevel, light, overlay);
-            if (isKnob) renderKnobAngle(poseStack, buffer, bePos, mod.id(), light, grid.getKnobAngle(mod.id()));
+            if (isKnob) {
+                renderKnobAngle(poseStack, buffer, bePos, mod.id(), light,
+                        grid.getKnobAngle(mod.id()), grid.getModuleConfig(mod.id()));
+            }
             if (mod.type() == ModuleType.BUTTON_1X1) {
                 renderButtonLabel(poseStack, buffer, grid.getButtonLabel(mod.id()), next, light);
             }
@@ -197,7 +201,8 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
     }
 
     private static void renderKnobAngle(PoseStack poseStack, MultiBufferSource buffer,
-                                        BlockPos monitorPos, int moduleId, int light, float serverAngle) {
+                                        BlockPos monitorPos, int moduleId, int light, float serverAngle,
+                                        CompoundTag config) {
         // 拖拽中优先显示客户端视觉角度；否则仅在准心悬浮于该旋钮上时显示服务端当前角度
         Float angle = MonitorGridOverlay.getActiveKnobAngle(monitorPos, moduleId);
         if (angle == null) {
@@ -208,7 +213,11 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
             }
         }
 
-        String text = Math.round(angle) + "°";
+        int detentAngle = config.getInt("angle");
+        boolean showDetent = config.getBoolean("detent_display") && detentAngle > 0;
+        String text = showDetent
+            ? String.valueOf(Math.round(angle / detentAngle))
+            : Math.round(angle) + "°";
         var font = Minecraft.getInstance().font;
         float scale = 1f / 512f;
         poseStack.pushPose();
