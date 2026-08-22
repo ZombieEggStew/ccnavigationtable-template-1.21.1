@@ -557,6 +557,27 @@ public class MonitorBlockEntity extends BlockEntity {
         syncGridToClients();
     }
 
+    /**
+     * 单层替换文本层（drawCells 的原子语义）：只替换格子与光标，图形层不变。
+     *
+     * @param cells 每格一行 {col, row, char, fg, bg}（col/row 1 起）
+     */
+    public void screenReplaceCells(int id, List<int[]> cells) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).replaceCells(cells);
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 单层替换图形层（drawShapes 的原子语义）：只替换 rect/line/circle，文本层不变。 */
+    public void screenReplaceShapes(int id, List<ScreenText.Rect> rects,
+                                    List<ScreenText.Line> lines, List<ScreenText.Circle> circles) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).replaceShapes(rects, lines, circles);
+        setChanged();
+        syncGridToClients();
+    }
+
     /** 在屏幕内区追加一个矩形（图形层，1/128 块坐标；z 为空时用默认层级）。 */
     public void screenDrawRect(int id, double x, double y, double w, double h,
                                int colour, boolean solid, double lineWidth, @Nullable Double z) {

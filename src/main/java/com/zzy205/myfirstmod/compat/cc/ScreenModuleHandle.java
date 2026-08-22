@@ -227,16 +227,70 @@ public final class ScreenModuleHandle extends ModuleHandle {
      * })
      * }</pre>
      *
+     * 只更新其中一层时可用 {@link #drawCells(LuaTable)} / {@link #drawShapes(LuaTable)}
+     * （单层替换，另一层保持不变）。
+     *
      * @throws LuaException 解析失败时抛出（整屏保持不变，不会部分应用）
      */
     @LuaFunction(mainThread = true)
     public final void draw(LuaTable<?, ?> batch) throws LuaException {
-        List<int[]> cells = new ArrayList<>();
-        List<ScreenText.Rect> rects = new ArrayList<>();
-        List<ScreenText.Line> lines = new ArrayList<>();
-        List<ScreenText.Circle> circles = new ArrayList<>();
+        ParsedShapes shapes = parseShapes(batch);
+        be.screenDraw(id, parseCells(batch), shapes.rects(), shapes.lines(), shapes.circles());
+    }
 
-        // cells：{col, row, char, fg?, bg?}[]
+    // ═══════════════ 单层批量传输 ═══════════════
+
+    /**
+     * 只替换文本层（格子 + 光标）：一次调用传全部需要绘制的格子，
+     * 服务端清空文本层后逐格写入（原子替换）。**图形层（rect/line/circle）保持不变**。
+     * <p>
+     * 参数结构与 {@link #draw(LuaTable)} 的 {@code cells} 段一致（外层仍是
+     * {@code {cells = {...}}}）：每格一个数组 {@code {col, row, char, fg?, bg?}}
+     * （col/row 1 起；fg 省略沿用当前前景色，bg 省略为透明）。
+     * 替换会清空格子并把光标复位到 (1,1)，省略的格子为空白。
+     *
+     * <pre>{@code
+     * scr.drawCells({ cells = {
+     *   {1, 1, "A", 0xFFFFFF, 0x000000},
+     *   {2, 1, "B", 0xFF0000},
+     * }})
+     * }</pre>
+     *
+     * @throws LuaException 解析失败时抛出（文本层保持不变，不会部分应用）
+     */
+    @LuaFunction(mainThread = true)
+    public final void drawCells(LuaTable<?, ?> batch) throws LuaException {
+        be.screenReplaceCells(id, parseCells(batch));
+    }
+
+    /**
+     * 只替换图形层（rect/line/circle）：一次调用传全部需要绘制的图形，
+     * 服务端清空图形层后写入（原子替换）。**文本层（格子 + 光标）保持不变**。
+     * <p>
+     * 参数结构与 {@link #draw(LuaTable)} 的 {@code shapes} 段一致（外层仍是
+     * {@code {shapes = {...}}}）：每项为带 {@code type} 字段的 table：
+     * {@code {type="rect", x, y, w, h, colour, solid?, lineWidth?, z?}} /
+     * {@code {type="line", x1, y1, x2, y2, colour, lineWidth?, z?}} /
+     * {@code {type="circle", cx, cy, radius, colour, solid?, lineWidth?, segments?, z?}} /
+     * {@code {type="point", x, y, colour, z?}}；z 省略用当前默认层级。
+     *
+     * <pre>{@code
+     * scr.drawShapes({ shapes = {
+     *   {type = "rect", x = 0, y = 0, w = 8, h = 8, colour = 0x00FF00, solid = true},
+     * }})
+     * }</pre>
+     *
+     * @throws LuaException 解析失败时抛出（图形层保持不变，不会部分应用）
+     */
+    @LuaFunction(mainThread = true)
+    public final void drawShapes(LuaTable<?, ?> batch) throws LuaException {
+        ParsedShapes shapes = parseShapes(batch);
+        be.screenReplaceShapes(id, shapes.rects(), shapes.lines(), shapes.circles());
+    }
+
+    /** draw/drawCells 共享：解析 cells 段（{cells = {{col,row,char,fg?,bg?}, ...}}）。 */
+    private List<int[]> parseCells(LuaTable<?, ?> batch) throws LuaException {
+        List<int[]> cells = new ArrayList<>();
         Object cellsObj = batch.get("cells");
         if (cellsObj instanceof Map<?, ?> cellsMap) {
             LuaTable<?, ?> cellsTable = cellsMap instanceof LuaTable<?, ?> lt ? lt : new ObjectLuaTable(cellsMap);
@@ -255,8 +309,14 @@ public final class ScreenModuleHandle extends ModuleHandle {
                 cells.add(new int[] { col, rowIdx, ch, fg, bg });
             }
         }
+        return cells;
+    }
 
-        // shapes：{type="rect"|"line"|"circle"|"point", ...}[]
+    /** draw/drawShapes 共享：解析 shapes 段（{shapes = {{type="rect"|"line"|"circle"|"point", ...}, ...}}）。 */
+    private ParsedShapes parseShapes(LuaTable<?, ?> batch) throws LuaException {
+        List<ScreenText.Rect> rects = new ArrayList<>();
+        List<ScreenText.Line> lines = new ArrayList<>();
+        List<ScreenText.Circle> circles = new ArrayList<>();
         Object shapesObj = batch.get("shapes");
         if (shapesObj instanceof Map<?, ?> shapesMap) {
             LuaTable<?, ?> shapesTable = shapesMap instanceof LuaTable<?, ?> lt ? lt : new ObjectLuaTable(shapesMap);
@@ -297,9 +357,11 @@ public final class ScreenModuleHandle extends ModuleHandle {
                 }
             }
         }
-
-        be.screenDraw(id, cells, rects, lines, circles);
+        return new ParsedShapes(rects, lines, circles);
     }
+
+    private record ParsedShapes(List<ScreenText.Rect> rects, List<ScreenText.Line> lines,
+                                List<ScreenText.Circle> circles) {}
 
     private int currentTextColour() {
         ScreenText t = text();

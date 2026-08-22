@@ -355,7 +355,19 @@ public class ScreenText {
      */
     public void replaceAll(List<int[]> newCells, List<Rect> newRects,
                            List<Line> newLines, List<Circle> newCircles) {
-        allocate(cols, rows); // 保留当前格子数，清空全部内容与光标
+        replaceCells(newCells);
+        replaceShapes(newRects, newLines, newCircles);
+    }
+
+    /**
+     * 单层替换文本层（drawCells 的原子语义）：清空全部格子与光标（保留格子数），
+     * 再逐格写入。**图形层（rect/line/circle）保持不变**。
+     * 光标复位到 (1,1)；省略 fg 的格子用当前前景色 {@link #textColour}，省略 bg 为透明。
+     *
+     * @param newCells 每格一行：{col, row, char, fg, bg}（col/row 1 起；fg/bg 省略用默认值）
+     */
+    public void replaceCells(List<int[]> newCells) {
+        allocate(cols, rows); // 保留当前格子数，清空格子与光标；rects/lines/circles 不动
         if (newCells != null) {
             for (int[] cell : newCells) {
                 if (cell == null || cell.length < 3) continue;
@@ -366,6 +378,13 @@ public class ScreenText {
                 bg[idx] = cell.length > 4 ? (cell[4] & 0xFFFFFF) : TRANSPARENT_BG;
             }
         }
+    }
+
+    /**
+     * 单层替换图形层（drawShapes 的原子语义）：清空全部图形（rect/line/circle），
+     * 再写入传入图形。**文本层（格子 + 光标）保持不变**。
+     */
+    public void replaceShapes(List<Rect> newRects, List<Line> newLines, List<Circle> newCircles) {
         rects.clear();
         if (newRects != null) rects.addAll(newRects);
         lines.clear();

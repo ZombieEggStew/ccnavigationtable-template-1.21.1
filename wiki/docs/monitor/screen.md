@@ -9,7 +9,7 @@ The screen uses a **cell model** (LCD framebuffer semantics):
 - **The text layer is a fixed-size cell array**: first call `setGrid(cols, rows)` to set the grid size; cells fill the screen's inner area. Each cell = character + foreground colour + background colour, **writing overwrites the cell** (one value per position forever, no overlapping quads), and the content size is fixed — it never grows over time.
 - **Cursor-based positioning**: `setCursorPos(col, row)` (1-based, CC:T style); `write` fills cells from the cursor.
 - **Background colour**: `fill` sets cell background colours in bulk; combined with `write` you get "colour block + text".
-- **Full-screen batch transfer**: `draw(batch)` sends the whole screen in one call with **atomic replacement** (no clear+write intermediate-state flicker).
+- **Full-screen batch transfer**: `draw(batch)` sends the whole screen in one call with **atomic replacement** (no clear+write intermediate-state flicker); when only one layer changes, `drawCells(batch)` / `drawShapes(batch)` replace just the text layer / graphics layer.
 - **The graphics layer** (`drawRect`/`drawLine`/`drawCircle`/`drawPoint`) keeps **free positioning** (1/128 block coordinates) and **z layering**, not constrained by the grid, but only drawn inside the screen's drawable area.
 
 ## Operation
@@ -152,6 +152,39 @@ screen.draw({
 ```
 
 Calling `draw` once per tick gives a "one frame per tick" full-screen refresh with no intermediate states anywhere in the pipeline.
+
+### screen.drawCells(batch)
+
+**Replaces only the text layer** (cells + cursor), with atomic replacement semantics: the server clears the text layer and writes the given cells; **the graphics layer (rect/line/circle) stays unchanged**. On a parse failure a Lua error is raised and the text layer stays unchanged (no partial application).
+
+The argument has the same shape as `draw`'s `cells` section (outer table is still `{cells = {...}}`): one array per cell, `{col, row, char, fg?, bg?}` (col/row **1-based**; omitted `fg` uses the current foreground colour, omitted `bg` is transparent).
+
+Replacing clears all cells and resets the cursor to (1,1); cells you omit are blank.
+
+```lua
+screen.drawCells({
+  cells = {
+    {1, 1, "A", 0xFFFFFF, 0x000000},
+    {2, 1, "B", 0xFF0000},
+  },
+})
+```
+
+### screen.drawShapes(batch)
+
+**Replaces only the graphics layer** (rect/line/circle), with atomic replacement semantics: the server clears the graphics layer and writes the given shapes; **the text layer (cells + cursor) stays unchanged**. On a parse failure a Lua error is raised and the graphics layer stays unchanged (no partial application).
+
+The argument has the same shape as `draw`'s `shapes` section (outer table is still `{shapes = {...}}`): an array of shapes, each a table with a `type` field (`rect` / `line` / `circle` / `point`), exactly as documented under `draw`.
+
+```lua
+screen.drawShapes({
+  shapes = {
+    {type = "rect", x = 0, y = 0, w = 8, h = 8, colour = 0x00FF00, solid = true},
+  },
+})
+```
+
+> **Tip**: update one layer per tick with `drawCells` / `drawShapes` when the other layer is static — each call is a single packet and never touches the other layer. Use `draw` when both layers change together (one call replaces both).
 
 
 ## Graphics Drawing (Free Positioning + z Layer)

@@ -9,7 +9,7 @@
 - **文本层是定长格子数组**：先 `setGrid(cols, rows)` 设定格子数，格子铺满屏幕内区；每格 = 字符 + 前景色 + 背景色，**写入即覆盖该格**（同位置永远只有一个值，无重叠面片），内容体积固定、不随运行时长增长。
 - **光标制定位**：`setCursorPos(col, row)`（1 起，CC:T 风格），`write` 从光标处逐格写入。
 - **背景色**：`fill` 批量设置格子背景色，与 `write` 叠加即「色块 + 文字」。
-- **整屏批量传输**：`draw(batch)` 一次调用传整屏内容，**原子替换**（无 clear+write 中间态闪烁）。
+- **整屏批量传输**：`draw(batch)` 一次调用传整屏内容，**原子替换**（无 clear+write 中间态闪烁）；单层变化可用 `drawCells(batch)` / `drawShapes(batch)` 只替换文本层/图形层。
 - **图形层**（`drawRect`/`drawLine`/`drawCircle`/`drawPoint`）保持**自由定位**（1/128 块坐标）与 **z 层级**，不受格子约束，但仅在屏幕可绘制区域内绘制。
 
 ## 操作说明
@@ -152,6 +152,39 @@ screen.draw({
 ```
 
 配合每 tick 调用一次 `draw`，即「每 tick 一帧」的整屏刷新模式，全链路无中间态。
+
+### screen.drawCells(batch)
+
+**只替换文本层（格子 + 光标）**，整层原子替换：服务端清空文本层后逐格写入传入的格子；**图形层（rect/line/circle）保持不变**。解析失败会抛 Lua 错误，文本层保持不变（不会部分应用）。
+
+参数结构与 `draw` 的 `cells` 段一致（外层仍是 `{cells = {...}}`）：每格一个数组 `{col, row, char, fg?, bg?}`（col/row **1 起**；`fg` 省略沿用当前前景色，`bg` 省略为透明）。
+
+替换会清空格子并把光标复位到 (1,1)，省略的格子为空白。
+
+```lua
+screen.drawCells({
+  cells = {
+    {1, 1, "A", 0xFFFFFF, 0x000000},
+    {2, 1, "B", 0xFF0000},
+  },
+})
+```
+
+### screen.drawShapes(batch)
+
+**只替换图形层（rect/line/circle）**，整层原子替换：服务端清空图形层后写入传入的图形；**文本层（格子 + 光标）保持不变**。解析失败会抛 Lua 错误，图形层保持不变（不会部分应用）。
+
+参数结构与 `draw` 的 `shapes` 段一致（外层仍是 `{shapes = {...}}`）：图形数组，每项为带 `type` 字段的 table（`rect` / `line` / `circle` / `point`），字段与 `draw` 下文档完全相同。
+
+```lua
+screen.drawShapes({
+  shapes = {
+    {type = "rect", x = 0, y = 0, w = 8, h = 8, colour = 0x00FF00, solid = true},
+  },
+})
+```
+
+> **提示**：当另一层是静态内容时，每 tick 用 `drawCells` / `drawShapes` 只更新单层——每次调用一个包，且绝不碰另一层；两层同时变化时用 `draw`（一次调用替换两层）。
 
 
 ## 图形绘制（自由定位 + z 层级）
