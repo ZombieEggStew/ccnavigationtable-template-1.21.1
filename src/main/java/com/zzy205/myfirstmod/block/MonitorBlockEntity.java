@@ -556,6 +556,18 @@ public class MonitorBlockEntity extends BlockEntity {
     }
 
     /**
+     * 定宽区域填充（fillField 用）：区域内前 count 格设背景色（按 align 锚定），
+     * 其余格子背景清透明（进度减少时多余色块自动消失），区域外与字符不动。
+     */
+    public void screenFillField(int id, int col, int row, int width, int count, int colour, String align) {
+        if (!canMutateScreen(id)) return;
+        ScreenText t = gridState.getOrCreateScreenText(id);
+        t.fillField(col, row, width, count, colour, ScreenText.Align.byName(align));
+        setChanged();
+        syncGridToClients();
+    }
+
+    /**
      * 整屏批量替换（draw(batch) 原子语义）：清空文本层后一次写入格子与图形，
      * 客户端收到的是完整新画面，无中间态。
      *

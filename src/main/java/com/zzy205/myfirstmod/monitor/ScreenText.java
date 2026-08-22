@@ -424,6 +424,50 @@ public class ScreenText {
     }
 
     /**
+     * 定宽区域填充（每帧刷新分段进度条用）：以 (col,row) 为起点、{@code width} 格宽的
+     * **单行区域**内，把前 {@code count} 格背景设为 {@code colour}（按 {@code align}
+     * 锚定：{@link Align#LEFT} 靠起点 / {@link Align#RIGHT} 靠终点 / {@link Align#CENTER} 居中），
+     * **区域内其余格子背景清成透明**（进度减少时多余色块自动消失）；区域外不动，字符不动。
+     * <p>
+     * {@code count} 钳制到 [0, width]，传 0 即清空整个区域（等同 fillClear 用途）。
+     *
+     * @param col    区域起始列（1 起，自动钳制到格子范围）
+     * @param row    区域行（1 起，自动钳制到格子范围）
+     * @param width  区域宽度（格，≤ 0 无操作；超出格子范围自动裁剪）
+     * @param count  要填充的格数（钳制到 [0, width]）
+     * @param colour 填充颜色（0xRRGGBB）
+     * @param align  对齐方式（null 回退 {@link Align#LEFT}）
+     */
+    public void fillField(int col, int row, int width, int count, int colour, Align align) {
+        if (width <= 0) return;
+        int r = clamp(row, 1, rows);
+        int c0 = clamp(col, 1, cols);
+        int c1 = clamp(col + width - 1, 1, cols);
+        if (c0 > c1) return;
+        Align a = align != null ? align : Align.LEFT;
+
+        // 区域内全部清成透明背景
+        for (int c = c0; c <= c1; c++) {
+            bg[index(c, r)] = TRANSPARENT_BG;
+        }
+
+        int span = c1 - c0 + 1;
+        int take = clamp(count, 0, span);
+        if (take == 0) return;
+        int start = switch (a) {
+            case RIGHT -> c1 - take + 1;
+            case CENTER -> c0 + (span - take) / 2;
+            default -> c0;
+        };
+        int col24 = colour & 0xFFFFFF;
+        for (int i = 0; i < take; i++) {
+            int idx = index(start + i, r);
+            if (idx < 0) continue; // 理论上不会越界，防御
+            bg[idx] = col24;
+        }
+    }
+
+    /**
      * 整屏替换（draw(batch) 的原子语义）：先清空文本层（格子 + 图形 + 光标），
      * 再逐格写入与图形。所有格子同位置永远只有一个值，无中间态。
      *

@@ -223,6 +223,31 @@ public final class ScreenModuleHandle extends ModuleHandle {
         be.screenFill(id, col, row, w, h, colour);
     }
 
+    /**
+     * 定宽区域填充（每帧刷新分段进度条用）：以 (col,row) 为起点、{@code width} 格宽的
+     * **单行区域**内，把前 {@code count} 格背景设为 {@code colour}，**区域内其余格子
+     * 背景自动清成透明**（进度减少时多余色块自动消失）；区域外与字符不动。
+     * <p>
+     * {@code align} 为 {@code "left"}（默认）/ {@code "right"} / {@code "center"}，
+     * 决定 count 格在区域内的锚定方向；{@code count} 钳制到 [0, width]，传 0 即清空整个区域。
+     *
+     * <pre>{@code
+     * scr.fillField(1, 2, 10, 7, 0x00FF00, "left")   -- 区域前 7 格绿色，其余透明
+     * scr.fillField(1, 2, 10, 3, 0x00FF00, "left")   -- 进度减少：第 4..10 格自动清透明
+     * }</pre>
+     *
+     * @param col    区域起始列（1 起）
+     * @param row    区域行（1 起）
+     * @param width  区域宽度（格，≤ 0 无操作）
+     * @param count  要填充的格数（钳制到 [0, width]；0 = 全清）
+     * @param colour 填充颜色（0xRRGGBB）
+     * @param align  对齐方式（可选，默认 "left"）
+     */
+    @LuaFunction(mainThread = true)
+    public final void fillField(int col, int row, int width, int count, int colour, Optional<String> align) {
+        be.screenFillField(id, col, row, width, count, colour, align.orElse("left"));
+    }
+
     // ═══════════════ 整屏批量传输 ═══════════════
 
     /**

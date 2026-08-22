@@ -145,6 +145,23 @@ screen.fill(1, 1, 10, 1, 0xFF0000)   -- first 10 cells of row 1 get a red backgr
 screen.write("Loading")              -- text drawn on top of the red
 ```
 
+### screen.fillField(col, row, width, count, colour, align?)
+
+**Fixed-width region fill** (for refreshing a segmented progress bar every tick): inside a **single-row region** of `width` cells starting at `(col, row)`, sets the first `count` cells' background to `colour` and **automatically clears the remaining cells in the region to transparent** (extra segments disappear when progress shrinks); everything outside the region and all characters stay unchanged.
+
+- `col, row`: starting cell of the region (1-based)
+- `width`: region width (cells, ≤ 0 does nothing)
+- `count`: number of cells to fill (clamped to `[0, width]`; `0` clears the whole region)
+- `colour`: fill colour (0xRRGGBB)
+- `align`: alignment (optional, default `"left"`) — `"left"` flush to the start / `"right"` flush to the end / `"center"` centred
+
+```lua
+screen.fillField(1, 2, 10, 7, 0x00FF00, "left")   -- first 7 cells green, rest transparent
+screen.fillField(1, 2, 10, 3, 0x00FF00, "left")   -- progress shrank: cells 4..10 auto-cleared
+```
+
+> **Tip**: `fillField` is an atomic background replacement of the region — fills `count` cells and clears the rest, ideal for per-tick progress bars that grow *and* shrink; `fill` only paints (never erases), best for one-time base colours.
+
 
 ## Full-Screen Batch Transfer
 

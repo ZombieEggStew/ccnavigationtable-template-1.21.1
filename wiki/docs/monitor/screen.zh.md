@@ -145,6 +145,23 @@ screen.fill(1, 1, 10, 1, 0xFF0000)   -- 第一行前 10 格红色底
 screen.write("Loading")              -- 字画在红色底上
 ```
 
+### screen.fillField(col, row, width, count, colour, align?)
+
+**定宽区域填充**（每帧刷新分段进度条用）：以 `(col, row)` 为起点、`width` 格宽的**单行区域**内，把前 `count` 格背景设为 `colour`，**区域内其余格子背景自动清成透明**（进度减少时多余色块自动消失）；区域外与字符不动。
+
+- `col, row`：区域起始格（1 起）
+- `width`：区域宽度（格，≤ 0 无操作）
+- `count`：要填充的格数（钳制到 `[0, width]`；传 0 即清空整个区域）
+- `colour`：填充颜色（0xRRGGBB）
+- `align`：对齐方式（可选，默认 `"left"`）——`"left"` 靠起点 / `"right"` 靠终点 / `"center"` 居中
+
+```lua
+screen.fillField(1, 2, 10, 7, 0x00FF00, "left")   -- 区域前 7 格绿色，其余透明
+screen.fillField(1, 2, 10, 3, 0x00FF00, "left")   -- 进度减少：第 4..10 格自动清透明
+```
+
+> **提示**：`fillField` 是「区域内原子替换背景色」——填 `count` 格 + 清其余，适合进度条「变长又变短」的每帧刷新；`fill` 只涂不擦，适合一次性铺底色。
+
 
 ## 整屏批量传输
 
