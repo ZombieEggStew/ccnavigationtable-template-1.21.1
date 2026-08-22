@@ -8,7 +8,9 @@ Angles are in **degrees**. The knob stores a cumulative **absolute angle** (may 
 - **Configure module**: hold a wrench and right-click the module, or sneak + right-click, to open the module config interface and configure properties such as module ID and tooltip
 - **Remove module**: hold a wrench and sneak + right-click to remove the module
 - **Detent**: enable the detent feature in the config interface to snap to multiples of the configured angle
-
+- **Show detent position**: enable the show detent position feature in the config interface to display the current knob angle / configured detent step
+- **Physical limit**: enable the physical limit feature in the config interface to clamp the knob at the configured angle, preventing further rotation
+- **Show percentage**: enable the show percentage feature in the config interface to display the current knob angle / configured max rotation angle × 100
 ---
 
 Getting a module instance:
