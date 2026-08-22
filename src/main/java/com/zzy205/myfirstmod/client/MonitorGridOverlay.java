@@ -255,7 +255,14 @@ public class MonitorGridOverlay {
             var config = grid.getModuleConfig(hoveredModule.id());
             String text = config.getString("text");
             if (!text.isBlank()) {
-                hoveredTooltip = Component.literal(text);
+                Component tooltip = Component.literal(text);
+                if (hoveredModule.type() == ModuleType.TOGGLE_SWITCH) {
+                    int stateColor = grid.isPressed(hoveredModule.id()) ? 0x55FF55 : 0xFF5555;
+                    tooltip = Component.literal("▶ ")
+                        .withStyle(style -> style.withColor(stateColor))
+                        .append(tooltip);
+                }
+                hoveredTooltip = tooltip;
             }
         } else if (screenAt != null && !screenAt.tooltipText().isBlank()) {
             hoveredTooltip = Component.literal(screenAt.tooltipText());
