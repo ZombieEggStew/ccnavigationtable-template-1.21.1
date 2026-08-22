@@ -17,6 +17,7 @@ public class KnobConfigSection implements ModuleConfigSection {
     private ScrollValueBar angleBar;
     private ToggleButton detentToggle;
     private ToggleButton detentDisplayToggle;
+    private ToggleButton percentDisplayToggle;
     private ScrollValueBar limitBar;
     private ToggleButton physicalLimitToggle;
 
@@ -45,7 +46,12 @@ public class KnobConfigSection implements ModuleConfigSection {
             .addToolTipInstruction(Component.translatable("gui.ccpe.module_config.knob_detent_display_tip"))
             .addToolTipInstruction(Component.translatable("gui.ccpe.module_config.knob_detent_display_requires_detent"));
         detentDisplayToggle.withCallback(
-            () -> detentDisplayToggle.setSelected(!detentDisplayToggle.isSelected()));
+            () -> {
+                detentDisplayToggle.setSelected(!detentDisplayToggle.isSelected());
+                if (detentDisplayToggle.isSelected()) {
+                    percentDisplayToggle.setSelected(false);
+                }
+            });
         detentDisplayToggle.setDisabled(!detentToggle.isSelected());
 
         int angle = clampAngle(config.getInt("angle"));
@@ -69,11 +75,28 @@ public class KnobConfigSection implements ModuleConfigSection {
         physicalLimitToggle.withCallback(
             () -> physicalLimitToggle.setSelected(!physicalLimitToggle.isSelected()));
 
+        percentDisplayToggle = new ToggleButton(0, 0, MyIcons.PERCENT, MyIcons.PERCENT, 0x80FF80);
+        percentDisplayToggle.setSelected(config.getBoolean("percent_display"));
+        percentDisplayToggle
+            .addToolTipTitle(Component.translatable("gui.ccpe.module_config.knob_percent_display"))
+            .addToolTipInstruction(Component.translatable("gui.ccpe.module_config.knob_percent_display_tip"));
+        percentDisplayToggle.withCallback(
+            () -> {
+                percentDisplayToggle.setSelected(!percentDisplayToggle.isSelected());
+                if (percentDisplayToggle.isSelected()) {
+                    detentDisplayToggle.setSelected(false);
+                }
+            });
+        if (percentDisplayToggle.isSelected()) {
+            detentDisplayToggle.setSelected(false);
+        }
+
         int limit = clampLimit(config.getInt("angle_limit"));
         limitBar = new ScrollValueBar(screen.getWinLeft(), y + BAR_H, BAR_W, BAR_H,
                 limit, limit, new int[0])
-            .range(360, 3600)
+            .range(1, 3600)
             .withToggleButton(physicalLimitToggle)
+            .withToggleButtonBackward(percentDisplayToggle)
             .addToolTipTitle(Component.translatable("gui.ccpe.module_config.knob_physical_limit_value"))
             .addToolTipInstruction(Component.translatable("gui.ccpe.module_config.knob_physical_limit_value_tip"));
         screen.addSectionWidget(limitBar);
@@ -86,6 +109,9 @@ public class KnobConfigSection implements ModuleConfigSection {
         if (detentDisplayToggle != null) {
             config.putBoolean("detent_display", detentDisplayToggle.isSelected());
         }
+        if (percentDisplayToggle != null) {
+            config.putBoolean("percent_display", percentDisplayToggle.isSelected());
+        }
         if (physicalLimitToggle != null) config.putBoolean("physical_limit", physicalLimitToggle.isSelected());
         if (limitBar != null) config.putInt("angle_limit", limitBar.getValue());
     }
@@ -95,6 +121,6 @@ public class KnobConfigSection implements ModuleConfigSection {
     }
 
     private static int clampLimit(int limit) {
-        return Math.max(360, Math.min(3600, limit > 0 ? limit : 360));
+        return Math.max(1, Math.min(3600, limit > 0 ? limit : 360));
     }
 }

@@ -216,9 +216,17 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
 
         int detentAngle = config.getInt("angle");
         boolean showDetent = config.getBoolean("detent_display") && detentAngle > 0;
-        String text = showDetent
-            ? String.valueOf(Math.round(angle / detentAngle))
-            : Math.round(angle) + "°";
+        String text;
+        if (config.getBoolean("percent_display")) {
+            float maxAngle = config.getBoolean("physical_limit")
+                ? Math.max(1, config.getInt("angle_limit")) : 360f;
+            int percent = Math.round(Math.max(0f, Math.min(maxAngle, angle)) / maxAngle * 100f);
+            text = percent + "%";
+        } else {
+            text = showDetent
+                ? String.valueOf(Math.round(angle / detentAngle))
+                : Math.round(angle) + "°";
+        }
         var font = Minecraft.getInstance().font;
         float scale = 1f / 512f;
         poseStack.pushPose();

@@ -45,6 +45,8 @@
   "gui.ccpe.module_config.knob_detent_display_requires_detent": "需要开启卡位模式",
   "gui.ccpe.module_config.knob_detent_display_on": "显示档位",
   "gui.ccpe.module_config.knob_detent_display_off": "显示角度",
+  "gui.ccpe.module_config.knob_percent_display": "显示百分比",
+  "gui.ccpe.module_config.knob_percent_display_tip": "将旋钮表面的数值显示为百分比",
   "gui.ccpe.module_config.knob_physical_limit": "物理限位",
   "gui.ccpe.module_config.knob_physical_limit_tip": "开启后限制旋钮的最大累计旋转角度",
   "gui.ccpe.module_config.knob_physical_limit_on": "开启",
