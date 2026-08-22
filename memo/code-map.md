@@ -164,7 +164,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/ModuleHandleRegistry.java` | 按模块类型把 Java 记录包装成对应的 Lua handle |
 | `compat/cc/ButtonModuleHandle.java` | 按钮的 Lua API（按下/弹起/点击检测/玩家锁/灯带/标签 setLabel 系列） |
 | `compat/cc/ToggleSwitchModuleHandle.java` | 钮子开关的 Lua API（锁存状态） |
-| `compat/cc/KnobModuleHandle.java` | 旋钮的 Lua API（角度读写） |
+| `compat/cc/KnobModuleHandle.java` | 旋钮的 Lua API（角度读写，归一化/绝对角度、档位、百分比读取） |
 | `compat/cc/ScreenModuleHandle.java` | 屏幕的 Lua API（格子模型：setGrid/getGrid、光标 write/setCursorPos、fill、draw(batch) 整屏原子替换、tooltip、图形层 drawRect/Line/Circle/Point） |
 | `compat/cc/RedstoneTransceiverPeripheral.java` | Redstone Transceiver 的 `IPeripheral` 实现 |
 | `compat/cc/RedstoneTransceiverRegistry.java` | Receiver 频道和外设实例登记 |

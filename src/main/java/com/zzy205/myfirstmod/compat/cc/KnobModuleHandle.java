@@ -1,14 +1,18 @@
 package com.zzy205.myfirstmod.compat.cc;
 
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
 import dan200.computercraft.api.lua.LuaFunction;
+import net.minecraft.nbt.CompoundTag;
 
 /**
  * 旋钮模块（knob）的 Lua 模块实例。
  * <p>
- * 提供 {@link #getAngle()} / {@link #setAngle(double)}，角度单位为度（0..360）。
- * {@link #setAngle(double)} 遵循旋钮的卡位（detent）配置：开启卡位时自动吸附到最近档位。
+ * 角度单位为度：{@link #getAngle()} / {@link #getAbsoluteAngle()} 返回累计绝对角度
+ * （开启物理限位时按限位夹紧，可能超过 360），{@link #getNormalizedAngle()} 返回
+ * 归一化角度（0..360）。{@link #setAngle(double)} 遵循旋钮的卡位（detent）配置：
+ * 开启卡位时自动吸附到最近档位。
  */
 public final class KnobModuleHandle extends ModuleHandle {
 
@@ -17,10 +21,68 @@ public final class KnobModuleHandle extends ModuleHandle {
                 module.getWidth(), module.getHeight());
     }
 
-    /** 读取当前角度（度，0..360）。 */
+    /** 读取当前累计绝对角度（度）。开启物理限位时按限位夹紧，可能超过 360。 */
     @LuaFunction
     public final double getAngle() {
         return be.getGridState().getKnobAngle(id);
+    }
+
+    /** 读取累计绝对角度（度），与 {@link #getAngle()} 相同。 */
+    @LuaFunction
+    public final double getAbsoluteAngle() {
+        return be.getGridState().getKnobAngle(id);
+    }
+
+    /** 读取归一化角度（度，0..360）：绝对角度折算到一圈内。 */
+    @LuaFunction
+    public final double getNormalizedAngle() {
+        return GridState.normalizeKnobAngle(be.getGridState().getKnobAngle(id));
+    }
+
+    /**
+     * 读取相对档位（int）：归一化角度 / 设定的卡位角度（四舍五入）。
+     * 未开启卡位（卡位角度为 0）时返回 0。
+     */
+    @LuaFunction
+    public final int getRelativeDetent() {
+        int step = be.getGridState().getDetentStep(id);
+        if (step <= 0) return 0;
+        return (int) Math.round(getNormalizedAngle() / step);
+    }
+
+    /**
+     * 读取绝对档位（int）：绝对角度 / 设定的卡位角度（四舍五入）。
+     * 未开启卡位（卡位角度为 0）时返回 0。
+     */
+    @LuaFunction
+    public final int getAbsoluteDetent() {
+        int step = be.getGridState().getDetentStep(id);
+        if (step <= 0) return 0;
+        return (int) Math.round(be.getGridState().getKnobAngle(id) / step);
+    }
+
+    /**
+     * 读取相对百分比（0..100）：归一化角度 / 设定的最大旋转角度 × 100。
+     */
+    @LuaFunction
+    public final double getRelativePercent() {
+        return getNormalizedAngle() / maxRotationAngle() * 100.0;
+    }
+
+    /**
+     * 读取绝对百分比：绝对角度 / 设定的最大旋转角度 × 100。
+     * 未开启物理限位时旋钮可转出设定范围，返回值可能超过 100 或为负数。
+     */
+    @LuaFunction
+    public final double getAbsolutePercent() {
+        return be.getGridState().getKnobAngle(id) / maxRotationAngle() * 100.0;
+    }
+
+    /** 设定的最大旋转角度（config "angle_limit"，未设置时默认 360）。 */
+    private float maxRotationAngle() {
+        CompoundTag cfg = be.getGridState().getModuleConfig(id);
+        int limit = cfg.getInt("angle_limit");
+        return limit > 0 ? limit : 360f;
     }
 
     /**
