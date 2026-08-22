@@ -390,6 +390,7 @@ public class MonitorBlockEntity extends BlockEntity {
                 gridState.setModuleConfig(newId, config);
                 // 切换到卡位模式（或修改卡位角度）时，把旋钮吸附到最近档位
                 if (ModuleType.KNOB == ModuleType.byName(name)) {
+                    gridState.setKnobAngle(newId, gridState.getKnobAngle(newId));
                     gridState.snapKnobToDetent(newId);
                 }
             }

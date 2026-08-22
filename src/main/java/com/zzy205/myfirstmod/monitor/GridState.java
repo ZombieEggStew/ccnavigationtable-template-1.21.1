@@ -300,14 +300,24 @@ public class GridState {
     // ── 旋钮角度 ──
 
     public void setKnobAngle(int moduleId, float angle) {
-        if (modules.containsKey(moduleId)) knobAngles.put(moduleId, normalizeKnobAngle(angle));
+        if (!modules.containsKey(moduleId)) return;
+        knobAngles.put(moduleId, clampKnobAngle(moduleId, angle));
     }
 
     public float getKnobAngle(int moduleId) {
         return knobAngles.getOrDefault(moduleId, 0f);
     }
 
-    private static float normalizeKnobAngle(float angle) {
+    public float clampKnobAngle(int moduleId, float angle) {
+        CompoundTag cfg = moduleConfigs.get(moduleId);
+        if (cfg != null && cfg.getBoolean("physical_limit")) {
+            int limit = cfg.getInt("angle_limit");
+            if (limit > 0) return Math.max(0f, Math.min(limit, angle));
+        }
+        return angle;
+    }
+
+    public static float normalizeKnobAngle(float angle) {
         float normalized = angle % 360f;
         return normalized < 0f ? normalized + 360f : normalized;
     }
@@ -322,16 +332,15 @@ public class GridState {
         return angle > 0 ? angle : 0;
     }
 
-    /** 把角度吸附到最近卡位档位（0-360，360 归一为 0）。 */
+    /** 把累计角度吸附到最近卡位档位。 */
     public static float snapToDetent(float angle, int step) {
-        if (step <= 0) return normalizeKnobAngle(angle);
-        float norm = normalizeKnobAngle(angle);
-        float q = norm / step;
+        if (step <= 0) return angle;
+        float q = angle / step;
         int base = (int) Math.floor(q);
         float frac = q - base;
         // 严格超过半程才吸附到下一档：半程点仍停在当前档位（微扭动峰值处）
         int idx = frac > 0.5f ? base + 1 : base;
-        return (idx * step) % 360f;
+        return idx * step;
     }
 
     /** 卡位开启时把旋钮当前角度吸附到最近档位（配置变更时调用）。 */
@@ -339,7 +348,8 @@ public class GridState {
         if (!modules.containsKey(moduleId)) return;
         int step = getDetentStep(moduleId);
         if (step <= 0) return;
-        knobAngles.put(moduleId, snapToDetent(getKnobAngle(moduleId), step));
+        knobAngles.put(moduleId, clampKnobAngle(moduleId,
+            snapToDetent(getKnobAngle(moduleId), step)));
     }
 
     // ── 按钮表面标签 ──
@@ -611,7 +621,7 @@ public class GridState {
             if (type == ModuleType.KNOB) {
                 float angle = modTag.contains("knobAngle")
                         ? modTag.getFloat("knobAngle") : 0f;
-                knobAngles.put(id, normalizeKnobAngle(angle));
+                knobAngles.put(id, angle);
             }
             if (modTag.contains("config")) moduleConfigs.put(id, modTag.getCompound("config"));
             if (type == ModuleType.BUTTON_1X1 && modTag.contains("labelText")) {

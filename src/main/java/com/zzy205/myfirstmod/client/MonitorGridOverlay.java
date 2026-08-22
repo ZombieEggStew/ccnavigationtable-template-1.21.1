@@ -384,11 +384,15 @@ public class MonitorGridOverlay {
                 interact.knobAccumAngle = monitorBE.getGridState().getKnobAngle(hoveredModule.id());
                 detentStep = monitorBE.getGridState().getDetentStep(hoveredModule.id());
             }
+                boolean physicalLimit = monitorBE != null
+                    && monitorBE.getGridState().getModuleConfig(hoveredModule.id())
+                        .getBoolean("physical_limit");
             interact.knobPrevRawAngle = computeCrosshairAngle(pos, facing, monitorYaw, monitorPitch, monitorOffset,
                     ray[0], ray[1], interact.knobCenterX, interact.knobCenterY);
             interact.knobUnwrappedDelta = 0f;
             interact.knobLastSoundAngle = interact.knobAccumAngle;
-            interact.knobDisplayAngle = normalizeDisplayAngle(interact.knobAccumAngle);
+                interact.knobDisplayAngle = physicalLimit
+                    ? interact.knobAccumAngle : normalizeDisplayAngle(interact.knobAccumAngle);
             // 卡位模式：以当前角度的最近档位作为起始档位，避免拖拽第一帧误触发音效
             interact.knobLastDetent = detentStep > 0
                     ? GridState.snapToDetent(interact.knobAccumAngle, detentStep)
@@ -642,30 +646,38 @@ public class MonitorGridOverlay {
 
             // 读取卡位配置（0 = 自由旋转）
             int detentStep = 0;
+            boolean physicalLimit = false;
             if (mc.level != null && mc.level.getBlockEntity(pos) instanceof MonitorBlockEntity be) {
                 detentStep = be.getGridState().getDetentStep(state.knobDragModuleId);
+                physicalLimit = be.getGridState().getModuleConfig(state.knobDragModuleId)
+                        .getBoolean("physical_limit");
             }
 
             float sendAngle;
             if (detentStep > 0) {
                 // ── 卡位模式：吸附到最近档位，只在跨档时发声 ──
-                float norm = normalizeDisplayAngle(newAngle);
-                float snapped = GridState.snapToDetent(norm, detentStep);
-                state.knobDisplayAngle = snapped;
+                float snapped = GridState.snapToDetent(newAngle, detentStep);
+                if (mc.level != null && mc.level.getBlockEntity(pos) instanceof MonitorBlockEntity be) {
+                    if (physicalLimit) snapped = be.getGridState().clampKnobAngle(state.knobDragModuleId, snapped);
+                }
+                state.knobDisplayAngle = physicalLimit ? snapped : normalizeDisplayAngle(snapped);
                 if (snapped != state.knobLastDetent) {
-                    float pitch = 0.5f + (snapped / 360f) * 1.5f;
+                    float soundAngle = normalizeDisplayAngle(snapped);
+                    float pitch = 0.5f + (soundAngle / 360f) * 1.5f;
                     mc.player.playSound(SoundEvents.LEVER_CLICK, 0.1f, pitch);
                     state.knobLastDetent = snapped;
                 }
                 // 弹性微扭动：把手滞后于手部 1/3（最大偏离 step/6），松手后由渲染器弹回档位
-                float off = norm - snapped;
-                if (off > 180f) off -= 360f;
-                else if (off < -180f) off += 360f;
-                state.knobVisualAngle = normalizeDisplayAngle(snapped + off / 3f);
+                float off = newAngle - snapped;
+                if (!physicalLimit) {
+                    if (off > 180f) off -= 360f;
+                    else if (off < -180f) off += 360f;
+                }
+                state.knobVisualAngle = physicalLimit ? snapped + off / 3f : normalizeDisplayAngle(snapped + off / 3f);
                 sendAngle = snapped;
             } else {
                 // ── 自由模式：每 12° 播放一次谢泼德音阶音效 ──
-                state.knobDisplayAngle = normalizeDisplayAngle(newAngle);
+                state.knobDisplayAngle = physicalLimit ? newAngle : normalizeDisplayAngle(newAngle);
                 float soundDiff = newAngle - state.knobLastSoundAngle;
                 int soundSteps = (int) (soundDiff / KNOB_SOUND_STEP);
                 if (soundSteps != 0) {
@@ -676,6 +688,11 @@ public class MonitorGridOverlay {
                     state.knobLastSoundAngle = newAngle - (soundDiff - soundSteps * KNOB_SOUND_STEP);
                 }
                 sendAngle = newAngle;
+            }
+
+            if (mc.level != null && mc.level.getBlockEntity(pos) instanceof MonitorBlockEntity be) {
+                sendAngle = be.getGridState().clampKnobAngle(state.knobDragModuleId, sendAngle);
+                state.knobDisplayAngle = be.getGridState().clampKnobAngle(state.knobDragModuleId, state.knobDisplayAngle);
             }
 
             // 周期性发送旋转角度到服务端

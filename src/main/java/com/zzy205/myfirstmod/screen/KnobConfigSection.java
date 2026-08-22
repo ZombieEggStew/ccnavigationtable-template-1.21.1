@@ -17,6 +17,8 @@ public class KnobConfigSection implements ModuleConfigSection {
     private ScrollValueBar angleBar;
     private ToggleButton detentToggle;
     private ToggleButton detentDisplayToggle;
+    private ScrollValueBar limitBar;
+    private ToggleButton physicalLimitToggle;
 
     @Override
     public void init(MonitorModuleScreen screen, int y, CompoundTag config) {
@@ -55,6 +57,26 @@ public class KnobConfigSection implements ModuleConfigSection {
             .addToolTipTitle(Component.translatable("gui.ccpe.module_config.knob_angle"))
             .addToolTipInstruction(Component.translatable("gui.ccpe.module_config.knob_angle_tip"));
         screen.addSectionWidget(angleBar);
+
+        physicalLimitToggle = new ToggleButton(0, 0, MyIcons.ANGLE_LIMIT, MyIcons.ANGLE_LIMIT, 0x80FF80);
+        physicalLimitToggle.setSelected(config.getBoolean("physical_limit"));
+        physicalLimitToggle
+            .addToolTipTitle(Component.translatable("gui.ccpe.module_config.knob_physical_limit"))
+            .addToolTipInstruction(Component.translatable("gui.ccpe.module_config.knob_physical_limit_tip"))
+            .addToolTipOnOff(
+                Component.translatable("gui.ccpe.module_config.knob_physical_limit_on"),
+                Component.translatable("gui.ccpe.module_config.knob_physical_limit_off"));
+        physicalLimitToggle.withCallback(
+            () -> physicalLimitToggle.setSelected(!physicalLimitToggle.isSelected()));
+
+        int limit = clampLimit(config.getInt("angle_limit"));
+        limitBar = new ScrollValueBar(screen.getWinLeft(), y + BAR_H, BAR_W, BAR_H,
+                limit, limit, new int[0])
+            .range(360, 3600)
+            .withToggleButton(physicalLimitToggle)
+            .addToolTipTitle(Component.translatable("gui.ccpe.module_config.knob_physical_limit_value"))
+            .addToolTipInstruction(Component.translatable("gui.ccpe.module_config.knob_physical_limit_value_tip"));
+        screen.addSectionWidget(limitBar);
     }
 
     @Override
@@ -64,9 +86,15 @@ public class KnobConfigSection implements ModuleConfigSection {
         if (detentDisplayToggle != null) {
             config.putBoolean("detent_display", detentDisplayToggle.isSelected());
         }
+        if (physicalLimitToggle != null) config.putBoolean("physical_limit", physicalLimitToggle.isSelected());
+        if (limitBar != null) config.putInt("angle_limit", limitBar.getValue());
     }
 
     private static int clampAngle(int angle) {
         return Math.max(0, Math.min(360, angle));
+    }
+
+    private static int clampLimit(int limit) {
+        return Math.max(360, Math.min(3600, limit > 0 ? limit : 360));
     }
 }

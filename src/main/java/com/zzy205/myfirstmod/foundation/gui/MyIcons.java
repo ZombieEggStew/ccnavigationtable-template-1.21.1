@@ -41,6 +41,8 @@ public class MyIcons implements ScreenElement {
     public static final MyIcons OFFSET = new MyIcons(0, 2);
     public static final MyIcons PERCENT = new MyIcons(1, 2);
     public static final MyIcons INDEX = new MyIcons(2, 2);
+    public static final MyIcons ANGLE_LIMIT = new MyIcons(3, 2);
+
 
     private final int u;
     private final int v;

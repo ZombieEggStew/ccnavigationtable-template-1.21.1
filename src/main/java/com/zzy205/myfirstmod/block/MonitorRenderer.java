@@ -207,7 +207,8 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         Float angle = MonitorGridOverlay.getActiveKnobAngle(monitorPos, moduleId);
         if (angle == null) {
             if (MonitorGridOverlay.getHoveredKnobModuleId(monitorPos) == moduleId) {
-                angle = serverAngle;
+                angle = config.getBoolean("physical_limit")
+                        ? serverAngle : normalizeKnobDisplayAngle(serverAngle);
             } else {
                 return;
             }
@@ -229,6 +230,11 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
                 0xFFFFFFFF, true, poseStack.last().pose(), buffer,
                 net.minecraft.client.gui.Font.DisplayMode.NORMAL, 0, light);
         poseStack.popPose();
+    }
+
+    private static float normalizeKnobDisplayAngle(float angle) {
+        float normalized = angle % 360f;
+        return normalized < 0f ? normalized + 360f : normalized;
     }
 
     /**
