@@ -55,7 +55,7 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | 文件 | 职责 | 修改场景 |
 |---|---|---|
 | `block/MonitorBlock.java` | Monitor 方块：水平朝向、放置/掉落、右键消费；可动变换的枢轴常量（`ROT_ORIGIN`/`HINGE_*`/`NECK_*`）与纯数学（`inverseToModel`/`transformPointToLocal`/`intersectScreen`/`isOnPanel`/`localToGrid`/`rayToGrid`）；碰撞体仅静态底座，选择框为静态 case（轴对齐） | 方块交互、朝向、枢轴常量、动态射线命中、掉落 |
-| `block/MonitorBlockEntity.java` | 持有 `GridState`；服务端执行放置、移除、按压/释放（含玩家锁定与点击计数）、钮子开关、旋钮（含卡位吸附）、屏幕、模块/屏幕配置修改、按钮标签与灯带；保存 pitch/yaw/offset（`setAngles`）；屏幕文本/图形入口（`screen*`，格子模型：setGrid/write/setCursor/fill/setFillPadding/draw 等）；NBT 和 BE 更新包；注册/注销 `MonitorClientRegistry` 与 `MonitorRegistry` | Monitor 状态、持久化、服务端行为、同步问题 |
+| `block/MonitorBlockEntity.java` | 持有 `GridState`；服务端执行放置、移除、按压/释放（含玩家锁定与点击计数）、钮子开关、旋钮（含卡位吸附）、屏幕、模块/屏幕配置修改、按钮标签与灯带；保存 pitch/yaw/offset（`setAngles`）；屏幕文本/图形入口（`screen*`，格子模型：setGrid/write/setCursor/fill/draw 等）；NBT 和 BE 更新包；注册/注销 `MonitorClientRegistry` 与 `MonitorRegistry` | Monitor 状态、持久化、服务端行为、同步问题 |
 | `block/MonitorRenderer.java` | BER：用 `MonitorTransform` 渲染可动 bearing/case、背景 quad（内置贴图/外部图片）、模块模型与动画（按 `(BlockPos,moduleId)` 隔离）、旋钮角度文字、按钮标签、屏幕 9 宫格 + 屏幕格子/图形（委托 `ScreenTextRenderer`） | Monitor 本体渲染、背景、模块动画、屏幕文本 |
 | `block/MonitorPreloadedModels.java` | 预加载 Monitor 动态渲染所需模型：模块主模型、额外部件（钮子拉杆/旋钮把手/按钮头/指示灯）、屏幕 9 宫格部件、可动 case/bearing、6 张背景贴图精灵 | 模型加载或资源找不到 |
 | `client/MonitorGridOverlay.java` | 客户端 Monitor 网格线、模块边框、放置预览（Catnip Outliner，key 按 BlockPos 前缀隔离）、鼠标交互（按钮/钮子/旋钮拖拽/屏幕两点放置）、payload 发送、打开模块配置与 Monitor 菜单；持有按 BlockPos 隔离的 `InteractionState` | 网格显示、模块交互、放置预览、多 Monitor 状态隔离 |
@@ -64,7 +64,7 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `client/MonitorTransform.java` | 渲染正向变换 helper：facing → offset → yaw → pitch；枢轴常量单一来源在 `MonitorBlock` | 渲染变换、与检测互逆 |
 | `client/MonitorClientRegistry.java` | 客户端已加载 Monitor 坐标集合（`onLoad`/`setRemoved`/`onChunkUnloaded` 维护），供独立命中检测枚举候选 | 命中检测候选枚举 |
 | `client/MonitorBackgrounds.java` | 扫描运行目录 `ccpe_res/monitor_bg` 的外部背景图片，注册为动态纹理（键 `custom/xxx.png`） | 外部背景、纹理加载 |
-| `client/ScreenTextRenderer.java` | 屏幕渲染（格子模型）：背景格 quad（fill 填充 + fillPadding 内缩）与字形 quad（`RenderType.textPolygonOffset` 防 z-fighting）、图形层（纯色 `POSITION_COLOR` quad）；格子坐标每帧计算；可绘制区边界 `DRAWABLE_INSET` | 屏幕字符/背景格/图形渲染、深度、镜像问题 |
+| `client/ScreenTextRenderer.java` | 屏幕渲染（格子模型）：背景格 quad（fill 填充）与字形 quad（`RenderType.textPolygonOffset` 防 z-fighting）、图形层（纯色 `POSITION_COLOR` quad）；格子坐标每帧计算；可绘制区边界 `DRAWABLE_INSET`；调试网格线开关 `DEBUG_DRAW_GRID` | 屏幕字符/背景格/图形渲染、深度、镜像问题 |
 
 ### 独立方块
 
@@ -91,7 +91,7 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `monitor/MonitorModule.java` | 不可变模块记录：ID、类型和网格坐标（宽高取自类型） |
 | `monitor/ModuleType.java` | 模块类型：`button_1`(1×1)、`toggle_switch`(1×1)、`knob`(2×2)；名称/尺寸/物品映射（`byName`/`fromItem`） | 新模块类型、尺寸或物品关联 |
 | `monitor/MonitorBackground.java` | Monitor 背景选项（6 个内置键 + 外部 `custom/` 键）与默认值（蓝色棋盘）；显示名可翻译 | 背景选项/默认值变更 |
-| `monitor/ScreenText.java` | 单个屏幕的格子文本缓冲（方案三，LCD 帧缓冲语义）：定长格子数组（字符 + 前景色 + 背景色，写入即覆盖）、光标制（1 起）、`setGrid`/`fill`/`setFillPadding`/`replaceAll`（draw 整屏原子替换）、溢出模式；图形层（矩形/线段/圆）自由定位 + z 层级；NBT 紧凑序列化（int[]） | 屏幕文本/图形数据结构、格子布局、溢出模式 |
+| `monitor/ScreenText.java` | 单个屏幕的格子文本缓冲（方案三，LCD 帧缓冲语义）：定长格子数组（字符 + 前景色 + 背景色，写入即覆盖）、光标制（1 起）、`setGrid`/`fill`/`replaceAll`（draw 整屏原子替换）、溢出模式、`setTextScale`（可配格子高宽比）；图形层（矩形/线段/圆）自由定位 + z 层级；NBT 紧凑序列化（int[]） | 屏幕文本/图形数据结构、格子布局、溢出模式 |
 | `monitor/ButtonLabel.java` | 按钮（`button_1`）表面标签数据：文本、位置偏移、字号、颜色、投影；默认值与钳制 | 按钮标签数据或渲染 |
 | `block/ModuleRenderBehavior.java` | 按模块类型选择渲染行为：Button（按压深度 + 灯带指示灯）、Toggle、Knob（旋转）；含灯带纯色面片渲染类型 | 模块动态渲染、按压/旋钮视觉状态 |
 
@@ -165,7 +165,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/ButtonModuleHandle.java` | 按钮的 Lua API（按下/弹起/点击检测/玩家锁/灯带/标签 setLabel 系列） |
 | `compat/cc/ToggleSwitchModuleHandle.java` | 钮子开关的 Lua API（锁存状态） |
 | `compat/cc/KnobModuleHandle.java` | 旋钮的 Lua API（角度读写） |
-| `compat/cc/ScreenModuleHandle.java` | 屏幕的 Lua API（格子模型：setGrid/getGrid、光标 write/setCursorPos、fill/setFillPadding、draw(batch) 整屏原子替换、tooltip、图形层 drawRect/Line/Circle/Point） |
+| `compat/cc/ScreenModuleHandle.java` | 屏幕的 Lua API（格子模型：setGrid/getGrid、光标 write/setCursorPos、fill、draw(batch) 整屏原子替换、tooltip、图形层 drawRect/Line/Circle/Point） |
 | `compat/cc/RedstoneTransceiverPeripheral.java` | Redstone Transceiver 的 `IPeripheral` 实现 |
 | `compat/cc/RedstoneTransceiverRegistry.java` | Receiver 频道和外设实例登记 |
 | `compat/create/CreateRedstoneCompat.java` | Create 红石链接兼容，建立虚拟红石连接 |

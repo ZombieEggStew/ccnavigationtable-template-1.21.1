@@ -151,18 +151,19 @@ Create / Flywheel 证据（工作区）：
 
 | 文件 | 改动 |
 |---|---|
-| `monitor/ScreenText.java` | 重写为格子模型：定长 `char[] cells` + `int[] fg` + `int[] bg`（LCD 帧缓冲语义，写入即覆盖，体积固定）；光标制 `setCursorPos(col,row)` 1 起；`write(text)` 覆盖字符+前景色、背景色不变；`fill(col,row,w,h,colour)` 批量设置背景色；`setFillPadding(ratio)`；`replaceAll` 整屏原子替换（draw 用）；`setGrid` 重设清空；`setTextScale(scale, innerWpx, innerHpx)` 保留为 setGrid 别名（按格子反推字号）；图形层 rect/line/circle 保持自由定位与 z；NBT 用 int[] 定长数组紧凑编码（`cols/rows/cells/fg/bg`） |
+| `monitor/ScreenText.java` | 重写为格子模型：定长 `char[] cells` + `int[] fg` + `int[] bg`（LCD 帧缓冲语义，写入即覆盖，体积固定）；光标制 `setCursorPos(col,row)` 1 起；`write(text)` 覆盖字符+前景色、背景色不变；`fill(col,row,w,h,colour)` 批量设置背景色；`replaceAll` 整屏原子替换（draw 用）；`setGrid` 重设清空；`setTextScale(scale, innerWpx, innerHpx)` 保留为 setGrid 别名（按格子反推字号，可配格子高宽比）；图形层 rect/line/circle 保持自由定位与 z；NBT 用 int[] 定长数组紧凑编码（`cols/rows/cells/fg/bg`）。~~`setFillPadding`~~ 已删除 |
 | `monitor/GridState.java` | 无结构改动（`screenTexts` 接口不变，NBT 序列化经 `ScreenText.save/load` 自动适配） |
-| `compat/cc/ScreenModuleHandle.java` | Lua API：新增 `setGrid/getGrid`、`fill`、`setFillPadding/getFillPadding`、`draw(batch)`（cells+shapes 两段式，LuaTable 解析，原子替换）；`setCursorPos` 改格子坐标；`write` 去 z 参数；`setTextScale` 保留为别名；`getSize/getTextScale` 返回格子数；图形层 API 不变 |
+| `compat/cc/ScreenModuleHandle.java` | Lua API：新增 `setGrid/getGrid`、`fill`、`draw(batch)`（cells+shapes 两段式，LuaTable 解析，原子替换）；`setCursorPos` 改格子坐标；`write` 去 z 参数；`setTextScale` 保留为别名（可传可选高宽比）；`getSize/getTextScale` 返回格子数；图形层 API 不变。~~`setFillPadding/getFillPadding`~~ 已删除 |
 | `compat/cc/MonitorPeripheral.java` | 删除 monitor 背景平面绘制 API（write/clear/setCursorPos/setTextScale/setTextColour/setZIndex/setOverflowMode/drawRect/clearRects/drawLine/drawCircle/drawPoint/clearShapes/getSize）——内容只能在 screen 模块上绘制 |
-| `block/MonitorBlockEntity.java` | 删除 `monitorDisplayText` 字段与全部 `monitorDisplay*` 方法、`getUpdateTag/save/load` 中的 `MonitorDisplayText`；`screen*` 方法改格子模型（screenWrite/screenSetCursor/screenSetTextScale/screenSetGrid/screenFill/screenSetFillPadding/screenDraw/screenDrawRect 等） |
+| `block/MonitorBlockEntity.java` | 删除 `monitorDisplayText` 字段与全部 `monitorDisplay*` 方法、`getUpdateTag/save/load` 中的 `MonitorDisplayText`；`screen*` 方法改格子模型（screenWrite/screenSetCursor/screenSetTextScale/screenSetGrid/screenFill/screenDraw/screenDrawRect 等）。~~`screenSetFillPadding`~~ 已删除 |
 | `block/MonitorRenderer.java` | 删除 `renderMonitorDisplay`（monitor 背景平面渲染）；`renderScreenText` 用 `DRAWABLE_INSET` 计算可绘制区，调用新 `ScreenTextRenderer.drawAll` 签名 |
-| `client/ScreenTextRenderer.java` | 重写：背景格 quad（fill 填充，支持 fillPadding 内缩）+ 字形 quad（`RenderType.textPolygonOffset(ascii.png)`，polygonOffset 防 z-fighting）+ 图形层 quad；**渲染平面 = screen 模块外边面**（`zBase = (SCREEN_Z+0.7)/16`，与 9 宫格模型 north 面 z=0.7 一致），内容仅极小贴面前移（1/2048 块级，量级对齐原版 `TEXT_OFFSET`）；格子坐标每帧计算（本规模开销可忽略） |
+| `client/ScreenTextRenderer.java` | 重写：背景格 quad（fill 填充）+ 字形 quad（`RenderType.textPolygonOffset(ascii.png)`，polygonOffset 防 z-fighting）+ 图形层 quad；**渲染平面 = screen 模块外边面**（`zBase = (SCREEN_Z+0.7)/16`，与 9 宫格模型 north 面 z=0.7 一致），内容仅极小贴面前移（1/2048 块级，量级对齐原版 `TEXT_OFFSET`）；格子坐标每帧计算（本规模开销可忽略）。~~fillPadding 内缩~~ 已删除 |
 | `network/SyncGridPayload.java` | NBT 改 gzip 压缩（`NbtIo.writeCompressed/readCompressed` + `writeByteArray`），顺带落地方案一（2 MiB 崩溃缓解） |
 
 ### 与计划文档的差异
 
 - **方案二（脏标记 + 每 tick 合并快照）未实施**：用户选择直接跳阶段 3。闪烁问题由 `draw(batch)` 整屏原子替换语义部分缓解（服务端一次替换 → 一次同步 → 客户端一帧显示）；若后续仍要根治「每次 Lua 调用一个包」，需补方案二。
+- **`setFillPadding` 已删除（2026-08-22 用户要求）**：`fill` 保留（纯色背景格，铺满整格），`setFillPadding/getFillPadding` 及渲染期内缩逻辑全部移除（`ScreenText` 字段/NBT、`ScreenModuleHandle` 两个 Lua 方法、`MonitorBlockEntity.screenSetFillPadding`、`ScreenTextRenderer` 背景格 pad）。方案三设计文档中的「LED 内缩」描述保留为历史存档，不再实施。
 - **只删 monitor 的字符/图形绘制，网格与背景保留（作者确认）**：`MonitorGridOverlay` 的网格线/模块边框/放置预览、`MonitorBackground` 背景贴图/`renderBackground` 均保留未动；仅删除 monitor 背景平面上的绘制通道（`monitorDisplay*`）。
 - **渲染平面贴外边面（作者确认）**：screen 内容直接绘制在 screen 模块外边面（9 宫格模型 north 面）上，不做 1/64~1/128 块级手动前移；z-fighting 完全按原版 `SignRenderer` 方案用 `textPolygonOffset`（polygonOffset(-1,-10)）区分深度。
 - **旧存档屏幕文本不迁移**：旧自由定位格式（无 `cols` 字段）加载时清空重置（破坏性变更，已确认接受）。
@@ -175,10 +176,21 @@ Create / Flywheel 证据（工作区）：
 1. `setGrid` 后格子文本渲染位置/大小正确（含 6×6px 小屏）。
 2. `write` 覆盖语义：同格重写无残留、wrap/truncate/ellipsis 行为正确。
 3. `draw(batch)` 整屏替换：无 clear+write 中间态闪烁。
-4. `fill` + `setFillPadding` 分段进度条（LED 效果）。
+4. `fill` 分段进度条（纯色背景格）。
 5. 图形层 drawRect/drawLine/drawCircle 自由定位 + z 层级正常。
 6. z-fighting：斜视角/远处无闪烁（polygonOffset 生效）。
 7. 多屏幕并存、屏幕文本 NBT 持久化（重启世界后内容保留）。
 8. 旧 Lua 程序按新 API 改写后行为正确。
 
-> 建议验证方式：写一个 Lua 测试程序依次覆盖 1-6（`setGrid` → `write` 覆盖 → `draw(batch)` → `fill`+`setFillPadding` → 图形层 → 斜视角观察），完成后勾选以上条目并回填本 memo 与 `.TO DO.md`。
+> 建议验证方式：写一个 Lua 测试程序依次覆盖 1-6（`setGrid` → `write` 覆盖 → `draw(batch)` → `fill` → 图形层 → 斜视角观察），完成后勾选以上条目并回填本 memo 与 `.TO DO.md`。
+
+### 调试辅助：格子网格线（2026-08-22）
+
+- `ScreenTextRenderer.DEBUG_DRAW_GRID = true` 时，所有屏幕画**半透明品红格子边缘**（cols+1 竖线 + rows+1 横线，含外框，画在最上层），用于肉眼核对格子布局/定位/镜像。
+- 涉及文件：`client/ScreenTextRenderer.java`（新增 `drawGridLines` + `colorQuad` alpha 重载 + `GRID_LINE_*` 常量）、`block/MonitorRenderer.java`（`renderScreen` 空屏也渲染的条件，`text.hasContent() || DEBUG_DRAW_GRID`）。
+- **验证完成后把 `DEBUG_DRAW_GRID` 改回 `false`**（当前默认 true）。
+
+### 格子高宽比可配置（2026-08-22）
+
+- `setTextScale(scale, lineSpacing?)` 第二个可选参数 = **格子高/格子宽比**（行距系数），默认 `ScreenText.LINE_SPACING = 1.2`；传 `1.0` 得正方形格子，旧调用（单参数）行为不变。
+- 链路：`ScreenModuleHandle.setTextScale(scale, Optional<Double>)` → `MonitorBlockEntity.screenSetTextScale(id, scale, @Nullable Double)` → `ScreenText.setTextScale(scale, lineSpacing, innerWpx, innerHpx)` → `rowsFor(innerHeightPx, scale, lineSpacing)`（`colsFor` 不变，格子宽 = 字号）。
