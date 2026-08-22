@@ -11,7 +11,6 @@ import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.MonitorBackground;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
 import com.zzy205.myfirstmod.monitor.ModuleType;
-import com.zzy205.myfirstmod.network.ModuleKnobRotatePayload;
 import com.zzy205.myfirstmod.network.ModulePressPayload;
 import com.zzy205.myfirstmod.network.PlaceModulePayload;
 import com.zzy205.myfirstmod.network.PlaceScreenPayload;
@@ -31,7 +30,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.sounds.SoundEvents;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
@@ -51,8 +49,6 @@ import java.util.Map;
  */
 public class MonitorGridOverlay {
 
-    private static final int KNOB_SEND_INTERVAL = 2;
-    private static final float KNOB_SOUND_STEP = 12f; // 每旋转多少度播放一次音效
     private static final float GRID_LINE_OFFSET = 0.06f;
     private static Component hoveredTooltip;
 
@@ -60,7 +56,7 @@ public class MonitorGridOverlay {
      * 单个 Monitor 的客户端交互状态。
      * 所有状态都按 BlockPos 隔离，消除多 Monitor 之间的静态变量共享问题。
      */
-    private static class InteractionState {
+    static class InteractionState {
         /** 按钮按下追踪：当前被按住的模块 ID，-1 表示无 */
         int pressingModuleId = -1;
         /** 钮子开关防连发：上次触发的 moduleId，松开右键后清除 */
@@ -114,11 +110,10 @@ public class MonitorGridOverlay {
         return state.knobDisplayAngle;
     }
 
-    /** 获取正在拖动的旋钮把手的视觉角度（含卡位前半程微扭动）；非卡位或未拖动时返回 null。 */
+    /** 获取正在拖动的旋钮把手视觉角度（含限位后的越界缓冲）；未拖动时返回 null。 */
     public static Float getActiveKnobVisualAngle(BlockPos pos, int moduleId) {
         InteractionState state = interactions.get(pos);
-        if (state == null || !state.knobDragging || state.knobDragModuleId != moduleId
-                || state.knobDetentStep <= 0) return null;
+        if (state == null || !state.knobDragging || state.knobDragModuleId != moduleId) return null;
         return state.knobVisualAngle;
     }
 
@@ -374,34 +369,10 @@ public class MonitorGridOverlay {
         // ── 旋钮拖拽 ──
         if (hoveredModule != null && hoveredModule.type() == ModuleType.KNOB
                 && useDown && heldType == null && !interact.knobDragging) {
-            interact.knobDragging = true;
-            interact.knobDragFacing = facing;
-            interact.knobDragModuleId = hoveredModule.id();
-            interact.knobCenterX = MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + hoveredModule.gridX() + hoveredModule.getWidth() / 2f;
-            interact.knobCenterY = MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + hoveredModule.gridY() + hoveredModule.getHeight() / 2f;
-            int detentStep = 0;
-            if (monitorBE != null) {
-                interact.knobAccumAngle = monitorBE.getGridState().getKnobAngle(hoveredModule.id());
-                detentStep = monitorBE.getGridState().getDetentStep(hoveredModule.id());
-            }
-                boolean physicalLimit = monitorBE != null
-                    && monitorBE.getGridState().getModuleConfig(hoveredModule.id())
-                        .getBoolean("physical_limit");
-            interact.knobPrevRawAngle = computeCrosshairAngle(pos, facing, monitorYaw, monitorPitch, monitorOffset,
-                    ray[0], ray[1], interact.knobCenterX, interact.knobCenterY);
-            interact.knobUnwrappedDelta = 0f;
-            interact.knobLastSoundAngle = interact.knobAccumAngle;
-                interact.knobDisplayAngle = physicalLimit
-                    ? interact.knobAccumAngle : normalizeDisplayAngle(interact.knobAccumAngle);
-            // 卡位模式：以当前角度的最近档位作为起始档位，避免拖拽第一帧误触发音效
-            interact.knobLastDetent = detentStep > 0
-                    ? GridState.snapToDetent(interact.knobAccumAngle, detentStep)
-                    : interact.knobDisplayAngle;
-            interact.knobDetentStep = detentStep;
-            interact.knobVisualAngle = interact.knobDisplayAngle;
+            KnobInteractionHandler.begin(interact, pos, facing, monitorYaw, monitorPitch, monitorOffset,
+                    ray, hoveredModule, monitorBE);
         } else if (interact.knobDragging && !useDown) {
-            interact.knobDragging = false;
-            interact.knobDragModuleId = -1;
+            KnobInteractionHandler.end(interact);
         }
         } // !holdingScreen && !screenPlacing
 
@@ -591,16 +562,6 @@ public class MonitorGridOverlay {
         o.showLine(slot + "_left",   p01, p00).colored(color).lineWidth(lw);
     }
 
-    // ── 旋钮拖拽：准心绕旋钮中心旋转 → 旋钮跟随 ──
-
-    /** 计算准心视线射线在屏幕上的命中点相对旋钮中心的角度（弧度）。origin/dir 为 plot 空间。 */
-    private static float computeCrosshairAngle(BlockPos pos, Direction facing, float yaw, float pitch, int offset,
-                                                Vec3 origin, Vec3 dir, float knobCx, float knobCy) {
-        float[] local = MonitorBlock.rayToScreenLocal(pos, facing, yaw, pitch, offset, origin, dir);
-        if (local == null) return 0f;
-        return (float) Math.atan2(local[1] - knobCy, local[0] - knobCx);
-    }
-
     public static void onClientTick(ClientTickEvent.Pre event) {
         var mc = Minecraft.getInstance();
         if (mc.player == null) return;
@@ -620,94 +581,8 @@ public class MonitorGridOverlay {
                 continue;
             }
 
-            // 独立动态命中检测：准心不再对准该 Monitor 的屏幕 → 取消拖拽
-            var knobHit = mc.level == null ? null : MonitorHitDetector.find(mc.level, mc.player, 1.0f);
-            if (knobHit == null || !knobHit.pos().equals(pos)) {
-                state.knobDragging = false;
-                state.knobDragModuleId = -1;
-                continue;
-            }
-
-            // 当前 raw 角度 → 解缠绕（用动态射线求交，兼容可动 Monitor）
-            MonitorBlockEntity knobMonitorBE = (mc.level != null && mc.level.getBlockEntity(pos) instanceof MonitorBlockEntity m) ? m : null;
-            float knobYaw = knobMonitorBE != null ? knobMonitorBE.getYawAngle() : 0f;
-            float knobPitch = knobMonitorBE != null ? knobMonitorBE.getPitchAngle() : 0f;
-            int knobOffset = knobMonitorBE != null ? knobMonitorBE.getOffset() : 0;
-            Vec3[] ray = crosshairRay(mc.level, pos, mc.player, 1.0f);
-            float rawAngle = computeCrosshairAngle(pos, state.knobDragFacing, knobYaw, knobPitch, knobOffset,
-                    ray[0], ray[1], state.knobCenterX, state.knobCenterY);
-            float diff = rawAngle - state.knobPrevRawAngle;
-            if (diff > Math.PI) diff -= (float)(2 * Math.PI);
-            else if (diff < -Math.PI) diff += (float)(2 * Math.PI);
-            state.knobUnwrappedDelta += diff;
-            state.knobPrevRawAngle = rawAngle;
-
-            float newAngle = state.knobAccumAngle + (float) Math.toDegrees(state.knobUnwrappedDelta);
-
-            // 读取卡位配置（0 = 自由旋转）
-            int detentStep = 0;
-            boolean physicalLimit = false;
-            if (mc.level != null && mc.level.getBlockEntity(pos) instanceof MonitorBlockEntity be) {
-                detentStep = be.getGridState().getDetentStep(state.knobDragModuleId);
-                physicalLimit = be.getGridState().getModuleConfig(state.knobDragModuleId)
-                        .getBoolean("physical_limit");
-            }
-
-            float sendAngle;
-            if (detentStep > 0) {
-                // ── 卡位模式：吸附到最近档位，只在跨档时发声 ──
-                float snapped = GridState.snapToDetent(newAngle, detentStep);
-                if (mc.level != null && mc.level.getBlockEntity(pos) instanceof MonitorBlockEntity be) {
-                    if (physicalLimit) snapped = be.getGridState().clampKnobAngle(state.knobDragModuleId, snapped);
-                }
-                state.knobDisplayAngle = physicalLimit ? snapped : normalizeDisplayAngle(snapped);
-                if (snapped != state.knobLastDetent) {
-                    float soundAngle = normalizeDisplayAngle(snapped);
-                    float pitch = 0.5f + (soundAngle / 360f) * 1.5f;
-                    mc.player.playSound(SoundEvents.LEVER_CLICK, 0.1f, pitch);
-                    state.knobLastDetent = snapped;
-                }
-                // 弹性微扭动：把手滞后于手部 1/3（最大偏离 step/6），松手后由渲染器弹回档位
-                float off = newAngle - snapped;
-                if (!physicalLimit) {
-                    if (off > 180f) off -= 360f;
-                    else if (off < -180f) off += 360f;
-                }
-                state.knobVisualAngle = physicalLimit ? snapped + off / 3f : normalizeDisplayAngle(snapped + off / 3f);
-                sendAngle = snapped;
-            } else {
-                // ── 自由模式：每 12° 播放一次谢泼德音阶音效 ──
-                state.knobDisplayAngle = physicalLimit ? newAngle : normalizeDisplayAngle(newAngle);
-                float soundDiff = newAngle - state.knobLastSoundAngle;
-                int soundSteps = (int) (soundDiff / KNOB_SOUND_STEP);
-                if (soundSteps != 0) {
-                    float cycleAngle = newAngle % 360f;
-                    if (cycleAngle < 0) cycleAngle += 360f;
-                    float pitch = 0.5f + (cycleAngle / 360f) * 1.5f;
-                    mc.player.playSound(SoundEvents.LEVER_CLICK, 0.1f, pitch);
-                    state.knobLastSoundAngle = newAngle - (soundDiff - soundSteps * KNOB_SOUND_STEP);
-                }
-                sendAngle = newAngle;
-            }
-
-            if (mc.level != null && mc.level.getBlockEntity(pos) instanceof MonitorBlockEntity be) {
-                sendAngle = be.getGridState().clampKnobAngle(state.knobDragModuleId, sendAngle);
-                state.knobDisplayAngle = be.getGridState().clampKnobAngle(state.knobDragModuleId, state.knobDisplayAngle);
-            }
-
-            // 周期性发送旋转角度到服务端
-            state.knobSendCooldown--;
-            if (state.knobSendCooldown <= 0) {
-                state.knobSendCooldown = KNOB_SEND_INTERVAL;
-                PacketDistributor.sendToServer(
-                        new ModuleKnobRotatePayload(pos, state.knobDragModuleId, sendAngle));
-            }
+            KnobInteractionHandler.tick(mc, pos, state);
         }
-    }
-
-    private static float normalizeDisplayAngle(float angle) {
-        float normalized = angle % 360f;
-        return normalized < 0f ? normalized + 360f : normalized;
     }
 
 }
