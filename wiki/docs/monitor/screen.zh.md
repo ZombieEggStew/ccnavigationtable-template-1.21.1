@@ -2,12 +2,15 @@
 
 ![屏幕模块](../img/screen.png)
 
-屏幕与普通模块共用 ID 命名空间，`getType()` 返回 `"screen"`。屏幕支持**文本渲染**和**图形绘制**。
+屏幕与普通模块共用 ID 命名空间，`getType()` 返回 `"screen"`。屏幕支持**文本渲染**（格子模型）和**图形绘制**。
 
-- 字号（`setTextScale`）决定每屏能显示的行列数，行列数随字号自动重算（见 `getSize`）。
-- 文本有溢出模式（`setOverflowMode`），控制超出一行时的行为。
-- 图形坐标使用「屏幕局部像素」：原点在屏幕**左上角**，`x` 向右、`y` 向下，单位 = 1 像素 = 1 格 = 1/16 块。
+屏幕采用**格子模型**（LCD 帧缓冲语义）：
 
+- **文本层是定长格子数组**：先 `setGrid(cols, rows)` 设定格子数，格子铺满屏幕内区；每格 = 字符 + 前景色 + 背景色，**写入即覆盖该格**（同位置永远只有一个值，无重叠面片），内容体积固定、不随运行时长增长。
+- **光标制定位**：`setCursorPos(col, row)`（1 起，CC:T 风格），`write` 从光标处逐格写入。
+- **背景色**：`fill` 批量设置格子背景色，与 `write` 叠加即「色块 + 文字」。
+- **整屏批量传输**：`draw(batch)` 一次调用传整屏内容，**原子替换**（无 clear+write 中间态闪烁）。
+- **图形层**（`drawRect`/`drawLine`/`drawCircle`/`drawPoint`）保持**自由定位**（1/128 块坐标）与 **z 层级**，不受格子约束，但仅在屏幕可绘制区域内绘制。
 
 ## 操作说明
 - **放置屏幕**：右键一个空格子，作为锚点，再右键一个空格子，屏幕会占用这两个格子形成一个矩形区域（最小 2×2）。
@@ -15,62 +18,77 @@
 - **拆卸模块**：手持扳手蹲下右键 可以拆卸模块
 
 
-## 文本渲染
+## 格子布局
 
-### screen.write(text, z?)
+### screen.setGrid(cols, rows) / screen.getGrid()
 
-在光标处写入文本（支持 `\n` 换行、忽略 `\r`）。每个字符占据的位置用 `drawRect` 坐标直接定位：
-写一个字符光标向右推进一个字形宽（`字号 × 1.0 × 8`），`\n` 回行首并下移一行（`字号 × 1.2 × 8`）。
-写到屏幕右缘时按 `setOverflowMode` 处理（默认 `"wrap"` 换行）。
+设定屏幕格子数（cols × rows，最大 128×128），格子铺满屏幕内区，字形尺寸由格子反推（`cellW = 内区宽 / cols`）。
+**重设会清空文本层**（CC:T resize 语义），光标回到 `(1, 1)`。
 
-可选参数 `z` 指定本次写入字符的层级（越大越靠前），省略时使用 `setZIndex` 设置的默认层级。
+用户未 `setGrid` 之前使用默认格子数（12 × 10）。
+
+```lua
+screen.setGrid(10, 6)
+local cols, rows = screen.getGrid()   -- 10, 6
+```
+
+### screen.setTextScale(scale, lineSpacing?) / screen.getTextScale()
+
+`setGrid` 的**别名**（旧 Lua 程序调用不报错）：按格子反推字号，等价于重设格子数——
+`cols = 内区宽 / scale`，`rows = 内区高 / (scale × lineSpacing)`。重设同样会清空文本层。
+
+- `scale`：字号（MC 像素，1px = 1/16 块）
+- `lineSpacing`：可选，**格子高/格子宽比**（行距系数，默认 1.2；传 1.0 得到正方形格子）
+
+```lua
+screen.setTextScale(0.35)            -- 默认高宽比 1.2（格子竖长）
+screen.setTextScale(0.35, 1.0)       -- 正方形格子
+screen.setTextScale(0.35, 1.5)       -- 更扁的格子
+local cols, rows = screen.getTextScale()   -- 返回格子数（同 getGrid）
+```
+
+### screen.getSize()
+
+返回当前格子数，与 `getGrid()` 相同，返回 `cols, rows` 两个值。
+
+```lua
+local cols, rows = screen.getSize()
+print(cols, rows)
+```
+
+
+## 文本渲染（格子模型）
+
+### screen.write(text)
+
+从光标处逐格写入文本（支持 `\n` 换行、忽略 `\r`）。每写入一个字符**覆盖该格**（字符 + 当前前景色），光标右移一格；
+**背景色保持不变**（`fill` 设置的填充色不被 `write` 覆盖，支持「色块 + 文字」叠加）。
+到达行尾时按 `setOverflowMode` 处理（默认 `"wrap"` 换行）；写满最后一行之后继续写入会被丢弃。
 
 ```lua
 screen.write("Hello\nCCPE")
-screen.write("Top", 2)          -- 层级 2
 ```
 
 ### screen.clear()
 
-清空屏幕文本和所有图形（矩形/线段/圆），并把光标重置到 `(0, 0)`。
+清空屏幕全部内容（格子 + 图形 + 光标），**保留格子数**。
 
-### screen.setCursorPos(x, y) / screen.getCursorPos()
+### screen.setCursorPos(col, row) / screen.getCursorPos()
 
-设置/读取光标位置，坐标系统与 `drawRect` 的前两个参数完全一致：
-以屏幕内区左上角为原点，X 向右、Y 向下，1 单位 = 1/128 块。
-`getCursorPos` 返回 `x, y` 两个值。
-
-```lua
-screen.setCursorPos(0, 0)          -- 内区左上角
-local x, y = screen.getCursorPos()
-```
-
-### screen.setTextScale(scale) / screen.getTextScale()
-
-设置/读取整块屏幕的字号（字形高度，MC 像素，1px = 1/16 块）。字号只影响之后 `write` 写入的字形大小与推进量，
-不影响已写入文本的位置（旧字符仍按各自位置渲染）。
+设置/读取光标位置（**格子坐标，1 起**，CC:T 风格；自动收拢到格子范围内）。
+`getCursorPos` 返回 `col, row` 两个值。
 
 ```lua
-screen.setTextScale(0.35)
-print(screen.getTextScale())  -- 0.35
+screen.setCursorPos(1, 1)          -- 左上角第一格
+local col, row = screen.getCursorPos()
 ```
 
 ### screen.setTextColour(colour) / screen.getTextColour()
 
-设置/读取前景色（0xRRGGBB）。文本**没有背景色**，需要背景时自己用 `drawRect` 画。
+设置/读取前景色（0xRRGGBB，默认 `0xFFFFFF`），影响之后 `write` 写入的字符颜色。
 
 ```lua
 screen.setTextColour(0x00FF00)
-```
-
-### screen.setZIndex(z) / screen.getZIndex()
-
-设置/读取之后 `write` / `drawRect` 未显式指定 z 时使用的默认层级（默认 0，越大越靠前，负值会被压进面板后面）。
-
-```lua
-screen.setZIndex(2)
-screen.write("Hello")           -- 用默认层级 2
-screen.drawRect(0, 0, 4, 4, 0xFF0000, true, 1)   -- 也用层级 2
 ```
 
 ### screen.setOverflowMode(mode) / screen.getOverflowMode()
@@ -87,11 +105,73 @@ screen.drawRect(0, 0, 4, 4, 0xFF0000, true, 1)   -- 也用层级 2
 screen.setOverflowMode("ellipsis")
 ```
 
-## 图形绘制
+
+## 填充（背景色）
+
+### screen.fill(col, row, w, h, colour)
+
+批量设置格子**背景色**（纯色填充，分段进度条用）。只改背景色，字符与前景色不变。
+
+- `col, row`：起始格（1 起）
+- `w, h`：宽高（格，超出自动裁剪）
+- `colour`：颜色（0xRRGGBB）
+
+```lua
+screen.fill(1, 1, 10, 1, 0xFF0000)   -- 第一行前 10 格红色底
+screen.write("Loading")              -- 字画在红色底上
+```
+
+
+## 整屏批量传输
+
+### screen.draw(batch)
+
+**一次调用传整屏所有需要绘制的格子与可选图形，整屏原子替换**（服务端清空后重建，客户端收到完整新画面，**无中间态闪烁**）。
+解析失败会抛 Lua 错误，整屏保持不变（不会部分应用）。
+
+`batch` 为 Lua table，两段式结构：
+
+- **`cells`**：每格一个数组 `{col, row, char, fg?, bg?}`（col/row **1 起**；`fg` 省略沿用当前前景色，`bg` 省略为透明）
+- **`shapes`**（可选）：图形数组，每项为带 `type` 字段的 table：
+  - `{type = "rect", x, y, w, h, colour, solid?, lineWidth?, z?}`
+  - `{type = "line", x1, y1, x2, y2, colour, lineWidth?, z?}`
+  - `{type = "circle", cx, cy, radius, colour, solid?, lineWidth?, segments?, z?}`
+  - `{type = "point", x, y, colour, z?}`
+  - `z` 省略用当前默认层级（`setZIndex`）
+
+```lua
+screen.draw({
+  cells = {
+    {1, 1, "A", 0xFFFFFF, 0x000000},   -- 第 1 行第 1 格：白字黑底
+    {2, 1, "B", 0xFF0000},             -- 第 2 格：红字，透明底
+  },
+  shapes = {
+    {type = "rect", x = 0, y = 0, w = 8, h = 8, colour = 0x00FF00, solid = true},
+  },
+})
+```
+
+配合每 tick 调用一次 `draw`，即「每 tick 一帧」的整屏刷新模式，全链路无中间态。
+
+
+## 图形绘制（自由定位 + z 层级）
+
+图形层坐标使用「屏幕局部坐标」：原点在可绘制区域**左上角**，`x` 向右、`y` 向下，单位 = 1/128 块（`1px = 8 单位`）。
+图形层不受格子约束，但**仅在屏幕可绘制区域内绘制**。
+
+### screen.setZIndex(z) / screen.getZIndex()
+
+设置/读取之后 `drawRect`/`drawLine`/`drawCircle`/`drawPoint` 未显式指定 z 时使用的默认层级（默认 0，越大越靠前）。
+仅图形层有层级，文本层（格子）没有 z。
+
+```lua
+screen.setZIndex(2)
+screen.drawRect(0, 0, 4, 4, 0xFF0000, true, 1)   -- 用默认层级 2
+```
 
 ### screen.drawRect(x, y, width, height, colour, solid, lineWidth, z?)
 
-在屏幕上画一个矩形。坐标与文本/光标共用同一套系统。
+在屏幕上画一个矩形。
 
 - `x, y`：左上角（1/128 块，0 = 内区左/上缘，向右/下增大）
 - `width, height`：宽高（1/128 块）
@@ -108,7 +188,7 @@ screen.drawRect(0, 0, 8, 8, 0x0000FF, true, 1, 5)     -- 层级 5，盖在其它
 
 ### screen.drawLine(x1, y1, x2, y2, colour, lineWidth, z?)
 
-画一条线段。坐标与 `drawRect` 共用同一套系统。
+画一条线段。
 
 - `x1, y1` / `x2, y2`：起终点（1/128 块）
 - `colour`：颜色（0xRRGGBB）
@@ -121,7 +201,7 @@ screen.drawLine(0, 0, 8, 8, 0xFFFFFF, 0.5)
 
 ### screen.drawCircle(cx, cy, radius, colour, solid, lineWidth, segments?, z?)
 
-画一个圆（用正多边形逼近）。坐标与 `drawRect` 共用同一套系统。
+画一个圆（用正多边形逼近）。
 
 - `cx, cy`：圆心（1/128 块）
 - `radius`：半径（1/128 块）
@@ -138,7 +218,7 @@ screen.drawCircle(8, 8, 4, 0x00FF00, false, 0.2, 48)   -- 48 段圆环
 
 ### screen.drawPoint(x, y, colour, z?)
 
-画一个点（等价于 1×1 单位的实心矩形）。坐标与 `drawRect` 共用同一套系统。
+画一个点（等价于 1×1 单位的实心矩形）。
 
 - `x, y`：左上角坐标（1/128 块）
 - `colour`：颜色（0xRRGGBB）
@@ -154,18 +234,7 @@ screen.drawPoint(4, 4, 0xFF0000)
 
 ### screen.clearShapes()
 
-清空所有图形（矩形 + 线段 + 圆 + 点），不影响文本。
+清空所有图形（矩形 + 线段 + 圆 + 点），不影响文本层。
 
 !!! tip "层级提醒"
-    `z` 越大越靠前，但每 +1 前移约 0.01px，**建议 z 在 `[-1, 10]` 左右**；设太大侧面看会分层、有穿帮感。
-
-## 尺寸
-
-### screen.getSize()
-
-返回当前字号下屏幕内区能容纳的整字行列数（参考值，文本实际按坐标定位，不受此限制），返回 `cols, rows` 两个值。
-
-```lua
-local cols, rows = screen.getSize()
-print(cols, rows)
-```
+    `z` 越大越靠前，但每 +1 前移约 1/2048 块；**建议 z 在 `[-1, 10]` 左右**；设太大侧面看会分层、有穿帮感。

@@ -493,10 +493,20 @@ public class MonitorBlockEntity extends BlockEntity {
 
     /** 按格子反推字号（等价于重设格子数）：cols = 内区宽 / scale，rows = 内区高 / (scale×1.2)。 */
     public void screenSetTextScale(int id, double scale) {
+        screenSetTextScale(id, scale, null);
+    }
+
+    /**
+     * 按格子反推字号（等价于重设格子数）：cols = 内区宽 / scale；
+     * rows = 内区高 / (scale × lineSpacing)。{@code lineSpacing} 为格子高/格子宽比
+     * （行距系数），为空时用默认 {@link ScreenText#LINE_SPACING}（1.2）。
+     */
+    public void screenSetTextScale(int id, double scale, @Nullable Double lineSpacing) {
         if (!canMutateScreen(id)) return;
         GridState.ScreenRegion scr = gridState.getScreenById(id);
         ScreenText t = gridState.getOrCreateScreenText(id);
-        t.setTextScale(scale, screenInnerWidthPx(scr), screenInnerHeightPx(scr));
+        t.setTextScale(scale, lineSpacing != null ? lineSpacing : ScreenText.LINE_SPACING,
+                screenInnerWidthPx(scr), screenInnerHeightPx(scr));
         setChanged();
         syncGridToClients();
     }
@@ -521,14 +531,6 @@ public class MonitorBlockEntity extends BlockEntity {
     public void screenSetOverflowMode(int id, String mode) {
         if (!canMutateScreen(id)) return;
         gridState.getOrCreateScreenText(id).setOverflowMode(ScreenText.OverflowMode.byName(mode));
-        setChanged();
-        syncGridToClients();
-    }
-
-    /** 设置填充色块每格内缩比例（0~0.5，默认 0；LED 分段效果）。 */
-    public void screenSetFillPadding(int id, double ratio) {
-        if (!canMutateScreen(id)) return;
-        gridState.getOrCreateScreenText(id).setFillPadding(ratio);
         setChanged();
         syncGridToClients();
     }

@@ -138,9 +138,6 @@ public final class ScreenTextRenderer {
         int rows = text.getRows();
         float cellW = cellWidth(fullRight, left, cols);
         float cellH = cellHeight(fullTop, bottom, rows);
-        float pad = (float) text.getFillPadding();
-        float padX = cellW * pad;
-        float padY = cellH * pad;
         Matrix4f pose = ps.last().pose();
         VertexConsumer vc = buffer.getBuffer(SOLID_BG);
 
@@ -148,10 +145,10 @@ public final class ScreenTextRenderer {
             for (int col = 1; col <= cols; col++) {
                 int bg = text.getCellBg(col, row);
                 if (bg == ScreenText.TRANSPARENT_BG) continue;
-                float x0 = cellLeft(fullRight, cellW, col) + padX;
-                float x1 = cellRight(fullRight, cellW, col) - padX;
-                float y0 = cellBottom(fullTop, cellH, row) + padY;
-                float y1 = cellTop(fullTop, cellH, row) - padY;
+                float x0 = cellLeft(fullRight, cellW, col);
+                float x1 = cellRight(fullRight, cellW, col);
+                float y0 = cellBottom(fullTop, cellH, row);
+                float y1 = cellTop(fullTop, cellH, row);
                 if (x0 >= x1 || y0 >= y1) continue;
                 colorQuad(vc, pose, x0, y0, x1, y1, bgDepth(zBase), bg);
             }

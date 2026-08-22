@@ -39,14 +39,10 @@ public class ScreenText {
     public static final int DEFAULT_TEXT_COLOUR = 0xFFFFFF;
     /** 默认层级（z），越大越靠前（仅图形层使用）。 */
     public static final double DEFAULT_Z = 0.0;
-    /** 填充内缩比例默认值（0 = 不内缩）。 */
-    public static final double DEFAULT_FILL_PADDING = 0.0;
-    /** 填充内缩比例上限（0~0.5）。 */
-    public static final double MAX_FILL_PADDING = 0.5;
 
     /** 字形为正方形（vanilla ascii.png 8×8 图集），列宽 = 字号。 */
     public static final double CHAR_ASPECT = 1.0;
-    /** 行距 = 字号 × 该系数（setTextScale 反推行数用）。 */
+    /** 行距 = 字号 × 该系数（setTextScale 反推行数用；也是格子高/格子宽比，默认 1.2）。 */
     public static final double LINE_SPACING = 1.2;
     /** 1 个 drawRect 单位 = 1/128 块，1px = 1/16 块，故 1px = 8 个 drawRect 单位。 */
     public static final double RECT_UNITS_PER_PX = 8.0;
@@ -67,8 +63,6 @@ public class ScreenText {
     private int textColour = DEFAULT_TEXT_COLOUR;
     /** 图形层默认层级 z（越大越靠前）。 */
     private double zIndex = DEFAULT_Z;
-    /** 填充色块每格内缩比例（0~0.5，默认 0）。 */
-    private double fillPadding = DEFAULT_FILL_PADDING;
     /** 文本超出单行宽度时的处理方式。 */
     private OverflowMode overflowMode = OverflowMode.WRAP;
 
@@ -139,9 +133,14 @@ public class ScreenText {
         return Math.max(1, (int) Math.floor(innerWidthPx / pitch));
     }
 
-    /** 由屏幕内区高（像素）与字号计算行数。 */
+    /** 由屏幕内区高（像素）与字号计算行数（用默认行距系数 {@link #LINE_SPACING}）。 */
     public static int rowsFor(double innerHeightPx, double scale) {
-        double pitch = Math.max(0.01, scale * LINE_SPACING);
+        return rowsFor(innerHeightPx, scale, LINE_SPACING);
+    }
+
+    /** 由屏幕内区高（像素）、字号与格子高宽比（行距系数）计算行数。 */
+    public static int rowsFor(double innerHeightPx, double scale, double lineSpacing) {
+        double pitch = Math.max(0.01, scale * Math.max(0.01, lineSpacing));
         return Math.max(1, (int) Math.floor(innerHeightPx / pitch));
     }
 
@@ -168,8 +167,6 @@ public class ScreenText {
     public int getTextColour() { return textColour; }
 
     public double getZIndex() { return zIndex; }
-
-    public double getFillPadding() { return fillPadding; }
 
     public OverflowMode getOverflowMode() { return overflowMode; }
 
@@ -221,11 +218,21 @@ public class ScreenText {
 
     /**
      * {@code setTextScale} 的别名语义：按格子反推字号（等价于重设格子）。
-     * 字形尺寸 = 内区宽 / cols，故 {@code cols = colsFor(innerWidthPx, scale)}。
+     * 字形尺寸 = 内区宽 / cols，故 {@code cols = colsFor(innerWidthPx, scale)}；
+     * 行距系数用默认 {@link #LINE_SPACING}（1.2）。
      * 重设格子并清空文本层。
      */
     public void setTextScale(double scale, double innerWidthPx, double innerHeightPx) {
-        setGrid(colsFor(innerWidthPx, scale), rowsFor(innerHeightPx, scale));
+        setTextScale(scale, LINE_SPACING, innerWidthPx, innerHeightPx);
+    }
+
+    /**
+     * 带格子高宽比的 {@code setTextScale}：{@code lineSpacing} 为格子高/格子宽比
+     * （行距系数，默认 {@link #LINE_SPACING} = 1.2；传 1.0 得到正方形格子）。
+     * 等价于按字号 + 高宽比重设格子，重设会清空文本层。
+     */
+    public void setTextScale(double scale, double lineSpacing, double innerWidthPx, double innerHeightPx) {
+        setGrid(colsFor(innerWidthPx, scale), rowsFor(innerHeightPx, scale, lineSpacing));
     }
 
     /** 设置光标位置（格子坐标，1 起；自动收拢到格子范围内）。 */
@@ -238,11 +245,6 @@ public class ScreenText {
 
     /** 设置图形层默认层级（越大越靠前）。 */
     public void setZIndex(double z) { this.zIndex = z; }
-
-    /** 设置填充色块每格内缩比例（0~0.5，自动钳制）。 */
-    public void setFillPadding(double ratio) {
-        this.fillPadding = clamp(ratio, 0, MAX_FILL_PADDING);
-    }
 
     public void setOverflowMode(OverflowMode mode) {
         this.overflowMode = mode != null ? mode : OverflowMode.WRAP;
@@ -349,7 +351,7 @@ public class ScreenText {
      * 整屏替换（draw(batch) 的原子语义）：先清空文本层（格子 + 图形 + 光标），
      * 再逐格写入与图形。所有格子同位置永远只有一个值，无中间态。
      *
-     * @param newCells 每格一行：{col, row, char, fg, bg}（col/row 1 起）
+     * @param newCells 每格一行：{col, row, char, fg, bg}（col/row 1 起；fg/bg 省略用默认值）
      */
     public void replaceAll(List<int[]> newCells, List<Rect> newRects,
                            List<Line> newLines, List<Circle> newCircles) {
@@ -424,7 +426,6 @@ public class ScreenText {
         tag.putInt("cursorRow", cursorRow);
         tag.putInt("textColour", textColour);
         tag.putDouble("zIndex", zIndex);
-        tag.putDouble("fillPadding", fillPadding);
         tag.putString("overflowMode", overflowMode.name);
 
         // 定长格子数组（紧凑编码：char[] / int[]，弃逐格 CompoundTag）
@@ -503,8 +504,6 @@ public class ScreenText {
         cursorRow = clamp(tag.getInt("cursorRow"), 1, rows);
         textColour = tag.contains("textColour") ? tag.getInt("textColour") : DEFAULT_TEXT_COLOUR;
         zIndex = tag.contains("zIndex") ? tag.getDouble("zIndex") : DEFAULT_Z;
-        fillPadding = clamp(tag.contains("fillPadding")
-                ? tag.getDouble("fillPadding") : DEFAULT_FILL_PADDING, 0, MAX_FILL_PADDING);
         overflowMode = OverflowMode.byName(tag.getString("overflowMode"));
 
         rects.clear();

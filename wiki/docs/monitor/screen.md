@@ -2,12 +2,15 @@
 
 ![Screen Module](../img/screen.png)
 
-Screens share the ID namespace with normal modules, and `getType()` returns `"screen"`. Screens support **text rendering** and **graphics drawing**.
+Screens share the ID namespace with normal modules, and `getType()` returns `"screen"`. Screens support **text rendering** (cell/grid model) and **graphics drawing**.
 
-- The font size (`setTextScale`) determines how many rows/columns fit on the screen; the row/column count is recomputed automatically with the font size (see `getSize`).
-- Text has an overflow mode (`setOverflowMode`) that controls what happens when it exceeds one line.
-- Graphics coordinates use "screen-local pixels": origin at the screen's **top-left**, `x` right, `y` down, 1 unit = 1 pixel = 1 cell = 1/16 block.
+The screen uses a **cell model** (LCD framebuffer semantics):
 
+- **The text layer is a fixed-size cell array**: first call `setGrid(cols, rows)` to set the grid size; cells fill the screen's inner area. Each cell = character + foreground colour + background colour, **writing overwrites the cell** (one value per position forever, no overlapping quads), and the content size is fixed — it never grows over time.
+- **Cursor-based positioning**: `setCursorPos(col, row)` (1-based, CC:T style); `write` fills cells from the cursor.
+- **Background colour**: `fill` sets cell background colours in bulk; combined with `write` you get "colour block + text".
+- **Full-screen batch transfer**: `draw(batch)` sends the whole screen in one call with **atomic replacement** (no clear+write intermediate-state flicker).
+- **The graphics layer** (`drawRect`/`drawLine`/`drawCircle`/`drawPoint`) keeps **free positioning** (1/128 block coordinates) and **z layering**, not constrained by the grid, but only drawn inside the screen's drawable area.
 
 ## Operation
 - **Place a screen**: right-click an empty cell as the anchor, then right-click another empty cell — the screen occupies the two cells to form a rectangular area (minimum 2×2).
@@ -15,62 +18,77 @@ Screens share the ID namespace with normal modules, and `getType()` returns `"sc
 - **Remove module**: hold a wrench and sneak + right-click to remove the module
 
 
-## Text Rendering
+## Grid Layout
 
-### screen.write(text, z?)
+### screen.setGrid(cols, rows) / screen.getGrid()
 
-Writes text at the cursor position (supports `\n` line breaks, ignores `\r`). Each character's position is positioned directly with `drawRect` coordinates:
-writing one character advances the cursor right by one glyph width (`fontSize × 1.0 × 8`); `\n` returns to the line start and moves down one line (`fontSize × 1.2 × 8`).
-When reaching the right edge of the screen, `setOverflowMode` applies (default `"wrap"`).
+Sets the screen's grid size (cols × rows, max 128×128); cells fill the screen's inner area and glyph size is derived from the grid (`cellW = inner width / cols`).
+**Resetting clears the text layer** (CC:T resize semantics) and the cursor returns to `(1, 1)`.
 
-The optional parameter `z` specifies the layer for the characters written this time (higher = more in front); when omitted, uses the default layer set by `setZIndex`.
+Before any `setGrid` call, the default grid size (12 × 10) is used.
+
+```lua
+screen.setGrid(10, 6)
+local cols, rows = screen.getGrid()   -- 10, 6
+```
+
+### screen.setTextScale(scale, lineSpacing?) / screen.getTextScale()
+
+An **alias for `setGrid`** (old Lua programs calling it won't error): derives the grid size from the font size, equivalent to resetting the grid —
+`cols = inner width / scale`, `rows = inner height / (scale × lineSpacing)`. Resetting also clears the text layer.
+
+- `scale`: font size (MC pixels, 1px = 1/16 block)
+- `lineSpacing`: optional, **cell height/width ratio** (line-spacing factor, default 1.2; pass 1.0 for square cells)
+
+```lua
+screen.setTextScale(0.35)            -- default ratio 1.2 (tall cells)
+screen.setTextScale(0.35, 1.0)       -- square cells
+screen.setTextScale(0.35, 1.5)       -- wider/flatter cells
+local cols, rows = screen.getTextScale()   -- returns the grid size (same as getGrid)
+```
+
+### screen.getSize()
+
+Returns the current grid size, identical to `getGrid()`, returning two values `cols, rows`.
+
+```lua
+local cols, rows = screen.getSize()
+print(cols, rows)
+```
+
+
+## Text Rendering (Cell Model)
+
+### screen.write(text)
+
+Writes text cell by cell from the cursor position (supports `\n` line breaks, ignores `\r`). Each written character **overwrites its cell** (character + current foreground colour) and the cursor advances one cell;
+**the background colour stays unchanged** (`fill` colours are not overwritten by `write`, enabling "colour block + text").
+At the end of a line, `setOverflowMode` applies (default `"wrap"`); writes after the last row are discarded.
 
 ```lua
 screen.write("Hello\nCCPE")
-screen.write("Top", 2)          -- layer 2
 ```
 
 ### screen.clear()
 
-Clears the screen's text and all shapes (rectangles/lines/circles), and resets the cursor to `(0, 0)`.
+Clears the whole screen (cells + shapes + cursor), **keeping the grid size**.
 
-### screen.setCursorPos(x, y) / screen.getCursorPos()
+### screen.setCursorPos(col, row) / screen.getCursorPos()
 
-Sets/reads the cursor position, using exactly the same coordinate system as the first two parameters of `drawRect`:
-origin at the top-left of the screen's inner area, X right, Y down, 1 unit = 1/128 block.
-`getCursorPos` returns two values, `x, y`.
-
-```lua
-screen.setCursorPos(0, 0)          -- top-left of the inner area
-local x, y = screen.getCursorPos()
-```
-
-### screen.setTextScale(scale) / screen.getTextScale()
-
-Sets/reads the font size of the whole screen (glyph height, MC pixels, 1px = 1/16 block). The font size only affects the glyph size and advance of `write` calls afterwards,
-and does not affect the position of already written text (old characters still render at their own positions).
+Sets/reads the cursor position (**cell coordinates, 1-based**, CC:T style; automatically clamped into the grid).
+`getCursorPos` returns two values, `col, row`.
 
 ```lua
-screen.setTextScale(0.35)
-print(screen.getTextScale())  -- 0.35
+screen.setCursorPos(1, 1)          -- top-left cell
+local col, row = screen.getCursorPos()
 ```
 
 ### screen.setTextColour(colour) / screen.getTextColour()
 
-Sets/reads the foreground colour (0xRRGGBB). Text has **no background colour** — use `drawRect` yourself for backgrounds.
+Sets/reads the foreground colour (0xRRGGBB, default `0xFFFFFF`), affecting characters written by subsequent `write` calls.
 
 ```lua
 screen.setTextColour(0x00FF00)
-```
-
-### screen.setZIndex(z) / screen.getZIndex()
-
-Sets/reads the default layer used by subsequent `write` / `drawRect` calls when no z is explicitly given (default 0, higher = more in front, negative values pushed behind the panel).
-
-```lua
-screen.setZIndex(2)
-screen.write("Hello")           -- uses default layer 2
-screen.drawRect(0, 0, 4, 4, 0xFF0000, true, 1)   -- also uses layer 2
 ```
 
 ### screen.setOverflowMode(mode) / screen.getOverflowMode()
@@ -87,11 +105,73 @@ Sets/reads how text overflowing one line width is handled:
 screen.setOverflowMode("ellipsis")
 ```
 
-## Graphics Drawing
+
+## Filling (Background Colour)
+
+### screen.fill(col, row, w, h, colour)
+
+Sets cell **background colours** in bulk (solid fill, for segmented progress bars). Only changes background colours; characters and foreground colours stay unchanged.
+
+- `col, row`: starting cell (1-based)
+- `w, h`: width and height (cells, overflowing is clipped automatically)
+- `colour`: colour (0xRRGGBB)
+
+```lua
+screen.fill(1, 1, 10, 1, 0xFF0000)   -- first 10 cells of row 1 get a red background
+screen.write("Loading")              -- text drawn on top of the red
+```
+
+
+## Full-Screen Batch Transfer
+
+### screen.draw(batch)
+
+**Sends the whole screen's cells and optional shapes in one call, with atomic full-screen replacement** (the server clears and rebuilds; the client receives a complete new frame, **no intermediate-state flicker**).
+On a parse failure a Lua error is raised and the screen stays unchanged (no partial application).
+
+`batch` is a Lua table with two sections:
+
+- **`cells`**: one array per cell, `{col, row, char, fg?, bg?}` (col/row **1-based**; omitted `fg` uses the current foreground colour, omitted `bg` is transparent)
+- **`shapes`** (optional): an array of shapes, each a table with a `type` field:
+  - `{type = "rect", x, y, w, h, colour, solid?, lineWidth?, z?}`
+  - `{type = "line", x1, y1, x2, y2, colour, lineWidth?, z?}`
+  - `{type = "circle", cx, cy, radius, colour, solid?, lineWidth?, segments?, z?}`
+  - `{type = "point", x, y, colour, z?}`
+  - omitted `z` uses the current default layer (`setZIndex`)
+
+```lua
+screen.draw({
+  cells = {
+    {1, 1, "A", 0xFFFFFF, 0x000000},   -- cell (1,1): white text on black
+    {2, 1, "B", 0xFF0000},             -- cell (2,1): red text, transparent bg
+  },
+  shapes = {
+    {type = "rect", x = 0, y = 0, w = 8, h = 8, colour = 0x00FF00, solid = true},
+  },
+})
+```
+
+Calling `draw` once per tick gives a "one frame per tick" full-screen refresh with no intermediate states anywhere in the pipeline.
+
+
+## Graphics Drawing (Free Positioning + z Layer)
+
+Graphics use "screen-local coordinates": origin at the **top-left** of the drawable area, `x` right, `y` down, 1 unit = 1/128 block (`1px = 8 units`).
+The graphics layer is not constrained by the grid, but is **only drawn inside the screen's drawable area**.
+
+### screen.setZIndex(z) / screen.getZIndex()
+
+Sets/reads the default layer used by subsequent `drawRect`/`drawLine`/`drawCircle`/`drawPoint` calls when no z is explicitly given (default 0, higher = more in front).
+Only the graphics layer has z; the text layer (cells) has no z.
+
+```lua
+screen.setZIndex(2)
+screen.drawRect(0, 0, 4, 4, 0xFF0000, true, 1)   -- uses default layer 2
+```
 
 ### screen.drawRect(x, y, width, height, colour, solid, lineWidth, z?)
 
-Draws a rectangle on the screen. Coordinates share the same system as text/cursor.
+Draws a rectangle on the screen.
 
 - `x, y`: top-left corner (1/128 block, 0 = left/top edge of the inner area, increasing right/down)
 - `width, height`: width and height (1/128 block)
@@ -108,7 +188,7 @@ screen.drawRect(0, 0, 8, 8, 0x0000FF, true, 1, 5)     -- layer 5, on top of the 
 
 ### screen.drawLine(x1, y1, x2, y2, colour, lineWidth, z?)
 
-Draws a line segment. Coordinates share the same system as `drawRect`.
+Draws a line segment.
 
 - `x1, y1` / `x2, y2`: start/end points (1/128 block)
 - `colour`: colour (0xRRGGBB)
@@ -121,7 +201,7 @@ screen.drawLine(0, 0, 8, 8, 0xFFFFFF, 0.5)
 
 ### screen.drawCircle(cx, cy, radius, colour, solid, lineWidth, segments?, z?)
 
-Draws a circle (approximated with a regular polygon). Coordinates share the same system as `drawRect`.
+Draws a circle (approximated with a regular polygon).
 
 - `cx, cy`: center (1/128 block)
 - `radius`: radius (1/128 block)
@@ -138,7 +218,7 @@ screen.drawCircle(8, 8, 4, 0x00FF00, false, 0.2, 48)   -- 48-segment ring
 
 ### screen.drawPoint(x, y, colour, z?)
 
-Draws a point (equivalent to a 1×1 unit filled rectangle). Coordinates share the same system as `drawRect`.
+Draws a point (equivalent to a 1×1 unit filled rectangle).
 
 - `x, y`: top-left coordinates (1/128 block)
 - `colour`: colour (0xRRGGBB)
@@ -154,18 +234,7 @@ Clears all drawn rectangles (does not affect text or other shapes).
 
 ### screen.clearShapes()
 
-Clears all shapes (rectangles + lines + circles + points), does not affect text.
+Clears all shapes (rectangles + lines + circles + points), does not affect the text layer.
 
 !!! tip "Layer reminder"
-    The larger the `z`, the more in front, but each +1 moves forward roughly 0.01px; **z around `[-1, 10]` is recommended**. Setting it too large will visibly separate layers and look wrong from the side.
-
-## Size
-
-### screen.getSize()
-
-Returns the number of whole character rows/columns that fit in the screen's inner area at the current font size (reference value; text is actually positioned by coordinates and is not limited by this), returning two values `cols, rows`.
-
-```lua
-local cols, rows = screen.getSize()
-print(cols, rows)
-```
+    The larger the `z`, the more in front, but each +1 moves forward roughly 1/2048 block; **z around `[-1, 10]` is recommended**. Setting it too large will visibly separate layers and look wrong from the side.

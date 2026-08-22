@@ -39,7 +39,7 @@ local monitor = peripheral.find("ccpe:monitor")
 | `button_1` | 按钮（瞬时型；支持玩家点击检测 / 互动锁 / 灯带控制） | [按钮模块](button.md) |
 | `toggle_switch` | 钮子开关（锁存型） | [开关模块](switch.md) |
 | `knob` | 旋钮（角度 0..360） | [旋钮模块](knob.md) |
-| `screen` | 屏幕（文本渲染 + 图形绘制） | [屏幕模块](screen.md) |
+| `screen` | 屏幕（格子模型文本渲染 + 自由定位图形） | [屏幕模块](screen.md) |
 
 
 ## 模块实例通用方法

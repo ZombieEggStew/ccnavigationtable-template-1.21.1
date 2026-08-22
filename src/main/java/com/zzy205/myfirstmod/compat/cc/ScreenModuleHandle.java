@@ -71,10 +71,18 @@ public final class ScreenModuleHandle extends ModuleHandle {
     /**
      * 按格子反推字号（等价于重设格子数）：
      * {@code cols = 内区宽 / scale}，{@code rows = 内区高 / (scale × 1.2)}。
+     *
+     * @param scale      字号（MC 像素，1px = 1/16 块）
+     * @param lineSpacing 可选，格子高/格子宽比（行距系数，默认 1.2；传 1.0 得到正方形格子）
+     *
+     * <pre>{@code
+     * scr.setTextScale(0.5)          -- 默认高宽比 1.2
+     * scr.setTextScale(0.5, 1.0)     -- 正方形格子
+     * }</pre>
      */
     @LuaFunction(mainThread = true)
-    public final void setTextScale(double scale) {
-        be.screenSetTextScale(id, scale);
+    public final void setTextScale(double scale, Optional<Double> lineSpacing) {
+        be.screenSetTextScale(id, scale, lineSpacing.orElse(null));
     }
 
     /** 读取当前格子数（与 {@link #getGrid()} 相同），返回 {@code cols, rows}。 */
@@ -188,27 +196,6 @@ public final class ScreenModuleHandle extends ModuleHandle {
     @LuaFunction(mainThread = true)
     public final void fill(int col, int row, int w, int h, int colour) {
         be.screenFill(id, col, row, w, h, colour);
-    }
-
-    /**
-     * 设置填充色块每格内缩比例（0~0.5，默认 0）。
-     * 大于 0 时填充色块在每格内按比例内缩，呈现 LED 分段效果。
-     *
-     * <pre>{@code
-     * scr.setFillPadding(0.2)
-     * scr.fill(1, 1, 10, 1, 0x00FF00)  -- 10 段 LED 进度条
-     * }</pre>
-     */
-    @LuaFunction(mainThread = true)
-    public final void setFillPadding(double ratio) {
-        be.screenSetFillPadding(id, ratio);
-    }
-
-    /** 读取当前填充内缩比例（0~0.5）。 */
-    @LuaFunction
-    public final double getFillPadding() {
-        ScreenText t = text();
-        return t != null ? t.getFillPadding() : ScreenText.DEFAULT_FILL_PADDING;
     }
 
     // ═══════════════ 整屏批量传输 ═══════════════

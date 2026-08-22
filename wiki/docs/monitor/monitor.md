@@ -7,8 +7,11 @@ After obtaining the Monitor peripheral instance (see [Overview](overview.md) for
 | Category | Methods |
 |---|---|
 | Module / screen query | `getCellModule` / `getModule` |
-| Background plane drawing (text + graphics) | `write` / `clear` / `setCursorPos` / `getCursorPos` / `setTextScale` / `getTextScale` / `setTextColour` / `getTextColour` / `setZIndex` / `getZIndex` / `setOverflowMode` / `getOverflowMode` / `drawRect` / `drawLine` / `drawCircle` / `drawPoint` / `clearRects` / `clearShapes` / `getSize` |
 | Sound | `playNiceSound` / `playSound` |
+
+!!! warning "Text and graphics can only be drawn on a screen module"
+    The Monitor itself **no longer provides a background-plane drawing API** (the old `write` / `clear` / `drawRect` / `drawLine` / `drawCircle` / `drawPoint` / `setCursorPos` / `setTextScale` / `setTextColour` / `setZIndex` / `setOverflowMode` / `clearRects` / `clearShapes` / `getSize` methods were removed).
+    To display content on a Monitor, install a **screen module** — all text/graphics APIs live on it, see [Screen Module](screen.md). The Monitor's grid lines and background texture are unchanged.
 
 ---
 
@@ -85,178 +88,12 @@ end
 
 ---
 
-## Monitor Background Plane Drawing
-
-The Monitor has a built-in **background plane** display area — you can write text and draw rectangles/lines/circles directly on the panel without installing a screen module. It shares the same text/graphics engine (`ScreenText`) and coordinate system as the screen module; see [Screen Module](screen.md) for the exact rendering semantics.
-
-- **Display area**: the Monitor panel is 14×12px; after removing the 1px border on each side, the inner area is **12×10px** (exactly matching the 12×10 module grid).
-- **Coordinate units**: 1/128 block (`1px = 8 units`), origin at the top-left of the inner area, `x` right, `y` down — identical to `drawRect` and `setCursorPos`.
-- **Font size units**: MC pixels (`1px = 1/16 block`), default `0.5`, range `0.05..8.0`, only affects characters written afterwards.
-- **Text**: foreground colour only (default `0xFFFFFF`), **no background colour** — use `drawRect` yourself when you need a background.
-- **Layer z**: higher = more in front, default `0`; negative values are pushed behind the panel.
-- **Overflow**: text reaching the right edge is handled per `setOverflowMode`, default `"wrap"`.
-
-!!! tip "Layer reminder"
-    The larger the `z`, the more in front, but each +1 moves forward roughly 0.01px; **z around `[-1, 10]` is recommended**. Setting it too large will visibly separate layers from the side.
-
-### monitor.write(text, z?)
-
-Writes text at the cursor position on the background plane (supports `\n` line breaks, ignores `\r`). Each character's position is positioned directly with `drawRect` coordinates:
-writing one character advances the cursor right by one glyph width (`fontSize × 1.0 × 8`); `\n` returns to the line start and moves down one line (`fontSize × 1.2 × 8`).
-When reaching the right edge of the inner area, `setOverflowMode` applies (default `"wrap"`).
-
-- `text`: the text to write
-- `z`: optional, layer for the characters written this time (higher = more in front); when omitted, uses the default layer set by `setZIndex`
-
-```lua
-monitor.write("Hello\nCCPE")
-monitor.write("Top", 2)          -- layer 2
-```
-
-### monitor.clear()
-
-Clears all text and shapes (rectangles/lines/circles) on the background plane, and resets the cursor to `(0, 0)`.
-
-### monitor.setCursorPos(x, y) / monitor.getCursorPos()
-
-Sets/reads the cursor position, using exactly the same coordinate system as the first two parameters of `drawRect`:
-origin at the top-left of the inner area, X right, Y down, 1 unit = 1/128 block (negative values clamp to 0).
-`getCursorPos` returns two values, `x, y`.
-
-```lua
-monitor.setCursorPos(0, 0)          -- top-left of the inner area
-local x, y = monitor.getCursorPos()
-```
-
-### monitor.setTextScale(scale) / monitor.getTextScale()
-
-Sets/reads the font size of the whole background plane (glyph height, MC pixels, `1px = 1/16 block`, range `0.05..8.0`).
-The font size only affects the glyph size and advance of `write` calls afterwards; it does not affect the position of already written text (old characters still render at their own positions).
-
-```lua
-monitor.setTextScale(0.5)
-print(monitor.getTextScale())  -- 0.5
-```
-
-### monitor.setTextColour(colour) / monitor.getTextColour()
-
-Sets/reads the foreground colour (0xRRGGBB, default `0xFFFFFF`). Text has **no background colour** — use `drawRect` yourself for backgrounds.
-
-```lua
-monitor.setTextColour(0x00FF00)
-```
-
-### monitor.setZIndex(z) / monitor.getZIndex()
-
-Sets/reads the default layer used by subsequent `write` / `drawRect` calls when no z is explicitly given (default `0`, higher = more in front, negative values pushed behind the panel).
-
-```lua
-monitor.setZIndex(2)
-monitor.write("Hello")           -- uses default layer 2
-monitor.drawRect(0, 0, 4, 4, 0xFF0000, true, 1)   -- also uses layer 2
-```
-
-### monitor.setOverflowMode(mode) / monitor.getOverflowMode()
-
-Sets/reads how text overflowing one line width is handled (unknown names fall back to `"wrap"`):
-
-| mode | Meaning |
-|---|---|
-| `"truncate"` | Truncate directly, discard the overflow |
-| `"ellipsis"` | Truncate a bit more, append `"..."` |
-| `"wrap"` | Wrap to the next line (default) |
-
-```lua
-monitor.setOverflowMode("ellipsis")
-print(monitor.getOverflowMode())  -- ellipsis
-```
-
-### monitor.drawRect(x, y, width, height, colour, solid, lineWidth, z?)
-
-Draws a rectangle on the background plane. Coordinates share the same system as text/cursor.
-
-- `x, y`: top-left corner (1/128 block, 0 = left/top edge of the inner area, increasing right/down)
-- `width, height`: width and height (1/128 block, negative values clamp to 0)
-- `colour`: colour (0xRRGGBB)
-- `solid`: `true` = filled, `false` = outline only
-- `lineWidth`: line width (1/128 block, only applies to outlines)
-- `z`: layer (higher = more in front, when omitted uses the default layer set by `setZIndex`)
-
-```lua
-monitor.drawRect(0, 0, 2, 2, 0xFF0000, true, 1)        -- filled red square, default layer
-monitor.drawRect(1, 1, 1, 1, 0x00FF00, false, 0.2)     -- green outline, default layer
-monitor.drawRect(0, 0, 8, 8, 0x0000FF, true, 1, 5)     -- layer 5, on top of the others
-```
-
-### monitor.drawLine(x1, y1, x2, y2, colour, lineWidth, z?)
-
-Draws a line segment. Coordinates share the same system as `drawRect`.
-
-- `x1, y1` / `x2, y2`: start/end points (1/128 block)
-- `colour`: colour (0xRRGGBB)
-- `lineWidth`: line width (1/128 block)
-- `z`: layer (higher = more in front, when omitted uses the `setZIndex` default layer)
-
-```lua
-monitor.drawLine(0, 0, 8, 8, 0xFFFFFF, 0.5)
-```
-
-### monitor.drawCircle(cx, cy, radius, colour, solid, lineWidth, segments?, z?)
-
-Draws a circle (approximated with a regular polygon). Coordinates share the same system as `drawRect`.
-
-- `cx, cy`: center (1/128 block)
-- `radius`: radius (1/128 block)
-- `colour`: colour (0xRRGGBB)
-- `solid`: `true` = filled circle, `false` = ring
-- `lineWidth`: line width (1/128 block, only applies when `solid=false`)
-- `segments`: approximation segments (default 32, minimum 3, more = rounder)
-- `z`: layer (higher = more in front, when omitted uses the `setZIndex` default layer)
-
-```lua
-monitor.drawCircle(8, 8, 4, 0xFFFF00, true, 1)          -- filled circle
-monitor.drawCircle(8, 8, 4, 0x00FF00, false, 0.2, 48)   -- 48-segment ring
-```
-
-### monitor.drawPoint(x, y, colour, z?)
-
-Draws a point (equivalent to a 1×1 unit filled rectangle). Coordinates share the same system as `drawRect`.
-
-- `x, y`: top-left coordinates (1/128 block)
-- `colour`: colour (0xRRGGBB)
-- `z`: layer (higher = more in front, when omitted uses the `setZIndex` default layer)
-
-```lua
-monitor.drawPoint(4, 4, 0xFF0000)
-```
-
-### monitor.clearRects()
-
-Clears all drawn rectangles (does not affect text or other shapes).
-
-### monitor.clearShapes()
-
-Clears all shapes (rectangles + lines + circles + points), does not affect text.
-
-### monitor.getSize()
-
-Returns the number of whole character rows/columns that fit in the background plane's inner area at the current font size (reference value; text is actually positioned by coordinates and is not limited by this), returning two values `cols, rows`.
-At the default font size `0.5`, it is roughly `24 × 16`.
-
-```lua
-local cols, rows = monitor.getSize()
-print(cols, rows)
-```
-
----
-
 ## Thread Model (mainThread)
 
 | Method | mainThread |
 |---|---|
 | `getCellModule` / `getModule` | ✅ `true` (queries also go through the server main thread) |
-| `write` / `clear` / `setCursorPos` / `setTextScale` / `setTextColour` / `setZIndex` / `setOverflowMode` / `drawRect` / `drawLine` / `drawCircle` / `drawPoint` / `clearRects` / `clearShapes` / `playNiceSound` / `playSound` | ✅ `true` |
-| `getCursorPos` / `getTextScale` / `getTextColour` / `getZIndex` / `getOverflowMode` / `getSize` | ❌ `false` (read directly on the computer thread, low latency) |
+| `playNiceSound` / `playSound` | ✅ `true` |
 
 ---
 

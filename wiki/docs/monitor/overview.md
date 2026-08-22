@@ -39,7 +39,7 @@ local monitor = peripheral.find("ccpe:monitor")
 | `button_1` | Button (momentary; player click detection / interaction lock / light strip control) | [Button Module](button.md) |
 | `toggle_switch` | Toggle switch (latching) | [Switch Module](switch.md) |
 | `knob` | Knob (angle 0..360) | [Knob Module](knob.md) |
-| `screen` | Screen (text rendering + graphics drawing) | [Screen Module](screen.md) |
+| `screen` | Screen (cell-model text rendering + free-position graphics) | [Screen Module](screen.md) |
 
 
 ## Common Module Instance Methods
