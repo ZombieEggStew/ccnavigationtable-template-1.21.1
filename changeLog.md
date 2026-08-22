@@ -47,6 +47,6 @@
 - Added servo mode to the Transmission Peripheral
 
 1.0.7
-- 屏幕渲染重做
-- 旋钮 添加了物理限位功能
-- 
+- Reworked screen rendering; the monitor background can no longer be drawn on.
+- Added physical rotation limits to the Knob.
+- Fixed outline rendering on moving physics bodies (preview no longer lags or ghosts).

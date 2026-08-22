@@ -135,6 +135,11 @@ public class MonitorGridOverlay {
     }
 
     public static void onRenderLevel(RenderLevelStageEvent event) {
+        // Sable 自带 LineOutlineMixin（compatibility.create.render_fixes）：Catnip 绘制
+        // LineOutline 时，会把子次元内的端点用 renderPose()（与方块同一插值姿态、同一
+        // partialTick）变换到世界空间 —— 绘制时刻变换，移动物理体上零滞后。
+        // 因此本 mod 只传 plot 局部坐标给 Outliner（见 world()），不手动变换到世界空间，
+        // 也不依赖早期渲染阶段更新几何；交互时序保持原有 AFTER_BLOCK_ENTITIES。
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES) return;
 
         hoveredTooltip = null;
@@ -233,7 +238,6 @@ public class MonitorGridOverlay {
                 | Config.MONITOR_OUTLINE_B.get();
 
         // ── 动态射线命中：网格坐标已由检测器算好；旋钮拖拽仍需 plot 空间射线 ──
-        SubLevel subLevel = SableCompat.getContainingSubLevel(level, pos);
         Vec3[] ray = crosshairRay(level, pos, player, partialTick);
         int[] gp = hit.grid();
         MonitorModule hoveredModule = null;
@@ -385,7 +389,7 @@ public class MonitorGridOverlay {
 
         // 1. 网格线（手持模块或屏幕物品时）
         if (showGrid) {
-            drawGridLines(outliner, pos, facing, monitorYaw, monitorPitch, monitorOffset, keyPrefix, subLevel, partialTick);
+            drawGridLines(outliner, pos, facing, monitorYaw, monitorPitch, monitorOffset, keyPrefix);
         }
 
         // 1.5 屏幕放置预览
@@ -400,7 +404,7 @@ public class MonitorGridOverlay {
             boolean canPlace = grid.canPlaceScreen(minX, minY, maxX, maxY);
             int color = (bigEnough && canPlace) ? 0x4CDA64 : 0xFF5E5E;
             drawModuleOutline(outliner, pos, minX, minY, w, h, keyPrefix + "/screen_preview", color, facing,
-                    monitorYaw, monitorPitch, monitorOffset, subLevel, partialTick);
+                    monitorYaw, monitorPitch, monitorOffset);
         }
 
         // 2. 放置预览 / 对准高亮
@@ -410,12 +414,12 @@ public class MonitorGridOverlay {
                 int color = ok ? 0x4CDA64 : 0xFF5E5E;
                 drawModuleOutline(outliner, pos, gp[0], gp[1],
                         heldType.width, heldType.height, keyPrefix + "/preview", color, facing,
-                        monitorYaw, monitorPitch, monitorOffset, subLevel, partialTick);
+                        monitorYaw, monitorPitch, monitorOffset);
             } else if (hoveredModule != null) {
                 drawModuleOutline(outliner, pos, hoveredModule.gridX(), hoveredModule.gridY(),
                         hoveredModule.getWidth(), hoveredModule.getHeight(),
                         keyPrefix + "/hover", moduleColor, facing,
-                        monitorYaw, monitorPitch, monitorOffset, subLevel, partialTick);
+                        monitorYaw, monitorPitch, monitorOffset);
             } else if (onScreenCell) {
                 // 悬停在屏幕上 → 高亮整个屏幕区域
                 var scr = grid.getScreenAt(gp[0], gp[1]);
@@ -427,7 +431,7 @@ public class MonitorGridOverlay {
                             | Config.MONITOR_OUTLINE_B.get();
                     drawModuleOutline(outliner, pos, scr.minX(), scr.minY(),
                             scr.width(), scr.height(), keyPrefix + "/screen_hover", screenColor, facing,
-                            monitorYaw, monitorPitch, monitorOffset, subLevel, partialTick);
+                            monitorYaw, monitorPitch, monitorOffset);
                 }
             }
         }
@@ -510,21 +514,26 @@ public class MonitorGridOverlay {
         };
     }
 
+    /**
+     * Monitor 屏幕上的点 → plot（子次元局部）坐标。
+     * 注意：故意返回 plot 局部坐标，不做世界空间变换 —— Sable 的 LineOutlineMixin
+     * 会在 Catnip 绘制线条时用 renderPose()（与方块同一插值姿态、同一 partialTick）
+     * 把子次元内端点变换到世界空间；绘制时刻变换保证移动物理体上零滞后。
+     * 不在子次元时 plot 坐标即世界坐标，行为不变。
+     */
     private static Vec3 world(BlockPos pos, float x, float y, float z, Direction f,
-                              float yaw, float pitch, int offset, SubLevel subLevel, float partialTick) {
+                              float yaw, float pitch, int offset) {
         // 模型空间 → 块局部（pitch → yaw → offset），再 facing + 方块偏移
         double[] p = { x, y, z };
         MonitorBlock.transformPointToLocal(p, yaw, pitch, offset);
         Vec3 r = rot((float) p[0], (float) p[1], (float) p[2], f);
-        Vec3 local = new Vec3(pos.getX() + r.x, pos.getY() + r.y, pos.getZ() + r.z);
-        return SableCompat.toWorldPosition(subLevel, partialTick, local);
+        return new Vec3(pos.getX() + r.x, pos.getY() + r.y, pos.getZ() + r.z);
     }
 
     // ── 网格线 ──
 
     private static void drawGridLines(Outliner o, BlockPos pos, Direction f,
-                                      float yaw, float pitch, int offset, String keyPrefix,
-                                      SubLevel subLevel, float partialTick) {
+                                      float yaw, float pitch, int offset, String keyPrefix) {
         float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;
         float x0 = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET) / 16f;
         float x1 = (MonitorBlock.SCREEN_X_MAX - MonitorBlock.GRID_INSET) / 16f;
@@ -534,14 +543,14 @@ public class MonitorGridOverlay {
 
         for (int i = 0; i <= GridState.GRID_WIDTH; i++) {
             float x = x0 + i / 16f;
-            Vec3 from = world(pos, x, y0, z, f, yaw, pitch, offset, subLevel, partialTick);
-            Vec3 to = world(pos, x, y1, z, f, yaw, pitch, offset, subLevel, partialTick);
+            Vec3 from = world(pos, x, y0, z, f, yaw, pitch, offset);
+            Vec3 to = world(pos, x, y1, z, f, yaw, pitch, offset);
             o.showLine(keyPrefix + "/grid_v" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
         for (int i = 0; i <= GridState.GRID_HEIGHT; i++) {
             float y = y0 + i / 16f;
-            Vec3 from = world(pos, x0, y, z, f, yaw, pitch, offset, subLevel, partialTick);
-            Vec3 to = world(pos, x1, y, z, f, yaw, pitch, offset, subLevel, partialTick);
+            Vec3 from = world(pos, x0, y, z, f, yaw, pitch, offset);
+            Vec3 to = world(pos, x1, y, z, f, yaw, pitch, offset);
             o.showLine(keyPrefix + "/grid_h" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
     }
@@ -550,7 +559,7 @@ public class MonitorGridOverlay {
 
     private static void drawModuleOutline(Outliner o, BlockPos pos,
                                            int gx, int gy, int w, int h, String slot, int color, Direction f,
-                                           float yaw, float pitch, int offset, SubLevel subLevel, float partialTick) {
+                                           float yaw, float pitch, int offset) {
         float x0 = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + gx) / 16f;
         float y0 = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + gy) / 16f;
         float x1 = x0 + w / 16f;
@@ -558,10 +567,10 @@ public class MonitorGridOverlay {
         float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;
         float lw = (float) (1 / 128f * Config.MONITOR_OUTLINE_LINE_WIDTH.get());
 
-        Vec3 p00 = world(pos, x0, y0, z, f, yaw, pitch, offset, subLevel, partialTick);
-        Vec3 p10 = world(pos, x1, y0, z, f, yaw, pitch, offset, subLevel, partialTick);
-        Vec3 p11 = world(pos, x1, y1, z, f, yaw, pitch, offset, subLevel, partialTick);
-        Vec3 p01 = world(pos, x0, y1, z, f, yaw, pitch, offset, subLevel, partialTick);
+        Vec3 p00 = world(pos, x0, y0, z, f, yaw, pitch, offset);
+        Vec3 p10 = world(pos, x1, y0, z, f, yaw, pitch, offset);
+        Vec3 p11 = world(pos, x1, y1, z, f, yaw, pitch, offset);
+        Vec3 p01 = world(pos, x0, y1, z, f, yaw, pitch, offset);
 
         o.showLine(slot + "_top",    p00, p10).colored(color).lineWidth(lw);
         o.showLine(slot + "_right",  p10, p11).colored(color).lineWidth(lw);

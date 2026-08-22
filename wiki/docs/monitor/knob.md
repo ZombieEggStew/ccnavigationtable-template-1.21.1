@@ -5,6 +5,7 @@
 Angles are in **degrees**. The knob stores a cumulative **absolute angle** (may exceed 360 when a physical limit above 360° is configured); the **normalized angle** wraps it into one full turn (0..360).
 
 ## Operation
+- **Rotate**: hold right-click and drag around the knob
 - **Configure module**: hold a wrench and right-click the module, or sneak + right-click, to open the module config interface and configure properties such as module ID and tooltip
 - **Remove module**: hold a wrench and sneak + right-click to remove the module
 - **Detent**: enable the detent feature in the config interface to snap to multiples of the configured angle
