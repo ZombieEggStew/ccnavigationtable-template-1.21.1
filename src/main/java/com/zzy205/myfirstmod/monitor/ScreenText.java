@@ -96,6 +96,28 @@ public class ScreenText {
         }
     }
 
+    /** 定宽字段（{@link #writeField}）内的文本对齐方式。 */
+    public enum Align {
+        /** 靠区域左缘，右侧留空。 */
+        LEFT("left"),
+        /** 靠区域右缘，左侧留空（数字/时钟常用）。 */
+        RIGHT("right"),
+        /** 区域居中，两侧均分留空。 */
+        CENTER("center");
+
+        public final String name;
+
+        Align(String name) { this.name = name; }
+
+        /** 按名称解析；未知名称回退到 LEFT。 */
+        public static Align byName(String name) {
+            for (Align a : values()) {
+                if (a.name.equals(name)) return a;
+            }
+            return LEFT;
+        }
+    }
+
     /**
      * 一个矩形绘制指令（图形层，自由定位）。
      *
@@ -324,6 +346,60 @@ public class ScreenText {
     private void newline() {
         cursorCol = 1;
         cursorRow++;
+    }
+
+    /**
+     * 在固定区域内写入文本（每帧刷新定宽字段用）。
+     * <p>
+     * 以 (col,row) 为起点、{@code width} 格宽的**单行区域**内写入 {@code text}：
+     * 区域内**未写入文本的格子字符清空为空格**（前景色用当前 {@link #textColour}），
+     * 区域内格子**背景色保留**（fill 底色不被清掉）；区域外的格子完全不动。
+     * <p>
+     * 对齐由 {@code align} 决定（{@link Align#LEFT} 靠左 / {@link Align#RIGHT} 靠右 /
+     * {@link Align#CENTER} 居中）；文本超过区域宽度时截断：
+     * 左对齐/居中保留文本开头，右对齐保留文本末尾（printf {@code %2s} 风格）。
+     * 光标位置不变。
+     *
+     * @param col   区域起始列（1 起，自动钳制到格子范围）
+     * @param row   区域行（1 起，自动钳制到格子范围）
+     * @param width 区域宽度（格，≤ 0 时无操作；超出格子范围自动裁剪）
+     * @param text  要写入的文本（null 视为空字符串）
+     * @param align 对齐方式（null 回退 {@link Align#LEFT}）
+     */
+    public void writeField(int col, int row, int width, String text, Align align) {
+        if (width <= 0) return;
+        int r = clamp(row, 1, rows);
+        int c0 = clamp(col, 1, cols);
+        int c1 = clamp(col + width - 1, 1, cols);
+        if (c0 > c1) return;
+        Align a = align != null ? align : Align.LEFT;
+        String s = text != null ? text : "";
+
+        // 区域内先全部清成空格（前景色用当前色，背景保留）
+        for (int c = c0; c <= c1; c++) {
+            int idx = index(c, r);
+            cells[idx] = ' ';
+            fg[idx] = textColour;
+        }
+
+        int len = s.length();
+        int span = c1 - c0 + 1;
+        if (len == 0) return;
+        // 截断：左/中保留开头，右对齐保留末尾
+        int take = Math.min(len, span);
+        int srcStart = (a == Align.RIGHT && len > span) ? len - span : 0;
+        // 起始列：左=c0，右=c1-take+1，中=c0+(span-take)/2
+        int dstStart = switch (a) {
+            case RIGHT -> c1 - take + 1;
+            case CENTER -> c0 + (span - take) / 2;
+            default -> c0;
+        };
+        for (int i = 0; i < take; i++) {
+            int idx = index(dstStart + i, r);
+            if (idx < 0) continue; // 理论上不会越界，防御
+            cells[idx] = s.charAt(srcStart + i);
+            fg[idx] = textColour;
+        }
     }
 
     /**

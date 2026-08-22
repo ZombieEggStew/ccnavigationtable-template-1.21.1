@@ -69,6 +69,30 @@ At the end of a line, `setOverflowMode` applies (default `"wrap"`); writes after
 screen.write("Hello\nCCPE")
 ```
 
+### screen.writeField(col, row, width, text, align?)
+
+**Writes text inside a fixed region** (for refreshing a fixed-width field every tick, e.g. clocks / counters). Writes `text` into a **single-row region** of `width` cells starting at `(col, row)`:
+
+- cells in the region **not covered by the text are automatically cleared to spaces** (foreground colour = the one set by `setTextColour`) — e.g. write `"15"` one frame and `"6"` the next, and the tens cell clears itself;
+- cell **background colours inside the region are kept** (`fill` colours are not cleared);
+- everything outside the region stays untouched; the cursor position is unchanged.
+
+`align` (optional, default `"left"`):
+
+- `"left"`: flush left, empty on the right
+- `"right"`: flush right, empty on the left (typical for numbers / clocks)
+- `"center"`: centred in the region
+
+Text wider than the region is truncated: left/centre keep the start, right-align keeps the end (printf `%2s` style).
+
+```lua
+screen.writeField(1, 1, 2, "15", "right")   -- |15|
+screen.writeField(1, 1, 2, "6",  "right")   -- | 6|  ← tens cell auto-cleared
+screen.writeField(1, 2, 10, "LOADING", "center")
+```
+
+> **Tip**: `writeField` clears only the region's characters and keeps backgrounds — ideal for "number/text refreshing in place". Use `draw(batch)` to replace the whole screen (including shapes), or `drawCells` / `drawShapes` to replace one layer.
+
 ### screen.clear()
 
 Clears the whole screen (cells + shapes + cursor), **keeping the grid size**.

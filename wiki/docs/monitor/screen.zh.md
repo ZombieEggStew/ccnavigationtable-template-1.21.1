@@ -69,6 +69,30 @@ print(cols, rows)
 screen.write("Hello\nCCPE")
 ```
 
+### screen.writeField(col, row, width, text, align?)
+
+**在固定区域内写入文本**（每帧刷新定宽字段用，如时钟/计数器）。以 `(col, row)` 为起点、`width` 格宽的**单行区域**内写入 `text`：
+
+- 区域内**未写入文本的格子自动清空为空格**（前景色用当前 `setTextColour` 设置的颜色）——比如第一帧写 `"15"`、第二帧写 `"6"`，十位格子自动清空；
+- 区域内格子**背景色保留**（`fill` 底色不被清掉）；
+- 区域外完全不动；光标位置不变。
+
+`align` 对齐方式（可选，默认 `"left"`）：
+
+- `"left"`：靠区域左缘，右侧留空
+- `"right"`：靠区域右缘，左侧留空（数字/时钟常用）
+- `"center"`：区域居中
+
+文本超过区域宽度时截断：左/中保留开头，右对齐保留末尾（printf `%2s` 风格）。
+
+```lua
+screen.writeField(1, 1, 2, "15", "right")   -- |15|
+screen.writeField(1, 1, 2, "6",  "right")   -- | 6|  ← 十位自动清空
+screen.writeField(1, 2, 10, "LOADING", "center")
+```
+
+> **提示**：`writeField` 只清区域内字符、保留背景，适合「数字/文字在固定位置刷新」；要整体替换整层（含图形）用 `draw(batch)`，只替换单层用 `drawCells`/`drawShapes`。
+
 ### screen.clear()
 
 清空屏幕全部内容（格子 + 图形 + 光标），**保留格子数**。

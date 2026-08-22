@@ -107,6 +107,31 @@ public final class ScreenModuleHandle extends ModuleHandle {
         be.screenWrite(id, text);
     }
 
+    /**
+     * 在固定区域内写入文本（每帧刷新定宽字段用，如时钟/计数器）。
+     * 以 (col,row) 为起点、{@code width} 格宽的**单行区域**内写入 {@code text}：
+     * 区域内**未写入文本的格子自动清空为空格**（前景色用当前 {@code setTextColour} 设置的颜色），
+     * 区域内格子**背景色保留**（fill 底色不清）；区域外不动；光标不变。
+     * <p>
+     * {@code align} 为 {@code "left"}（默认）/ {@code "right"} / {@code "center"}；
+     * 文本超过区域宽度时截断：左/中保留开头，右对齐保留末尾。
+     *
+     * <pre>{@code
+     * scr.writeField(1, 1, 2, "15", "right")   -- |15|
+     * scr.writeField(1, 1, 2, "6",  "right")   -- | 6|  ← 十位自动清空
+     * }</pre>
+     *
+     * @param col   区域起始列（1 起）
+     * @param row   区域行（1 起）
+     * @param width 区域宽度（格，≤ 0 无操作）
+     * @param text  要写入的文本
+     * @param align 对齐方式（可选，默认 "left"）
+     */
+    @LuaFunction(mainThread = true)
+    public final void writeField(int col, int row, int width, String text, Optional<String> align) {
+        be.screenWriteField(id, col, row, width, text, align.orElse("left"));
+    }
+
     /** 清空屏幕全部内容（格子 + 图形 + 光标），保留格子数。 */
     @LuaFunction(mainThread = true)
     public final void clear() {

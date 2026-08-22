@@ -544,6 +544,18 @@ public class MonitorBlockEntity extends BlockEntity {
     }
 
     /**
+     * 定宽字段写入（writeField 用）：在 (col,row) 起 width 格宽的单行区域内写文本，
+     * 未写入部分清成空格（前景色用当前色），背景色保留，区域外不动。光标不变。
+     */
+    public void screenWriteField(int id, int col, int row, int width, String text, String align) {
+        if (!canMutateScreen(id)) return;
+        ScreenText t = gridState.getOrCreateScreenText(id);
+        t.writeField(col, row, width, text, ScreenText.Align.byName(align));
+        setChanged();
+        syncGridToClients();
+    }
+
+    /**
      * 整屏批量替换（draw(batch) 原子语义）：清空文本层后一次写入格子与图形，
      * 客户端收到的是完整新画面，无中间态。
      *

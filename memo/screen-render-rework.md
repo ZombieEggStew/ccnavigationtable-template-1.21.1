@@ -169,6 +169,7 @@ Create / Flywheel 证据（工作区）：
 - **旧存档屏幕文本不迁移**：旧自由定位格式（无 `cols` 字段）加载时清空重置（破坏性变更，已确认接受）。
 - `setTextScale` 保留为 setGrid 别名（旧 Lua 程序调用不报错，语义变为重设格子数）；`write` 的 z 参数移除（格子无层级，z 仅图形层用）。
 - **`drawCells`/`drawShapes` 单层替换（2026-08-22 追加，方案三定稿后补充）**：`draw(batch)` 保留整屏替换语义不变；新增两个单层方法解决「静态一层 + 动态一层」场景（进度条每 tick 只 `drawShapes` 1 包，替代 clearShapes+drawRect 的 2 包，且不误伤文本层）。参数结构与 `draw` 的 cells/shapes 段一致（外层 `{cells=...}`/`{shapes=...}`），解析逻辑与 `draw` 共用（`ScreenModuleHandle.parseCells/parseShapes`）；`ScreenText.replaceAll` 拆为 `replaceCells`（清格子+光标，不动图形）+ `replaceShapes`（清图形，不动格子）。验证项同步新增第 4、5 条。
+- **`writeField` 定宽字段（2026-08-22 追加）**：`writeField(col, row, width, text, align?)` 在单行定宽区域内写文本，**未写到的格子自动清成空格（前景用当前色）、背景色保留、区域外不动、光标不变**；对齐 `"left"`/`"right"`/`"center"`（默认 left），超宽截断：左/中留头、右对齐留尾（printf `%2s` 风格）。用于每帧刷新时钟/计数器（第一帧 `"15"`、第二帧 `"6"` 十位自动清空）。链路：`ScreenModuleHandle.writeField`（Lua，Optional<String> align）→ `MonitorBlockEntity.screenWriteField`（Align.byName 解析）→ `ScreenText.writeField`（新枚举 `ScreenText.Align`）。验证项新增第 6 条。
 
 ### 待游戏内验证
 
@@ -179,13 +180,14 @@ Create / Flywheel 证据（工作区）：
 3. `draw(batch)` 整屏替换：无 clear+write 中间态闪烁。
 4. `drawCells` 只替换文本层：图形层保持不动；光标复位 (1,1)；省略格子为空白。
 5. `drawShapes` 只替换图形层：文本层保持不动（与 drawRect 追加语义对比，动态更新不用 clearShapes）。
-6. `fill` 分段进度条（纯色背景格）。
-7. 图形层 drawRect/drawLine/drawCircle 自由定位 + z 层级正常。
-8. z-fighting：斜视角/远处无闪烁（polygonOffset 生效）。
-9. 多屏幕并存、屏幕文本 NBT 持久化（重启世界后内容保留）。
-10. 旧 Lua 程序按新 API 改写后行为正确。
+6. `writeField` 定宽字段：区域内未写部分自动清空、背景保留、区域外不动；left/right/center 对齐与超宽截断正确。
+7. `fill` 分段进度条（纯色背景格）。
+8. 图形层 drawRect/drawLine/drawCircle 自由定位 + z 层级正常。
+9. z-fighting：斜视角/远处无闪烁（polygonOffset 生效）。
+10. 多屏幕并存、屏幕文本 NBT 持久化（重启世界后内容保留）。
+11. 旧 Lua 程序按新 API 改写后行为正确。
 
-> 建议验证方式：写一个 Lua 测试程序依次覆盖 1-8（`setGrid` → `write` 覆盖 → `draw(batch)` → `drawCells`/`drawShapes` 单层 → `fill` → 图形层 → 斜视角观察），完成后勾选以上条目并回填本 memo 与 `.TO DO.md`。
+> 建议验证方式：写一个 Lua 测试程序依次覆盖 1-9（`setGrid` → `write` 覆盖 → `draw(batch)` → `drawCells`/`drawShapes` 单层 → `writeField` 定宽字段 → `fill` → 图形层 → 斜视角观察），完成后勾选以上条目并回填本 memo 与 `.TO DO.md`。
 >
 > **旧测试脚本已失效**：`run/saves/**/computercraft/*/home/` 下遗留的 Lua 脚本（`test.lua`/`test2.lua`/`asd.lua` 等）用的都是已删除的 monitor 背景平面 API（`monitor.setTextScale`/`setCursorPos`/`write`），直接运行会报 `attempt to call a nil value`；验证前必须按新 API 重写（`mon.getCellModule(x,y)` 或 `mon.getModule(id)` 取 screen 句柄 → `setGrid`/`write`/`fill`/`draw`）。
 
