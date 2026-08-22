@@ -25,13 +25,13 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.List;
+
 /**
  * 显示器 BlockEntity — 持有棋盘网格状态。
  */
 public class MonitorBlockEntity extends BlockEntity {
 
-    /** monitor 背景平面上的字符和图形缓冲。 */
-    private final ScreenText monitorDisplayText = new ScreenText();
     /** 12×10 棋盘网格 */
     private final GridState gridState = new GridState();
     /** 全局频道号（-1 表示尚未注册，注册时自动分配） */
@@ -91,8 +91,6 @@ public class MonitorBlockEntity extends BlockEntity {
     }
 
     public GridState getGridState() { return gridState; }
-
-    public ScreenText getMonitorDisplayText() { return monitorDisplayText; }
 
     /** 全局频道号。 */
     public int getChannel() { return channel; }
@@ -435,21 +433,7 @@ public class MonitorBlockEntity extends BlockEntity {
         return false;
     }
 
-    // ── 屏幕文本（Lua 控制） ──
-
-    /** 屏幕文本/矩形相对 9 宫格边框的四周内缩（MC 像素），每侧为 1/64 块。 */
-    private static final float SCREEN_TEXT_INSET_PX = 0.25f;
-
-    /** 计算屏幕可显示的行列数（按当前字号自动计算）。 */
-    public int[] getScreenSize(int id) {
-        GridState.ScreenRegion scr = gridState.getScreenById(id);
-        if (scr == null) return null;
-        double innerW = scr.width() - 2 * SCREEN_TEXT_INSET_PX;
-        double innerH = scr.height() - 2 * SCREEN_TEXT_INSET_PX;
-        ScreenText text = gridState.getScreenText(id);
-        double scale = text != null ? text.getTextScale() : ScreenText.DEFAULT_SCALE;
-        return new int[] { ScreenText.colsFor(innerW, scale), ScreenText.rowsFor(innerH, scale) };
-    }
+    // ── 屏幕文本（Lua 控制，格子模型） ──
 
     /** 服务端能否修改指定屏幕。 */
     private boolean canMutateScreen(int id) {
@@ -457,18 +441,40 @@ public class MonitorBlockEntity extends BlockEntity {
         return gridState.getScreenById(id) != null;
     }
 
-    /** 在光标处写入文本（z 为空时用 ScreenText 的默认层级）。 */
-    public void screenWrite(int id, String text, @Nullable Double z) {
+    /** 屏幕内区宽度（px，已扣除可绘制区域内缩）。 */
+    private double screenInnerWidthPx(GridState.ScreenRegion scr) {
+        return scr.width() - 2 * ScreenText.DRAWABLE_INSET * 16;
+    }
+
+    /** 屏幕内区高度（px，已扣除可绘制区域内缩）。 */
+    private double screenInnerHeightPx(GridState.ScreenRegion scr) {
+        return scr.height() - 2 * ScreenText.DRAWABLE_INSET * 16;
+    }
+
+    /** 读取屏幕当前格子数，返回 {cols, rows}；屏幕不存在返回 null。 */
+    public int[] getScreenGrid(int id) {
+        ScreenText t = gridState.getScreenText(id);
+        if (t == null) return null;
+        return new int[] { t.getCols(), t.getRows() };
+    }
+
+    /** 重设屏幕格子数（清空文本层，CC:T resize 语义）。 */
+    public void screenSetGrid(int id, int cols, int rows) {
         if (!canMutateScreen(id)) return;
-        GridState.ScreenRegion scr = gridState.getScreenById(id);
-        double innerW = (scr.width() - 2 * SCREEN_TEXT_INSET_PX) * ScreenText.RECT_UNITS_PER_PX;
-        ScreenText t = gridState.getOrCreateScreenText(id);
-        t.write(text, innerW, z != null ? z : t.getZIndex());
+        gridState.getOrCreateScreenText(id).setGrid(cols, rows);
         setChanged();
         syncGridToClients();
     }
 
-    /** 清空屏幕文本。 */
+    /** 在光标处写入文本（覆盖格子字符 + 前景色，背景色不变）。 */
+    public void screenWrite(int id, String text) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).write(text);
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 清空屏幕全部内容（格子 + 图形 + 光标），保留格子数。 */
     public void screenClear(int id) {
         if (!canMutateScreen(id)) return;
         gridState.getOrCreateScreenText(id).clear();
@@ -476,23 +482,25 @@ public class MonitorBlockEntity extends BlockEntity {
         syncGridToClients();
     }
 
-    /** 设置光标（drawRect 坐标，原点在内区左上角，1 单位 = 1/128 块）。 */
-    public void screenSetCursor(int id, double x, double y) {
+    /** 设置光标位置（格子坐标，1 起）。 */
+    public void screenSetCursor(int id, int col, int row) {
         if (!canMutateScreen(id)) return;
-        gridState.getOrCreateScreenText(id).setCursor(x, y);
+        gridState.getOrCreateScreenText(id).setCursorPos(col, row);
         setChanged();
         syncGridToClients();
     }
 
-    /** 设置整块屏幕的字号（仅影响之后写入的字形大小与换行推进量）。 */
+    /** 按格子反推字号（等价于重设格子数）：cols = 内区宽 / scale，rows = 内区高 / (scale×1.2)。 */
     public void screenSetTextScale(int id, double scale) {
         if (!canMutateScreen(id)) return;
-        gridState.getOrCreateScreenText(id).setTextScale(scale);
+        GridState.ScreenRegion scr = gridState.getScreenById(id);
+        ScreenText t = gridState.getOrCreateScreenText(id);
+        t.setTextScale(scale, screenInnerWidthPx(scr), screenInnerHeightPx(scr));
         setChanged();
         syncGridToClients();
     }
 
-    /** 设置前景色（0xRRGGBB）。 */
+    /** 设置前景色（0xRRGGBB，影响之后 write 的字符颜色）。 */
     public void screenSetTextColour(int id, int colour) {
         if (!canMutateScreen(id)) return;
         gridState.getOrCreateScreenText(id).setTextColour(colour);
@@ -500,7 +508,7 @@ public class MonitorBlockEntity extends BlockEntity {
         syncGridToClients();
     }
 
-    /** 设置之后 write/drawRect 未显式指定 z 时使用的默认层级。 */
+    /** 设置图形层默认层级 z（越大越靠前；文本层无层级）。 */
     public void screenSetZIndex(int id, double z) {
         if (!canMutateScreen(id)) return;
         gridState.getOrCreateScreenText(id).setZIndex(z);
@@ -516,7 +524,37 @@ public class MonitorBlockEntity extends BlockEntity {
         syncGridToClients();
     }
 
-    /** 在屏幕内区追加一个矩形（1/128 块坐标，原点在内区左上角；z 为空时用默认层级）。 */
+    /** 设置填充色块每格内缩比例（0~0.5，默认 0；LED 分段效果）。 */
+    public void screenSetFillPadding(int id, double ratio) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).setFillPadding(ratio);
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 批量设置格子背景色（纯色填充，分段进度条用），字符与前景色不变。 */
+    public void screenFill(int id, int col, int row, int w, int h, int colour) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).fill(col, row, w, h, colour);
+        setChanged();
+        syncGridToClients();
+    }
+
+    /**
+     * 整屏批量替换（draw(batch) 原子语义）：清空文本层后一次写入格子与图形，
+     * 客户端收到的是完整新画面，无中间态。
+     *
+     * @param cells 每格一行 {col, row, char, fg, bg}（col/row 1 起）
+     */
+    public void screenDraw(int id, List<int[]> cells,
+                           List<ScreenText.Rect> rects, List<ScreenText.Line> lines, List<ScreenText.Circle> circles) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).replaceAll(cells, rects, lines, circles);
+        setChanged();
+        syncGridToClients();
+    }
+
+    /** 在屏幕内区追加一个矩形（图形层，1/128 块坐标；z 为空时用默认层级）。 */
     public void screenDrawRect(int id, double x, double y, double w, double h,
                                int colour, boolean solid, double lineWidth, @Nullable Double z) {
         if (!canMutateScreen(id)) return;
@@ -534,7 +572,7 @@ public class MonitorBlockEntity extends BlockEntity {
         syncGridToClients();
     }
 
-    /** 在屏幕内区追加一条线段（1/128 块坐标；z 为空时用默认层级）。 */
+    /** 在屏幕内区追加一条线段（图形层，1/128 块坐标；z 为空时用默认层级）。 */
     public void screenDrawLine(int id, double x1, double y1, double x2, double y2,
                                int colour, double lineWidth, @Nullable Double z) {
         if (!canMutateScreen(id)) return;
@@ -544,7 +582,7 @@ public class MonitorBlockEntity extends BlockEntity {
         syncGridToClients();
     }
 
-    /** 在屏幕内区追加一个圆（1/128 块坐标；z 为空时用默认层级）。 */
+    /** 在屏幕内区追加一个圆（图形层，1/128 块坐标；z 为空时用默认层级）。 */
     public void screenDrawCircle(int id, double cx, double cy, double radius, int colour,
                                  boolean solid, double lineWidth, int segments, @Nullable Double z) {
         if (!canMutateScreen(id)) return;
@@ -554,7 +592,7 @@ public class MonitorBlockEntity extends BlockEntity {
         syncGridToClients();
     }
 
-    /** 清空屏幕上的所有图形（矩形 + 线段 + 圆），不影响文本。 */
+    /** 清空屏幕上的所有图形（矩形 + 线段 + 圆），不影响文本层。 */
     public void screenClearShapes(int id) {
         if (!canMutateScreen(id)) return;
         gridState.getOrCreateScreenText(id).clearShapes();
@@ -562,113 +600,9 @@ public class MonitorBlockEntity extends BlockEntity {
         syncGridToClients();
     }
 
-    // ── monitor 背景平面文本（Lua 控制） ──
-
-    private boolean canMutateMonitorDisplay() {
-        return level != null && !level.isClientSide;
-    }
-
-    private void monitorDisplayChanged() {
-        setChanged();
-        blockChanged();
-    }
-
-    /** Monitor 背景显示区：14×12 面板去除四周 1px 边框后为 12×10px。 */
-    private static final double MONITOR_DISPLAY_WIDTH_PX = MonitorBlock.SCREEN_X_MAX
-            - MonitorBlock.SCREEN_X_MIN - 2 * MonitorBlock.GRID_INSET;
-    private static final double MONITOR_DISPLAY_HEIGHT_PX = MonitorBlock.SCREEN_Y_MAX
-            - MonitorBlock.SCREEN_Y_MIN - 2 * MonitorBlock.GRID_INSET;
-
-    public int[] getMonitorDisplaySize() {
-        double innerW = MONITOR_DISPLAY_WIDTH_PX;
-        double innerH = MONITOR_DISPLAY_HEIGHT_PX;
-        return new int[] { ScreenText.colsFor(innerW, monitorDisplayText.getTextScale()),
-                ScreenText.rowsFor(innerH, monitorDisplayText.getTextScale()) };
-    }
-
-    public void monitorDisplayWrite(String text, @Nullable Double z) {
-        if (!canMutateMonitorDisplay()) return;
-        double innerW = MONITOR_DISPLAY_WIDTH_PX * ScreenText.RECT_UNITS_PER_PX;
-        monitorDisplayText.write(text, innerW, z != null ? z : monitorDisplayText.getZIndex());
-        monitorDisplayChanged();
-    }
-
-    public void monitorDisplayClear() {
-        if (!canMutateMonitorDisplay()) return;
-        monitorDisplayText.clear();
-        monitorDisplayChanged();
-    }
-
-    public void monitorDisplaySetCursor(double x, double y) {
-        if (!canMutateMonitorDisplay()) return;
-        monitorDisplayText.setCursor(x, y);
-        monitorDisplayChanged();
-    }
-
-    public void monitorDisplaySetTextScale(double scale) {
-        if (!canMutateMonitorDisplay()) return;
-        monitorDisplayText.setTextScale(scale);
-        monitorDisplayChanged();
-    }
-
-    public void monitorDisplaySetTextColour(int colour) {
-        if (!canMutateMonitorDisplay()) return;
-        monitorDisplayText.setTextColour(colour);
-        monitorDisplayChanged();
-    }
-
-    public void monitorDisplaySetZIndex(double z) {
-        if (!canMutateMonitorDisplay()) return;
-        monitorDisplayText.setZIndex(z);
-        monitorDisplayChanged();
-    }
-
-    public void monitorDisplaySetOverflowMode(String mode) {
-        if (!canMutateMonitorDisplay()) return;
-        monitorDisplayText.setOverflowMode(ScreenText.OverflowMode.byName(mode));
-        monitorDisplayChanged();
-    }
-
-    public void monitorDisplayDrawRect(double x, double y, double w, double h,
-                                       int colour, boolean solid, double lineWidth, @Nullable Double z) {
-        if (!canMutateMonitorDisplay()) return;
-        monitorDisplayText.addRect(x, y, w, h, colour, solid, lineWidth,
-                z != null ? z : monitorDisplayText.getZIndex());
-        monitorDisplayChanged();
-    }
-
-    public void monitorDisplayClearRects() {
-        if (!canMutateMonitorDisplay()) return;
-        monitorDisplayText.clearRects();
-        monitorDisplayChanged();
-    }
-
-    public void monitorDisplayDrawLine(double x1, double y1, double x2, double y2,
-                                       int colour, double lineWidth, @Nullable Double z) {
-        if (!canMutateMonitorDisplay()) return;
-        monitorDisplayText.addLine(x1, y1, x2, y2, colour, lineWidth,
-                z != null ? z : monitorDisplayText.getZIndex());
-        monitorDisplayChanged();
-    }
-
-    public void monitorDisplayDrawCircle(double cx, double cy, double radius, int colour,
-                                         boolean solid, double lineWidth, int segments, @Nullable Double z) {
-        if (!canMutateMonitorDisplay()) return;
-        monitorDisplayText.addCircle(cx, cy, radius, colour, solid, lineWidth, segments,
-                z != null ? z : monitorDisplayText.getZIndex());
-        monitorDisplayChanged();
-    }
-
-    public void monitorDisplayClearShapes() {
-        if (!canMutateMonitorDisplay()) return;
-        monitorDisplayText.clearShapes();
-        monitorDisplayChanged();
-    }
-
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        tag.put("MonitorDisplayText", monitorDisplayText.save());
         tag.putInt("Channel", channel);
         tag.putString("Background", background);
         tag.putIntArray("OccupiedChannels", occupiedChannels);
@@ -681,7 +615,6 @@ public class MonitorBlockEntity extends BlockEntity {
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        if (tag.contains("MonitorDisplayText")) monitorDisplayText.load(tag.getCompound("MonitorDisplayText"));
         if (tag.contains("Channel")) channel = tag.getInt("Channel");
         if (tag.contains("Background")) {
             String bg = tag.getString("Background");
@@ -701,7 +634,6 @@ public class MonitorBlockEntity extends BlockEntity {
         CompoundTag tag = super.getUpdateTag(registries);
         tag.putInt("Channel", channel);
         tag.putString("Background", background);
-        tag.put("MonitorDisplayText", monitorDisplayText.save());
         tag.putIntArray("OccupiedChannels", occupiedChannels);
         tag.putFloat("PitchAngle", pitchAngle);
         tag.putFloat("YawAngle", yawAngle);

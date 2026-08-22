@@ -4,10 +4,8 @@ import com.simibubi.create.AllSoundEvents;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
-import com.zzy205.myfirstmod.monitor.ScreenText;
 import com.zzy205.myfirstmod.network.PlayOrderEffectPayload;
 import dan200.computercraft.api.lua.LuaFunction;
-import dan200.computercraft.api.lua.MethodResult;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -15,14 +13,15 @@ import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Optional;
-
 /**
  * Monitor 的 CC:Tweaked 外设实现。
  * <p>
  * 通过 {@code pe.getPeripheral(ch)} 或 {@code peripheral.wrap(...)} 获取。
  * 提供模块/屏幕查询：{@link #getCellModule(int, int)} / {@link #getModule(int)}，
  * 返回的 {@link ModuleHandle} 即为可在 Lua 侧进一步操作的「模块实例」。
+ * <p>
+ * 屏幕的文本渲染 / 图形绘制 API 全部在 {@link ScreenModuleHandle} 上（格子模型），
+ * monitor 背景平面不再可绘制（内容只能在 screen 模块上绘制）。
  */
 public class MonitorPeripheral implements IPeripheral {
 
@@ -99,109 +98,6 @@ public class MonitorPeripheral implements IPeripheral {
     private @Nullable ModuleHandle toHandle(@Nullable MonitorModule module) {
         if (module == null) return null;
         return ModuleHandleRegistry.create(be, module);
-    }
-
-    // ═══════════════ monitor 背景平面绘制 ═══════════════
-
-    @LuaFunction(mainThread = true)
-    public final void write(String text, Optional<Double> z) {
-        be.monitorDisplayWrite(text, z.orElse(null));
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void clear() {
-        be.monitorDisplayClear();
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void setCursorPos(double x, double y) {
-        be.monitorDisplaySetCursor(x, y);
-    }
-
-    @LuaFunction
-    public final MethodResult getCursorPos() {
-        ScreenText text = be.getMonitorDisplayText();
-        return MethodResult.of(text.getCursorX(), text.getCursorY());
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void setTextScale(double scale) {
-        be.monitorDisplaySetTextScale(scale);
-    }
-
-    @LuaFunction
-    public final double getTextScale() {
-        return be.getMonitorDisplayText().getTextScale();
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void setTextColour(int colour) {
-        be.monitorDisplaySetTextColour(colour);
-    }
-
-    @LuaFunction
-    public final int getTextColour() {
-        return be.getMonitorDisplayText().getTextColour();
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void setZIndex(double z) {
-        be.monitorDisplaySetZIndex(z);
-    }
-
-    @LuaFunction
-    public final double getZIndex() {
-        return be.getMonitorDisplayText().getZIndex();
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void setOverflowMode(String mode) {
-        be.monitorDisplaySetOverflowMode(mode);
-    }
-
-    @LuaFunction
-    public final String getOverflowMode() {
-        return be.getMonitorDisplayText().getOverflowMode().name;
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void drawRect(double x, double y, double width, double height,
-                               int colour, boolean solid, double lineWidth, Optional<Double> z) {
-        be.monitorDisplayDrawRect(x, y, width, height, colour, solid, lineWidth, z.orElse(null));
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void clearRects() {
-        be.monitorDisplayClearRects();
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void drawLine(double x1, double y1, double x2, double y2,
-                               int colour, double lineWidth, Optional<Double> z) {
-        be.monitorDisplayDrawLine(x1, y1, x2, y2, colour, lineWidth, z.orElse(null));
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void drawCircle(double cx, double cy, double radius, int colour,
-                                 boolean solid, double lineWidth, Optional<Integer> segments, Optional<Double> z) {
-        be.monitorDisplayDrawCircle(cx, cy, radius, colour, solid, lineWidth,
-                segments.orElse(32), z.orElse(null));
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void drawPoint(double x, double y, int colour, Optional<Double> z) {
-        be.monitorDisplayDrawRect(x, y, 1.0, 1.0, colour, true, 0.0, z.orElse(null));
-    }
-
-    @LuaFunction(mainThread = true)
-    public final void clearShapes() {
-        be.monitorDisplayClearShapes();
-    }
-
-    @LuaFunction
-    public final MethodResult getSize() {
-        int[] size = be.getMonitorDisplaySize();
-        return MethodResult.of((double) size[0], (double) size[1]);
     }
 
     // ═══════════════ 下单音效 / WiFi 粒子 ═══════════════

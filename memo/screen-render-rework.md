@@ -1,6 +1,7 @@
 # 屏幕渲染重构 — 需求分析与方案决策（存档）
 
-> 2026-08-22 | 决策已定，**未实施**。本文档为选型记录，实施时按「方案一 → 二 → 三」递进，每步独立可用、可随时喊停。
+> 2026-08-22 | 决策已定。**方案三（格子模型）已实施**（2026-08-22，含方案一 gzip 顺带落地；方案二未实施），详见文末「实施状态」。
+> **方案三（格子模型）已定稿**为最终文本数据模型（2026-08-22 与作者确认），详见下文。
 
 ---
 
@@ -33,7 +34,7 @@
 
 ## 方案选型结论
 
-### ✅ 采用：三个递进步骤（都只动同步与数据，不碰渲染底层，Lua API 不变）
+### ✅ 采用：三个递进步骤（只动同步与数据，不碰渲染底层；方案一/二 Lua API 不变，方案三为破坏性变更，已确认接受）
 
 #### 方案一：止血（改动最小，数行）
 | 改动 | 治什么 |
@@ -47,10 +48,47 @@
 - 治：闪烁（同 tick 内 clear+write 合一个包 → 无中间态）、每次调用一个包的浪费、带宽。
 - 范围：`MonitorBlockEntity`（脏标记 + 队列）、`MonitorPacketHandlers`/`SyncGridPayload`（快照化），**不碰 `ScreenTextRenderer`**。
 
-#### 方案三：数据模型升级（以后有需要再做，当前不需要）
-- `ScreenText` 改成「格子 + 每格前景/背景色」，覆盖即替换（LCD 帧缓冲模型）。
-- 治：数据只增不减、为将来大屏/特效（辉光等）留路。
-- 当前单人 1-2 小屏，数据增长要很久才够着 2 MiB，**先不做**。
+#### 方案三：格子模型（✅ 已定稿为最终文本数据模型，计划实施，未开始）
+
+**设计**：
+- 屏幕模块由用户设定格子数（新增 `setGrid(cols, rows)`），格子铺满内区；文本层改为「每格 = 字符 + 前景色 + 背景色」，**写入即覆盖该格**（LCD 帧缓冲语义，同位置永远只有一个值，无重叠面片）。
+- 定位改为**光标制**：`setCursorPos(col, row)`（1 起，CC:T 风格），`write` 从光标处逐格写入（保留 wrap/truncate/ellipsis）。**取消文本自由定位**（浮点 x,y 仅图形层保留）。
+- **填充（进度条）**：新增 `fill(col, row, w, h, colour)` 批量设置格子**背景色**（纯色填充），配合每格背景色实现分段进度条；新增 `setFillPadding(ratio)` 让填充色块每格内缩（LED 分段效果，默认 0）。平滑进度（连续条）用现有自由定位 `drawRect`（浮点坐标任意宽度），无需新 API。
+- **整屏批量传输**：新增 `draw(batch)` —— 一次调用传**整屏所有需要绘制的格子**（每格：行列 + 字符 + 前景色 + 背景色，可选图形），**整屏替换语义**（原子 clear + 重建，无中间态）。Lua table 经 `@LuaFunction` 自动转 Java `Map`（CC:T 支持，见 `SpeakerPeripheral.playAudio(LuaTable)` 先例）。与方案二（每 tick 合并快照）互补：程序每 tick 调一次 `draw` → 服务端原子替换 → 每 tick 一个快照 → 客户端一帧显示，全链路无中间态。
+- 渲染沿用**原版告示牌模型**：每帧 MultiBufferSource、每字符一 quad（`BakedGlyph.render` 4 顶点）、同图集同 RenderType 一批 draw call；格子坐标 → 世界坐标每帧计算（本规模开销可忽略）；深度用 **`RenderSystem.polygonOffset`**（原版 SignRenderer 的 `DisplayMode.POLYGON_OFFSET` 方案）替代 0.01px/16 手动偏移。
+- 图形层（rect/line/circle）**保持自由定位与 z**，不受格子约束，但**仅在 screen 模块可绘制区域内**绘制（差异化保留，CC:T 无矢量图形能力）。
+
+**关键决策（已定）**：
+1. **格子数为文本布局唯一依据**：字形尺寸由格子推导（`cellW = 内区宽 / cols`，字形自动贴合格子），`setTextScale` 语义改为「按格子反推字号」（等价于重设格子）。现状 `colsFor/rowsFor` 公式（`scale×8` / `scale×9.6` 单位）恰是"格子==字形"的特例，耦合时行为不变。
+2. `setGrid` 重设时**清空文本层**（CC:T resize 语义）。
+3. 光标单位改格子坐标（1 起）——**破坏性变更**：旧 Lua 程序文本定位部分需改写（已确认接受）。
+4. 每格含背景色（LCD 覆盖刷新成立），颜色沿用 24 位 RGB。`fill()` = 背景色的批量写入（无新数据结构）；`setFillPadding` = 渲染期背景 quad 内缩（进背景批次，字符画在填充色之上，天然支持"色块 + 文字"叠加）。
+5. **可绘制区域 = screen 模块（重要范围收窄）**：内容**只能在 screen 模块上绘制**，不在 monitor 背景平面上绘制。因此：
+   - **移除 monitor 背景平面绘制通道（仅此一项，已与作者确认）**：`MonitorBlockEntity.monitorDisplayText`（12×10 px 背景平面）及 `MonitorPeripheral` 上的背景平面绘制 API（`write`/`clear`/`drawRect`/`setCursorPos`/`setTextScale`/`setTextColour`/`setZIndex`/`setOverflowMode`/`clearRects`/`clearShapes`）——全部迁移到 screen 模块（`GridState.screenTexts` / `ScreenModuleHandle`）。
+   - **不动的部分（已与作者确认）**：Monitor 的**网格线（`MonitorGridOverlay.drawGridLines`）与背景贴图（`MonitorBackground` / `renderBackground`）全部保留**，重构只删除 monitor 背景平面上的「字符绘制与图形绘制逻辑」，不改网格和背景。`GRID_INSET=1`（`MonitorBlock.java`）保留，仅用于放置逻辑，与绘制无关。
+6. **screen 模块可绘制区域内缩（screen 模块规格，重要）**：screen 模块可绘制区域每侧内缩 **1/64 块 = 1/4 px = 2 drawRect 单位**（原因：screen 模型边缘缺 1/8px + 贴图边框占 1/8px）。方案三实施时统一为常量 `DRAWABLE_INSET = 1/64`，用于：格子计算（`cellW = 可绘制区宽 / cols`）、`draw(batch)`/`fill` 边界与裁剪、渲染内容边界（`ScreenTextRenderer` 的 left/right/top/bottom）。与决策 5 的 `GRID_INSET` 是两个独立常量。
+7. **防 z-fighting 用 `DisplayMode.POLYGON_OFFSET`（参考原版告示牌 `SignRenderer`，已与作者确认）**：**废弃**手动 0.01px/16 深度偏移（`GLYPH_FRONT`/`Z_STEP`/`RECT_BACK`），也**不做手动前移**（`1/64~1/128` 块固定前移仅方案一可选缓解，方案三不采用）。**渲染平面 = screen 模块外边面**（screen 9 宫格模型 north 面，世界坐标 `zBase = (SCREEN_Z + 0.7) / 16`，与模型 `from.z = 0.7` 一致），内容 z 直接取外表面 z，深度区分完全交给 polygonOffset。实现方式：
+   - 字形/填充绘制用带 polygonOffset 的 RenderType（实施中为 `RenderType.textPolygonOffset(ascii.png)`，其 `POLYGON_OFFSET_LAYERING` state shard 在 RenderType 切换时自动 `polygonOffset(-1,-10)` + enable/disable，适配 MultiBufferSource 延迟批处理）；
+   - 背景格 / 图形层（纯色 quad）与字形不同平面时用固定深度差（图形层 `zBase - z/128`，z 越大越靠前），与字形同平面部分由 polygonOffset 区分。
+
+**数据与同步影响**：
+- 文本层 → 定长格子数组（char[] + 前景/背景色），**体积固定、不再增长**（根治"数据只增不减"）。
+- 配合方案一（gzip）+ 方案二（每 tick 合并快照）→ 2 MiB 崩溃、闪烁、数据增长全部根治。
+- `SyncGridPayload` 编码可进一步紧凑化（定长结构体，弃逐字符 CompoundTag）。
+
+**API 变更清单（破坏性，实施前需确认）**：
+
+| 变更 | 旧 | 新 |
+|---|---|---|
+| 新增 `setGrid(cols, rows)` / `getGrid()` | — | 用户先设定格子数 |
+| 新增 `fill(col, row, w, h, colour)` | — | 批量设置格子背景色（分段进度条） |
+| 新增 `setFillPadding(ratio)` | — | 填充色块每格内缩比例（0~0.5，默认 0） |
+| 新增 `draw(batch)` | — | 整屏一次传输（格子+可选图形），整屏替换语义 |
+| **移除背景平面绘制 API**（`MonitorPeripheral` 的 `write`/`clear`/`drawRect`/`setCursorPos`/`setTextScale`/`setTextColour`/`setZIndex`/`setOverflowMode`/`clearRects`/`clearShapes`） | monitor 背景平面（12×10 px） | **迁移到 screen 模块**（`ScreenModuleHandle`），monitor 背景不再可绘制 |
+| `setCursorPos(x, y)` | 像素/drawRect 单位 | 格子坐标（1 起） |
+| `write(text, z)` | 追加自由定位字符 | 光标处逐格写入覆盖 |
+| `setTextScale` | 独立字号 | 按格子反推（或移除） |
+| `drawRect/Line/Circle` | 自由定位 | **不变**（图形层） |
 
 ### ❌ 明确排除（已排雷，不再考虑）
 
@@ -64,7 +102,7 @@
 ### 差异化（已天然成立，无需额外做）
 
 - 矢量图形（rect/line/circle）+ 自由定位 + z 层级：CC:T monitor 全部做不到。
-- 24 位色 + 每字符背景色（方案三落地后）：CC:T 只有 16 色调色板、无背景格。
+- 24 位色 + 每格背景色（方案三）：CC:T 只有 16 色调色板、无背景格。
 - 可选加分：用 vanilla `font.drawInBatch` 替代手写字形（简化代码 + 观感与 CC:T 方块像素字拉开），但**不是必须**。
 
 ---
@@ -86,7 +124,53 @@ CC:T 源码（工作区 `references/CC-Tweaked-mc-1.21.x/`）：
 - 「装了 OptiFine 用 VBO」提交：https://git.osmarks.net/mirrors/CC-Tweaked/commit/4bfdb65989b6a427b423b1c76383dea5d4405716
 - shader mod 兼容问题：https://github.com/cc-tweaked/CC-Tweaked/issues/1140
 
+原版告示牌渲染（方案三的渲染参考）：
+- `net.minecraft.client.renderer.blockentity.SignRenderer`（1.21.x；1.21.4+ 为 `AbstractSignRenderer`）：每帧 `font.drawInBatch` + `DisplayMode.POLYGON_OFFSET` 防 z-fighting。javadoc：https://aldak0.ru/javadoc/1.21.4-21.4.x/net/minecraft/client/renderer/blockentity/AbstractSignRenderer.html
+- 字形 = 每字符一 quad（`BakedGlyph.render` 4 顶点），同图集同 RenderType 一批 draw call，无几何合并。javadoc：https://aldak0.ru/javadoc/1.21.4-21.4.x/net/minecraft/client/gui/font/glyphs/BakedGlyph.html
+
+Iris / Sodium 兼容调研（FBO 门控依据，`references/Iris-1.21.1/`、`references/sodium-1.21.1-stable/`）：
+- `net.irisshaders.iris.api.v0.IrisApi`：`isShaderPackInUse()`（官方兼容开关）、`isRenderingShadowPass()`、`getMinorApiRevision()`。FBO 方案可据此「开光影包 → 回退普通渲染」。
+- Iris 帧缓冲自管（`net.irisshaders.iris.targets.RenderTargets` 等），**不碰 mod 自建的 vanilla `RenderTarget`**；Sodium 保留 vanilla `MultiBufferSource`（`SodiumWorldRenderer.java:314`），方块实体渲染路径原样可用。
+
 Create / Flywheel 证据（工作区）：
 - `references/Create-mc1.21.1-dev/.../redstone/nixieTube/NixieTubeRenderer.java`（vanilla font 画字符）
 - `references/Create-mc1.21.1-dev/.../foundation/blockEntity/renderer/SmartBlockEntityRenderer.java`（vanilla font 画标签）
 - `api/create/flywheel-neoforge-api-1.21.1-1.0.6/`（仅 .class，无源码）
+
+---
+
+## 实施状态（2026-08-22）
+
+**方案三（格子模型）已实施，`./gradlew.bat classes` 编译通过；待进游戏验证。**
+
+### 已落地的改动
+
+| 文件 | 改动 |
+|---|---|
+| `monitor/ScreenText.java` | 重写为格子模型：定长 `char[] cells` + `int[] fg` + `int[] bg`（LCD 帧缓冲语义，写入即覆盖，体积固定）；光标制 `setCursorPos(col,row)` 1 起；`write(text)` 覆盖字符+前景色、背景色不变；`fill(col,row,w,h,colour)` 批量设置背景色；`setFillPadding(ratio)`；`replaceAll` 整屏原子替换（draw 用）；`setGrid` 重设清空；`setTextScale(scale, innerWpx, innerHpx)` 保留为 setGrid 别名（按格子反推字号）；图形层 rect/line/circle 保持自由定位与 z；NBT 用 int[] 定长数组紧凑编码（`cols/rows/cells/fg/bg`） |
+| `monitor/GridState.java` | 无结构改动（`screenTexts` 接口不变，NBT 序列化经 `ScreenText.save/load` 自动适配） |
+| `compat/cc/ScreenModuleHandle.java` | Lua API：新增 `setGrid/getGrid`、`fill`、`setFillPadding/getFillPadding`、`draw(batch)`（cells+shapes 两段式，LuaTable 解析，原子替换）；`setCursorPos` 改格子坐标；`write` 去 z 参数；`setTextScale` 保留为别名；`getSize/getTextScale` 返回格子数；图形层 API 不变 |
+| `compat/cc/MonitorPeripheral.java` | 删除 monitor 背景平面绘制 API（write/clear/setCursorPos/setTextScale/setTextColour/setZIndex/setOverflowMode/drawRect/clearRects/drawLine/drawCircle/drawPoint/clearShapes/getSize）——内容只能在 screen 模块上绘制 |
+| `block/MonitorBlockEntity.java` | 删除 `monitorDisplayText` 字段与全部 `monitorDisplay*` 方法、`getUpdateTag/save/load` 中的 `MonitorDisplayText`；`screen*` 方法改格子模型（screenWrite/screenSetCursor/screenSetTextScale/screenSetGrid/screenFill/screenSetFillPadding/screenDraw/screenDrawRect 等） |
+| `block/MonitorRenderer.java` | 删除 `renderMonitorDisplay`（monitor 背景平面渲染）；`renderScreenText` 用 `DRAWABLE_INSET` 计算可绘制区，调用新 `ScreenTextRenderer.drawAll` 签名 |
+| `client/ScreenTextRenderer.java` | 重写：背景格 quad（fill 填充，支持 fillPadding 内缩）+ 字形 quad（`RenderType.textPolygonOffset(ascii.png)`，polygonOffset 防 z-fighting）+ 图形层 quad；**渲染平面 = screen 模块外边面**（`zBase = (SCREEN_Z+0.7)/16`，与 9 宫格模型 north 面 z=0.7 一致），内容仅极小贴面前移（1/2048 块级，量级对齐原版 `TEXT_OFFSET`）；格子坐标每帧计算（本规模开销可忽略） |
+| `network/SyncGridPayload.java` | NBT 改 gzip 压缩（`NbtIo.writeCompressed/readCompressed` + `writeByteArray`），顺带落地方案一（2 MiB 崩溃缓解） |
+
+### 与计划文档的差异
+
+- **方案二（脏标记 + 每 tick 合并快照）未实施**：用户选择直接跳阶段 3。闪烁问题由 `draw(batch)` 整屏原子替换语义部分缓解（服务端一次替换 → 一次同步 → 客户端一帧显示）；若后续仍要根治「每次 Lua 调用一个包」，需补方案二。
+- **只删 monitor 的字符/图形绘制，网格与背景保留（作者确认）**：`MonitorGridOverlay` 的网格线/模块边框/放置预览、`MonitorBackground` 背景贴图/`renderBackground` 均保留未动；仅删除 monitor 背景平面上的绘制通道（`monitorDisplay*`）。
+- **渲染平面贴外边面（作者确认）**：screen 内容直接绘制在 screen 模块外边面（9 宫格模型 north 面）上，不做 1/64~1/128 块级手动前移；z-fighting 完全按原版 `SignRenderer` 方案用 `textPolygonOffset`（polygonOffset(-1,-10)）区分深度。
+- **旧存档屏幕文本不迁移**：旧自由定位格式（无 `cols` 字段）加载时清空重置（破坏性变更，已确认接受）。
+- `setTextScale` 保留为 setGrid 别名（旧 Lua 程序调用不报错，语义变为重设格子数）；`write` 的 z 参数移除（格子无层级，z 仅图形层用）。
+
+### 待游戏内验证
+
+1. `setGrid` 后格子文本渲染位置/大小正确（含 6×6px 小屏）。
+2. `write` 覆盖语义：同格重写无残留、wrap/truncate/ellipsis 行为正确。
+3. `draw(batch)` 整屏替换：无 clear+write 中间态闪烁。
+4. `fill` + `setFillPadding` 分段进度条（LED 效果）。
+5. 图形层 drawRect/drawLine/drawCircle 自由定位 + z 层级正常。
+6. z-fighting：斜视角/远处无闪烁（polygonOffset 生效）。
+7. 多屏幕并存、屏幕文本 NBT 持久化（重启世界后内容保留）。
+8. 旧 Lua 程序按新 API 改写后行为正确。

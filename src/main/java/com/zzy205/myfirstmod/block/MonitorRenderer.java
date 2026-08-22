@@ -51,8 +51,6 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
     /** 标签坐标原点 Y（模型像素）：按钮 head 的视觉垂直中心。 */
     private static final float BUTTON_LABEL_ORIGIN_Y_PX = 0.35f;
 
-    private static final float RENDER_INSET = 1f / 16f; // 屏幕内容相对屏幕边框的内缩距离（块单位）
-
     /** 每个 Monitor 独立的动画进度表，外层 key=BlockPos，内层 key=moduleId */
     private final Map<BlockPos, Map<Integer, Float>> animProgress = new HashMap<>();
 
@@ -87,7 +85,6 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
 
         // ── 背景面板（始终渲染，覆盖原 screen 元素的面板贴图） ──
         renderBackground(poseStack, buffer, be.getBackground(), light);
-        renderMonitorDisplay(poseStack, buffer, be.getMonitorDisplayText());
 
         var grid = be.getGridState();
 
@@ -197,17 +194,6 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
                 .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0f, 0f, -1f);
         vc.addVertex(pose.pose(), x1, y0, z).setColor(1f, 1f, 1f, 1f).setUv(u1, v1)
                 .setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0f, 0f, -1f);
-    }
-
-    /** 在背景 quad 朝玩家一侧绘制 monitor 自身的字符和图形。 */
-    private static void renderMonitorDisplay(PoseStack ps, MultiBufferSource buffer, ScreenText text) {
-        if (text.getChars().isEmpty() && text.getRects().isEmpty()
-                && text.getLines().isEmpty() && text.getCircles().isEmpty()) return;
-
-        float contentRight = MonitorBlock.SCREEN_X_MAX / 16f - RENDER_INSET;
-        float contentTop = MonitorBlock.SCREEN_Y_MAX / 16f - RENDER_INSET;
-        float backgroundZ = (MonitorBlock.PANEL_Z - MonitorBlock.BACKGROUND_Z_OFFSET) / 16f;
-        ScreenTextRenderer.drawAll(ps, buffer, text, contentRight, contentTop, 96f, 80f, backgroundZ);
     }
 
     private static void renderKnobAngle(PoseStack poseStack, MultiBufferSource buffer,
@@ -348,35 +334,37 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         }
 
         // ── 屏幕字符 / 图形 ──
-        if (text != null && (!text.getChars().isEmpty() || !text.getRects().isEmpty()
-                || !text.getLines().isEmpty() || !text.getCircles().isEmpty())) {
+        if (text != null && text.hasContent()) {
             renderScreenText(ps, buffer, scr, text);
         }
     }
 
-    /** 在屏幕内区渲染字符缓冲（位图字体，字号由 ScreenText 控制）。 */
+    /** 在屏幕内区渲染格子文本缓冲（格子模型：每格字符 + 前景/背景色 + 图形层）。 */
     private void renderScreenText(PoseStack ps, MultiBufferSource buffer,
                                   GridState.ScreenRegion scr, ScreenText text) {
-        float borderInset = 1f / 64f;
         float cellSize = 1f / 16f;
+        float drawableInset = (float) ScreenText.DRAWABLE_INSET;
 
         float scrX = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + scr.minX()) / 16f;
         float scrY = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + scr.minY()) / 16f;
         float scrW = scr.width() * cellSize;
         float scrH = scr.height() * cellSize;
 
-        // 内容原点：边框内缩已包含在这里，字符串和 drawRect 共用这组边界。
-        float contentRight = scrX + scrW - borderInset;
-        float contentTop = scrY + scrH - borderInset;
-        float innerWidthUnits = (float) ((scr.width() - 2f * borderInset * 16f)
+        // 可绘制区域 = 屏幕 9 宫格内区再内缩 DRAWABLE_INSET（1/64 块）。
+        // 内容原点：DRAWABLE_INSET 已包含在这里，格子 / drawRect 共用这组边界。
+        float contentRight = scrX + scrW - drawableInset;
+        float contentTop = scrY + scrH - drawableInset;
+        float contentLeft = scrX + drawableInset;
+        float contentBottom = scrY + drawableInset;
+        float innerWidthUnits = (float) ((scr.width() - 2f * drawableInset * 16f)
             * ScreenText.RECT_UNITS_PER_PX);
-        float innerHeightUnits = (float) ((scr.height() - 2f * borderInset * 16f)
+        float innerHeightUnits = (float) ((scr.height() - 2f * drawableInset * 16f)
             * ScreenText.RECT_UNITS_PER_PX);
         // 内容基准面 = 屏幕 9 宫格中心面（screen_center 模型 north 面在 z=0.7px）
         float zBase = (MonitorBlock.SCREEN_Z + 0.7f) / 16f;
 
         ScreenTextRenderer.drawAll(ps, buffer, text, contentRight, contentTop,
-            innerWidthUnits, innerHeightUnits, zBase);
+            contentLeft, contentBottom, innerWidthUnits, innerHeightUnits, zBase);
     }
 
     /** 渲染一个角模型，绕格子中心 Z 轴旋转（法线安全） */

@@ -8,50 +8,77 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 单个屏幕（screen）的字符缓冲，仿 CC:T 终端的最小实现。
+ * 单个屏幕（screen）的文本缓冲 — 格子模型（LCD 帧缓冲语义，方案三）。
  * <p>
- * 文本不再使用「行列格子」，而是像 {@link #addRect} 一样用屏幕局部坐标直接定位：
- * 每个字符记录自己的左上角 {@code (x, y)}，单位与 drawRect 一致（1/128 块，原点在内区左上角）。
- * 光标也是该坐标系下的 {@code (x, y)}，{@link #write} 写入后按字号向右推进。
+ * 文本层是<b>定长格子数组</b>：每格 = 字符 + 前景色 + 背景色，写入即覆盖该格，
+ * 同位置永远只有一个值（无重叠面片），体积固定、不再随运行时长增长。
+ * 格子数由用户经 {@link #setGrid(int, int)} 设定（{@code setTextScale} 为按格子反推字号的别名），
+ * 字形尺寸由格子推导（{@code cellW = 可绘制区宽 / cols}）。
  * <p>
- * 文本只有前景色，<b>没有背景色</b>（需要背景由调用方自己 drawRect）。每个字符/矩形
- * 都带一个 {@code z} 层级（越大越靠前），未显式指定时使用 {@link #zIndex} 默认值。
+ * 定位为<b>光标制</b>：{@code setCursorPos(col, row)}，1 起（CC:T 风格），
+ * {@link #write(String)} 从光标处逐格写入（保留 wrap / truncate / ellipsis 溢出处理）。
  * <p>
- * 字号单位：MC 像素（1px = 1/16 块）。
+ * 图形层（矩形 / 线段 / 圆）保持自由定位（1/128 块）与 z 层级，不受格子约束，
+ * 但仅在 screen 模块可绘制区域内绘制。
+ * <p>
+ * 背景色为 24 位 RGB；{@link #TRANSPARENT_BG}（-1）表示透明（不绘制背景 quad）。
  */
 public class ScreenText {
 
-    /** 默认字号（字形高度，MC 像素）。 */
-    public static final double DEFAULT_SCALE = 0.5;
-    public static final double MIN_SCALE = 0.05;
-    public static final double MAX_SCALE = 8.0;
-    /** 行距 = 字号 × 该系数。 */
-    public static final double LINE_SPACING = 1.2;
-    /** 字形为正方形（vanilla ascii.png 8×8 图集），列宽 = 字号。 */
-    public static final double CHAR_ASPECT = 1.0;
-
-    /**
-     * 矩形 / 光标坐标单位换算：1 个 drawRect 单位 = 1/128 块，
-     * 而字号单位是 MC 像素（1px = 1/16 块），故 1px = 8 个 drawRect 单位。
-     */
-    public static final double RECT_UNITS_PER_PX = 8.0;
+    /** 可绘制区域内缩（块），每侧 1/64 块 = 1/4 px = 2 drawRect 单位。 */
+    public static final double DRAWABLE_INSET = 1.0 / 64.0;
+    /** 格子数上限（防滥用；本规模 6×6px 屏远小于此）。 */
+    public static final int MAX_COLS = 128;
+    public static final int MAX_ROWS = 128;
+    /** 默认格子数（用户 setGrid 之前的兜底值，接近旧默认字号 0.5 在 6×6px 屏的 11×9 字符）。 */
+    public static final int DEFAULT_COLS = 12;
+    public static final int DEFAULT_ROWS = 10;
+    /** 透明背景色标记（不渲染背景 quad）。 */
+    public static final int TRANSPARENT_BG = -1;
 
     public static final int DEFAULT_TEXT_COLOUR = 0xFFFFFF;
-    /** 默认层级（z），越大越靠前。 */
+    /** 默认层级（z），越大越靠前（仅图形层使用）。 */
     public static final double DEFAULT_Z = 0.0;
+    /** 填充内缩比例默认值（0 = 不内缩）。 */
+    public static final double DEFAULT_FILL_PADDING = 0.0;
+    /** 填充内缩比例上限（0~0.5）。 */
+    public static final double MAX_FILL_PADDING = 0.5;
 
-    private final List<TextChar> chars = new ArrayList<>();
+    /** 字形为正方形（vanilla ascii.png 8×8 图集），列宽 = 字号。 */
+    public static final double CHAR_ASPECT = 1.0;
+    /** 行距 = 字号 × 该系数（setTextScale 反推行数用）。 */
+    public static final double LINE_SPACING = 1.2;
+    /** 1 个 drawRect 单位 = 1/128 块，1px = 1/16 块，故 1px = 8 个 drawRect 单位。 */
+    public static final double RECT_UNITS_PER_PX = 8.0;
+
+    private int cols = DEFAULT_COLS;
+    private int rows = DEFAULT_ROWS;
+    /** 格子内容：字符（' ' = 空格）。 */
+    private char[] cells;
+    /** 格子前景色（0xRRGGBB）。 */
+    private int[] fg;
+    /** 格子背景色（0xRRGGBB 或 {@link #TRANSPARENT_BG}）。 */
+    private int[] bg;
+    /** 光标列（1 起）。 */
+    private int cursorCol = 1;
+    /** 光标行（1 起）。 */
+    private int cursorRow = 1;
+    /** write 使用的前景色。 */
+    private int textColour = DEFAULT_TEXT_COLOUR;
+    /** 图形层默认层级 z（越大越靠前）。 */
+    private double zIndex = DEFAULT_Z;
+    /** 填充色块每格内缩比例（0~0.5，默认 0）。 */
+    private double fillPadding = DEFAULT_FILL_PADDING;
+    /** 文本超出单行宽度时的处理方式。 */
+    private OverflowMode overflowMode = OverflowMode.WRAP;
+
     private final List<Rect> rects = new ArrayList<>();
     private final List<Line> lines = new ArrayList<>();
     private final List<Circle> circles = new ArrayList<>();
-    private double cursorX = 0; // drawRect 坐标（1/128 块）
-    private double cursorY = 0; // drawRect 坐标（1/128 块）
-    private int textColour = DEFAULT_TEXT_COLOUR;
-    private double zIndex = DEFAULT_Z;
-    private double textScale = DEFAULT_SCALE;
-    private OverflowMode overflowMode = OverflowMode.WRAP;
 
-    public ScreenText() {}
+    public ScreenText() {
+        allocate(DEFAULT_COLS, DEFAULT_ROWS);
+    }
 
     /** 文本超出单行宽度时的处理方式。 */
     public enum OverflowMode {
@@ -76,13 +103,7 @@ public class ScreenText {
     }
 
     /**
-     * 一个已写入的字符：{@code (x, y)} 为字符左上角（drawRect 坐标，1/128 块），
-     * {@code z} 为层级（越大越靠前）。
-     */
-    public record TextChar(double x, double y, char ch, double z) {}
-
-    /**
-     * 一个矩形绘制指令。
+     * 一个矩形绘制指令（图形层，自由定位）。
      *
      * @param x         左上角 X（1/128 块，0 = 内区左缘，向右增大）
      * @param y         左上角 Y（1/128 块，0 = 内区上缘，向下增大）
@@ -97,20 +118,20 @@ public class ScreenText {
                        int colour, boolean solid, double lineWidth, double z) {}
 
     /**
-     * 一条线段绘制指令（坐标均为 drawRect 坐标，1/128 块）。
+     * 一条线段绘制指令（图形层，坐标均为 drawRect 坐标，1/128 块）。
      */
     public record Line(double x1, double y1, double x2, double y2,
                        int colour, double lineWidth, double z) {}
 
     /**
-     * 一个圆绘制指令（坐标均为 drawRect 坐标，1/128 块）。
+     * 一个圆绘制指令（图形层，坐标均为 drawRect 坐标，1/128 块）。
      *
      * @param segments 多边形逼近的段数（>= 3）
      */
     public record Circle(double cx, double cy, double radius, int colour,
                          boolean solid, double lineWidth, int segments, double z) {}
 
-    // ── 布局 ──
+    // ── 布局（由格子数推导） ──
 
     /** 由屏幕内区宽（像素）与字号计算列数。 */
     public static int colsFor(double innerWidthPx, double scale) {
@@ -124,19 +145,51 @@ public class ScreenText {
         return Math.max(1, (int) Math.floor(innerHeightPx / pitch));
     }
 
-    /** 单个字形宽度（drawRect 单位）。 */
-    public double glyphWidth() {
-        return textScale * CHAR_ASPECT * RECT_UNITS_PER_PX;
+    /** 单格字形宽度（drawRect 单位）= 可绘制区宽 / cols。 */
+    public double glyphWidthUnits(double innerWidthUnits) {
+        return Math.max(1, innerWidthUnits / cols);
     }
 
-    /** 单个行高（drawRect 单位）。 */
-    public double lineHeight() {
-        return textScale * LINE_SPACING * RECT_UNITS_PER_PX;
+    /** 单格行高（drawRect 单位）= 可绘制区高 / rows。 */
+    public double lineHeightUnits(double innerHeightUnits) {
+        return Math.max(1, innerHeightUnits / rows);
     }
 
     // ── 访问器 ──
 
-    public List<TextChar> getChars() { return chars; }
+    public int getCols() { return cols; }
+
+    public int getRows() { return rows; }
+
+    public int getCursorCol() { return cursorCol; }
+
+    public int getCursorRow() { return cursorRow; }
+
+    public int getTextColour() { return textColour; }
+
+    public double getZIndex() { return zIndex; }
+
+    public double getFillPadding() { return fillPadding; }
+
+    public OverflowMode getOverflowMode() { return overflowMode; }
+
+    /** 格子字符（(col,row) 1 起；越界返回空格）。 */
+    public char getCellChar(int col, int row) {
+        int i = index(col, row);
+        return i < 0 ? ' ' : cells[i];
+    }
+
+    /** 格子前景色（(col,row) 1 起；越界返回默认前景色）。 */
+    public int getCellFg(int col, int row) {
+        int i = index(col, row);
+        return i < 0 ? DEFAULT_TEXT_COLOUR : fg[i];
+    }
+
+    /** 格子背景色（(col,row) 1 起；越界返回 {@link #TRANSPARENT_BG}）。 */
+    public int getCellBg(int col, int row) {
+        int i = index(col, row);
+        return i < 0 ? TRANSPARENT_BG : bg[i];
+    }
 
     public List<Rect> getRects() { return rects; }
 
@@ -144,38 +197,182 @@ public class ScreenText {
 
     public List<Circle> getCircles() { return circles; }
 
-    public double getCursorX() { return cursorX; }
+    /** 是否存在可绘制内容（任意非空格字符、非透明背景格或图形）。 */
+    public boolean hasContent() {
+        for (int i = 0; i < cells.length; i++) {
+            if (cells[i] != ' ' || bg[i] != TRANSPARENT_BG) return true;
+        }
+        return !rects.isEmpty() || !lines.isEmpty() || !circles.isEmpty();
+    }
 
-    public double getCursorY() { return cursorY; }
+    private int index(int col, int row) {
+        if (col < 1 || col > cols || row < 1 || row > rows) return -1;
+        return (row - 1) * cols + (col - 1);
+    }
 
-    public int getTextColour() { return textColour; }
+    // ── 格子数 / 光标 ──
 
-    public double getZIndex() { return zIndex; }
+    /**
+     * 重设格子数并清空文本层（CC:T resize 语义），光标回到 (1,1)。
+     */
+    public void setGrid(int newCols, int newRows) {
+        allocate(clampCols(newCols), clampRows(newRows));
+    }
 
-    public double getTextScale() { return textScale; }
+    /**
+     * {@code setTextScale} 的别名语义：按格子反推字号（等价于重设格子）。
+     * 字形尺寸 = 内区宽 / cols，故 {@code cols = colsFor(innerWidthPx, scale)}。
+     * 重设格子并清空文本层。
+     */
+    public void setTextScale(double scale, double innerWidthPx, double innerHeightPx) {
+        setGrid(colsFor(innerWidthPx, scale), rowsFor(innerHeightPx, scale));
+    }
 
-    public OverflowMode getOverflowMode() { return overflowMode; }
+    /** 设置光标位置（格子坐标，1 起；自动收拢到格子范围内）。 */
+    public void setCursorPos(int col, int row) {
+        this.cursorCol = clamp(col, 1, cols);
+        this.cursorRow = clamp(row, 1, rows);
+    }
 
-    // ── 修改 ──
+    public void setTextColour(int colour) { this.textColour = colour & 0xFFFFFF; }
 
-    public void setTextScale(double scale) {
-        this.textScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
+    /** 设置图形层默认层级（越大越靠前）。 */
+    public void setZIndex(double z) { this.zIndex = z; }
+
+    /** 设置填充色块每格内缩比例（0~0.5，自动钳制）。 */
+    public void setFillPadding(double ratio) {
+        this.fillPadding = clamp(ratio, 0, MAX_FILL_PADDING);
     }
 
     public void setOverflowMode(OverflowMode mode) {
         this.overflowMode = mode != null ? mode : OverflowMode.WRAP;
     }
 
-    public void setTextColour(int colour) { this.textColour = colour & 0xFFFFFF; }
-
-    /** 设置之后 write/drawRect 未显式指定 z 时使用的默认层级。 */
-    public void setZIndex(double z) { this.zIndex = z; }
-
-    /** 设置光标位置（drawRect 坐标，原点在内区左上角），只收拢到非负。 */
-    public void setCursor(double x, double y) {
-        this.cursorX = Math.max(0, x);
-        this.cursorY = Math.max(0, y);
+    private void allocate(int c, int r) {
+        this.cols = c;
+        this.rows = r;
+        int n = c * r;
+        cells = new char[n];
+        fg = new int[n];
+        bg = new int[n];
+        java.util.Arrays.fill(cells, ' ');
+        java.util.Arrays.fill(fg, DEFAULT_TEXT_COLOUR);
+        java.util.Arrays.fill(bg, TRANSPARENT_BG);
+        cursorCol = 1;
+        cursorRow = 1;
     }
+
+    private static int clampCols(int v) { return clamp(v, 1, MAX_COLS); }
+    private static int clampRows(int v) { return clamp(v, 1, MAX_ROWS); }
+    private static int clamp(int v, int min, int max) { return Math.max(min, Math.min(max, v)); }
+    private static double clamp(double v, double min, double max) { return Math.max(min, Math.min(max, v)); }
+
+    // ── 写入（LCD 帧缓冲语义） ──
+
+    /**
+     * 从光标处逐格写入文本（支持 {@code \n} 换行，{@code \r} 忽略）。
+     * <p>
+     * 每写入一个字符覆盖该格（字符 + 当前前景色），光标右移一格；
+     * <b>背景色保持不变</b>（fill 设置的填充色不被 write 覆盖，支持「色块 + 文字」叠加）。
+     * 到达行尾时按 {@link #overflowMode} 处理：
+     * {@link OverflowMode#WRAP} 换行、{@link OverflowMode#TRUNCATE} 截断、
+     * {@link OverflowMode#ELLIPSIS} 截断并把本行末尾最多 3 格替换成 "."。
+     * 到达最后一行之后继续写入会被丢弃。
+     */
+    public void write(String text) {
+        if (text == null || text.isEmpty()) return;
+
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '\r') continue;
+            if (ch == '\n') {
+                newline();
+                continue;
+            }
+            if (cursorRow > rows) return; // 屏幕已满（最后一行之后丢弃）
+
+            // 当前字符将越过行尾：按 overflowMode 处理
+            if (cursorCol > cols) {
+                switch (overflowMode) {
+                    case TRUNCATE -> { return; }
+                    case ELLIPSIS -> { appendEllipsis(); return; }
+                    case WRAP -> newline();
+                }
+                if (cursorRow > rows) return;
+            }
+
+            int idx = index(cursorCol, cursorRow);
+            cells[idx] = ch;
+            fg[idx] = textColour;
+            cursorCol++;
+        }
+    }
+
+    /** 把当前行末尾最多 3 格替换成 "."（实现 "..."），不改变光标。 */
+    private void appendEllipsis() {
+        int row = cursorRow;
+        int end = Math.min(cols, cursorCol - 1);
+        int start = Math.max(1, end - 2);
+        for (int c = start; c <= end; c++) {
+            int idx = index(c, row);
+            cells[idx] = '.';
+        }
+    }
+
+    private void newline() {
+        cursorCol = 1;
+        cursorRow++;
+    }
+
+    /**
+     * 批量设置格子背景色（纯色填充，分段进度条用）。
+     * 只改背景色，字符与前景色不变。
+     *
+     * @param col,row 起始格（1 起）
+     * @param w,h     宽高（格，超出自动裁剪）
+     * @param colour  颜色（0xRRGGBB）
+     */
+    public void fill(int col, int row, int w, int h, int colour) {
+        int c0 = clamp(col, 1, cols);
+        int r0 = clamp(row, 1, rows);
+        int c1 = clamp(col + Math.max(0, w) - 1, 1, cols);
+        int r1 = clamp(row + Math.max(0, h) - 1, 1, rows);
+        int col24 = colour & 0xFFFFFF;
+        for (int r = r0; r <= r1; r++) {
+            for (int c = c0; c <= c1; c++) {
+                bg[index(c, r)] = col24;
+            }
+        }
+    }
+
+    /**
+     * 整屏替换（draw(batch) 的原子语义）：先清空文本层（格子 + 图形 + 光标），
+     * 再逐格写入与图形。所有格子同位置永远只有一个值，无中间态。
+     *
+     * @param newCells 每格一行：{col, row, char, fg, bg}（col/row 1 起）
+     */
+    public void replaceAll(List<int[]> newCells, List<Rect> newRects,
+                           List<Line> newLines, List<Circle> newCircles) {
+        allocate(cols, rows); // 保留当前格子数，清空全部内容与光标
+        if (newCells != null) {
+            for (int[] cell : newCells) {
+                if (cell == null || cell.length < 3) continue;
+                int idx = index(cell[0], cell[1]);
+                if (idx < 0) continue;
+                cells[idx] = (char) cell[2];
+                fg[idx] = cell.length > 3 ? (cell[3] & 0xFFFFFF) : textColour;
+                bg[idx] = cell.length > 4 ? (cell[4] & 0xFFFFFF) : TRANSPARENT_BG;
+            }
+        }
+        rects.clear();
+        if (newRects != null) rects.addAll(newRects);
+        lines.clear();
+        if (newLines != null) lines.addAll(newLines);
+        circles.clear();
+        if (newCircles != null) circles.addAll(newCircles);
+    }
+
+    // ── 图形层（自由定位） ──
 
     /** 追加一个矩形绘制指令。 */
     public void addRect(double x, double y, double width, double height,
@@ -202,97 +399,40 @@ public class ScreenText {
         rects.clear();
     }
 
-    /** 清空所有图形（矩形 + 线段 + 圆），不影响文本。 */
+    /** 清空所有图形（矩形 + 线段 + 圆），不影响文本层。 */
     public void clearShapes() {
         rects.clear();
         lines.clear();
         circles.clear();
     }
 
+    /** 清空全部内容（格子 + 图形 + 光标），保留格子数。 */
     public void clear() {
-        chars.clear();
+        allocate(cols, rows);
         rects.clear();
         lines.clear();
         circles.clear();
-        cursorX = 0;
-        cursorY = 0;
-    }
-
-    /**
-     * 在光标处写入文本（支持 {@code \n} 换行，{@code \r} 忽略）。
-     * <p>
-     * 每写入一个字符，光标按「字号 × 宽高比」向右推进；{@code \n} 让光标回行首并下移一行。
-     * 当当前字符放不下（越过屏幕内区右缘）时按 {@link #overflowMode} 处理：
-     * {@link OverflowMode#WRAP} 换行、{@link OverflowMode#TRUNCATE} 截断、
-     * {@link OverflowMode#ELLIPSIS} 截断并把本行末尾最多 3 个字符替换成 "."。
-     *
-     * @param innerWidthUnits 屏幕内区宽度（drawRect 单位，用于右缘换行判定）
-     * @param z               本次写入字符的层级（越大越靠前）
-     */
-    public void write(String text, double innerWidthUnits, double z) {
-        if (text == null || text.isEmpty()) return;
-        double glyphW = glyphWidth();
-        double lineH = lineHeight();
-
-        for (int i = 0; i < text.length(); i++) {
-            char ch = text.charAt(i);
-            if (ch == '\r') continue;
-            if (ch == '\n') {
-                newline(lineH);
-                continue;
-            }
-
-            // 当前字符将越过右缘：按 overflowMode 处理
-            if (cursorX + glyphW > innerWidthUnits) {
-                switch (overflowMode) {
-                    case TRUNCATE -> { return; }
-                    case ELLIPSIS -> { appendEllipsis(); return; }
-                    case WRAP -> newline(lineH);
-                }
-            }
-
-            chars.add(new TextChar(cursorX, cursorY, ch, z));
-            cursorX += glyphW;
-        }
-    }
-
-    /** 把本行末尾最多 3 个字符替换成 "."（实现 "..."）。 */
-    private void appendEllipsis() {
-        int replaced = 0;
-        for (int i = chars.size() - 1; i >= 0 && replaced < 3; i--) {
-            TextChar c = chars.get(i);
-            if (Math.abs(c.y() - cursorY) > 1e-9) break; // 只处理当前行
-            chars.set(i, new TextChar(c.x(), c.y(), '.', c.z()));
-            replaced++;
-        }
-    }
-
-    private void newline(double lineH) {
-        cursorX = 0;
-        cursorY += lineH;
     }
 
     // ── NBT ──
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putDouble("cursorX", cursorX);
-        tag.putDouble("cursorY", cursorY);
+        tag.putInt("cols", cols);
+        tag.putInt("rows", rows);
+        tag.putInt("cursorCol", cursorCol);
+        tag.putInt("cursorRow", cursorRow);
         tag.putInt("textColour", textColour);
         tag.putDouble("zIndex", zIndex);
-        tag.putDouble("textScale", textScale);
+        tag.putDouble("fillPadding", fillPadding);
         tag.putString("overflowMode", overflowMode.name);
 
-        ListTag charList = new ListTag();
-        for (TextChar ch : chars) {
-            CompoundTag c = new CompoundTag();
-            c.putDouble("x", ch.x());
-            c.putDouble("y", ch.y());
-            c.putInt("ch", ch.ch());
-            c.putDouble("z", ch.z());
-            charList.add(c);
-        }
-        tag.put("chars", charList);
+        // 定长格子数组（紧凑编码：char[] / int[]，弃逐格 CompoundTag）
+        int[] charArray = new int[cells.length];
+        for (int i = 0; i < cells.length; i++) charArray[i] = cells[i];
+        tag.putIntArray("cells", charArray);
+        tag.putIntArray("fg", fg);
+        tag.putIntArray("bg", bg);
 
         ListTag rectList = new ListTag();
         for (Rect rect : rects) {
@@ -342,24 +482,39 @@ public class ScreenText {
     }
 
     public void load(CompoundTag tag) {
-        chars.clear();
-        if (tag.contains("chars")) {
-            ListTag charList = tag.getList("chars", Tag.TAG_COMPOUND);
-            for (int i = 0; i < charList.size(); i++) {
-                CompoundTag c = charList.getCompound(i);
-                double z = c.contains("z") ? c.getDouble("z") : DEFAULT_Z;
-                chars.add(new TextChar(c.getDouble("x"), c.getDouble("y"), (char) c.getInt("ch"), z));
+        // 旧版（自由定位，无 "cols"）为破坏性变更：忽略旧文本，用默认格子数
+        int loadCols = tag.contains("cols") ? clampCols(tag.getInt("cols")) : DEFAULT_COLS;
+        int loadRows = tag.contains("rows") ? clampRows(tag.getInt("rows")) : DEFAULT_ROWS;
+        allocate(loadCols, loadRows);
+
+        if (tag.contains("cells")) {
+            int[] charArray = tag.getIntArray("cells");
+            int[] fgArray = tag.getIntArray("fg");
+            int[] bgArray = tag.getIntArray("bg");
+            int n = Math.min(cells.length, charArray.length);
+            for (int i = 0; i < n; i++) {
+                cells[i] = (char) charArray[i];
+                if (i < fgArray.length) fg[i] = fgArray[i];
+                if (i < bgArray.length) bg[i] = bgArray[i];
             }
         }
+
+        cursorCol = clamp(tag.getInt("cursorCol"), 1, cols);
+        cursorRow = clamp(tag.getInt("cursorRow"), 1, rows);
+        textColour = tag.contains("textColour") ? tag.getInt("textColour") : DEFAULT_TEXT_COLOUR;
+        zIndex = tag.contains("zIndex") ? tag.getDouble("zIndex") : DEFAULT_Z;
+        fillPadding = clamp(tag.contains("fillPadding")
+                ? tag.getDouble("fillPadding") : DEFAULT_FILL_PADDING, 0, MAX_FILL_PADDING);
+        overflowMode = OverflowMode.byName(tag.getString("overflowMode"));
 
         rects.clear();
         if (tag.contains("rects")) {
             ListTag rectList = tag.getList("rects", Tag.TAG_COMPOUND);
             for (int i = 0; i < rectList.size(); i++) {
-                CompoundTag r = rectList.getCompound(i);
-                double z = r.contains("z") ? r.getDouble("z") : DEFAULT_Z;
-                rects.add(new Rect(r.getDouble("x"), r.getDouble("y"), r.getDouble("w"), r.getDouble("h"),
-                        r.getInt("colour"), r.getBoolean("solid"), r.getDouble("lineWidth"), z));
+                CompoundTag rectTag = rectList.getCompound(i);
+                double z = rectTag.contains("z") ? rectTag.getDouble("z") : DEFAULT_Z;
+                rects.add(new Rect(rectTag.getDouble("x"), rectTag.getDouble("y"), rectTag.getDouble("w"), rectTag.getDouble("h"),
+                        rectTag.getInt("colour"), rectTag.getBoolean("solid"), rectTag.getDouble("lineWidth"), z));
             }
         }
         lines.clear();
@@ -384,12 +539,5 @@ public class ScreenText {
                         t.getInt("colour"), t.getBoolean("solid"), t.getDouble("lineWidth"), segments, z));
             }
         }
-
-        cursorX = Math.max(0, tag.getDouble("cursorX"));
-        cursorY = Math.max(0, tag.getDouble("cursorY"));
-        textColour = tag.contains("textColour") ? tag.getInt("textColour") : DEFAULT_TEXT_COLOUR;
-        zIndex = tag.contains("zIndex") ? tag.getDouble("zIndex") : DEFAULT_Z;
-        textScale = tag.contains("textScale") ? tag.getDouble("textScale") : DEFAULT_SCALE;
-        overflowMode = OverflowMode.byName(tag.getString("overflowMode"));
     }
 }
