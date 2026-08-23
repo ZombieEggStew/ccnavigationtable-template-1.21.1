@@ -1,8 +1,8 @@
 # controlDesk × Create 坐垫联动 + 可安装控件 方案
 
 > 记录 controlDesk 的坐垫联动、可安装控件、配置存储与 Create 蓝图兼容的**设计方案与已确认决策**。
-> **阶段一（控件安装系统）已实现并验证 ✅**；坐垫联动 / 按键 / 动画 / CC 外设待实施。
-> 参考来源：aeroworks（`references/aeroworks-decompiled/.../content/controls/` 模块/socket 系统）、本项目 Monitor 模块系统、Create 坐垫（`SeatBlock`/`SeatEntity`）、本项目 RedstoneTransceiver 蓝图兼容案例（`create-schematic-nbt.md`）。
+> **阶段一（控件安装系统）✅ 已实现；阶段二（模块设置菜单 + 按键绑定 UI）✅ 已实现**；坐垫联动 / 按键驱动 / 动画 / CC 外设 / 配置保存待实施。
+> 参考来源：aeroworks（`references/aeroworks-decompiled/.../content/controls/` 模块/socket 系统 + ModuleScreen 按键捕获）、本项目 Monitor 模块系统、Create 坐垫（`SeatBlock`/`SeatEntity`）、本项目 RedstoneTransceiver 蓝图兼容案例（`create-schematic-nbt.md`）。
 
 ## 需求一句话
 
@@ -65,9 +65,32 @@ flowchart LR
 3. **Flywheel `PartialModel` 自动注册**（`PartialModelEventHandler` 在 `ModelEvent.RegisterAdditional` 遍历 `PartialModel.ALL` 注册、`BakingCompleted` 填充），**无需手动注册**；移动模型文件路径不影响加载，模型缺失会烘焙成 missing（渲染为空）。
 4. **控件模型拆分**：本体与底座分开建模（`pedal`/`pedal_right`/`pedal_base`、`joystick`/`joystick_base`），渲染需**分别挂 PartialModel**，别漏底座。
 
-## 按键与交互（待实施）
+## 模块设置菜单（✅ 已实现）
 
-- **配置界面**：对准相应元件（已安装的控件）蹲下+右键打开（对齐 Monitor 惯例）
+### 打开方式
+
+- **扳手右键** 或 **空手蹲下右键**，准星命中已安装模块（安装位 AABB）→ 打开 `screen/ControlModuleScreen`
+- 实现分层（对齐 Monitor 模式，Block 双端加载不引用 Screen）：
+  - `ControlDeskBlock.onWrenched`：命中已装模块 → 消费右键（**不旋转**）；未命中 → `IWrenchable.super`（保留扳手旋转）
+  - `ControlDeskBlock.useItemOn`：空手蹲下命中 → 消费右键
+  - `client/ControlDeskPlacementOverlay`：右键**边沿**检测（`useDown && !lastUseDown` 防连发）+（扳手 或 空手蹲下）→ `mc.setScreen(new ControlModuleScreen(pos, type))`
+
+### ControlModuleScreen
+
+- 继承 `AbstractMonitorScreen`；背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169 + 标题控件名）
+- 当前含一条双按键绑定条；**按键配置保存（onBindCaptured → BE NBT）待接入**
+
+### DoubleInputBar（双按键绑定条，`foundation/gui/widget/`）
+
+- 左右两个按键槽位（命中区 `HIT_X_1=45`/`HIT_X_2=123`/`HIT_W=47`），各带图标 + 按键名显示（槽位内居中）
+- **按键捕获（参考 aeroworks ModuleScreen）**：左键点击槽位进入捕获 → 键盘键 `InputConstants.getKey(keyCode, scanCode).getName()` / 鼠标键 `Type.MOUSE.getOrCreate(button).getName()` 均可绑定 → ESC(256) 取消；右键点击槽位清除绑定
+- 显示：未绑定 →「未绑定」（`bind_unbound`）；捕获中 → `> 内容(仅内容下划线) <` 居中，颜色不变
+- 音效：进入捕获/清除 `UI_BUTTON_CLICK`（aeroworks playUiClick 风格）、改键成功 `NOTE_BLOCK_HAT`（ScrollValueBar 风格）
+- tooltip「左键绑定 右键清除」（`bind_tip`）；完成回调 `onBindCaptured(side, keyName)`（side 0=左 1=右，空串=清除）
+
+## 按键与交互（部分实现，坐垫驱动待实施）
+
+- **配置界面**：✅ 已实现（扳手右键 / 空手蹲下右键打开模块菜单，`DoubleInputBar` 按键捕获）；按键保存到 BE 待接入
 - **按键可配置**：KeyMapping 注册（左踏板/右踏板/操纵杆 W/A/S/D），玩家设定的按键**覆盖已有按键**——自定义 KeyConflictContext（坐垫操作模式激活我们的键、原版 Q 丢物品/E 物品栏/WASD 移动失效；离开坐垫恢复）。实现前先验证 NeoForge `KeyMapping.setKeyConflictContext` 行为
 - **潜行键不覆盖**（Create 坐垫按潜行=下车，必须保留）
 - **默认按键**：Q=左踏板、E=右踏板、WASD=操纵杆（W 前推 / S 后拉 / A 左摆 / D 右摆）
@@ -99,16 +122,16 @@ flowchart LR
   1. 蓝图保存路径走 `saveAdditional`（**不走** `writeSafe`）——运行时字段要在 `saveAdditional` 层排除，光实现 `writeSafe` 没用
   2. BE **必须实现 `getUpdatePacket()`**（quill 保存读的是客户端 BE，否则存出旧配置）
   3. 配置变更后 `sendBlockUpdated` + 先落盘再保存蓝图（自动存档 ~30s 间隔，会回滚未落盘配置）
-- **阶段一已按此实现**：BE 的控件安装状态 NBT 持久化 + `getUpdatePacket` + `writeSafe` 全部就位
+- **阶段一已按此实现**：BE 的控件安装状态 NBT 持久化 + `getUpdatePacket` + `writeSafe` 全部就位；**阶段二待接入**：按键绑定配置（`DoubleInputBar.onBindCaptured` 回调 → BE NBT，含触发模式等）
 
 ## 实施顺序
 
-1. ✅ 控件安装系统：控件物品 + 安装/卸载交互 + BE 存储 + 蓝图兼容 + 安装预览 + 叠加渲染（**已完成，含踩坑经验**）
+1. ✅ 控件安装系统：控件物品 + 安装/卸载交互 + BE 存储 + 蓝图兼容 + 安装预览 + 叠加渲染（含踩坑经验）
 2. ⏳ 判定工具 + 服务端校验骨架（坐垫四邻联动 + 玩家骑乘判定，无 UI 效果，可断点验证）
 3. ⏳ 客户端按键监听 + payload 链路（重点验证按键冲突 KeyConflictContext 方案）
 4. ⏳ BE 状态 + 服务端权威更新 + 广播同步
 5. ⏳ 动画（踏板平移、操纵杆 30° 倾斜）
-6. ⏳ 配置 GUI（自绘背景/控件，蹲下右键对准控件打开；按键重绑定 + 触发模式）
+6. 🔶 配置 GUI：✅ 菜单背景 + 双按键绑定条（按键捕获）已完成；⏳ 按键配置保存到 BE（onBindCaptured → NBT + 蓝图兼容）+ 触发模式等其余控件
 7. ⏳ CC 外设 + Lua API（Lua 侧验证信号）
 
 ## 待确认 / 风险清单
@@ -117,7 +140,8 @@ flowchart LR
 |---|---|---|
 | 1 | 按键冲突方案需进游戏验证（NeoForge KeyConflictContext 对原版键的实际效果） | 按键 |
 | 2 | 按键绑定存 BE 后，多个玩家对同一 controlDesk 的按键习惯冲突如何处理（配置跟随机器 vs 跟随玩家） | 配置 |
-| 3 | 配置 GUI 的贴图/控件由用户绘制（进行中） | GUI |
+| 3 | 按键配置保存链路（`DoubleInputBar.onBindCaptured` → `ControlDeskBlockEntity` NBT + `getUpdatePacket`/`writeSafe` 蓝图兼容）待实施 | 配置 |
 | 4 | 踏板平移行程/操纵杆 30° 的具体动画参数 | 动画 |
 | 5 | 广播语义：坐垫四邻多个 controlDesk 同时响应时，各自控件安装情况不同（未安装的忽略）——需确认无额外要求 | 联动 |
-| 6 | 控件物品安装位固定为北面（模型空间 -Z 侧）预览，位置可在 `ControlDeskBlock` 的 `*_SHAPE` 常量调整——确认当前位置满意 | 安装位 |
+| 6 | 安装位固定为北侧 z0..8 三块（左踏板 x11..16 / 操纵杆 x5..11 / 右踏板 x0..5），`ControlDeskBlock` 的 `*_SHAPE` 常量可调——确认当前位置满意 | 安装位 |
+| 7 | 触发模式（按住式/切换式）配置 UI 待做 | 配置 GUI |

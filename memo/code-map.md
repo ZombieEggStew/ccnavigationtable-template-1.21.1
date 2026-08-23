@@ -82,11 +82,11 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `block/TransmissionPeripheralBlockEntity.java` | 传动外设方块实体：变速器模式（ratio/targetSpeed）与舵机模式（服务器权威 ±180° 角度定位 + Lua 控制 + 每 tick 同步，类 TiltAdapter）及 CC 外设实例 |
 | `block/TransmissionPeripheralRenderer.java` | 传动外设的 Create 动态方块实体渲染（舵机模式下输出端按权威角度渲染） |
 | `block/TransmissionPeripheralVisual.java` | 传动外设的 Create Flywheel Visual 实现（OrientedInstance，舵机模式输出端角度渲染） |
-| `block/ControlDeskBlock.java` | 控制台方块：底座由 blockstate 静态模型渲染；控件安装/卸载交互（手持 pedal/joystick 右键安装、扳手蹲下右键卸载掉落、`getDrops` 破坏掉落）；选择框/碰撞箱 = 单块 `[0,0,8]~[16,8,16]`（安装不改变）；`installBounds` 提供安装位世界 AABB（预览框用）；`FACING` 四向朝向；扳手旋转 `getRotatedBlockState` 顺时针 90° | 控制台朝向、碰撞、控件安装/卸载、安装位 |
+| `block/ControlDeskBlock.java` | 控制台方块：底座由 blockstate 静态模型渲染；控件安装/卸载/菜单交互（手持 pedal/joystick 右键安装、扳手蹲下右键按点击位置拆单个模块、`getDrops` 破坏掉落、`onWrenched`/`useItemOn` 命中已装模块时消费右键供菜单打开、未命中保留扳手旋转）；选择框/碰撞箱 = 单块 `[0,0,8]~[16,8,16]`；`installBounds` 安装位 AABB + `hitBounds` 闭区间容差命中（不能用 `AABB.contains`，点击位置在桌体面 z=8 = 框的 maxZ）；`FACING` 四向朝向 | 控制台朝向、碰撞、控件安装/卸载、菜单交互、安装位 |
 | `block/ControlDeskBlockEntity.java` | 控制台方块实体：`ControlType`（PEDAL 一对 / JOYSTICK）+ `install`/`remove`/`isInstalled`；NBT 持久化（`PedalInstalled`/`JoystickInstalled`）+ `getUpdatePacket`/`writeSafe`（`PartialSafeNBT`，蓝图兼容）；无 ticker | 控制台控件状态、蓝图兼容、动画数据接入 |
 | `block/ControlDeskVisual.java` | 控制台 Flywheel Visual（`SimpleDynamicVisual`）：按 BE 安装状态**动态创建/删除** TransformedInstance，叠加 底座→本体（踏板双底座/双踏板、操纵杆底座/杆把手）；每帧 `setIdentityTransform()` 必须（translate 累加语义，否则漂移） | 控制台 Flywheel 渲染、安装控件渲染、动画 |
 | `block/ControlDeskRenderer.java` | 控制台原版 BER 回退渲染（Flywheel 不可用时）：按 BE 安装状态叠加控件 PartialModel（底座→本体）；渲染盒 1.5³ 防操纵杆把手（y≈17.4/16）被视锥剔除 | 控制台 BER 回退路径 |
-| `client/ControlDeskPlacementOverlay.java` | 控件安装预览：手持 pedal/joystick + 准星指向 controlDesk（原版 `mc.hitResult`）→ Catnip Outliner 在安装位显示预览框（绿=可装/红=已装，随 FACING 旋转）；每 tick 重新 show | 安装预览、安装位调整 |
+| `client/ControlDeskPlacementOverlay.java` | 控制台客户端交互：控件安装预览（手持物品，绿=可装/红=已装）；扳手拆除预览（已装控件默认绿、视角命中安装位变红）；**模块菜单打开**（右键边沿 +（扳手右键 或 空手蹲下右键）+ 命中已装模块 → `ControlModuleScreen`）；命中判定共用 `ControlDeskBlock.hitBounds` | 安装预览、拆除预览、菜单打开、安装位调整 |
 
 ### 控制台模型布局（北向基准）
 
@@ -95,7 +95,7 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
   - 脚踏板：`pedal.json` 左踏板（脚踏面 `x12..15, y2..7, z3..4`，22.5° x 轴倾斜，枢轴 `[13,2,3]` + 踏板杆 `x13..14, y3..4, z4..9`）；`pedal_right.json` 右踏板（x 镜像，脚踏面 `x1..4`）；`pedal_base.json` **一个模型含左右双底座**（`x12..15`/`x1..4`, `z7.5..9.5`）。
   - 操纵杆：`joystick.json`（杆 `x7..9, y3..12, z2..4` + 把手 `x6.8..9.2, y12..17.4, z1.8..4.2`）；`joystick_base.json`（底座 `x5..11, y0..8, z0..8`）。
   - 物品栏模型：`models/item/pedal.json` → `block/pedal/pedal_item`；`models/item/joystick.json` → `block/joystick/joystick_item`（均带 display 变换）。
-- 安装位（预览框）：`ControlDeskBlock.installBounds`，北向基准 `*_SHAPE` 常量 + `VoxelShaper` 随 FACING 旋转；PEDAL 显示左右两框，JOYSTICK 一框。调整位置改 `ControlDeskBlock` 顶部常量。
+- 安装位（预览/拆除/菜单命中共用）：`ControlDeskBlock.installBounds`，北向基准 `*_SHAPE` 常量 + `VoxelShaper` 随 FACING 旋转；北侧空区 z0..8 分三块：左踏板 `x11..16`、操纵杆 `x5..11`、右踏板 `x0..5`（操作者面朝南，左=东=+X）。调整位置改 `ControlDeskBlock` 顶部 `*_SHAPE` 常量。
 - 渲染约定（已实现）：模型按与底座相同的方块空间（北向）建模，渲染时绕方块中心 Y 旋转到 FACING（与 blockstate 对底座模型的 y 旋转一致）；叠加顺序 底座→本体。
 - 控件物品注册：`item/MyModItems.java` 的 `CONTROL_PEDAL`（"pedal"）/ `CONTROL_JOYSTICK`（"joystick"）。
 
@@ -120,18 +120,20 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `screen/MyModMenus.java` | 容器菜单类型注册（Peripheral Extender / Redstone Transceiver）；Monitor 的两个 GUI 不走菜单系统，由客户端直接 `mc.setScreen` 打开 |
 | `screen/AbstractMonitorScreen.java` | 中间层 Screen 基类：统一在控件之上渲染子控件 tooltip（`TooltipWidget` 与 Catnip `AbstractSimiWidget`），禁用原版渐变背景，非暂停界面 |
 | `screen/MonitorModuleScreen.java` | Monitor 模块/屏幕通用配置界面（继承 `AbstractMonitorScreen`）；ID 滚轮 + 悬浮文本输入条 + 类型专属配置区，汇总后发送 `ModuleConfigPayload` |
+| `screen/ControlModuleScreen.java` | controlDesk 控件（模块）设置菜单（继承 `AbstractMonitorScreen`）：背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169）；当前含双按键绑定条（`DoubleInputBar`），按键配置保存待接入 BE |
 | `screen/MonitorMenuScreen.java` | Monitor 自身菜单（蹲下+右键空白处/扳手右键打开，继承 `AbstractMonitorScreen`）；频道、背景、俯仰/偏航/偏移共五条滚轮，关闭时发送 `MonitorChannelPayload`/`MonitorBackgroundPayload`/`MonitorTransformPayload` |
 | `screen/ModuleConfigSection.java` | 模块专属配置区接口及空实现 |
 | `screen/ModuleConfigSections.java` | 按模块名称创建配置区的工厂（目前仅 KNOB → `KnobConfigSection`，其余走 Empty）；每次必须创建新实例 |
 | `screen/KnobConfigSection.java` | 旋钮专属配置区：角度范围滚轮条（0-360）+ 卡位开关 |
 | `screen/LoadModeHelper.java` | GUI 中负载模式的显示和选择辅助逻辑 |
-| `foundation/gui/MyIcons.java` | Create 风格 GUI 图标定义（频道/背景/俯仰/偏航/偏移/ID/提示/旋钮等） |
-| `foundation/gui/MyUIElements.java` | GUI 背景元素（横条/输入框背景等）定义 |
+| `foundation/gui/MyIcons.java` | Create 风格 GUI 图标定义（频道/背景/俯仰/偏航/偏移/ID/提示/旋钮、控制台 UP/DOWN/LEFT/RIGHT/鼠标/键盘/PEDAL_* 等） |
+| `foundation/gui/MyUIElements.java` | GUI 背景元素（横条/输入框背景、控制台窗口背景 `BACKGROUND` 192×169、双输入背景 `INPUT_DOUBLE` 等）定义 |
 | `foundation/gui/widget/TooltipWidget.java` | 具备独立 tooltip 渲染能力的控件接口，由 Screen（如 `AbstractMonitorScreen`）统一调用 |
 | `foundation/gui/widget/HoverTintIconButton.java` | 带悬停染色的图标按钮 |
 | `foundation/gui/widget/ToggleButton.java` | 可选中状态的图标切换按钮 |
 | `foundation/gui/widget/ScrollValueBar.java` | 滚轮数值输入条：频道/ID 跳过占用、数值范围模式（`range`）、离散选项模式、内嵌开关（`withToggleButton`）、tooltip |
 | `foundation/gui/widget/TextInputBar.java` | 长文本输入条（横条 + 图标 + 长输入框 + 内嵌 EditBox） |
+| `foundation/gui/widget/DoubleInputBar.java` | 双按键绑定条（横条 + 左右两个按键槽位）：点击进入捕获（键盘/鼠标键可绑，存 `InputConstants.Key.getName()` 字符串）、ESC 取消、右键清除；捕获态显示 `> 内容(下划线) <` 居中；点击/改键音效；`onBindCaptured(side, keyName)` 回调（参考 aeroworks ModuleScreen） |
 
 GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送 `ModuleConfigPayload` → `CCPeripheraExtender` 在服务端调用 `MonitorBlockEntity.applyModuleConfig` → `GridState` 保存。`MonitorMenuScreen` 关闭时发送频道/背景/可动变换三个 payload。
 
@@ -203,6 +205,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | 新增方块/物品 | `block/MyModBlocks.java` / `item/MyModItems.java` | `MyModBlockEntities.java`、资源模型、语言文件、创造模式物品栏 |
 | 修改控制台（Control Desk）朝向、碰撞或控件安装 | `block/ControlDeskBlock.java`（朝向/碰撞/安装/卸载/安装位）、`block/ControlDeskBlockEntity.java`（控件状态/NBT/蓝图） | `ControlDeskVisual.java` / `ControlDeskRenderer.java`（渲染）、`client/ControlDeskPlacementOverlay.java`（预览）、`assets/ccpe/models/block/control_desk_1/` |
 | 修改控制台控件物品（踏板/操纵杆）或安装位 | `item/MyModItems.java`（`CONTROL_PEDAL` / `CONTROL_JOYSTICK`）、`ControlDeskBlock.installBounds`（安装位 shape 常量） | `assets/ccpe/models/item/pedal.json` / `joystick.json`、`assets/ccpe/models/block/pedal/`、`assets/ccpe/models/block/joystick/`、语言文件 |
+| 修改控制台模块设置菜单/按键绑定 | `screen/ControlModuleScreen.java`、`foundation/gui/widget/DoubleInputBar.java`（按键捕获） | `ControlDeskPlacementOverlay`（菜单打开）、`ControlDeskBlock`（右键消费）、语言文件、`MyUIElements`/`MyIcons` |
 | 修改 Monitor 右键或射线命中 | `block/MonitorBlock.java`（`intersectScreen`/`rayToGrid`）、`client/MonitorHitDetector.java` | `client/MonitorGridOverlay.java`、`MonitorClientRegistry.java` |
 | 修改可动变换（俯仰/偏航/偏移） | `block/MonitorBlock.java`（枢轴常量）、`client/MonitorTransform.java` | `MonitorBlockEntity.setAngles`、`MonitorTransformPayload`、`MonitorMenuScreen`、`MonitorRenderer` |
 | 修改 Monitor 选择框描边 | `client/MonitorOutlineRenderer.java` | `MonitorTransform`、`MonitorBlock` 枢轴常量 |
