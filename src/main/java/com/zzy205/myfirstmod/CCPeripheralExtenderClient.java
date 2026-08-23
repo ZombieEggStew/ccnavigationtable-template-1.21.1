@@ -4,6 +4,7 @@ import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
 import com.zzy205.myfirstmod.block.ControlDeskVisual;
+import com.zzy205.myfirstmod.block.ControlDeskRenderer;
 import com.zzy205.myfirstmod.block.MonitorPreloadedModels;
 import com.zzy205.myfirstmod.block.MonitorRenderer;
 import com.zzy205.myfirstmod.block.MyModPartialModels;
@@ -69,6 +70,9 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.transmission_peripheral_entity.get(),
                 TransmissionPeripheralRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.control_desk_entity.get(),
+                ControlDeskRenderer::new);
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.monitor_entity.get(),
                 MonitorRenderer::new);
