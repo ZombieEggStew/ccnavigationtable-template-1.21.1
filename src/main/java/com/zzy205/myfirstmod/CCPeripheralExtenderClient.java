@@ -5,6 +5,7 @@ import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
 import com.zzy205.myfirstmod.block.ControlDeskVisual;
 import com.zzy205.myfirstmod.block.ControlDeskRenderer;
+import com.zzy205.myfirstmod.block.MonitorVisual;
 import com.zzy205.myfirstmod.block.MonitorPreloadedModels;
 import com.zzy205.myfirstmod.block.MonitorRenderer;
 import com.zzy205.myfirstmod.block.MyModPartialModels;
@@ -58,6 +59,14 @@ public class CCPeripheralExtenderClient {
         SimpleBlockEntityVisualizer.builder(MyModBlockEntities.control_desk_entity.get())
                 .factory(ControlDeskVisual::new)
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
+        // 注册 Flywheel Visual（Monitor 外壳：bearing/case 实例化渲染）。
+        // 动态内容（背景/模块/屏幕/文字）仍在 BER，故不跳过 vanilla 渲染；
+        // MonitorRenderer 内部会在 Flywheel 可用时跳过外壳绘制。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.monitor_entity.get())
+                .factory(MonitorVisual::new)
+                .neverSkipVanillaRender()
                 .apply();
 
         // 初始化自定义 PartialModel（参照 Create 的 AllPartialModels.init()）

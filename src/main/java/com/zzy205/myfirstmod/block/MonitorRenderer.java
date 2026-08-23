@@ -12,6 +12,7 @@ import com.zzy205.myfirstmod.client.MonitorGridOverlay;
 import com.zzy205.myfirstmod.client.MonitorBackgrounds;
 import com.zzy205.myfirstmod.client.MonitorTransform;
 import com.zzy205.myfirstmod.client.ScreenTextRenderer;
+import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -26,6 +27,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.client.model.data.ModelData;
 
 import java.util.HashMap;
@@ -63,6 +65,10 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         BlockPos bePos = be.getBlockPos();
         Direction facing = be.getBlockState().getValue(MonitorBlock.FACING);
 
+        // Flywheel 可用时外壳（bearing/case）由 MonitorVisual 实例化渲染，BER 只负责动态内容
+        Level level = be.getLevel();
+        boolean shellInstanced = level != null && VisualizationManager.supportsVisualization(level);
+
         poseStack.pushPose();
         // 底座由方块模型（blockstate → my_monitor_base）固定渲染，BER 只负责可动部分。
         // facing → offset → yaw（外层到内层）
@@ -71,17 +77,21 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         MonitorTransform.applyYaw(poseStack, be.getYawAngle());
 
         // bearing：随 facing + offset + yaw，不随 pitch
-        BakedModel bearingModel = MonitorPreloadedModels.getMonitorBearing();
-        if (bearingModel != null) {
-            renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), bearingModel, light, overlay);
+        if (!shellInstanced) {
+            BakedModel bearingModel = MonitorPreloadedModels.getMonitorBearing();
+            if (bearingModel != null) {
+                renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), bearingModel, light, overlay);
+            }
         }
 
         // case 与所有屏幕内容：随 facing + offset + yaw + pitch。
         // case 模型带 render_type=cutout（前脸有屏幕开孔），必须用 cutout 片，否则背景/屏幕文字被不透明前脸遮挡。
         MonitorTransform.applyPitch(poseStack, be.getPitchAngle());
-        BakedModel caseModel = MonitorPreloadedModels.getMonitorCase();
-        if (caseModel != null) {
-            renderModel(poseStack, buffer.getBuffer(Sheets.cutoutBlockSheet()), caseModel, light, overlay);
+        if (!shellInstanced) {
+            BakedModel caseModel = MonitorPreloadedModels.getMonitorCase();
+            if (caseModel != null) {
+                renderModel(poseStack, buffer.getBuffer(Sheets.cutoutBlockSheet()), caseModel, light, overlay);
+            }
         }
 
         // ── 背景面板（始终渲染，覆盖原 screen 元素的面板贴图） ──
@@ -94,12 +104,40 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         beAnims.keySet().removeIf(id -> !grid.getAllModules().containsKey(id));
 
         for (var mod : grid.getAllModules().values()) {
+            var bhv = ModuleRenderBehavior.of(mod.type());
+            boolean isKnob = mod.type() == ModuleType.KNOB;
+
+            float px = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + mod.gridX()) / 16f + bhv.offsetX();
+            float py = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + mod.gridY()) / 16f + bhv.offsetY();
+            float pz = MonitorBlock.SCREEN_Z / 16f + bhv.offsetZ();
+
+            if (shellInstanced) {
+                // 模块模型由 MonitorVisual（Flywheel）实例化渲染；BER 只画模块上的文字与按钮灯带
+                Float visualAnim = MonitorVisual.getModuleAnim(bePos, mod.id());
+                float next = visualAnim != null ? visualAnim
+                        : (isKnob ? grid.getKnobAngle(mod.id()) : (grid.isPressed(mod.id()) ? 1f : 0f));
+
+                poseStack.pushPose();
+                poseStack.translate(px, py, pz);
+                bhv.applyInitialRotation(poseStack);
+                if (isKnob) {
+                    renderKnobAngle(poseStack, buffer, bePos, mod.id(), light,
+                            grid.getKnobAngle(mod.id()), grid.getModuleConfig(mod.id()));
+                }
+                if (mod.type() == ModuleType.BUTTON_1X1) {
+                    float lightLevel = grid.isLightCodeControlled(mod.id())
+                            ? grid.getLightBrightness(mod.id()) : next;
+                    ((ModuleRenderBehavior.ButtonBehavior) bhv).renderIndicator(poseStack, buffer, next, lightLevel);
+                    renderButtonLabel(poseStack, buffer, grid.getButtonLabel(mod.id()), next, light);
+                }
+                poseStack.popPose();
+                continue;
+            }
+
+            // ── Flywheel 不可用：BER 全量渲染（含模块模型与部件） ──
             BakedModel model = MonitorPreloadedModels.getModel(mod.type());
             if (model == null) continue;
 
-            var bhv = ModuleRenderBehavior.of(mod.type());
-
-            boolean isKnob = mod.type() == ModuleType.KNOB;
             float target;
             if (isKnob) {
                 // 拖拽中优先使用客户端视觉角度（卡位微扭动）；否则跟随服务端角度
@@ -108,28 +146,11 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
             } else {
                 target = grid.isPressed(mod.id()) ? 1f : 0f;
             }
-            float current = beAnims.computeIfAbsent(mod.id(), ignored -> target);
-            float delta = target - current;
-            if (isKnob) {
-                delta %= 360f;
-                if (delta > 180f) delta -= 360f;
-                else if (delta < -180f) delta += 360f;
-            }
-            float speed = delta >= 0f ? bhv.animPressSpeed() : bhv.animReleaseSpeed();
-            // 动画速度定义为 20 TPS 下的每 tick 逼近比例，按实际帧时间推进，避免重绘频率改变动画观感。
-            float frameTime = Math.min(Minecraft.getInstance().getTimer().getGameTimeDeltaTicks(), 2f);
-            float next = current + delta * (1f - (float) Math.pow(1f - speed, frameTime));
-            if (!isKnob && Math.abs(next - target) < 0.01f) next = target;
-            if (isKnob && Math.abs(delta) < 0.01f) next = current;
-            beAnims.put(mod.id(), next);
+            float next = ModuleRenderBehavior.stepAnim(beAnims, mod.id(), isKnob, target,
+                    bhv.animPressSpeed(), bhv.animReleaseSpeed());
 
             poseStack.pushPose();
-
-            float px = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + mod.gridX()) / 16f + bhv.offsetX();
-            float py = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + mod.gridY()) / 16f + bhv.offsetY();
-            float pz = MonitorBlock.SCREEN_Z / 16f + bhv.offsetZ();
             if (bhv.usePressDepth()) pz += PRESS_DEPTH * next / 16f;
-
             poseStack.translate(px, py, pz);
             bhv.applyInitialRotation(poseStack);
 

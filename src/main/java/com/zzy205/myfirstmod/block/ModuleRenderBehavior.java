@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.math.Axis;
 import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.monitor.ModuleType;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
@@ -51,6 +52,32 @@ public abstract class ModuleRenderBehavior {
 
     public static ModuleRenderBehavior of(ModuleType type) {
         return REGISTRY.getOrDefault(type, new ButtonBehavior());
+    }
+
+    /**
+     * 单步动画逼近（BER 与 Flywheel Visual 共用的单一实现）：20 TPS 下每 tick 逼近 speed 比例，
+     * 按实际帧时间推进，避免重绘频率改变动画观感。返回下一帧动画值（已写入 anims）。
+     *
+     * @param anims       动画值表（按 moduleId 存放）
+     * @param isKnob      旋钮用角度语义（360° 取最短路径），按钮/开关用 0..1 按压语义
+     * @param target      目标值（旋钮为累计角度，其余为 0/1）
+     */
+    public static float stepAnim(Map<Integer, Float> anims, int moduleId, boolean isKnob, float target,
+                                 float pressSpeed, float releaseSpeed) {
+        float current = anims.computeIfAbsent(moduleId, ignored -> target);
+        float delta = target - current;
+        if (isKnob) {
+            delta %= 360f;
+            if (delta > 180f) delta -= 360f;
+            else if (delta < -180f) delta += 360f;
+        }
+        float speed = delta >= 0f ? pressSpeed : releaseSpeed;
+        float frameTime = Math.min(Minecraft.getInstance().getTimer().getGameTimeDeltaTicks(), 2f);
+        float next = current + delta * (1f - (float) Math.pow(1f - speed, frameTime));
+        if (!isKnob && Math.abs(next - target) < 0.01f) next = target;
+        if (isKnob && Math.abs(delta) < 0.01f) next = current;
+        anims.put(moduleId, next);
+        return next;
     }
 
     // ── 子类覆写 ──
@@ -105,7 +132,8 @@ public abstract class ModuleRenderBehavior {
     // ── 默认：按钮行为 ──
 
     public static class ButtonBehavior extends ModuleRenderBehavior {
-        private static final float PRESS_DEPTH = 0.2f;
+        /** 按钮 head 按压凹陷深度（模型像素），Flywheel 实例化与 BER 共用 */
+        public static final float PRESS_DEPTH = 0.2f;
 
         /** 灯带平面范围（模型像素，1px=1/16 块），与 button_1_indicator 模型一致 */
         private static final float INDICATOR_X0 = 0.1875f, INDICATOR_X1 = 0.8125f;
@@ -146,17 +174,21 @@ public abstract class ModuleRenderBehavior {
             }
 
             // ② 灯带：常显不透明面片，颜色随 lightLevel 从灰(0x666666)渐变到纯绿，避免半透明透出背后世界
-            if (indicatorKey != null) {
-                ps.pushPose();
-                float iz = (INDICATOR_Z_PX + PRESS_DEPTH * anim) / 16f;
-                float r = Mth.lerp(lightLevel, 0.2f, 0.0f);
-                float g = Mth.lerp(lightLevel, 0.2f, 1.0f);
-                float b = Mth.lerp(lightLevel, 0.2f, 0.0f);
-                renderFlatQuad(ps, buffer,
-                        INDICATOR_X0 / 16f, INDICATOR_Y0 / 16f, INDICATOR_X1 / 16f, INDICATOR_Y1 / 16f, iz,
-                        r, g, b, 1f);
-                ps.popPose();
-            }
+            renderIndicator(ps, buffer, anim, lightLevel);
+        }
+
+        /** 仅绘制灯带面片（模块模型由 Flywheel 实例化时，BER 只画灯带与文字）。 */
+        public void renderIndicator(PoseStack ps, MultiBufferSource buffer, float anim, float lightLevel) {
+            if (indicatorKey == null) return;
+            ps.pushPose();
+            float iz = (INDICATOR_Z_PX + PRESS_DEPTH * anim) / 16f;
+            float r = Mth.lerp(lightLevel, 0.2f, 0.0f);
+            float g = Mth.lerp(lightLevel, 0.2f, 1.0f);
+            float b = Mth.lerp(lightLevel, 0.2f, 0.0f);
+            renderFlatQuad(ps, buffer,
+                    INDICATOR_X0 / 16f, INDICATOR_Y0 / 16f, INDICATOR_X1 / 16f, INDICATOR_Y1 / 16f, iz,
+                    r, g, b, 1f);
+            ps.popPose();
         }
     }
 
