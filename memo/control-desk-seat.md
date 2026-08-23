@@ -79,8 +79,8 @@ flowchart LR
 ### 控件设置菜单（JoystickModuleScreen / PedalModuleScreen）
 
 - 两屏幕均继承 `AbstractMonitorScreen`；背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169 + 标题控件名）；`ControlDeskPlacementOverlay` 按命中控件类型分发
-- `JoystickModuleScreen`（操纵杆）：双按键绑定条 UP/DOWN（W/S 前后，默认 w/s）+ LEFT/RIGHT（A/D 左右，默认 a/d）+ 双滚轮条 `DoubleScrollValueBar`（左=回正时间，icon RECOVER，默认 20 tick、范围 0..100，已持久化；右=档位模式，ToggleButton icon=INDEX，默认 4 档、范围 1..8，待持久化）；`PedalModuleScreen`（脚踏板）：双按键绑定条 左踏板/右踏板（PEDAL_LEFT_UP / PEDAL_RIGHT_UP）
-- **操纵杆配置已全部持久化**：BE NBT（`JoystickReturnTime` + `JoystickKeyUp/Down/Left/Right`，默认 w/s/a/d，旧存档缺失字段时保持默认）+ `saveAdditional`/`loadAdditional`/`writeSafe`/`getUpdateTag` 四路径 + `getUpdatePacket` 同步；屏幕打开时读客户端 BE 初始化、`onClose` 经 `ControlDeskConfigPayload`（pos + returnTime + 4 键）→ 服务端 `setJoystickReturnTime` + `setJoystickKeys`
+- `JoystickModuleScreen`（操纵杆）布局（自上而下）：① 前后键位绑定条（W/S，默认 w/s）② 前后轴设置条 `DoubleScrollValueBar`（左=回正时间 icon RECOVER 默认 20 tick 范围 0..100；右=档位模式 ToggleButton icon=INDEX 默认 4 档范围 1..8）③ 左右键位绑定条（A/D，默认 a/d）④ 左右轴设置条（同上结构）；`PedalModuleScreen`（脚踏板）：双按键绑定条 左踏板/右踏板（PEDAL_LEFT_UP / PEDAL_RIGHT_UP）
+- **操纵杆配置已全部持久化**：BE NBT（两轴回正时间 `JoystickReturnTime`/`JoystickReturnTimeYaw` + 两轴档位模式 `GearModePitch`/`GearCountPitch`/`GearModeYaw`/`GearCountYaw` + 四向按键 `JoystickKeyUp/Down/Left/Right`，旧存档缺失字段时保持默认）+ `saveAdditional`/`loadAdditional`/`writeSafe`/`getUpdateTag` 四路径 + `getUpdatePacket` 同步；屏幕打开时读客户端 BE 初始化、`onClose` 经 `ControlDeskConfigPayload`（pos + 两轴回正时间 + 两轴档位开关/档位数 + 4 键，共 11 字段）→ 服务端 setter（`setJoystickReturnTime`/`setJoystickReturnTimeYaw`/`setGearConfig`/`setJoystickKeys`）
 
 ### DoubleInputBar（双按键绑定条，`foundation/gui/widget/`）
 
@@ -125,7 +125,7 @@ flowchart LR
   2. BE **必须实现 `getUpdatePacket()`**（quill 保存读的是客户端 BE，否则存出旧配置）
   3. 配置变更后 `sendBlockUpdated` + 先落盘再保存蓝图（自动存档 ~30s 间隔，会回滚未落盘配置）
 - **阶段一已按此实现**：BE 的控件安装状态 NBT 持久化 + `getUpdatePacket` + `writeSafe` 全部就位
-- **操纵杆配置已持久化**：回正时间 + 四向按键（默认 w/s/a/d）存 BE NBT 四路径全覆盖；`JoystickModuleScreen` 打开时读客户端 BE 初始化、`onClose` 经 `ControlDeskConfigPayload` → 服务端 setter（`notifyChange` 同步）
+- **操纵杆配置已全部持久化**：两轴回正时间 + 两轴档位模式（开关 + 档位数，默认关 / 4 档）+ 四向按键（默认 w/s/a/d）存 BE NBT 四路径全覆盖；`JoystickModuleScreen` 打开时读客户端 BE 初始化、`onClose` 经 `ControlDeskConfigPayload`（11 字段）→ 服务端 setter（`notifyChange` 同步）
 - **待接入**：脚踏板按键绑定配置 + 触发模式（`onBindCaptured` → BE NBT）
 
 ## 实施顺序
@@ -135,7 +135,7 @@ flowchart LR
 3. ⏳ 客户端按键监听 + payload 链路（重点验证按键冲突 KeyConflictContext 方案）
 4. ⏳ BE 状态 + 服务端权威更新 + 广播同步
 5. ⏳ 动画（踏板平移、操纵杆 30° 倾斜）
-6. 🔶 配置 GUI：✅ 菜单背景 + 双按键绑定条（按键捕获）+ 回正时间滚轮条 + 操纵杆配置持久化 已完成；⏳ 脚踏板按键绑定/触发模式配置 + 其余控件
+6. 🔶 配置 GUI：✅ 菜单背景 + 双按键绑定条 + 双滚轮条（回正/档位）+ 操纵杆全部配置持久化 已完成；⏳ 脚踏板按键绑定/触发模式配置 + 其余控件
 7. ⏳ CC 外设 + Lua API（Lua 侧验证信号）
 
 ## 待确认 / 风险清单

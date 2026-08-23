@@ -19,7 +19,14 @@ import net.neoforged.neoforge.network.PacketDistributor;
 /**
  * 操纵杆设置菜单 —— 背景复用 {@link MonitorModuleScreen}（gui_2.png 同区域）。
  * 打开方式：手持扳手右键 或 空手蹲下右键，准星命中已安装的操纵杆（由客户端 ControlDeskPlacementOverlay 打开）。
- * 当前阶段：窗口背景 + 标题 + 两条按键双输入条（W/S 前后、A/D 左右）+ 双滚轮条（左=回正时间[已持久化]，右=档位模式[待持久化]）。
+ * 布局（自上而下）：
+ * <ol>
+ *   <li>前后键位绑定条（W/S）</li>
+ *   <li>前后轴设置条（回正时间 + 档位模式，双滚轮条）</li>
+ *   <li>左右键位绑定条（A/D）</li>
+ *   <li>左右轴设置条（回正时间 + 档位模式，双滚轮条）</li>
+ * </ol>
+ * 全部配置已持久化（两轴回正时间 + 两轴档位模式 + 四向按键）。
  */
 public class JoystickModuleScreen extends AbstractMonitorScreen {
 
@@ -33,22 +40,22 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
     private static final int DONE_BTN_RIGHT = 25;
     private static final int DONE_BTN_BOTTOM = 24;
 
-    // ── 横条布局 ──
+    // ── 横条布局（交替：键位绑定条 ↔ 轴设置条） ──
     private static final int BAR_TEX_H = 28;
-    private static final int KEY_BAR_Y = 18; // 首条（按键绑定条）相对窗口顶部的偏移
-    private static final int CONFIG_BAR_Y = KEY_BAR_Y + 2 * BAR_TEX_H + 2; // 双滚轮条（两条绑定条下方，留 2px 间距）
-
-    // 档位模式（档位数）：默认 4，范围 1..8
-    private static final int GEAR_DEFAULT = 4;
-    private static final int GEAR_MIN = 1;
-    private static final int GEAR_MAX = 8;
+    private static final int KEY_BAR_Y = 18;                                      // 1. 前后键位绑定条（W/S）
+    private static final int PITCH_CONFIG_BAR_Y = KEY_BAR_Y + BAR_TEX_H - 1;      // 2. 前后轴设置条
+    private static final int YAW_KEY_BAR_Y = PITCH_CONFIG_BAR_Y + BAR_TEX_H + 2;  // 3. 左右键位绑定条（A/D）
+    private static final int YAW_CONFIG_BAR_Y = YAW_KEY_BAR_Y + BAR_TEX_H -1 ;    // 4. 左右轴设置条
+    // 档位模式与回正时间的默认值/范围常量统一在 ControlDeskBlockEntity 定义
 
     private final BlockPos deskPos;
 
-    private DoubleInputBar inputBar;        // W/S（前后）双按键绑定条
-    private DoubleInputBar inputBar2;       // A/D（左右）双按键绑定条
-    private ToggleButton gearToggle;        // 档位模式开关（挂在双滚轮条右图标位）
-    private DoubleScrollValueBar configBar; // 双滚轮条：左=回正时间（icon RECOVER），右=档位模式
+    private DoubleInputBar inputBar;        // 1. W/S（前后）键位绑定条
+    private DoubleScrollValueBar pitchBar;  // 2. 前后轴设置条（回正时间 + 档位模式）
+    private DoubleInputBar inputBar2;       // 3. A/D（左右）键位绑定条
+    private DoubleScrollValueBar yawBar;    // 4. 左右轴设置条（回正时间 + 档位模式）
+    private ToggleButton gearTogglePitch;   // 前后轴档位模式开关（挂在 pitchBar 右图标位）
+    private ToggleButton gearToggleYaw;     // 左右轴档位模式开关（挂在 yawBar 右图标位）
 
     public JoystickModuleScreen(BlockPos deskPos) {
         super(Component.empty());
@@ -62,6 +69,11 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
 
         // 从客户端 BE 读取当前配置（服务端权威数据经 getUpdatePacket / 区块加载同步到客户端）；BE 缺失时用默认值
         int returnTime = ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME;
+        int returnTimeYaw = ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME;
+        boolean gearModePitch = false;
+        int gearCountPitch = ControlDeskBlockEntity.DEFAULT_GEAR_COUNT;
+        boolean gearModeYaw = false;
+        int gearCountYaw = ControlDeskBlockEntity.DEFAULT_GEAR_COUNT;
         String keyUp = ControlDeskBlockEntity.DEFAULT_JOYSTICK_KEY_UP;
         String keyDown = ControlDeskBlockEntity.DEFAULT_JOYSTICK_KEY_DOWN;
         String keyLeft = ControlDeskBlockEntity.DEFAULT_JOYSTICK_KEY_LEFT;
@@ -69,47 +81,40 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
         if (this.minecraft != null && this.minecraft.level != null
                 && this.minecraft.level.getBlockEntity(deskPos) instanceof ControlDeskBlockEntity desk) {
             returnTime = desk.getJoystickReturnTime();
+            returnTimeYaw = desk.getJoystickReturnTimeYaw();
+            gearModePitch = desk.isGearModePitch();
+            gearCountPitch = desk.getGearCountPitch();
+            gearModeYaw = desk.isGearModeYaw();
+            gearCountYaw = desk.getGearCountYaw();
             keyUp = desk.getJoystickKeyUp();
             keyDown = desk.getJoystickKeyDown();
             keyLeft = desk.getJoystickKeyLeft();
             keyRight = desk.getJoystickKeyRight();
         }
 
-        // 双按键绑定条：上条 W/S（前后），下条 A/D（左右）；onClose 时经 getLeftKey/getRightKey 写回 BE
+        // 1. 前后键位绑定条（W/S）
         this.inputBar = new DoubleInputBar(
                 winLeft, winTop + KEY_BAR_Y, WIN_W, BAR_TEX_H, MyIcons.UP, MyIcons.DOWN)
                 .setLeftKey(keyUp).setRightKey(keyDown)
                 .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.bind_tip"));
         this.addRenderableWidget(this.inputBar);
 
+        // 2. 前后轴设置条（回正时间 + 档位模式，均已持久化）
+        this.gearTogglePitch = createGearToggle(gearModePitch);
+        this.pitchBar = createAxisBar(winLeft, winTop, PITCH_CONFIG_BAR_Y, returnTime, gearCountPitch, this.gearTogglePitch);
+        this.addRenderableWidget(this.pitchBar);
+
+        // 3. 左右键位绑定条（A/D）
         this.inputBar2 = new DoubleInputBar(
-                winLeft, winTop + KEY_BAR_Y + BAR_TEX_H, WIN_W, BAR_TEX_H, MyIcons.LEFT, MyIcons.RIGHT)
+                winLeft, winTop + YAW_KEY_BAR_Y, WIN_W, BAR_TEX_H, MyIcons.LEFT, MyIcons.RIGHT)
                 .setLeftKey(keyLeft).setRightKey(keyRight)
                 .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.bind_tip"));
         this.addRenderableWidget(this.inputBar2);
 
-        // 档位模式开关（ToggleButton 挂在双滚轮条右图标位，icon 用 INDEX）
-        this.gearToggle = new ToggleButton(0, 0, MyIcons.INDEX, MyIcons.INDEX, 0x80FF80);
-        this.gearToggle
-            .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode"))
-            .addToolTipInstruction(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode_tip"))
-            .addToolTipOnOff(
-                Component.translatable("gui.ccpe.control_desk.toggle_on"),
-                Component.translatable("gui.ccpe.control_desk.toggle_off"));
-        this.gearToggle.withCallback(() -> this.gearToggle.setSelected(!this.gearToggle.isSelected()));
-
-        // 双滚轮条：左=回正时间（普通 icon RECOVER，已持久化），右=档位模式（ToggleButton，待持久化）
-        this.configBar = new DoubleScrollValueBar(
-                winLeft, winTop + CONFIG_BAR_Y, WIN_W, BAR_TEX_H,
-                MyIcons.RECOVER, MyIcons.INDEX, returnTime, GEAR_DEFAULT)
-                .rangeLeft(ControlDeskBlockEntity.MIN_JOYSTICK_RETURN_TIME, ControlDeskBlockEntity.MAX_JOYSTICK_RETURN_TIME)
-                .rangeRight(GEAR_MIN, GEAR_MAX)
-                .withToggleButtonRight(this.gearToggle)
-                .addToolTipTitleLeft(Component.translatable("gui.ccpe.control_desk.joystick_return_time"))
-                .addToolTipInstructionLeft(Component.translatable("gui.ccpe.control_desk.joystick_return_time_tip"))
-                .addToolTipTitleRight(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode"))
-                .addToolTipInstructionRight(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode_tip"));
-        this.addRenderableWidget(this.configBar);
+        // 4. 左右轴设置条（回正时间 + 档位模式，均已持久化）
+        this.gearToggleYaw = createGearToggle(gearModeYaw);
+        this.yawBar = createAxisBar(winLeft, winTop, YAW_CONFIG_BAR_Y, returnTimeYaw, gearCountYaw, this.gearToggleYaw);
+        this.addRenderableWidget(this.yawBar);
 
         // 右下角"完成"按钮
         HoverTintIconButton doneBtn = new HoverTintIconButton(
@@ -124,11 +129,41 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
         this.addRenderableWidget(doneBtn);
     }
 
+    /** 档位模式开关（ToggleButton，icon 用 INDEX，挂在轴设置条右图标位）。 */
+    private static ToggleButton createGearToggle(boolean selected) {
+        ToggleButton toggle = new ToggleButton(0, 0, MyIcons.INDEX, MyIcons.INDEX, 0x80FF80);
+        toggle.setSelected(selected);
+        toggle
+            .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode"))
+            .addToolTipInstruction(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode_tip"))
+            .addToolTipOnOff(
+                Component.translatable("gui.ccpe.control_desk.toggle_on"),
+                Component.translatable("gui.ccpe.control_desk.toggle_off"));
+        toggle.withCallback(() -> toggle.setSelected(!toggle.isSelected()));
+        return toggle;
+    }
+
+    /** 轴设置条（DoubleScrollValueBar）：左=回正时间（icon RECOVER），右=档位模式（ToggleButton）。 */
+    private static DoubleScrollValueBar createAxisBar(int winLeft, int winTop, int y, int returnTime, int gearCount, ToggleButton gearToggle) {
+        return new DoubleScrollValueBar(
+                winLeft, winTop + y, WIN_W, BAR_TEX_H,
+                MyIcons.RECOVER, MyIcons.INDEX, returnTime, gearCount)
+                .rangeLeft(ControlDeskBlockEntity.MIN_JOYSTICK_RETURN_TIME, ControlDeskBlockEntity.MAX_JOYSTICK_RETURN_TIME)
+                .rangeRight(ControlDeskBlockEntity.MIN_GEAR_COUNT, ControlDeskBlockEntity.MAX_GEAR_COUNT)
+                .withToggleButtonRight(gearToggle)
+                .addToolTipTitleLeft(Component.translatable("gui.ccpe.control_desk.joystick_return_time"))
+                .addToolTipInstructionLeft(Component.translatable("gui.ccpe.control_desk.joystick_return_time_tip"))
+                .addToolTipTitleRight(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode"))
+                .addToolTipInstructionRight(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode_tip"));
+    }
+
     @Override
     public void onClose() {
-        // 回正时间（左槽位）+ 四向按键写回服务端 BE（服务端权威：saveAdditional 落盘 + getUpdatePacket 同步 + 蓝图兼容）
+        // 两轴回正时间 + 两轴档位模式 + 四向按键写回服务端 BE（服务端权威：saveAdditional 落盘 + getUpdatePacket 同步 + 蓝图兼容）
         PacketDistributor.sendToServer(new ControlDeskConfigPayload(deskPos,
-                configBar.getLeftValue(),
+                pitchBar.getLeftValue(), yawBar.getLeftValue(),
+                gearTogglePitch.isSelected(), pitchBar.getRightValue(),
+                gearToggleYaw.isSelected(), yawBar.getRightValue(),
                 inputBar.getLeftKey(), inputBar.getRightKey(),
                 inputBar2.getLeftKey(), inputBar2.getRightKey()));
         super.onClose();
