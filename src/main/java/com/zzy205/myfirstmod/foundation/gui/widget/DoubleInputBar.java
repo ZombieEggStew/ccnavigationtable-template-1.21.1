@@ -26,7 +26,7 @@ import java.util.function.BiConsumer;
  */
 public class DoubleInputBar extends AbstractWidget implements TooltipWidget {
 
-    // 相对横条左上角的布局偏移（对齐 ControlModuleScreen 中的使用位置）
+    // 相对横条左上角的布局偏移（对齐 JoystickModuleScreen / PedalModuleScreen 中的使用位置）
     private static final int ICON_LEFT_X = 22;
     private static final int ICON_RIGHT_X = 102;
     private static final int ICON_Y = 6;

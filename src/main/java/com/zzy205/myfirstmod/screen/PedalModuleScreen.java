@@ -1,6 +1,5 @@
 package com.zzy205.myfirstmod.screen;
 
-import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.foundation.gui.MyIcons;
 import com.zzy205.myfirstmod.foundation.gui.MyUIElements;
 import com.zzy205.myfirstmod.foundation.gui.widget.DoubleInputBar;
@@ -10,11 +9,12 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
 /**
- * controlDesk 控件（模块）设置菜单 —— 背景复用 {@link MonitorModuleScreen}（gui_2.png 同区域）。
- * 打开方式：手持扳手右键 或 空手蹲下右键，准星命中已安装控件（由客户端 ControlDeskPlacementOverlay 打开）。
- * 当前阶段：窗口背景 + 标题 + 双输入条（渲染骨架，交互待接入）。
+ * 脚踏板设置菜单 —— 背景复用 {@link MonitorModuleScreen}（gui_2.png 同区域），
+ * 双按键绑定条对应「左踏板 / 右踏板」。
+ * 打开方式：手持扳手右键 或 空手蹲下右键，准星命中已安装的脚踏板（由客户端 ControlDeskPlacementOverlay 打开）。
+ * 当前阶段：窗口背景 + 标题 + 双输入条（渲染骨架，按键配置保存到 BE 待接入）。
  */
-public class ControlModuleScreen extends AbstractMonitorScreen {
+public class PedalModuleScreen extends AbstractMonitorScreen {
 
     private static final int WIN_W = 192;
     private static final int WIN_H = 169;
@@ -24,12 +24,10 @@ public class ControlModuleScreen extends AbstractMonitorScreen {
     private static final int TITLE_COLOR = 0x404040;
 
     private final BlockPos deskPos;
-    private final ControlDeskBlockEntity.ControlType type;
 
-    public ControlModuleScreen(BlockPos deskPos, ControlDeskBlockEntity.ControlType type) {
+    public PedalModuleScreen(BlockPos deskPos) {
         super(Component.empty());
         this.deskPos = deskPos;
-        this.type = type;
     }
 
     @Override
@@ -37,9 +35,9 @@ public class ControlModuleScreen extends AbstractMonitorScreen {
         int winLeft = (this.width - WIN_W) / 2;
         int winTop = (this.height - WIN_H) / 2;
 
-        // 双按键绑定条（捕获逻辑在 DoubleInputBar；捕获结果后续接入 BE 配置）
+        // 双按键绑定条：左踏板 / 右踏板（捕获逻辑在 DoubleInputBar；捕获结果后续接入 BE 配置）
         DoubleInputBar inputBar = new DoubleInputBar(
-                winLeft, winTop + 18, WIN_W, 28, MyIcons.UP, MyIcons.DOWN)
+                winLeft, winTop + 18, WIN_W, 28, MyIcons.PEDAL_LEFT_UP, MyIcons.PEDAL_RIGHT_UP)
                 .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.bind_tip"));
         this.addRenderableWidget(inputBar);
     }
@@ -52,8 +50,7 @@ public class ControlModuleScreen extends AbstractMonitorScreen {
         MyUIElements.BACKGROUND.render(g, winLeft, winTop);
 
         // 标题：控件名
-        String itemKey = type == ControlDeskBlockEntity.ControlType.PEDAL ? "pedal" : "joystick";
-        Component title = Component.translatable("item.ccpe." + itemKey);
-        g.drawString(this.font, title, winLeft + TITLE_X, winTop + TITLE_Y, TITLE_COLOR, false);
+        g.drawString(this.font, Component.translatable("item.ccpe.pedal"),
+                winLeft + TITLE_X, winTop + TITLE_Y, TITLE_COLOR, false);
     }
 }

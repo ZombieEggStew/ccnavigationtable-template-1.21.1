@@ -69,16 +69,17 @@ flowchart LR
 
 ### 打开方式
 
-- **扳手右键** 或 **空手蹲下右键**，准星命中已安装模块（安装位 AABB）→ 打开 `screen/ControlModuleScreen`
+- **扳手右键** 或 **空手蹲下右键**，准星命中已安装模块（安装位 AABB）→ 打开对应控件设置菜单（操纵杆 `JoystickModuleScreen` / 脚踏板 `PedalModuleScreen`）
 - 实现分层（对齐 Monitor 模式，Block 双端加载不引用 Screen）：
   - `ControlDeskBlock.onWrenched`：命中已装模块 → 消费右键（**不旋转**）；未命中 → `IWrenchable.super`（保留扳手旋转）
   - `ControlDeskBlock.useItemOn`：空手蹲下命中 → 消费右键
   - `client/ControlDeskPlacementOverlay`：右键**边沿**检测（`useDown && !lastUseDown` 防连发）+（扳手 或 空手蹲下）→ `mc.setScreen(new ControlModuleScreen(pos, type))`
 
-### ControlModuleScreen
+### 控件设置菜单（JoystickModuleScreen / PedalModuleScreen）
 
-- 继承 `AbstractMonitorScreen`；背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169 + 标题控件名）
-- 当前含一条双按键绑定条；**按键配置保存（onBindCaptured → BE NBT）待接入**
+- 两屏幕均继承 `AbstractMonitorScreen`；背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169 + 标题控件名）；`ControlDeskPlacementOverlay` 按命中控件类型分发
+- `JoystickModuleScreen`（操纵杆）：双按键绑定条 UP/DOWN；`PedalModuleScreen`（脚踏板）：双按键绑定条 左踏板/右踏板（PEDAL_LEFT_UP / PEDAL_RIGHT_UP）
+- 当前各含一条双按键绑定条；**按键配置保存（onBindCaptured → BE NBT）待接入**
 
 ### DoubleInputBar（双按键绑定条，`foundation/gui/widget/`）
 

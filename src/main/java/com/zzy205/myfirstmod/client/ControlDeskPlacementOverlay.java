@@ -4,7 +4,8 @@ import com.simibubi.create.AllItems;
 import com.zzy205.myfirstmod.block.ControlDeskBlock;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.item.MyModItems;
-import com.zzy205.myfirstmod.screen.ControlModuleScreen;
+import com.zzy205.myfirstmod.screen.JoystickModuleScreen;
+import com.zzy205.myfirstmod.screen.PedalModuleScreen;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -27,7 +28,7 @@ import java.util.List;
  * <ul>
  *   <li>手持踏板/操纵杆 → 准星指向 controlDesk 时在安装位显示预览框（绿=可装 / 红=已装）</li>
  *   <li>手持扳手 → 准星指向 controlDesk 时显示已安装控件的安装位（默认绿）；视角命中安装位变红，蹲下右键拆对应模块</li>
- *   <li>扳手右键 或 空手蹲下右键，命中已安装模块 → 打开 {@link ControlModuleScreen}（右键边沿防连发）</li>
+ *   <li>扳手右键 或 空手蹲下右键，命中已安装模块 → 打开对应控件设置菜单（操纵杆 {@link JoystickModuleScreen} / 脚踏板 {@link PedalModuleScreen}，右键边沿防连发）</li>
  * </ul>
  * 每 tick 重新 show，离开/换物品后自动消失（Outliner 语义）。
  */
@@ -61,7 +62,12 @@ public class ControlDeskPlacementOverlay {
             if (wrench || emptySneak) {
                 ControlDeskBlockEntity.ControlType menuType = hitInstalledType(mc, hit);
                 if (menuType != null) {
-                    mc.setScreen(new ControlModuleScreen(hit.getBlockPos(), menuType));
+                    // 按控件类型打开各自的设置菜单（背景同一贴图区域）
+                    if (menuType == ControlDeskBlockEntity.ControlType.JOYSTICK) {
+                        mc.setScreen(new JoystickModuleScreen(hit.getBlockPos()));
+                    } else {
+                        mc.setScreen(new PedalModuleScreen(hit.getBlockPos()));
+                    }
                     return;
                 }
             }
