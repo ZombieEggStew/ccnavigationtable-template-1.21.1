@@ -143,7 +143,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 
-    /** 扳手普通右键：命中已安装模块 → 消费（模块菜单由客户端 overlay 打开，不旋转）；未命中 → 默认旋转。 */
+    /** 扳手普通右键（不蹲下）：命中已安装模块 → 消费（模块菜单由客户端 overlay 打开，不旋转）；未命中 → 默认旋转。 */
     @Override
     public InteractionResult onWrenched(BlockState state, UseOnContext context) {
         Level level = context.getLevel();

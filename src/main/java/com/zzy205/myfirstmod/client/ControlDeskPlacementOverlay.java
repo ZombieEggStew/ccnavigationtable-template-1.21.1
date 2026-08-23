@@ -28,7 +28,7 @@ import java.util.List;
  * <ul>
  *   <li>手持踏板/操纵杆 → 准星指向 controlDesk 时在安装位显示预览框（绿=可装 / 红=已装）</li>
  *   <li>手持扳手 → 准星指向 controlDesk 时显示已安装控件的安装位（默认绿）；视角命中安装位变红，蹲下右键拆对应模块</li>
- *   <li>扳手右键 或 空手蹲下右键，命中已安装模块 → 打开对应控件设置菜单（操纵杆 {@link JoystickModuleScreen} / 脚踏板 {@link PedalModuleScreen}，右键边沿防连发）</li>
+ *   <li>扳手普通右键（不蹲下）或 空手蹲下右键，命中已安装模块 → 打开对应控件设置菜单（操纵杆 {@link JoystickModuleScreen} / 脚踏板 {@link PedalModuleScreen}，右键边沿防连发）；扳手蹲下右键 → 不拦截，交给服务端 {@code onSneakWrenched} 拆除模块</li>
  * </ul>
  * 每 tick 重新 show，离开/换物品后自动消失（Outliner 语义）。
  */
@@ -52,14 +52,16 @@ public class ControlDeskPlacementOverlay {
 
         ItemStack held = mc.player.getMainHandItem();
 
-        // ── 打开模块设置菜单：扳手右键 或 空手蹲下右键，命中已安装模块 ──
+        // ── 打开模块设置菜单：扳手普通右键（不蹲下）或 空手蹲下右键，命中已安装模块 ──
+        // 扳手蹲下右键 = 拆除（服务端 onSneakWrenched），这里不拦截，让右键事件正常传到服务端
         boolean useDown = mc.options.keyUse.isDown();
         boolean useEdge = useDown && !lastUseDown;
         lastUseDown = useDown;
         if (useEdge) {
             boolean wrench = isWrench(held);
             boolean emptySneak = held.isEmpty() && mc.player.isShiftKeyDown();
-            if (wrench || emptySneak) {
+            boolean openMenu = (wrench && !mc.player.isShiftKeyDown()) || emptySneak;
+            if (openMenu) {
                 ControlDeskBlockEntity.ControlType menuType = hitInstalledType(mc, hit);
                 if (menuType != null) {
                     // 按控件类型打开各自的设置菜单（背景同一贴图区域）

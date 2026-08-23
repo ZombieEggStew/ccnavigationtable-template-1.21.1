@@ -48,7 +48,7 @@ flowchart LR
 - **BE 存储**（`ControlDeskBlockEntity`）：`ControlType` 枚举（PEDAL 一对 / JOYSTICK）+ `install`/`remove`/`isInstalled`；NBT 字段 `PedalInstalled`/`JoystickInstalled`；实现 `saveAdditional`/`loadAdditional`/`getUpdateTag`/`getUpdatePacket`/`writeSafe`（`PartialSafeNBT`）→ Create 蓝图兼容三件套（见下）
 - **交互**（`ControlDeskBlock`）：
   - 手持控件物品右键 → 服务端安装（非创造消耗 1 个；已装提示 `gui.ccpe.control_desk.already_installed`）
-  - 扳手蹲下右键 → 卸载全部已装控件并掉落物品；无控件时走 `IWrenchable` 默认拆方块
+  - 扳手蹲下右键 → 按点击位置拆除对应的**单个**模块并掉落物品（`onSneakWrenched`）；点击不在安装位时不拆；光桌（无模块）走 `IWrenchable` 默认拆方块
   - `getDrops` 覆写 → 方块被破坏（任何方式）时已装控件随掉落
 - **安装预览**（`client/ControlDeskPlacementOverlay`，已注册）：手持控件物品 + 准星指向 controlDesk（原版 `mc.hitResult`）→ Catnip Outliner 在安装位显示预览框，绿=可装 / 红=已装；每 tick 重新 show，离开/换物品自动消失
   - 安装位 AABB = `ControlDeskBlock.installBounds(type, facing, pos)`（北向基准 shape + `VoxelShaper` 随 FACING 旋转；PEDAL 显示左右两个框）；调整位置改 `ControlDeskBlock` 顶部的 `*_SHAPE` 常量
@@ -69,17 +69,18 @@ flowchart LR
 
 ### 打开方式
 
-- **扳手右键** 或 **空手蹲下右键**，准星命中已安装模块（安装位 AABB）→ 打开对应控件设置菜单（操纵杆 `JoystickModuleScreen` / 脚踏板 `PedalModuleScreen`）
+- **扳手普通右键（不蹲下）** 或 **空手蹲下右键**，准星命中已安装模块（安装位 AABB）→ 打开对应控件设置菜单（操纵杆 `JoystickModuleScreen` / 脚踏板 `PedalModuleScreen`）
+- **扳手蹲下右键** → 拆除命中的模块（服务端 `onSneakWrenched`，掉落物品）；客户端 overlay 不拦截此组合（不打开菜单，让右键事件传到服务端）
 - 实现分层（对齐 Monitor 模式，Block 双端加载不引用 Screen）：
   - `ControlDeskBlock.onWrenched`：命中已装模块 → 消费右键（**不旋转**）；未命中 → `IWrenchable.super`（保留扳手旋转）
   - `ControlDeskBlock.useItemOn`：空手蹲下命中 → 消费右键
-  - `client/ControlDeskPlacementOverlay`：右键**边沿**检测（`useDown && !lastUseDown` 防连发）+（扳手 或 空手蹲下）→ `mc.setScreen(new ControlModuleScreen(pos, type))`
+  - `client/ControlDeskPlacementOverlay`：右键**边沿**检测（`useDown && !lastUseDown` 防连发）+（扳手 或 空手蹲下）→ 按命中类型打开 `JoystickModuleScreen` / `PedalModuleScreen`
 
 ### 控件设置菜单（JoystickModuleScreen / PedalModuleScreen）
 
 - 两屏幕均继承 `AbstractMonitorScreen`；背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169 + 标题控件名）；`ControlDeskPlacementOverlay` 按命中控件类型分发
-- `JoystickModuleScreen`（操纵杆）：双按键绑定条 UP/DOWN；`PedalModuleScreen`（脚踏板）：双按键绑定条 左踏板/右踏板（PEDAL_LEFT_UP / PEDAL_RIGHT_UP）
-- 当前各含一条双按键绑定条；**按键配置保存（onBindCaptured → BE NBT）待接入**
+- `JoystickModuleScreen`（操纵杆）：双按键绑定条 UP/DOWN（W/S 前后，默认 w/s）+ LEFT/RIGHT（A/D 左右，默认 a/d）+ 双滚轮条 `DoubleScrollValueBar`（左=回正时间，icon RECOVER，默认 20 tick、范围 0..100，已持久化；右=档位模式，ToggleButton icon=INDEX，默认 4 档、范围 1..8，待持久化）；`PedalModuleScreen`（脚踏板）：双按键绑定条 左踏板/右踏板（PEDAL_LEFT_UP / PEDAL_RIGHT_UP）
+- **操纵杆配置已全部持久化**：BE NBT（`JoystickReturnTime` + `JoystickKeyUp/Down/Left/Right`，默认 w/s/a/d，旧存档缺失字段时保持默认）+ `saveAdditional`/`loadAdditional`/`writeSafe`/`getUpdateTag` 四路径 + `getUpdatePacket` 同步；屏幕打开时读客户端 BE 初始化、`onClose` 经 `ControlDeskConfigPayload`（pos + returnTime + 4 键）→ 服务端 `setJoystickReturnTime` + `setJoystickKeys`
 
 ### DoubleInputBar（双按键绑定条，`foundation/gui/widget/`）
 
@@ -123,7 +124,9 @@ flowchart LR
   1. 蓝图保存路径走 `saveAdditional`（**不走** `writeSafe`）——运行时字段要在 `saveAdditional` 层排除，光实现 `writeSafe` 没用
   2. BE **必须实现 `getUpdatePacket()`**（quill 保存读的是客户端 BE，否则存出旧配置）
   3. 配置变更后 `sendBlockUpdated` + 先落盘再保存蓝图（自动存档 ~30s 间隔，会回滚未落盘配置）
-- **阶段一已按此实现**：BE 的控件安装状态 NBT 持久化 + `getUpdatePacket` + `writeSafe` 全部就位；**阶段二待接入**：按键绑定配置（`DoubleInputBar.onBindCaptured` 回调 → BE NBT，含触发模式等）
+- **阶段一已按此实现**：BE 的控件安装状态 NBT 持久化 + `getUpdatePacket` + `writeSafe` 全部就位
+- **操纵杆配置已持久化**：回正时间 + 四向按键（默认 w/s/a/d）存 BE NBT 四路径全覆盖；`JoystickModuleScreen` 打开时读客户端 BE 初始化、`onClose` 经 `ControlDeskConfigPayload` → 服务端 setter（`notifyChange` 同步）
+- **待接入**：脚踏板按键绑定配置 + 触发模式（`onBindCaptured` → BE NBT）
 
 ## 实施顺序
 
@@ -132,7 +135,7 @@ flowchart LR
 3. ⏳ 客户端按键监听 + payload 链路（重点验证按键冲突 KeyConflictContext 方案）
 4. ⏳ BE 状态 + 服务端权威更新 + 广播同步
 5. ⏳ 动画（踏板平移、操纵杆 30° 倾斜）
-6. 🔶 配置 GUI：✅ 菜单背景 + 双按键绑定条（按键捕获）已完成；⏳ 按键配置保存到 BE（onBindCaptured → NBT + 蓝图兼容）+ 触发模式等其余控件
+6. 🔶 配置 GUI：✅ 菜单背景 + 双按键绑定条（按键捕获）+ 回正时间滚轮条 + 操纵杆配置持久化 已完成；⏳ 脚踏板按键绑定/触发模式配置 + 其余控件
 7. ⏳ CC 外设 + Lua API（Lua 侧验证信号）
 
 ## 待确认 / 风险清单
