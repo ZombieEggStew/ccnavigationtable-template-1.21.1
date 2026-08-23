@@ -73,6 +73,8 @@
   "item.ccpe.joystick": "Joystick",
 
   "gui.ccpe.control_desk.already_installed": "Control already installed",
+  "gui.ccpe.control_desk.bind_unbound": "Unbound",
+  "gui.ccpe.control_desk.bind_tip": "Left click to bind, right click to clear",
 
   "gui.ccpe.redstone_transceiver": "Redstone Transceiver",
   "gui.ccpe.redstone_transceiver.hold_to_delete": "Hold left click to delete",

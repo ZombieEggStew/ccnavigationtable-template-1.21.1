@@ -75,6 +75,8 @@
   "item.ccpe.joystick": "操纵杆",
 
   "gui.ccpe.control_desk.already_installed": "该控件已安装",
+  "gui.ccpe.control_desk.bind_unbound": "未绑定",
+  "gui.ccpe.control_desk.bind_tip": "左键绑定 右键清除",
 
   "gui.ccpe.redstone_transceiver": "红石收发器",
   "gui.ccpe.redstone_transceiver.hold_to_delete": "按住鼠标左键删除此条",

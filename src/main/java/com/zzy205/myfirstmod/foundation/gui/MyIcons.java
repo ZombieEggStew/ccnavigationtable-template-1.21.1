@@ -49,6 +49,12 @@ public class MyIcons implements ScreenElement {
 
     public static final MyIcons LEFT = new MyIcons(0, 4);
     public static final MyIcons RIGHT = new MyIcons(1, 4);
+    public static final MyIcons PEDAL_LEFT_UP = new MyIcons(2, 4);
+    public static final MyIcons PEDAL_LEFT_DOWN = new MyIcons(3, 4);
+
+    public static final MyIcons PEDAL_RIGHT_UP = new MyIcons(0, 5);
+    public static final MyIcons PEDAL_RIGHT_DOWN = new MyIcons(1, 5);
+
 
 
     private final int u;

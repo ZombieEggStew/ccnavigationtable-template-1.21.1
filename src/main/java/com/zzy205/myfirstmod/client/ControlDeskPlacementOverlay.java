@@ -4,6 +4,7 @@ import com.simibubi.create.AllItems;
 import com.zzy205.myfirstmod.block.ControlDeskBlock;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.item.MyModItems;
+import com.zzy205.myfirstmod.screen.ControlModuleScreen;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -22,10 +23,11 @@ import net.neoforged.neoforge.common.Tags;
 import java.util.List;
 
 /**
- * controlDesk 交互预览：
+ * controlDesk 交互预览与菜单打开：
  * <ul>
  *   <li>手持踏板/操纵杆 → 准星指向 controlDesk 时在安装位显示预览框（绿=可装 / 红=已装）</li>
  *   <li>手持扳手 → 准星指向 controlDesk 时显示已安装控件的安装位（默认绿）；视角命中安装位变红，蹲下右键拆对应模块</li>
+ *   <li>扳手右键 或 空手蹲下右键，命中已安装模块 → 打开 {@link ControlModuleScreen}（右键边沿防连发）</li>
  * </ul>
  * 每 tick 重新 show，离开/换物品后自动消失（Outliner 语义）。
  */
@@ -33,6 +35,9 @@ public class ControlDeskPlacementOverlay {
 
     private static final int COLOR_VALID = 0x4CDA64;
     private static final int COLOR_INVALID = 0xFF5E5E;
+
+    /** 右键边沿检测（防连发，参考 MonitorGridOverlay） */
+    private static boolean lastUseDown;
 
     public static void register() {
         NeoForge.EVENT_BUS.addListener(ControlDeskPlacementOverlay::onClientTick);
@@ -46,6 +51,22 @@ public class ControlDeskPlacementOverlay {
 
         ItemStack held = mc.player.getMainHandItem();
 
+        // ── 打开模块设置菜单：扳手右键 或 空手蹲下右键，命中已安装模块 ──
+        boolean useDown = mc.options.keyUse.isDown();
+        boolean useEdge = useDown && !lastUseDown;
+        lastUseDown = useDown;
+        if (useEdge) {
+            boolean wrench = isWrench(held);
+            boolean emptySneak = held.isEmpty() && mc.player.isShiftKeyDown();
+            if (wrench || emptySneak) {
+                ControlDeskBlockEntity.ControlType menuType = hitInstalledType(mc, hit);
+                if (menuType != null) {
+                    mc.setScreen(new ControlModuleScreen(hit.getBlockPos(), menuType));
+                    return;
+                }
+            }
+        }
+
         ControlDeskBlockEntity.ControlType type = controlTypeOf(held);
         if (type != null) {
             showInstallPreview(mc, hit, type);
@@ -54,6 +75,25 @@ public class ControlDeskPlacementOverlay {
         if (isWrench(held)) {
             showRemovePreview(mc, hit);
         }
+    }
+
+    /** 准星点击位置命中的已安装控件类型；未命中返回 null。 */
+    private static ControlDeskBlockEntity.ControlType hitInstalledType(Minecraft mc, BlockHitResult hit) {
+        BlockPos pos = hit.getBlockPos();
+        BlockState state = mc.level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ControlDeskBlock)) return null;
+        BlockEntity be = mc.level.getBlockEntity(pos);
+        if (!(be instanceof ControlDeskBlockEntity desk)) return null;
+
+        Direction facing = state.getValue(ControlDeskBlock.FACING);
+        Vec3 click = hit.getLocation();
+        for (ControlDeskBlockEntity.ControlType type : ControlDeskBlockEntity.ControlType.values()) {
+            if (desk.isInstalled(type)
+                    && ControlDeskBlock.hitBounds(ControlDeskBlock.installBounds(type, facing, pos), click)) {
+                return type;
+            }
+        }
+        return null;
     }
 
     /** 手持控件物品：在安装位显示预览框（绿=可装 / 红=已装）。 */

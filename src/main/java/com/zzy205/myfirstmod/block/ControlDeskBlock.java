@@ -112,29 +112,45 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
                                               Player player, InteractionHand hand, BlockHitResult hitResult) {
         ControlDeskBlockEntity.ControlType type = controlTypeOf(stack);
-        if (type == null) {
-            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-        }
-        if (level.isClientSide) {
-            return ItemInteractionResult.SUCCESS;
-        }
-        BlockEntity be = level.getBlockEntity(pos);
-        if (!(be instanceof ControlDeskBlockEntity desk)) {
-            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-        }
-        if (!desk.install(type)) {
-            // 已安装：不消耗物品，提示玩家
-            if (player != null) {
-                player.displayClientMessage(
-                        Component.translatable("gui.ccpe.control_desk.already_installed"), true);
+        if (type != null) {
+            if (level.isClientSide) {
+                return ItemInteractionResult.SUCCESS;
+            }
+            BlockEntity be = level.getBlockEntity(pos);
+            if (!(be instanceof ControlDeskBlockEntity desk)) {
+                return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+            }
+            if (!desk.install(type)) {
+                // 已安装：不消耗物品，提示玩家
+                if (player != null) {
+                    player.displayClientMessage(
+                            Component.translatable("gui.ccpe.control_desk.already_installed"), true);
+                }
+                return ItemInteractionResult.SUCCESS;
+            }
+            // 安装成功：非创造模式消耗 1 个物品
+            if (player != null && !player.isCreative()) {
+                stack.shrink(1);
             }
             return ItemInteractionResult.SUCCESS;
         }
-        // 安装成功：非创造模式消耗 1 个物品
-        if (player != null && !player.isCreative()) {
-            stack.shrink(1);
+
+        // 空手 + 蹲下 + 命中已安装模块：消费右键（模块菜单由客户端 ControlDeskPlacementOverlay 打开）
+        if (stack.isEmpty() && player != null && player.isShiftKeyDown()
+                && hitControlTypeAt(level, state, pos, hitResult.getLocation()) != null) {
+            return ItemInteractionResult.SUCCESS;
         }
-        return ItemInteractionResult.SUCCESS;
+        return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+    }
+
+    /** 扳手普通右键：命中已安装模块 → 消费（模块菜单由客户端 overlay 打开，不旋转）；未命中 → 默认旋转。 */
+    @Override
+    public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+        Level level = context.getLevel();
+        if (hitControlTypeAt(level, state, context.getClickedPos(), context.getClickLocation()) != null) {
+            return InteractionResult.SUCCESS;
+        }
+        return IWrenchable.super.onWrenched(state, context);
     }
 
     /** 扳手蹲下右键：按点击位置拆除对应的单个模块（掉落物品）；点击不在任何安装位时不拆方块；光桌（无模块）走默认拆方块行为。 */
@@ -164,6 +180,13 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             return InteractionResult.SUCCESS;
         }
         return IWrenchable.super.onSneakWrenched(state, context);
+    }
+
+    /** 点击位置命中的已安装控件类型（PEDAL 左右两框任一命中即算）；未命中返回 null。 */
+    private static ControlDeskBlockEntity.ControlType hitControlTypeAt(Level level, BlockState state, BlockPos pos,
+                                                                      Vec3 click) {
+        if (!(level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return null;
+        return hitControlType(desk, state.getValue(FACING), pos, click);
     }
 
     /** 点击位置命中的已安装控件类型（PEDAL 左右两框任一命中即算）；未命中返回 null。 */
