@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
+import com.zzy205.myfirstmod.block.ControlDeskVisual;
 import com.zzy205.myfirstmod.block.MonitorPreloadedModels;
 import com.zzy205.myfirstmod.block.MonitorRenderer;
 import com.zzy205.myfirstmod.block.MyModPartialModels;
@@ -49,6 +50,12 @@ public class CCPeripheralExtenderClient {
         // 注册 Flywheel Visual（shaft 渲染）
         SimpleBlockEntityVisualizer.builder(MyModBlockEntities.transmission_peripheral_entity.get())
                 .factory(TransmissionPeripheralVisual::new)
+                .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
+        // 注册 Flywheel Visual（控制台踏板/操纵杆叠加渲染）
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.control_desk_entity.get())
+                .factory(ControlDeskVisual::new)
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
