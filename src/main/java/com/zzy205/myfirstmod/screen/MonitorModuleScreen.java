@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.screen;
 
 import com.zzy205.myfirstmod.foundation.gui.MyIcons;
+import com.zzy205.myfirstmod.foundation.gui.MyUIElements;
 import com.zzy205.myfirstmod.foundation.gui.widget.HoverTintIconButton;
 import com.zzy205.myfirstmod.foundation.gui.widget.ScrollValueBar;
 import com.zzy205.myfirstmod.foundation.gui.widget.TextInputBar;
@@ -25,11 +26,7 @@ public class MonitorModuleScreen extends AbstractMonitorScreen {
 
     private static final int WIN_W = 192;
     private static final int WIN_H = 169;
-    private static final int TEX_W = 256;
-    private static final int TEX_H = 384;
 
-    private static final ResourceLocation TEXTURE =
-            ResourceLocation.fromNamespaceAndPath("ccpe", "textures/gui/gui_2.png");
 
     private static final int TITLE_X = 8;
     private static final int TITLE_Y = 4;
@@ -39,7 +36,7 @@ public class MonitorModuleScreen extends AbstractMonitorScreen {
     private static final int DONE_BTN_BOTTOM = 24;
 
     // ── 横条：背景 + 图标 + 输入框 ──
-    private static final int BAR_TEX_W = 256;
+    private static final int BAR_TEX_W = 192;
     private static final int BAR_TEX_H = 28;
     private static final int BAR_ID_Y = 18;  // 首条横条（ID 滚轮）相对窗口顶部的偏移
     private static final int BAR_MARGIN_Y = 2;  // 横条之间的垂直间距
@@ -118,7 +115,8 @@ public class MonitorModuleScreen extends AbstractMonitorScreen {
     @Override
     protected void renderCustom(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         // 先画自定义背景面板
-        g.blit(TEXTURE, winLeft, winTop, 0, 0, WIN_W, WIN_H, TEX_W, TEX_H);
+        MyUIElements.BACKGROUND.render(g, winLeft, winTop);
+        // g.blit(TEXTURE, winLeft, winTop, 0, 0, WIN_W, WIN_H, TEX_W, TEX_H);
 
         // 标题：仅显示名称
         Component titleText = Component.translatable("module.ccpe." + name);

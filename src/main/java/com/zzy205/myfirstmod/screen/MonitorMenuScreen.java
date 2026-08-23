@@ -25,7 +25,7 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
 
     private static final int WIN_W = 192;
     private static final int WIN_H = 200;
-    private static final int TEX_W = 256;
+    private static final int TEX_W = 192;
     private static final int TEX_H = 384;
 
     private static final ResourceLocation TEXTURE =
@@ -44,7 +44,7 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
     private static final int PANEL_BODY_COLOR = 0xFF404040;
 
     // ── 横条尺寸（与 MonitorModuleScreen 的 bar_id 一致）──
-    private static final int BAR_TEX_W = 256;
+    private static final int BAR_TEX_W = 192;
     private static final int BAR_TEX_H = 28;
 
     /** 首条横条（bar_id）相对窗口顶部的偏移 */
@@ -164,7 +164,7 @@ public class MonitorMenuScreen extends AbstractMonitorScreen {
         g.fill(winLeft + 2, bodyTop, winLeft + 3, bodyBottom, 0xFFEAEAEA);
         g.fill(winLeft + WIN_W - 2, bodyTop, winLeft + WIN_W - 1, bodyBottom, 0xFF000000);
         g.fill(winLeft + WIN_W - 3, bodyTop, winLeft + WIN_W - 2, bodyBottom, 0xFFEAEAEA);
-        g.blit(TEXTURE, winLeft, winTop + WIN_H - PANEL_BOTTOM_H, 0, 130, WIN_W, PANEL_BOTTOM_H, TEX_W, TEX_H);
+        g.blit(TEXTURE, winLeft, winTop + WIN_H - PANEL_BOTTOM_H, 0, 140, WIN_W, PANEL_BOTTOM_H, TEX_W, TEX_H);
 
         // 标题
         Component title = Component.translatable("block.ccpe.my_monitor");

@@ -58,8 +58,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
 
     // ── 控件安装位（北向基准 0..16 模型空间，随 FACING 旋转；供安装/拆除预览框与拆除判定使用） ──
     // 北侧空区 z0..8 分成左/中/右：左踏板 x11..16、操纵杆 x5..11、右踏板 x0..5（操作者面朝南，左=东=+X）
-    private static final VoxelShape PEDAL_LEFT_SHAPE = Block.box(12, 1, 0, 16, 7, 8);
-    private static final VoxelShape PEDAL_RIGHT_SHAPE = Block.box(0, 1, 0, 4, 7, 8);
+    private static final VoxelShape PEDAL_LEFT_SHAPE = Block.box(12, 1, 1, 16, 7, 8);
+    private static final VoxelShape PEDAL_RIGHT_SHAPE = Block.box(0, 1, 1, 4, 7, 8);
     private static final VoxelShape JOYSTICK_SHAPE = Block.box(5, 0, 0, 11, 8, 8);
     private static final VoxelShaper PEDAL_LEFT_SHAPER = VoxelShaper.forHorizontal(PEDAL_LEFT_SHAPE, Direction.NORTH);
     private static final VoxelShaper PEDAL_RIGHT_SHAPER = VoxelShaper.forHorizontal(PEDAL_RIGHT_SHAPE, Direction.NORTH);

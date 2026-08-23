@@ -21,7 +21,6 @@ public class MyIcons implements ScreenElement {
     public static final ResourceLocation ATLAS =
             ResourceLocation.fromNamespaceAndPath("ccpe", "textures/gui/my_icons.png");
 
-    private static final int ATLAS_SIZE = 64;
     private static final int CELL = 16;
 
     // ═══════ 在这里添加你的图标 ═══════
@@ -43,6 +42,14 @@ public class MyIcons implements ScreenElement {
     public static final MyIcons INDEX = new MyIcons(2, 2);
     public static final MyIcons ANGLE_LIMIT = new MyIcons(3, 2);
 
+    public static final MyIcons MOUSE = new MyIcons(0, 3);
+    public static final MyIcons KEY_BOARD = new MyIcons(1, 3);
+    public static final MyIcons UP = new MyIcons(2, 3);
+    public static final MyIcons DOWN = new MyIcons(3, 3);
+
+    public static final MyIcons LEFT = new MyIcons(0, 4);
+    public static final MyIcons RIGHT = new MyIcons(1, 4);
+
 
     private final int u;
     private final int v;
@@ -54,6 +61,6 @@ public class MyIcons implements ScreenElement {
 
     @Override
     public void render(GuiGraphics graphics, int x, int y) {
-        graphics.blit(ATLAS, x, y, u, v, CELL, CELL, ATLAS_SIZE, ATLAS_SIZE);
+        graphics.blit(ATLAS, x, y, u, v, CELL, CELL, 64, 128);
     }
 }

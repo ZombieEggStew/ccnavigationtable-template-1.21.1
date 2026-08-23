@@ -11,7 +11,7 @@ import net.minecraft.network.chat.Component;
  */
 public class KnobConfigSection implements ModuleConfigSection {
 
-    private static final int BAR_W = 256;
+    private static final int BAR_W = 192;
     private static final int BAR_H = 28;
 
     private ScrollValueBar angleBar;
