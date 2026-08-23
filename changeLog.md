@@ -50,3 +50,6 @@
 - Reworked screen rendering; the monitor background can no longer be drawn on.
 - Added physical rotation limits to the Knob.
 - Fixed outline rendering on moving physics bodies (preview no longer lags or ghosts).
+
+1.0.8
+- getRelativePercent,getAbsolutePercent return 0-100 -> 0-1

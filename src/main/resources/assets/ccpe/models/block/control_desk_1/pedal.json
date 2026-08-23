@@ -1,0 +1,38 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "ccpe:block/control_desk",
+		"particle": "ccpe:block/control_desk"
+	},
+	"elements": [
+		{
+			"name": "pedal",
+			"from": [12, 1, 5],
+			"to": [15, 6, 6],
+			"rotation": {"angle": 22.5, "axis": "x", "origin": [13, 1, 5]},
+			"faces": {
+				"north": {"uv": [13.5, 0, 14.5, 1.5], "texture": "#0"},
+				"east": {"uv": [14, 0, 14.5, 1.5], "texture": "#0"},
+				"south": {"uv": [13.5, 0, 14.5, 1.5], "texture": "#0"},
+				"west": {"uv": [13.5, 0, 14, 1.5], "texture": "#0"},
+				"up": {"uv": [13.5, 0, 14.5, 0.5], "texture": "#0"},
+				"down": {"uv": [13.5, 1, 14.5, 1.5], "texture": "#0"}
+			}
+		},
+		{
+			"name": "pedal_base",
+			"from": [13, 2, 6],
+			"to": [14, 3, 11],
+			"rotation": {"angle": 0, "axis": "y", "origin": [13, 2, 6]},
+			"faces": {
+				"north": {"uv": [15, 3.5, 15.5, 4], "texture": "#0"},
+				"east": {"uv": [15, 3.5, 15.5, 6.5], "rotation": 90, "texture": "#0"},
+				"south": {"uv": [15, 6, 15.5, 6.5], "texture": "#0"},
+				"west": {"uv": [15, 3.5, 15.5, 6.5], "rotation": 270, "texture": "#0"},
+				"up": {"uv": [15, 3.5, 15.5, 6.5], "texture": "#0"},
+				"down": {"uv": [15, 3.5, 15.5, 6.5], "rotation": 180, "texture": "#0"}
+			}
+		}
+	]
+}
