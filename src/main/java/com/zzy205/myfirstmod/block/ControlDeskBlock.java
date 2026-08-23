@@ -32,6 +32,7 @@ import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
@@ -55,10 +56,11 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             Direction.NORTH
     );
 
-    // ── 控件安装位（北向基准 0..16 模型空间，随 FACING 旋转；供安装预览框使用） ──
-    private static final VoxelShape PEDAL_LEFT_SHAPE = Block.box(12, 2, 3, 15, 7, 4);
-    private static final VoxelShape PEDAL_RIGHT_SHAPE = Block.box(1, 2, 3, 4, 7, 4);
-    private static final VoxelShape JOYSTICK_SHAPE = Block.box(6.8, 3, 1.8, 9.2, 17.4, 4.2);
+    // ── 控件安装位（北向基准 0..16 模型空间，随 FACING 旋转；供安装/拆除预览框与拆除判定使用） ──
+    // 北侧空区 z0..8 分成左/中/右：左踏板 x11..16、操纵杆 x5..11、右踏板 x0..5（操作者面朝南，左=东=+X）
+    private static final VoxelShape PEDAL_LEFT_SHAPE = Block.box(12, 1, 0, 16, 7, 8);
+    private static final VoxelShape PEDAL_RIGHT_SHAPE = Block.box(0, 1, 0, 4, 7, 8);
+    private static final VoxelShape JOYSTICK_SHAPE = Block.box(5, 0, 0, 11, 8, 8);
     private static final VoxelShaper PEDAL_LEFT_SHAPER = VoxelShaper.forHorizontal(PEDAL_LEFT_SHAPE, Direction.NORTH);
     private static final VoxelShaper PEDAL_RIGHT_SHAPER = VoxelShaper.forHorizontal(PEDAL_RIGHT_SHAPE, Direction.NORTH);
     private static final VoxelShaper JOYSTICK_SHAPER = VoxelShaper.forHorizontal(JOYSTICK_SHAPE, Direction.NORTH);
@@ -135,7 +137,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         return ItemInteractionResult.SUCCESS;
     }
 
-    /** 扳手蹲下右键：卸载全部已安装控件（掉落物品）；无控件时走默认拆方块行为。 */
+    /** 扳手蹲下右键：按点击位置拆除对应的单个模块（掉落物品）；点击不在任何安装位时不拆方块；光桌（无模块）走默认拆方块行为。 */
     @Override
     public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
         Level level = context.getLevel();
@@ -145,19 +147,54 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         }
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof ControlDeskBlockEntity desk) {
-            boolean removedAny = false;
-            for (ControlDeskBlockEntity.ControlType type : ControlDeskBlockEntity.ControlType.values()) {
-                if (desk.remove(type)) {
-                    Block.popResource(level, pos, new ItemStack(controlItem(type)));
-                    removedAny = true;
-                }
+            boolean anyInstalled = desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK);
+            if (!anyInstalled) {
+                // 光桌：没有模块可拆，走默认拆方块
+                return IWrenchable.super.onSneakWrenched(state, context);
             }
-            if (removedAny) {
+            // 对准模块：按点击位置命中安装位，只拆对应的那个
+            Direction facing = state.getValue(FACING);
+            ControlDeskBlockEntity.ControlType hit = hitControlType(desk, facing, pos, context.getClickLocation());
+            if (hit != null && desk.remove(hit)) {
+                Block.popResource(level, pos, new ItemStack(controlItem(hit)));
                 IWrenchable.playRemoveSound(level, pos);
-                return InteractionResult.SUCCESS;
             }
+            // 无论是否命中安装位都消费交互，避免误拆方块
+            return InteractionResult.SUCCESS;
         }
         return IWrenchable.super.onSneakWrenched(state, context);
+    }
+
+    /** 点击位置命中的已安装控件类型（PEDAL 左右两框任一命中即算）；未命中返回 null。 */
+    private static ControlDeskBlockEntity.ControlType hitControlType(ControlDeskBlockEntity desk, Direction facing,
+                                                                    BlockPos pos, Vec3 click) {
+        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
+                && hitBounds(installBounds(ControlDeskBlockEntity.ControlType.PEDAL, facing, pos), click)) {
+            return ControlDeskBlockEntity.ControlType.PEDAL;
+        }
+        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
+                && hitBounds(installBounds(ControlDeskBlockEntity.ControlType.JOYSTICK, facing, pos), click)) {
+            return ControlDeskBlockEntity.ControlType.JOYSTICK;
+        }
+        return null;
+    }
+
+    /**
+     * 点击位置是否命中安装位（闭区间 + 边界容差）。
+     * 不能用 {@link AABB#contains}：它是半开区间（z &lt; maxZ），而准星从北侧命中桌体表面 z=8
+     * 恰为安装位框（z0..8）的 maxZ，会导致永不命中。客户端预览变色与服务端拆除判定共用本方法。
+     */
+    public static boolean hitBounds(List<AABB> bounds, Vec3 click) {
+        double eps = 0.001;
+        for (AABB aabb : bounds) {
+            if (click.x >= aabb.minX - eps && click.x <= aabb.maxX + eps
+                    && click.y >= aabb.minY - eps && click.y <= aabb.maxY + eps
+                    && click.z >= aabb.minZ - eps && click.z <= aabb.maxZ + eps) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 方块被破坏时已安装控件随掉落（对齐 MonitorBlock.getDrops 的做法）。 */
@@ -192,7 +229,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
 
     /**
      * 控件安装位的世界 AABB 列表（随 FACING 旋转；PEDAL 为一对左右两个框）。
-     * 供安装预览框使用；如需调整安装位置，改上面的北向基准 shape 即可。
+     * 供安装/拆除预览框与拆除判定（onSneakWrenched 按点击位置命中）使用；
+     * 如需调整安装位置，改上面的北向基准 shape 即可。
      */
     public static List<AABB> installBounds(ControlDeskBlockEntity.ControlType type, Direction facing, BlockPos pos) {
         List<AABB> result = new ArrayList<>();
