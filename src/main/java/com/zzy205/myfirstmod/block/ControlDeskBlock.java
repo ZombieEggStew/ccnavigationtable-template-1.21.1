@@ -2,12 +2,22 @@ package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
+import com.zzy205.myfirstmod.item.MyModItems;
 import net.createmod.catnip.math.VoxelShaper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
@@ -18,14 +28,20 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
-import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * 控制台方块 — 底座由 blockstate 静态模型渲染；踏板/操纵杆为可安装控件物品（pedal/joystick），安装系统接入后叠加渲染。
- * 水平四向朝向（北/东/南/西）。
+ * 控制台方块 — 底座由 blockstate 静态模型渲染；踏板/操纵杆为可安装控件物品（pedal/joystick）。
+ * 手持控件物品右键安装到北面（模型空间 -Z 侧，随 FACING 旋转）；扳手蹲下右键卸载；破坏时控件掉落。
  * 模型：models/block/control_desk_1/my_control_desk_base.json
  */
 public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
@@ -33,13 +49,19 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     public static final MapCodec<ControlDeskBlock> CODEC = simpleCodec(ControlDeskBlock::new);
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
 
-    /** 北向基准形状（对应模型元素 from/to） */
+    /** 北向基准形状（对应模型元素 from/to）：仅桌体一块；选择框/碰撞箱均使用，安装控件不改变形状 */
     private static final VoxelShaper SHAPE = VoxelShaper.forHorizontal(
-            Shapes.or(
-                    Block.box(0, 0, 8, 16, 8, 16)
-            ),
+            Block.box(0, 0, 8, 16, 8, 16),
             Direction.NORTH
     );
+
+    // ── 控件安装位（北向基准 0..16 模型空间，随 FACING 旋转；供安装预览框使用） ──
+    private static final VoxelShape PEDAL_LEFT_SHAPE = Block.box(12, 2, 3, 15, 7, 4);
+    private static final VoxelShape PEDAL_RIGHT_SHAPE = Block.box(1, 2, 3, 4, 7, 4);
+    private static final VoxelShape JOYSTICK_SHAPE = Block.box(6.8, 3, 1.8, 9.2, 17.4, 4.2);
+    private static final VoxelShaper PEDAL_LEFT_SHAPER = VoxelShaper.forHorizontal(PEDAL_LEFT_SHAPE, Direction.NORTH);
+    private static final VoxelShaper PEDAL_RIGHT_SHAPER = VoxelShaper.forHorizontal(PEDAL_RIGHT_SHAPE, Direction.NORTH);
+    private static final VoxelShaper JOYSTICK_SHAPER = VoxelShaper.forHorizontal(JOYSTICK_SHAPE, Direction.NORTH);
 
     public ControlDeskBlock(Properties properties) {
         super(properties);
@@ -82,7 +104,109 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         return null;
     }
 
-    // ═══════════════ Create 扳手旋转（顺时针 90°） ═══════════════
+    // ════════════════════ 控件安装 / 卸载 ════════════════════
+
+    @Override
+    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
+                                              Player player, InteractionHand hand, BlockHitResult hitResult) {
+        ControlDeskBlockEntity.ControlType type = controlTypeOf(stack);
+        if (type == null) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+        if (level.isClientSide) {
+            return ItemInteractionResult.SUCCESS;
+        }
+        BlockEntity be = level.getBlockEntity(pos);
+        if (!(be instanceof ControlDeskBlockEntity desk)) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+        if (!desk.install(type)) {
+            // 已安装：不消耗物品，提示玩家
+            if (player != null) {
+                player.displayClientMessage(
+                        Component.translatable("gui.ccpe.control_desk.already_installed"), true);
+            }
+            return ItemInteractionResult.SUCCESS;
+        }
+        // 安装成功：非创造模式消耗 1 个物品
+        if (player != null && !player.isCreative()) {
+            stack.shrink(1);
+        }
+        return ItemInteractionResult.SUCCESS;
+    }
+
+    /** 扳手蹲下右键：卸载全部已安装控件（掉落物品）；无控件时走默认拆方块行为。 */
+    @Override
+    public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
+        Level level = context.getLevel();
+        BlockPos pos = context.getClickedPos();
+        if (!(level instanceof ServerLevel)) {
+            return InteractionResult.SUCCESS;
+        }
+        BlockEntity be = level.getBlockEntity(pos);
+        if (be instanceof ControlDeskBlockEntity desk) {
+            boolean removedAny = false;
+            for (ControlDeskBlockEntity.ControlType type : ControlDeskBlockEntity.ControlType.values()) {
+                if (desk.remove(type)) {
+                    Block.popResource(level, pos, new ItemStack(controlItem(type)));
+                    removedAny = true;
+                }
+            }
+            if (removedAny) {
+                IWrenchable.playRemoveSound(level, pos);
+                return InteractionResult.SUCCESS;
+            }
+        }
+        return IWrenchable.super.onSneakWrenched(state, context);
+    }
+
+    /** 方块被破坏时已安装控件随掉落（对齐 MonitorBlock.getDrops 的做法）。 */
+    @Override
+    public List<ItemStack> getDrops(BlockState state, LootParams.Builder params) {
+        List<ItemStack> drops = new ArrayList<>(super.getDrops(state, params));
+        BlockEntity be = params.getOptionalParameter(LootContextParams.BLOCK_ENTITY);
+        if (be instanceof ControlDeskBlockEntity desk) {
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)) {
+                drops.add(new ItemStack(MyModItems.CONTROL_PEDAL.get()));
+            }
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)) {
+                drops.add(new ItemStack(MyModItems.CONTROL_JOYSTICK.get()));
+            }
+        }
+        return drops;
+    }
+
+    /** 控件类型对应的物品。 */
+    public static Item controlItem(ControlDeskBlockEntity.ControlType type) {
+        return switch (type) {
+            case PEDAL -> MyModItems.CONTROL_PEDAL.get();
+            case JOYSTICK -> MyModItems.CONTROL_JOYSTICK.get();
+        };
+    }
+
+    private static ControlDeskBlockEntity.ControlType controlTypeOf(ItemStack stack) {
+        if (stack.is(MyModItems.CONTROL_PEDAL.get())) return ControlDeskBlockEntity.ControlType.PEDAL;
+        if (stack.is(MyModItems.CONTROL_JOYSTICK.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK;
+        return null;
+    }
+
+    /**
+     * 控件安装位的世界 AABB 列表（随 FACING 旋转；PEDAL 为一对左右两个框）。
+     * 供安装预览框使用；如需调整安装位置，改上面的北向基准 shape 即可。
+     */
+    public static List<AABB> installBounds(ControlDeskBlockEntity.ControlType type, Direction facing, BlockPos pos) {
+        List<AABB> result = new ArrayList<>();
+        switch (type) {
+            case PEDAL -> {
+                result.add(PEDAL_LEFT_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
+                result.add(PEDAL_RIGHT_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
+            }
+            case JOYSTICK -> result.add(JOYSTICK_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
+        }
+        return result;
+    }
+
+    // ═══════════════════ Create 扳手旋转（顺时针 90°） ═══════════════════
     // Create 默认 getRotatedBlockState 只识别 Create 自己的朝向属性，
     // 这里把原版 HORIZONTAL_FACING 顺时针转 90°，实现四向旋转。
 

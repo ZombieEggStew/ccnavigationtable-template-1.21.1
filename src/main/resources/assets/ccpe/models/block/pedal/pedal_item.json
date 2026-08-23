@@ -35,6 +35,34 @@
 			}
 		},
 		{
+			"name": "pedal",
+			"from": [1, 2, 3],
+			"to": [4, 7, 4],
+			"rotation": {"angle": 22.5, "axis": "x", "origin": [2, 2, 3]},
+			"faces": {
+				"north": {"uv": [13.5, 0, 14.5, 1.5], "texture": "#0"},
+				"east": {"uv": [14, 0, 14.5, 1.5], "texture": "#0"},
+				"south": {"uv": [13.5, 0, 14.5, 1.5], "texture": "#0"},
+				"west": {"uv": [13.5, 0, 14, 1.5], "texture": "#0"},
+				"up": {"uv": [13.5, 0, 14.5, 0.5], "texture": "#0"},
+				"down": {"uv": [13.5, 1, 14.5, 1.5], "texture": "#0"}
+			}
+		},
+		{
+			"name": "pedal_stick",
+			"from": [2, 3, 4],
+			"to": [3, 4, 9],
+			"rotation": {"angle": 0, "axis": "y", "origin": [2, 3, 4]},
+			"faces": {
+				"north": {"uv": [15, 3.5, 15.5, 4], "texture": "#0"},
+				"east": {"uv": [15, 3.5, 15.5, 6.5], "rotation": 90, "texture": "#0"},
+				"south": {"uv": [15, 6, 15.5, 6.5], "texture": "#0"},
+				"west": {"uv": [15, 3.5, 15.5, 6.5], "rotation": 270, "texture": "#0"},
+				"up": {"uv": [15, 3.5, 15.5, 6.5], "texture": "#0"},
+				"down": {"uv": [15, 3.5, 15.5, 6.5], "rotation": 180, "texture": "#0"}
+			}
+		},
+		{
 			"name": "base",
 			"from": [12, 2, 7.5],
 			"to": [15, 5, 9.5],
@@ -47,15 +75,29 @@
 				"up": {"uv": [10.5, 0, 12, 0.5], "rotation": 180, "texture": "#0"},
 				"down": {"uv": [10.5, 1, 12, 1.5], "rotation": 180, "texture": "#0"}
 			}
+		},
+		{
+			"name": "base",
+			"from": [1, 2, 7.5],
+			"to": [4, 5, 9.5],
+			"rotation": {"angle": 0, "axis": "y", "origin": [2, 3, 8]},
+			"faces": {
+				"north": {"uv": [10.5, 0, 12, 1.5], "texture": "#0"},
+				"east": {"uv": [10.5, 0, 11, 1.5], "texture": "#0"},
+				"south": {"uv": [10.5, 0, 12, 1.5], "texture": "#0"},
+				"west": {"uv": [11.5, 0, 12, 1.5], "texture": "#0"},
+				"up": {"uv": [10.5, 0, 12, 0.5], "rotation": 180, "texture": "#0"},
+				"down": {"uv": [10.5, 1, 12, 1.5], "rotation": 180, "texture": "#0"}
+			}
 		}
 	],
 	"display": {
 		"thirdperson_righthand": {
-			"translation": [-4, 3.75, 1.25],
+			"translation": [0, 3.75, 1.25],
 			"scale": [0.75, 0.75, 0.75]
 		},
 		"thirdperson_lefthand": {
-			"translation": [4.25, 3.75, 1.25],
+			"translation": [0, 3.75, 1.25],
 			"scale": [0.75, 0.75, 0.75]
 		},
 		"firstperson_righthand": {
@@ -65,12 +107,13 @@
 			"scale": [0.75, 0.75, 0.75]
 		},
 		"ground": {
-			"translation": [-3.5, 5.5, 0],
+			"translation": [0, 5.5, 0],
 			"scale": [0.75, 0.75, 0.75]
 		},
 		"gui": {
 			"rotation": [30, 145, 0],
-			"translation": [5.25, 2.5, 0]
+			"translation": [0.75, 2.75, 0],
+			"scale": [0.8, 0.8, 0.8]
 		}
 	}
 }
