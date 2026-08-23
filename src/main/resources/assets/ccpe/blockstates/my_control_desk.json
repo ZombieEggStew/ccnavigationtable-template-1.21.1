@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 0 },
+    "facing=east":  { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 90 },
+    "facing=south": { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 180 },
+    "facing=west":  { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 270 }
+  }
+}

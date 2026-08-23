@@ -24,6 +24,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.redstone_transceiver);
                 output.accept(MyModBlocks.transmission_peripheral);
                 output.accept(MyModBlocks.monitor);
+                output.accept(MyModBlocks.my_control_desk);
                 output.accept(MyModItems.MODULE_BUTTON_1);
                 output.accept(MyModItems.MODULE_TOGGLE_SWITCH);
                 output.accept(MyModItems.MODULE_KNOB);

@@ -42,7 +42,12 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
-
+    public static final DeferredBlock<ControlDeskBlock> my_control_desk =
+            registerBlocks("my_control_desk", () -> new ControlDeskBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.WOOD).
+                    strength(1.5f, 6.0f).
+                    noOcclusion()
+            ));
 
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {
         DeferredBlock<T> blocks = BLOCKS.register(name , block);
