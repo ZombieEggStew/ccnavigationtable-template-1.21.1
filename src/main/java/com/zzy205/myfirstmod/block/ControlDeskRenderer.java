@@ -17,7 +17,7 @@ import org.jetbrains.annotations.NotNull;
 
 /**
  * 控制台原版 BER 回退渲染（Flywheel 不可用时使用），对齐 simulated 的 ThrottleLeverRenderer：
- * 踏板/操纵杆 PartialModel 用 SuperByteBuffer 叠加在底座（blockstate 静态模型）之上。
+ * 左右踏板/操纵杆 PartialModel 用 SuperByteBuffer 叠加在底座（blockstate 静态模型）之上。
  * <p>
  * 与 {@link ControlDeskVisual} 共享同一套朝向约定：模型按与底座相同的方块空间（北向）建模，
  * 渲染时绕方块中心 Y 旋转到 FACING（BER 的 PoseStack 已平移到方块位置，无需再平移）。
@@ -38,12 +38,15 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         VertexConsumer vb = bufferSource.getBuffer(RenderType.cutoutMipped());
 
         SuperByteBuffer pedal = CachedBuffers.partial(MyModPartialModels.CONTROL_DESK_PEDAL, state);
+        SuperByteBuffer pedalRight = CachedBuffers.partial(MyModPartialModels.CONTROL_DESK_PEDAL_RIGHT, state);
         SuperByteBuffer joystick = CachedBuffers.partial(MyModPartialModels.CONTROL_DESK_JOYSTICK, state);
 
         initialTransform(pedal, facing);
+        initialTransform(pedalRight, facing);
         initialTransform(joystick, facing);
 
         pedal.light(light).renderInto(ms, vb);
+        pedalRight.light(light).renderInto(ms, vb);
         joystick.light(light).renderInto(ms, vb);
     }
 

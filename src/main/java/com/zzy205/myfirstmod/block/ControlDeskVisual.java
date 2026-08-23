@@ -14,7 +14,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.function.Consumer;
 
 /**
- * 控制台 Flywheel 渲染：踏板与操纵杆 PartialModel 叠加在底座（blockstate 静态模型）之上。
+ * 控制台 Flywheel 渲染：左右踏板与操纵杆 PartialModel 叠加在底座（blockstate 静态模型）之上。
  * <p>
  * 参照 simulated 的 ThrottleLeverVisual：模型按与底座相同的方块空间建模，
  * 渲染时平移到方块位置，再按 FACING 绕 Y 旋转（与 blockstate 对底座模型的 y 旋转一致）。
@@ -24,6 +24,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         implements SimpleDynamicVisual {
 
     private final TransformedInstance pedal;
+    private final TransformedInstance pedalRight;
     private final TransformedInstance joystick;
 
     public ControlDeskVisual(VisualizationContext ctx, ControlDeskBlockEntity blockEntity, float partialTick) {
@@ -31,6 +32,9 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
 
         this.pedal = this.instancerProvider()
                 .instancer(InstanceTypes.TRANSFORMED, Models.partial(MyModPartialModels.CONTROL_DESK_PEDAL))
+                .createInstance();
+        this.pedalRight = this.instancerProvider()
+                .instancer(InstanceTypes.TRANSFORMED, Models.partial(MyModPartialModels.CONTROL_DESK_PEDAL_RIGHT))
                 .createInstance();
         this.joystick = this.instancerProvider()
                 .instancer(InstanceTypes.TRANSFORMED, Models.partial(MyModPartialModels.CONTROL_DESK_JOYSTICK))
@@ -46,15 +50,18 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
 
     private void transformAll() {
         this.pedal.setIdentityTransform();
+        this.pedalRight.setIdentityTransform();
         this.joystick.setIdentityTransform();
 
         final BlockState state = this.blockEntity.getBlockState();
         final Direction facing = state.getValue(ControlDeskBlock.FACING);
 
         this.initialTransform(this.pedal, facing);
+        this.initialTransform(this.pedalRight, facing);
         this.initialTransform(this.joystick, facing);
 
         this.pedal.setChanged();
+        this.pedalRight.setChanged();
         this.joystick.setChanged();
     }
 
@@ -67,18 +74,21 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     @Override
     public void collectCrumblingInstances(Consumer<Instance> consumer) {
         consumer.accept(this.pedal);
+        consumer.accept(this.pedalRight);
         consumer.accept(this.joystick);
     }
 
     @Override
     public void updateLight(float v) {
         this.relight(this.pedal);
+        this.relight(this.pedalRight);
         this.relight(this.joystick);
     }
 
     @Override
     protected void _delete() {
         this.pedal.delete();
+        this.pedalRight.delete();
         this.joystick.delete();
     }
 }

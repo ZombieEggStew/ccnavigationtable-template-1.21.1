@@ -9,8 +9,10 @@ import net.minecraft.resources.ResourceLocation;
  */
 public class MyModPartialModels {
 
-    /** 控制台：踏板（东侧地面） */
+    /** 控制台：左踏板（东侧地面） */
     public static final PartialModel CONTROL_DESK_PEDAL = block("control_desk_1/pedal");
+    /** 控制台：右踏板（西侧地面，与左踏板关于 x=8 镜像） */
+    public static final PartialModel CONTROL_DESK_PEDAL_RIGHT = block("control_desk_1/pedal_right");
     /** 控制台：操纵杆（桌面北缘） */
     public static final PartialModel CONTROL_DESK_JOYSTICK = block("control_desk_1/joystick");
     /** Monitor：偏航支架（bearing，随 facing+offset+yaw） */
