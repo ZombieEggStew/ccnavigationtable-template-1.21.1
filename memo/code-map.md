@@ -46,7 +46,7 @@ com.zzy205.myfirstmod
 |---|---|
 | `block/MyModBlocks.java` | DeferredRegister 中的方块注册；新增方块先看这里 |
 | `block/MyModBlockEntities.java` | 方块实体类型注册及方块实体与方块的绑定 |
-| `block/MyModPartialModels.java` | Create/Catnip 部分模型资源位置集中定义（传动外设、控制台踏板/操纵杆、Monitor 部件等） |
+| `block/MyModPartialModels.java` | Create/Catnip 部分模型资源位置集中定义（传动外设、Monitor 部件等） |
 
 ### Monitor
 
@@ -82,18 +82,20 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `block/TransmissionPeripheralBlockEntity.java` | 传动外设方块实体：变速器模式（ratio/targetSpeed）与舵机模式（服务器权威 ±180° 角度定位 + Lua 控制 + 每 tick 同步，类 TiltAdapter）及 CC 外设实例 |
 | `block/TransmissionPeripheralRenderer.java` | 传动外设的 Create 动态方块实体渲染（舵机模式下输出端按权威角度渲染） |
 | `block/TransmissionPeripheralVisual.java` | 传动外设的 Create Flywheel Visual 实现（OrientedInstance，舵机模式输出端角度渲染） |
-| `block/ControlDeskBlock.java` | 控制台方块：底座由 blockstate 静态模型渲染，踏板/操纵杆由动态渲染叠加；`FACING`（原版 `HORIZONTAL_FACING`）四向朝向；碰撞体 = 桌体 + 前部中央支撑两盒；扳手旋转用 `getRotatedBlockState` 覆盖原版朝向属性（顺时针 90°） | 控制台朝向、碰撞、扳手旋转 |
-| `block/ControlDeskBlockEntity.java` | 控制台方块实体：仅承载 Flywheel Visual（踏板/操纵杆叠加渲染），暂无业务状态、无 ticker | 控制台状态/动画数据接入 |
-| `block/ControlDeskVisual.java` | 控制台 Flywheel Visual（`SimpleDynamicVisual`）：左/右踏板 + 操纵杆三个 `TransformedInstance` 叠加在底座之上；变换 = 平移到方块位置 + 绕方块中心 Y 旋转到 FACING；暂无动画，仅静态叠加 | 控制台 Flywheel 渲染、动画 |
-| `block/ControlDeskRenderer.java` | 控制台原版 BER 回退渲染（Flywheel 不可用时）：三个 PartialModel 用 SuperByteBuffer 叠加，与 Visual 共享同一套 facing 旋转约定；渲染盒放大为 1.5³ 防操纵杆把手（y≈17.4/16）被视锥剔除 | 控制台 BER 回退路径 |
+| `block/ControlDeskBlock.java` | 控制台方块：底座由 blockstate 静态模型渲染；踏板/操纵杆已改为可安装控件物品（pedal/joystick），安装系统接入后叠加渲染；`FACING`（原版 `HORIZONTAL_FACING`）四向朝向；碰撞体 = 桌体 + 前部中央支撑两盒；扳手旋转用 `getRotatedBlockState` 覆盖原版朝向属性（顺时针 90°） | 控制台朝向、碰撞、扳手旋转 |
+| `block/ControlDeskBlockEntity.java` | 控制台方块实体：目前仅承载 Flywheel Visual，暂无业务状态、无 ticker；控件安装/状态数据待接入 | 控制台状态/控件安装/动画数据接入 |
+| `block/ControlDeskVisual.java` | 控制台 Flywheel Visual（`SimpleDynamicVisual`）：目前为空壳（踏板/操纵杆已移除）；控件安装系统接入后在此按已安装状态叠加对应 PartialModel（参考 aeroworks ConsoleVisual） | 控制台 Flywheel 渲染、安装控件渲染、动画 |
+| `block/ControlDeskRenderer.java` | 控制台原版 BER 回退渲染（Flywheel 不可用时）：目前为空（底座由 blockstate 静态渲染）；控件安装系统接入后在此叠加已安装控件；渲染盒保留 1.5³ 防控件超出 1 格被视锥剔除 | 控制台 BER 回退路径 |
 
 ### 控制台模型布局（北向基准）
 
 - 底座（blockstate 静态模型 `control_desk_1/my_control_desk_base.json`）：桌体 `x0..16, y0..8, z8..16`（桌面顶面 y=8）+ 前部中央支撑 `x5..11, y0..8, z0..8`。
-- 左踏板（`control_desk_1/pedal.json`，东侧地面）：脚踏面 `x12..15, y2..7, z3..4`，绕 x 轴 22.5° 静态倾斜，枢轴 `[13,2,3]`；底座 `x13..14, y3..4, z4..9`。
-- 右踏板（`control_desk_1/pedal_right.json`，西侧地面）：左踏板关于 x=8 的镜像（x' = 16−x）：脚踏面 `x1..4`、枢轴 `[3,2,3]`；底座 `x2..3`。UV 与左踏板一致（共用 `ccpe:block/control_desk` 贴图）。
-- 操纵杆（`control_desk_1/joystick.json`，桌面北缘前方）：杆 `x7..9, y3..12, z2..4`；把手 `x6.8..9.2, y12..17.4, z1.8..4.2`。
-- 渲染约定（Visual 与 BER 共享）：模型按与底座相同的方块空间（北向）建模，渲染时绕方块中心 Y 旋转到 FACING，与 blockstate 对底座模型的 y 旋转一致。暂无动画，仅静态叠加。
+- 控件模型已独立为物品并移出控制台目录（原 `control_desk_1/pedal.json`、`joystick.json` 已删除）：
+  - 脚踏板（`block/pedal/pedal.json`，物品模型 `pedal_item.json`）：脚踏面 `x12..15, y2..7, z3..4`，绕 x 轴 22.5° 静态倾斜，枢轴 `[13,2,3]`；踏板杆 `x13..14, y3..4, z4..9`；`pedal_base.json` 为安装底座。
+  - 操纵杆（`block/joystick/joystick.json`，物品模型 `joystick_item.json`）：杆 `x7..9, y3..12, z2..4`；把手 `x6.8..9.2, y12..17.4, z1.8..4.2`；`joystick_base.json` 为安装底座。
+  - 物品栏模型路径：`models/item/pedal.json` → `block/pedal/pedal_item`；`models/item/joystick.json` → `block/joystick/joystick_item`（均带 display 变换）。
+- 控件物品注册：`item/MyModItems.java` 的 `CONTROL_PEDAL`（"pedal"）/ `CONTROL_JOYSTICK`（"joystick"）。
+- 渲染约定（控件安装系统接入后）：模型按与底座相同的方块空间（北向）建模，渲染时绕方块中心 Y 旋转到 FACING，与 blockstate 对底座模型的 y 旋转一致。
 
 ## Monitor 状态与模块模型
 
@@ -197,7 +199,8 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | 需求 | 首先查看 | 通常还要检查 |
 |---|---|---|
 | 新增方块/物品 | `block/MyModBlocks.java` / `item/MyModItems.java` | `MyModBlockEntities.java`、资源模型、语言文件、创造模式物品栏 |
-| 修改控制台（Control Desk）朝向、碰撞或渲染 | `block/ControlDeskBlock.java`（朝向/碰撞/扳手）、`ControlDeskVisual.java` / `ControlDeskRenderer.java`（渲染） | `MyModPartialModels.java`、`assets/ccpe/models/block/control_desk_1/`、`CCPeripheralExtenderClient.java` |
+| 修改控制台（Control Desk）朝向、碰撞或渲染 | `block/ControlDeskBlock.java`（朝向/碰撞/扳手）、`ControlDeskVisual.java` / `ControlDeskRenderer.java`（渲染） | `assets/ccpe/models/block/control_desk_1/`、`assets/ccpe/models/block/pedal/`、`assets/ccpe/models/block/joystick/`、`CCPeripheralExtenderClient.java` |
+| 修改控制台控件物品（踏板/操纵杆） | `item/MyModItems.java`（`CONTROL_PEDAL` / `CONTROL_JOYSTICK`） | `assets/ccpe/models/item/pedal.json` / `joystick.json`、`assets/ccpe/models/block/pedal/`、`assets/ccpe/models/block/joystick/`、语言文件 |
 | 修改 Monitor 右键或射线命中 | `block/MonitorBlock.java`（`intersectScreen`/`rayToGrid`）、`client/MonitorHitDetector.java` | `client/MonitorGridOverlay.java`、`MonitorClientRegistry.java` |
 | 修改可动变换（俯仰/偏航/偏移） | `block/MonitorBlock.java`（枢轴常量）、`client/MonitorTransform.java` | `MonitorBlockEntity.setAngles`、`MonitorTransformPayload`、`MonitorMenuScreen`、`MonitorRenderer` |
 | 修改 Monitor 选择框描边 | `client/MonitorOutlineRenderer.java` | `MonitorTransform`、`MonitorBlock` 枢轴常量 |

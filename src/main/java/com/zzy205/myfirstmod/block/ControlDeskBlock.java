@@ -24,7 +24,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 控制台方块 — 底座由 blockstate 静态模型渲染，踏板/操纵杆由 Flywheel Visual 叠加。
+ * 控制台方块 — 底座由 blockstate 静态模型渲染；踏板/操纵杆为可安装控件物品（pedal/joystick），安装系统接入后叠加渲染。
  * 水平四向朝向（北/东/南/西）。
  * 模型：models/block/control_desk_1/my_control_desk_base.json
  */
@@ -36,7 +36,6 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     /** 北向基准形状（对应模型元素 from/to） */
     private static final VoxelShaper SHAPE = VoxelShaper.forHorizontal(
             Shapes.or(
-                    Block.box(5, 0, 0, 11, 8, 8),
                     Block.box(0, 0, 8, 16, 8, 16)
             ),
             Direction.NORTH

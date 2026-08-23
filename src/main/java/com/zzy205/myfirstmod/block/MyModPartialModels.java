@@ -9,12 +9,7 @@ import net.minecraft.resources.ResourceLocation;
  */
 public class MyModPartialModels {
 
-    /** 控制台：左踏板（东侧地面） */
-    public static final PartialModel CONTROL_DESK_PEDAL = block("control_desk_1/pedal");
-    /** 控制台：右踏板（西侧地面，与左踏板关于 x=8 镜像） */
-    public static final PartialModel CONTROL_DESK_PEDAL_RIGHT = block("control_desk_1/pedal_right");
-    /** 控制台：操纵杆（桌面北缘） */
-    public static final PartialModel CONTROL_DESK_JOYSTICK = block("control_desk_1/joystick");
+    /** 控制台：底座由 blockstate 静态模型渲染；踏板/操纵杆已改为可安装控件物品（pedal/joystick），安装后渲染待接入 */
     /** Monitor：偏航支架（bearing，随 facing+offset+yaw） */
     public static final PartialModel MONITOR_BEARING = block("monitor/my_monitor_bearing");
     /** Monitor：屏幕外壳（case，随 facing+offset+yaw+pitch；模型带 cutout 开孔） */

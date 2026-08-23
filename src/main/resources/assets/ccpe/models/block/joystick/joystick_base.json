@@ -1,0 +1,22 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "ccpe:block/control_desk",
+		"particle": "ccpe:block/control_desk"
+	},
+	"elements": [
+		{
+			"from": [5, 0, 0],
+			"to": [11, 8, 8],
+			"faces": {
+				"north": {"uv": [8.5, 12, 11.5, 16], "texture": "#0"},
+				"east": {"uv": [12, 12, 16, 16], "texture": "#0"},
+				"south": {"uv": [8.5, 12, 11.5, 16], "texture": "#0"},
+				"west": {"uv": [12, 12, 16, 16], "rotation": 180, "texture": "#0"},
+				"up": {"uv": [2.5, 12, 5.5, 16], "rotation": 180, "texture": "#0"},
+				"down": {"uv": [8.5, 12, 11.5, 16], "texture": "#0"}
+			}
+		}
+	]
+}

@@ -71,6 +71,8 @@
   "item.ccpe.module_toggle_switch": "开关模块 (1×1)",
   "item.ccpe.module_knob": "旋钮模块 (2×2)",
   "item.ccpe.module_screen": "屏幕模块",
+  "item.ccpe.pedal": "脚踏板",
+  "item.ccpe.joystick": "操纵杆",
 
   "gui.ccpe.redstone_transceiver": "红石收发器",
   "gui.ccpe.redstone_transceiver.hold_to_delete": "按住鼠标左键删除此条",

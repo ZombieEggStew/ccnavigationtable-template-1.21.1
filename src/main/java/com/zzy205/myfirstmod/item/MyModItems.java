@@ -26,6 +26,12 @@ public class MyModItems {
     public static final DeferredItem<Item> MODULE_SCREEN = ITEMS.register(
             "module_screen", () -> new Item(new Item.Properties()));
 
+    // ── controlDesk 控件物品（可安装到控制台上）──
+    public static final DeferredItem<Item> CONTROL_PEDAL = ITEMS.register(
+            "pedal", () -> new Item(new Item.Properties()));
+    public static final DeferredItem<Item> CONTROL_JOYSTICK = ITEMS.register(
+            "joystick", () -> new Item(new Item.Properties()));
+
     /** 创建指定普通 Monitor 模块的物品栈；未知类型返回空栈。 */
     public static ItemStack monitorModuleStack(ModuleType type) {
         if (type == null) return ItemStack.EMPTY;

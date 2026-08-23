@@ -69,6 +69,8 @@
   "item.ccpe.module_toggle_switch": "Toggle Switch (1×1)",
   "item.ccpe.module_knob": "Knob (2×2)",
   "item.ccpe.module_screen": "Screen Module",
+  "item.ccpe.pedal": "Foot Pedal",
+  "item.ccpe.joystick": "Joystick",
 
   "gui.ccpe.redstone_transceiver": "Redstone Transceiver",
   "gui.ccpe.redstone_transceiver.hold_to_delete": "Hold left click to delete",

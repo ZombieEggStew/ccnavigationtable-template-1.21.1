@@ -5,7 +5,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * 控制台方块实体 — 仅承载 Flywheel Visual（踏板/操纵杆 PartialModel 渲染），暂无业务状态。
+ * 控制台方块实体 — 目前仅承载 Flywheel Visual；控件安装/状态数据待接入。
  */
 public class ControlDeskBlockEntity extends BlockEntity {
 
