@@ -62,20 +62,20 @@ public final class KnobModuleHandle extends ModuleHandle {
     }
 
     /**
-     * 读取相对百分比（0..100）：归一化角度 / 设定的最大旋转角度 × 100。
+     * 读取相对比例（0..1）：归一化角度 / 设定的最大旋转角度。
      */
     @LuaFunction
     public final double getRelativePercent() {
-        return getNormalizedAngle() / maxRotationAngle() * 100.0;
+        return getNormalizedAngle() / maxRotationAngle();
     }
 
     /**
-     * 读取绝对百分比：绝对角度 / 设定的最大旋转角度 × 100。
-     * 未开启物理限位时旋钮可转出设定范围，返回值可能超过 100 或为负数。
+     * 读取绝对比例：绝对角度 / 设定的最大旋转角度。
+     * 未开启物理限位时旋钮可转出设定范围，返回值可能超过 1 或为负数。
      */
     @LuaFunction
     public final double getAbsolutePercent() {
-        return be.getGridState().getKnobAngle(id) / maxRotationAngle() * 100.0;
+        return be.getGridState().getKnobAngle(id) / maxRotationAngle();
     }
 
     /** 设定的最大旋转角度（config "angle_limit"，未设置时默认 360）。 */

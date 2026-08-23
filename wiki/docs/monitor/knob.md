@@ -73,18 +73,18 @@ print(knob.getAbsoluteDetent())
 
 ## knob.getRelativePercent()
 
-Returns the relative percentage (number, 0..100): normalized angle / configured max rotation angle × 100.
+Returns the relative proportion (number, 0..1): normalized angle / configured max rotation angle.
 
 ```lua
--- max rotation angle 360°, knob at 180°: returns 50.0
+-- max rotation angle 360°, knob at 180°: returns 0.5
 print(knob.getRelativePercent())
 ```
 
 ## knob.getAbsolutePercent()
 
-Returns the absolute percentage (number): absolute angle / configured max rotation angle × 100. May exceed 100 (or be negative) when the knob is rotated past the configured max rotation angle (physical limit off).
+Returns the absolute proportion (number): absolute angle / configured max rotation angle. May exceed 1 (or be negative) when the knob is rotated past the configured max rotation angle (physical limit off).
 
 ```lua
--- max rotation angle 360°, knob at 405°: returns 112.5
+-- max rotation angle 360°, knob at 405°: returns 1.125
 print(knob.getAbsolutePercent())
 ```
