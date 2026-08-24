@@ -18,7 +18,7 @@ import java.util.function.Consumer;
  * 控制台 Flywheel Visual：按 BE 已安装控件状态叠加渲染控件（底座 + 本体）。
  * 安装状态变化时动态创建/删除实例；实例存在期间每帧重置变换并刷新 facing 旋转
  * （必须 setIdentityTransform，translate 为累加语义，否则模型每帧漂移）。
- * 操纵杆本体（joystick）叠加倾斜：绕枢轴 (8,3,3)（见 {@link JoystickTilt}）倾斜，
+ * 操纵杆本体（joystick）叠加倾斜：绕枢轴 (8,6,3)（见 {@link JoystickTilt}）倾斜，
  * 目标 = 模拟轴（每 tick 线性累加，{@link com.zzy205.myfirstmod.client.SeatControlState}）× 15°；
  * 动画用指数逼近追逐目标（aeroworks SMOOTHED 模式，帧时间修正），本实例持有平滑值。
  * 模型按与底座相同的方块空间（北向）建模，渲染时平移到方块位置 + 绕方块中心 Y 旋转到 FACING。
@@ -94,7 +94,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         return instance;
     }
 
-    /** 绕枢轴 (8,3,3) 倾斜：tiltY 绕 X 轴（W/S 前后），tiltX 绕 Z 轴（A/D 左右）。 */
+    /** 绕枢轴 (8,6,3) 倾斜：tiltY 绕 X 轴（W/S 前后），tiltX 绕 Z 轴（A/D 左右）。 */
     private static void applyTilt(TransformedInstance inst, float tiltX, float tiltY) {
         if (tiltX == 0f && tiltY == 0f) return;
         inst.translate(JoystickTilt.PIVOT_X, JoystickTilt.PIVOT_Y, JoystickTilt.PIVOT_Z);

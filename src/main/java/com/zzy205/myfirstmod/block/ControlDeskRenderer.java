@@ -25,7 +25,7 @@ import java.util.Map;
  * 控制台原版 BER 回退渲染（Flywheel 不可用时使用）：按 BE 已安装控件状态叠加踏板/操纵杆。
  * 与 {@link ControlDeskVisual} 共享同一套朝向约定：模型按与底座相同的方块空间（北向）建模，
  * 渲染时绕方块中心 Y 旋转到 FACING（BER 的 PoseStack 已平移到方块位置，无需再平移）。
- * 操纵杆本体叠加倾斜：绕枢轴 (8,3,3) 倾斜（SuperByteBuffer 变换链，与 Create HarvesterRenderer
+ * 操纵杆本体叠加倾斜：绕枢轴 (8,6,3) 倾斜（SuperByteBuffer 变换链，与 Create HarvesterRenderer
  * pivot 模式一致），倾斜 = 模拟轴 × 15°（轴值动力学由 SeatControlListener 推进），见 {@link JoystickTilt}。
  */
 public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBlockEntity> {
@@ -59,7 +59,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         }
     }
 
-    /** 操纵杆本体：facing 旋转 + 绕枢轴 (8,3,3) 倾斜（动画 = 指数逼近追逐模拟轴 × 15°）。 */
+    /** 操纵杆本体：facing 旋转 + 绕枢轴 (8,6,3) 倾斜（动画 = 指数逼近追逐模拟轴 × 15°）。 */
     private void renderJoystick(ControlDeskBlockEntity be, BlockState state, Direction facing,
                                 PoseStack ms, VertexConsumer vb, int light) {
         float[] smooth = smoothTilts.computeIfAbsent(be.getBlockPos(), k -> new float[2]);

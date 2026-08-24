@@ -43,6 +43,7 @@ import java.util.List;
 /**
  * 控制台方块 — 底座由 blockstate 静态模型渲染；踏板/操纵杆为可安装控件物品（pedal/joystick）。
  * 手持控件物品右键安装到北面（模型空间 -Z 侧，随 FACING 旋转）；扳手蹲下右键卸载；破坏时控件掉落。
+ * 扳手普通右键 / 空手蹲下右键 → 消费右键，配置菜单由客户端 ControlDeskPlacementOverlay 打开（不再旋转方块）。
  * 模型：models/block/control_desk_1/my_control_desk_base.json
  */
 public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
@@ -138,22 +139,17 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             return ItemInteractionResult.SUCCESS;
         }
 
-        // 空手 + 蹲下 + 命中已安装模块：消费右键（模块菜单由客户端 ControlDeskPlacementOverlay 打开）
-        if (stack.isEmpty() && player != null && player.isShiftKeyDown()
-                && hitControlTypeAt(level, state, pos, hitResult.getLocation()) != null) {
+        // 空手 + 蹲下右键：消费右键（控制台配置菜单由客户端 ControlDeskPlacementOverlay 打开）
+        if (stack.isEmpty() && player != null && player.isShiftKeyDown()) {
             return ItemInteractionResult.SUCCESS;
         }
         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 
-    /** 扳手普通右键（不蹲下）：命中已安装模块 → 消费（模块菜单由客户端 overlay 打开，不旋转）；未命中 → 默认旋转。 */
+    /** 扳手普通右键（不蹲下）：一律消费右键（配置菜单由客户端 overlay 打开），不再旋转方块。 */
     @Override
     public InteractionResult onWrenched(BlockState state, UseOnContext context) {
-        Level level = context.getLevel();
-        if (hitControlTypeAt(level, state, context.getClickedPos(), context.getClickLocation()) != null) {
-            return InteractionResult.SUCCESS;
-        }
-        return IWrenchable.super.onWrenched(state, context);
+        return InteractionResult.SUCCESS;
     }
 
     /** 扳手蹲下右键：按点击位置拆除对应的单个模块（掉落物品）；点击不在任何安装位时不拆方块；光桌（无模块）走默认拆方块行为。 */
@@ -183,13 +179,6 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             return InteractionResult.SUCCESS;
         }
         return IWrenchable.super.onSneakWrenched(state, context);
-    }
-
-    /** 点击位置命中的已安装控件类型（PEDAL 左右两框任一命中即算）；未命中返回 null。 */
-    private static ControlDeskBlockEntity.ControlType hitControlTypeAt(Level level, BlockState state, BlockPos pos,
-                                                                      Vec3 click) {
-        if (!(level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return null;
-        return hitControlType(desk, state.getValue(FACING), pos, click);
     }
 
     /** 点击位置命中的已安装控件类型（PEDAL 左右两框任一命中即算）；未命中返回 null。 */
@@ -268,14 +257,5 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             case JOYSTICK -> result.add(JOYSTICK_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
         }
         return result;
-    }
-
-    // ═══════════════════ Create 扳手旋转（顺时针 90°） ═══════════════════
-    // Create 默认 getRotatedBlockState 只识别 Create 自己的朝向属性，
-    // 这里把原版 HORIZONTAL_FACING 顺时针转 90°，实现四向旋转。
-
-    @Override
-    public BlockState getRotatedBlockState(BlockState originalState, Direction targetedFace) {
-        return originalState.setValue(FACING, originalState.getValue(FACING).getClockWise());
     }
 }

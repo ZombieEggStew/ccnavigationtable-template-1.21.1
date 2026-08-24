@@ -66,21 +66,23 @@ flowchart LR
 3. **Flywheel `PartialModel` 自动注册**（`PartialModelEventHandler` 在 `ModelEvent.RegisterAdditional` 遍历 `PartialModel.ALL` 注册、`BakingCompleted` 填充），**无需手动注册**；移动模型文件路径不影响加载，模型缺失会烘焙成 missing（渲染为空）。
 4. **控件模型拆分**：本体与底座分开建模（`pedal`/`pedal_right`/`pedal_base`、`joystick`/`joystick_base`），渲染需**分别挂 PartialModel**，别漏底座。
 
-## 模块设置菜单（✅ 已实现）
+## 控制台配置菜单（🔶 骨架）与模块设置菜单（✅ 已实现）
 
-### 打开方式
+### 打开方式（配置菜单）
 
-- **扳手普通右键（不蹲下）** 或 **空手蹲下右键**，准星命中已安装模块（安装位 AABB）→ 打开对应控件设置菜单（操纵杆 `JoystickModuleScreen` / 脚踏板 `PedalModuleScreen`）
+- **扳手普通右键（不蹲下）** 或 **空手蹲下右键**，准星指向 controlDesk（**任意位置**）→ 打开控制台配置菜单 `ControlDeskConfigScreen`（背景复用 JoystickModuleScreen：`MyUIElements.BACKGROUND` 192×169）
+- **当前配置**：① 频道滚轮条（第一条，对齐 MonitorMenuScreen：跳过已占用频道；复用 PE/Monitor 的全局频道注册表 `GlobalChannelRegistry`（经 `ControlDeskRegistry` 登记），频道全局唯一；关闭时经 `ControlDeskChannelPayload` → 服务端 `setChannel` 注册 + 落盘 + 蓝图兼容）；② 已安装控件列表（`InstalledModulesList`：物品栏图标 + 控件名称，数据来自客户端 BE 安装状态；**悬停整行高亮，点击行打开对应模块配置菜单**（操纵杆 `JoystickModuleScreen` / 脚踏板 `PedalModuleScreen`））；其余配置控件（按键绑定、触发模式等）后续接入
 - **扳手蹲下右键** → 拆除命中的模块（服务端 `onSneakWrenched`，掉落物品）；客户端 overlay 不拦截此组合（不打开菜单，让右键事件传到服务端）
 - 实现分层（对齐 Monitor 模式，Block 双端加载不引用 Screen）：
-  - `ControlDeskBlock.onWrenched`：命中已装模块 → 消费右键（**不旋转**）；未命中 → `IWrenchable.super`（保留扳手旋转）
-  - `ControlDeskBlock.useItemOn`：空手蹲下命中 → 消费右键
-  - `client/ControlDeskPlacementOverlay`：右键**边沿**检测（`useDown && !lastUseDown` 防连发）+（扳手 或 空手蹲下）→ 按命中类型打开 `JoystickModuleScreen` / `PedalModuleScreen`
+  - `ControlDeskBlock.onWrenched`：一律消费右键（**不再旋转方块**，`getRotatedBlockState` 已移除）
+  - `ControlDeskBlock.useItemOn`：空手蹲下 → 一律消费右键
+  - `client/ControlDeskPlacementOverlay`：右键**边沿**检测（`useDown && !lastUseDown` 防连发）+（扳手 或 空手蹲下）→ 准星指向控制台 → 打开 `ControlDeskConfigScreen`
+- **模块设置菜单入口**：控制台配置菜单中点击已安装控件行（`InstalledModulesList` 点击回调按控件类型分发）→ 打开对应模块设置菜单（`JoystickModuleScreen` / `PedalModuleScreen`）
 
 ### 控件设置菜单（JoystickModuleScreen / PedalModuleScreen）
 
 - 两屏幕均继承 `AbstractMonitorScreen`；背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169 + 标题控件名）；`ControlDeskPlacementOverlay` 按命中控件类型分发
-- `JoystickModuleScreen`（操纵杆）布局（自上而下）：① 前后键位绑定条（W/S，默认 w/s）② 前后轴设置条 `DoubleScrollValueBar`（左=回正时间 icon RECOVER 默认 20 tick 范围 0..100；右=档位/自由模式 ToggleButton：未选中 icon FREE_MODE = 自由模式满偏 tick 数（默认 20 范围 1..100），选中 icon INDEX = 档位数（默认 4 范围 1..8）；两值独立记忆，右槽数值/范围/tooltip 随开关状态切换）③ 左右键位绑定条（A/D，默认 a/d）④ 左右轴设置条（同上结构）；`PedalModuleScreen`（脚踏板）：① 左踏板按键绑定条（PEDAL_LEFT_UP / PEDAL_LEFT_DOWN）② 右踏板按键绑定条（PEDAL_RIGHT_UP / PEDAL_RIGHT_DOWN）③ 回正时间条 `ScrollValueBar`（icon RECOVER，默认 20 tick 范围 0..100，左右两踏板共用）
+- `JoystickModuleScreen`（操纵杆）布局（自上而下）：① 前后键位绑定条（W/S，默认 w/s）② 前后轴设置条 `DoubleScrollValueBar`（左=回正时间 icon RECOVER 默认 2 tick 范围 0..100；右=档位/自由模式 ToggleButton：未选中 icon FREE_MODE = 自由模式满偏 tick 数（默认 2 范围 1..100），选中 icon INDEX = 档位数（默认 4 范围 1..8）；两值独立记忆，右槽数值/范围/tooltip 随开关状态切换）③ 左右键位绑定条（A/D，默认 a/d）④ 左右轴设置条（同上结构）；`PedalModuleScreen`（脚踏板）：① 左踏板按键绑定条（PEDAL_LEFT_UP / PEDAL_LEFT_DOWN）② 右踏板按键绑定条（PEDAL_RIGHT_UP / PEDAL_RIGHT_DOWN）③ 回正时间条 `ScrollValueBar`（icon RECOVER，默认 20 tick 范围 0..100，左右两踏板共用）
 - **操纵杆配置已全部持久化**：BE NBT（两轴回正时间 `JoystickReturnTime`/`JoystickReturnTimeYaw` + 两轴档位模式 `GearModePitch`/`GearCountPitch`/`GearModeYaw`/`GearCountYaw` + 两轴自由模式满偏 tick 数 `JoystickFreeSpeedPitch`/`JoystickFreeSpeedYaw` + 四向按键 `JoystickKeyUp/Down/Left/Right`，旧存档缺失字段时保持默认）+ `saveAdditional`/`loadAdditional`/`writeSafe`/`getUpdateTag` 四路径 + `getUpdatePacket` 同步；屏幕打开时读客户端 BE 初始化、`onClose` 经 `ControlDeskConfigPayload`（pos + 两轴回正时间 + 两轴档位开关/档位数/自由速度 + 4 键，共 13 字段）→ 服务端 setter（`setJoystickReturnTime`/`setJoystickReturnTimeYaw`/`setGearConfig`/`setJoystickFreeSpeed`/`setJoystickKeys`）
 
 ### DoubleInputBar（双按键绑定条，`foundation/gui/widget/`）
@@ -93,7 +95,7 @@ flowchart LR
 
 ## 按键与交互（✅ 坐垫驱动已接入，踏板状态待实施）
 
-- **配置界面**：✅ 已实现（扳手右键 / 空手蹲下右键打开模块菜单，`DoubleInputBar` 按键捕获）；按键配置已存 BE（操纵杆四键 + 脚踏板四键，见「配置存储与 Create 蓝图兼容」）
+- **配置界面**：🔶 控制台配置菜单已就位（扳手右键 / 空手蹲下右键打开 `ControlDeskConfigScreen`），首条配置 = 频道（复用全局频道注册表，经 `ControlDeskChannelPayload` 保存）+ 已安装控件列表（点击行打开对应模块设置菜单）；按键配置已存 BE（操纵杆四键 + 脚踏板四键，见「配置存储与 Create 蓝图兼容」）；模块设置菜单（`DoubleInputBar` 按键捕获等）已实现，入口 = 配置菜单点击已安装控件行
 - **联动判定 + 按键监听**：✅ `ControlDeskSeatLink`（判定① 坐垫四邻 N/E/S/W 紧邻 1 格的 controlDesk 全部联动，最多 4 个；判定② 玩家骑乘 Create `SeatEntity`；操作模式 = ①+②，客户端/服务端各自现查零持久化）+ `SeatControlListener`（客户端每 tick 现查：进入操作模式输出联动信息，按下任一联动控制台**已安装控件**所配置的按键 → 边沿检测 debug 日志，含按键含义与归属控制台）；✅ payload 链路已接入（`SeatInputPayload` 每 tick 上报四方向按住态 → 服务端校验 → BE 权威模拟）；按键冲突方案已决定不实施
 - **虚拟摇杆 HUD overlay（测试用，默认关闭）**：✅ `SeatControlState`（客户端共享状态：操作模式 / 有无操纵杆 / 模拟轴 axisX,axisY(-1..1 带动力学) / 原始值 rawX,rawY(0/1) / 轴值 analogX,analogY(0..1 = |axis|)）+ `JoystickOverlay`（`LayeredDraw.Layer` 经 `RegisterGuiLayersEvent` 挂在 HOTBAR 之上，右下角**贴图方案**：底座 `textures/gui/joy_stick_ui.png` + 摇杆头 `textures/gui/crosshair.png`；摇杆头位置 = 圆心 + **模拟轴** × 行程，与 3D 动画同源、无额外平滑层；曾用 `fillCircle` 逐行扫描画圆、后又加 SMOOTHED 平滑层，均已弃）；**显示由客户端配置 `joystickOverlayEnabled` 控制（默认关闭）**；轴目标 = 操纵杆方向槽位**并集**（任一联动控制台该方向绑定的键按下即生效）；设计参考 aeroworks ConsoleHudOverlay
 - **按键可配置**：KeyMapping 注册（左踏板/右踏板/操纵杆 W/A/S/D）——**已决定不实施按键冲突处理**（本项目的按键仅作输入读取，不拦截原版行为；aeroworks 的 mixin 拦截 + drain KeyMapping + 移动清零三件套已调研，需要时可直接参考）
@@ -113,7 +115,7 @@ flowchart LR
 
 ## 动画（操纵杆已实施，踏板待实施）
 
-- **操纵杆**：✅ WASD 方向倾斜、松开回中，**最大 15°**（用户定稿，原 30° 作废），绕枢轴 **(8,3,3)**（Blockbench 找的旋转中心，模型像素）；**分层约定：数值层线性累加 + 动画层指数逼近** —— 数值 = **BE 运行时轴状态 `joystickAxisX/Y`（服务端权威，经 getUpdatePacket 同步）**（本地 `SeatControlState` 仅 HUD overlay 用，配置取第一个装操纵杆的控制台）：**自由模式**（档位开关关）按下按 `JoystickTilt.pressStep`（= 1/满偏tick，满偏 tick 数可配置，默认 20）累加、松开每 tick 向 0 累加 1/回正时间 `JoystickTilt.returnStep`（0 = 关闭回正保持不动）；**档位模式**（开关开）**关闭自动回正**，检测按键**按下边沿**（服务端按上一 tick 输入判定），进/退一档：轴值 = 离散档位 `pos(k) = -1 + 2k/(档位数-1)`（相邻档间隔 `JoystickTilt.gearStep` = **2/(档位数-1)**：2 档 = {-1,1}、3 档 = {-1,0,1}、4 档 = {-1,-1/3,1/3,1}；按住不重复步进），钳位两端；**离开坐垫档位保持**（服务端输入租约失效清除输入后：档位模式轴值保持、自由模式自然回正；渲染读 BE 轴值，所有客户端一致，非联动控制台不受本地玩家输入影响）；各 BE 用**自己的**两轴配置模拟（X 轴用 Yaw 系列、Y 轴用 Pitch 系列），CC 接口直接读数值层（BE 轴值）；**动画层**各渲染端（Visual 实例字段 / BER `Map<BlockPos,float[]>` / overlay SMOOTHED map）用 `JoystickTilt.approach` **指数逼近**追逐数值（aeroworks SMOOTHED 模式，`SMOOTH_DECAY=0.3`/tick，帧时间修正 `getGameTimeDeltaTicks`）；曾用 partialTick 线性插值方案（已弃）；Flywheel 路径 `TransformedInstance` 变换链 `rotateCentered → translate(pivot) → rotateX/rotateZ → translate(-pivot)`，BER 路径 SuperByteBuffer 同链（参考 Create HarvesterRenderer pivot 模式）；**方向符号待进游戏验证**（W=前推 / D=右摆 对应 rotateX/rotateZ 正负，反了翻转 `JoystickTilt.targetDeg` 符号）；**档位步进手感待进游戏验证**（每按一次进/退一档、按住不连跳；档位数 = 1 时步长为 0 不动作；**偶数档位（如 4 档）中心 0 不是档位**，从中心首次按下会吸附到最近档位——四舍五入向上取整偏前进方向，如 4 档从中心按前进直接到满偏 1，按后退到 -1/3，若手感不对可改为向下取整）
+- **操纵杆**：✅ WASD 方向倾斜、松开回中，**最大 15°**（用户定稿，原 30° 作废），绕枢轴 **(8,6,3)**（Blockbench 找的旋转中心，模型像素）；**分层约定：数值层线性累加 + 动画层指数逼近** —— 数值 = **BE 运行时轴状态 `joystickAxisX/Y`（服务端权威，经 getUpdatePacket 同步）**（本地 `SeatControlState` 仅 HUD overlay 用，配置取第一个装操纵杆的控制台）：**自由模式**（档位开关关）按下按 `JoystickTilt.pressStep`（= 1/满偏tick，满偏 tick 数可配置，默认 2）累加、松开每 tick 向 0 累加 1/回正时间 `JoystickTilt.returnStep`（0 = 关闭回正保持不动）；**档位模式**（开关开）**关闭自动回正**，检测按键**按下边沿**（服务端按上一 tick 输入判定），进/退一档：轴值 = 离散档位 `pos(k) = -1 + 2k/(档位数-1)`（相邻档间隔 `JoystickTilt.gearStep` = **2/(档位数-1)**：2 档 = {-1,1}、3 档 = {-1,0,1}、4 档 = {-1,-1/3,1/3,1}；按住不重复步进），钳位两端；**离开坐垫档位保持**（服务端输入租约失效清除输入后：档位模式轴值保持、自由模式自然回正；渲染读 BE 轴值，所有客户端一致，非联动控制台不受本地玩家输入影响）；各 BE 用**自己的**两轴配置模拟（X 轴用 Yaw 系列、Y 轴用 Pitch 系列），CC 接口直接读数值层（BE 轴值）；**动画层**各渲染端（Visual 实例字段 / BER `Map<BlockPos,float[]>` / overlay SMOOTHED map）用 `JoystickTilt.approach` **指数逼近**追逐数值（aeroworks SMOOTHED 模式，`SMOOTH_DECAY=0.3`/tick，帧时间修正 `getGameTimeDeltaTicks`）；曾用 partialTick 线性插值方案（已弃）；Flywheel 路径 `TransformedInstance` 变换链 `rotateCentered → translate(pivot) → rotateX/rotateZ → translate(-pivot)`，BER 路径 SuperByteBuffer 同链（参考 Create HarvesterRenderer pivot 模式）；**方向符号待进游戏验证**（W=前推 / D=右摆 对应 rotateX/rotateZ 正负，反了翻转 `JoystickTilt.targetDeg` 符号）；**档位步进手感待进游戏验证**（每按一次进/退一档、按住不连跳；档位数 = 1 时步长为 0 不动作；**偶数档位（如 4 档）中心 0 不是档位**，从中心首次按下会吸附到最近档位——四舍五入向上取整偏前进方向，如 4 档从中心按前进直接到满偏 1，按后退到 -1/3，若手感不对可改为向下取整）
 - **踏板：踩下 = 前后平移（不是旋转！）**，Visual（Flywheel）与 BER 两条路径都要支持（待实施）
 
 ## CC 外设（待实施）
@@ -129,7 +131,7 @@ flowchart LR
   2. BE **必须实现 `getUpdatePacket()`**（quill 保存读的是客户端 BE，否则存出旧配置）
   3. 配置变更后 `sendBlockUpdated` + 先落盘再保存蓝图（自动存档 ~30s 间隔，会回滚未落盘配置）
 - **阶段一已按此实现**：BE 的控件安装状态 NBT 持久化 + `getUpdatePacket` + `writeSafe` 全部就位
-- **操纵杆配置已全部持久化**：两轴回正时间 + 两轴档位模式（开关 + 档位数，默认关 / 4 档）+ 两轴自由模式满偏 tick 数（默认 20，范围 1..100）+ 四向按键（默认 w/s/a/d）存 BE NBT 四路径全覆盖；`JoystickModuleScreen` 打开时读客户端 BE 初始化、`onClose` 经 `ControlDeskConfigPayload`（13 字段）→ 服务端 setter（`notifyChange` 同步）
+- **操纵杆配置已全部持久化**：两轴回正时间 + 两轴档位模式（开关 + 档位数，默认关 / 4 档）+ 两轴自由模式满偏 tick 数（默认 2，范围 1..100）+ 四向按键（默认 w/s/a/d）存 BE NBT 四路径全覆盖；`JoystickModuleScreen` 打开时读客户端 BE 初始化、`onClose` 经 `ControlDeskConfigPayload`（13 字段）→ 服务端 setter（`notifyChange` 同步）
 - **脚踏板配置已全部持久化**：回正时间（`PedalReturnTime`，左右共用）+ 四个按键绑定（`PedalKeyLeftUp`/`PedalKeyLeftDown`/`PedalKeyRightUp`/`PedalKeyRightDown`）存 BE NBT 四路径全覆盖；`PedalModuleScreen` 打开时读客户端 BE 初始化、`onClose` 经 `PedalConfigPayload`（5 字段，与操纵杆包分离防互覆盖）→ 服务端 setter（`setPedalReturnTime`/`setPedalKeys`）
 - **待接入**：踏板触发模式（按住式/切换式）
 
@@ -140,7 +142,7 @@ flowchart LR
 3. ✅ payload 链路（坐垫校验 → BE 轴状态 → 广播）已接入；按键冲突方案已决定不实施（见风险 1）
 4. ✅ BE 运行时轴状态（`joystickAxisX/Y`）+ 服务端权威更新（BE ticker 用 `JoystickTilt` 动力学模拟）+ 广播同步（`getUpdatePacket`）
 5. ✅ 操纵杆倾斜动画（15°、枢轴 8,3,3、**模拟轴动力学驱动**：按下逼近 ±1 / 松开按回正时间归零，Flywheel Visual + BER 双路径）；⏳ 踏板平移动画
-6. 🔶 配置 GUI：✅ 菜单背景 + 双按键绑定条 + 双滚轮条（回正/档位）+ 操纵杆全部配置持久化 + 脚踏板回正时间条与按键绑定持久化 已完成；⏳ 脚踏板触发模式配置 + 其余控件
+6. 🔶 配置 GUI：✅ 控制台配置菜单（`ControlDeskConfigScreen`：扳手右键 / 空手蹲下右键打开；首条配置 = 频道滚轮条，复用全局频道注册表）+ 模块菜单背景 + 双按键绑定条 + 双滚轮条（回正/档位）+ 操纵杆全部配置持久化 + 脚踏板回正时间条与按键绑定持久化 已完成；⏳ 配置菜单其余控件（模块设置区块重新接入、脚踏板触发模式配置等）
 7. ⏳ CC 外设 + Lua API（Lua 侧验证信号）
 
 ## 待确认 / 风险清单

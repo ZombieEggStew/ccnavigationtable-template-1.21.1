@@ -1,6 +1,8 @@
 package com.zzy205.myfirstmod.block;
 
 import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
+import com.zzy205.myfirstmod.compat.cc.ControlDeskRegistry;
+import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -26,7 +28,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     }
 
     /** 操纵杆回正时间（tick）默认值与范围（与 JoystickModuleScreen 滚轮条一致）。 */
-    public static final int DEFAULT_JOYSTICK_RETURN_TIME = 20;
+    public static final int DEFAULT_JOYSTICK_RETURN_TIME = 2;
     public static final int MIN_JOYSTICK_RETURN_TIME = 0;
     public static final int MAX_JOYSTICK_RETURN_TIME = 100;
 
@@ -36,7 +38,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public static final int MAX_GEAR_COUNT = 8;
 
     /** 操纵杆自由模式累加速度（满偏所需 tick 数，速度 = 1/数值 每 tick）默认值与范围（与 JoystickModuleScreen 滚轮条一致）。 */
-    public static final int DEFAULT_JOYSTICK_FREE_SPEED = 20;
+    public static final int DEFAULT_JOYSTICK_FREE_SPEED = 2;
     public static final int MIN_JOYSTICK_FREE_SPEED = 1;
     public static final int MAX_JOYSTICK_FREE_SPEED = 100;
 
@@ -78,6 +80,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_PEDAL_KEY_LEFT_DOWN = "PedalKeyLeftDown";
     private static final String TAG_PEDAL_KEY_RIGHT_UP = "PedalKeyRightUp";
     private static final String TAG_PEDAL_KEY_RIGHT_DOWN = "PedalKeyRightDown";
+    private static final String TAG_CHANNEL = "Channel";
+    private static final String TAG_OCCUPIED_CHANNELS = "OccupiedChannels";
 
     private boolean pedalInstalled;
     private boolean joystickInstalled;
@@ -108,8 +112,63 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private String pedalKeyRightUp = DEFAULT_PEDAL_KEY_RIGHT_UP;   // 右踏板 抬起键
     private String pedalKeyRightDown = DEFAULT_PEDAL_KEY_RIGHT_DOWN; // 右踏板 踩下键
 
+    // ── 全局频道（与传感器/显示器共享 GlobalChannelRegistry 命名空间，频道全局唯一） ──
+    /** 全局频道号（-1 表示尚未注册，加载时自动分配） */
+    private int channel = -1;
+    /** 所有已被占用的频道号快照（服务端设置，客户端通过 updateTag 同步，菜单用它跳过已占用频道） */
+    private int[] occupiedChannels = new int[0];
+
     public ControlDeskBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.control_desk_entity.get(), pos, state);
+    }
+
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        if (this.level != null && !this.level.isClientSide) {
+            int assigned = ControlDeskRegistry.register(this.channel, this);
+            if (assigned != this.channel) {
+                this.channel = assigned;
+                this.setChanged();
+            }
+            refreshOccupiedChannels();
+        }
+    }
+
+    @Override
+    public void setRemoved() {
+        if (this.level != null && !this.level.isClientSide) {
+            ControlDeskRegistry.unregister(this.channel, this);
+        }
+        super.setRemoved();
+    }
+
+    /** 全局频道号。 */
+    public int getChannel() {
+        return channel;
+    }
+
+    /** 获取已占用频道号数组（客户端配置菜单用它跳过已占用频道）。 */
+    public int[] getOccupiedChannels() {
+        return occupiedChannels;
+    }
+
+    /** 更新全局频道号（服务端调用）：重新注册（冲突顺延）并同步客户端。 */
+    public void setChannel(int newChannel) {
+        if (level == null || level.isClientSide) return;
+        // -1 表示客户端尚未同步到真实频道，直接忽略，避免误触发自动重分配
+        if (newChannel < 0) return;
+        if (newChannel == this.channel) return;
+        int assigned = ControlDeskRegistry.register(newChannel, this);
+        this.channel = assigned;
+        notifyChange();
+    }
+
+    /** 从全局注册表同步 occupiedChannels 快照到本 BE，并通知客户端。 */
+    public void refreshOccupiedChannels() {
+        if (this.level == null || this.level.isClientSide) return;
+        this.occupiedChannels = GlobalChannelRegistry.occupiedChannelsArray();
+        notifyChange();
     }
 
     public boolean isInstalled(ControlType type) {
@@ -418,6 +477,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_PEDAL_KEY_LEFT_DOWN, pedalKeyLeftDown);
         tag.putString(TAG_PEDAL_KEY_RIGHT_UP, pedalKeyRightUp);
         tag.putString(TAG_PEDAL_KEY_RIGHT_DOWN, pedalKeyRightDown);
+        tag.putInt(TAG_CHANNEL, channel);
+        tag.putIntArray(TAG_OCCUPIED_CHANNELS, occupiedChannels);
     }
 
     @Override
@@ -484,6 +545,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_PEDAL_KEY_RIGHT_DOWN)) {
             pedalKeyRightDown = tag.getString(TAG_PEDAL_KEY_RIGHT_DOWN);
         }
+        if (tag.contains(TAG_CHANNEL)) {
+            channel = tag.getInt(TAG_CHANNEL);
+        }
+        if (tag.contains(TAG_OCCUPIED_CHANNELS)) {
+            occupiedChannels = tag.getIntArray(TAG_OCCUPIED_CHANNELS);
+        }
     }
 
     /** Create 原理图 / 装置搬运时的「安全 NBT」（Schematicannon 打印保留控件配置）。 */
@@ -508,6 +575,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putString(TAG_PEDAL_KEY_LEFT_DOWN, pedalKeyLeftDown);
         compound.putString(TAG_PEDAL_KEY_RIGHT_UP, pedalKeyRightUp);
         compound.putString(TAG_PEDAL_KEY_RIGHT_DOWN, pedalKeyRightDown);
+        // 频道是配置（蓝图可分享）；OccupiedChannels 是运行时快照，不写 Safe NBT
+        compound.putInt(TAG_CHANNEL, channel);
     }
 
     @Override
@@ -535,6 +604,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_PEDAL_KEY_LEFT_DOWN, pedalKeyLeftDown);
         tag.putString(TAG_PEDAL_KEY_RIGHT_UP, pedalKeyRightUp);
         tag.putString(TAG_PEDAL_KEY_RIGHT_DOWN, pedalKeyRightDown);
+        tag.putInt(TAG_CHANNEL, channel);
+        tag.putIntArray(TAG_OCCUPIED_CHANNELS, occupiedChannels);
         return tag;
     }
 

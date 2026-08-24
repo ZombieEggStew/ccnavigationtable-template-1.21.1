@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
 import com.zzy205.myfirstmod.channel.ChannelRegistry;
@@ -32,6 +33,9 @@ public final class GlobalChannelRegistry {
             } else if (be instanceof MonitorBlockEntity monitor) {
                 try { monitor.refreshOccupiedChannels(); }
                 catch (Exception e) { LOGGER.debug("Failed to refresh monitor channel snapshot", e); }
+            } else if (be instanceof ControlDeskBlockEntity desk) {
+                try { desk.refreshOccupiedChannels(); }
+                catch (Exception e) { LOGGER.debug("Failed to refresh control desk channel snapshot", e); }
             }
         }
     }

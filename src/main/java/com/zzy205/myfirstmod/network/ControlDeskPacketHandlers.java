@@ -8,6 +8,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 /**
  * controlDesk 相关网络包处理。
  * <ul>
+ *   <li>{@link ControlDeskChannelPayload} — 客户端→服务端：保存控制台全局频道</li>
  *   <li>{@link ControlDeskConfigPayload} — 客户端→服务端：保存操纵杆配置（两轴回正时间 + 两轴档位模式/档位数 + 两轴自由模式速度 + 四向按键）</li>
  *   <li>{@link PedalConfigPayload} — 客户端→服务端：保存脚踏板配置（回正时间 + 四向按键）</li>
  *   <li>{@link SeatInputPayload} — 客户端→服务端（运行时每 tick）：坐垫操作输入，服务端校验后驱动 BE 轴状态</li>
@@ -18,6 +19,18 @@ public final class ControlDeskPacketHandlers {
     private ControlDeskPacketHandlers() {}
 
     public static void register(PayloadRegistrar registrar) {
+        // 客户端→服务端：保存 controlDesk 全局频道（服务端权威 + 落盘 + 蓝图兼容）
+        registrar.playToServer(
+                ControlDeskChannelPayload.TYPE,
+                ControlDeskChannelPayload.STREAM_CODEC,
+                (payload, ctx) -> {
+                    var be = PacketHelper.findBE(ctx.player().level(), payload.pos(), ControlDeskBlockEntity.class);
+                    if (be != null) {
+                        be.setChannel(payload.channel());
+                    }
+                }
+        );
+
         // 客户端→服务端：保存 controlDesk 操纵杆配置（服务端权威 + 落盘）
         registrar.playToServer(
                 ControlDeskConfigPayload.TYPE,

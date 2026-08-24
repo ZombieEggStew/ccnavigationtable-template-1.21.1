@@ -4,8 +4,7 @@ import com.simibubi.create.AllItems;
 import com.zzy205.myfirstmod.block.ControlDeskBlock;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.item.MyModItems;
-import com.zzy205.myfirstmod.screen.JoystickModuleScreen;
-import com.zzy205.myfirstmod.screen.PedalModuleScreen;
+import com.zzy205.myfirstmod.screen.ControlDeskConfigScreen;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -28,7 +27,7 @@ import java.util.List;
  * <ul>
  *   <li>手持踏板/操纵杆 → 准星指向 controlDesk 时在安装位显示预览框（绿=可装 / 红=已装）</li>
  *   <li>手持扳手 → 准星指向 controlDesk 时显示已安装控件的安装位（默认绿）；视角命中安装位变红，蹲下右键拆对应模块</li>
- *   <li>扳手普通右键（不蹲下）或 空手蹲下右键，命中已安装模块 → 打开对应控件设置菜单（操纵杆 {@link JoystickModuleScreen} / 脚踏板 {@link PedalModuleScreen}，右键边沿防连发）；扳手蹲下右键 → 不拦截，交给服务端 {@code onSneakWrenched} 拆除模块</li>
+ *   <li>扳手普通右键（不蹲下）或 空手蹲下右键，准星指向 controlDesk（任意位置）→ 打开控制台配置菜单 {@link ControlDeskConfigScreen}（右键边沿防连发）；扳手蹲下右键 → 不拦截，交给服务端 {@code onSneakWrenched} 拆除模块</li>
  * </ul>
  * 每 tick 重新 show，离开/换物品后自动消失（Outliner 语义）。
  */
@@ -52,7 +51,7 @@ public class ControlDeskPlacementOverlay {
 
         ItemStack held = mc.player.getMainHandItem();
 
-        // ── 打开模块设置菜单：扳手普通右键（不蹲下）或 空手蹲下右键，命中已安装模块 ──
+        // ── 打开控制台配置菜单：扳手普通右键（不蹲下）或 空手蹲下右键，准星指向控制台任意位置 ──
         // 扳手蹲下右键 = 拆除（服务端 onSneakWrenched），这里不拦截，让右键事件正常传到服务端
         boolean useDown = mc.options.keyUse.isDown();
         boolean useEdge = useDown && !lastUseDown;
@@ -61,17 +60,9 @@ public class ControlDeskPlacementOverlay {
             boolean wrench = isWrench(held);
             boolean emptySneak = held.isEmpty() && mc.player.isShiftKeyDown();
             boolean openMenu = (wrench && !mc.player.isShiftKeyDown()) || emptySneak;
-            if (openMenu) {
-                ControlDeskBlockEntity.ControlType menuType = hitInstalledType(mc, hit);
-                if (menuType != null) {
-                    // 按控件类型打开各自的设置菜单（背景同一贴图区域）
-                    if (menuType == ControlDeskBlockEntity.ControlType.JOYSTICK) {
-                        mc.setScreen(new JoystickModuleScreen(hit.getBlockPos()));
-                    } else {
-                        mc.setScreen(new PedalModuleScreen(hit.getBlockPos()));
-                    }
-                    return;
-                }
+            if (openMenu && isControlDesk(mc, hit)) {
+                mc.setScreen(new ControlDeskConfigScreen(hit.getBlockPos()));
+                return;
             }
         }
 
@@ -85,23 +76,9 @@ public class ControlDeskPlacementOverlay {
         }
     }
 
-    /** 准星点击位置命中的已安装控件类型；未命中返回 null。 */
-    private static ControlDeskBlockEntity.ControlType hitInstalledType(Minecraft mc, BlockHitResult hit) {
-        BlockPos pos = hit.getBlockPos();
-        BlockState state = mc.level.getBlockState(pos);
-        if (!(state.getBlock() instanceof ControlDeskBlock)) return null;
-        BlockEntity be = mc.level.getBlockEntity(pos);
-        if (!(be instanceof ControlDeskBlockEntity desk)) return null;
-
-        Direction facing = state.getValue(ControlDeskBlock.FACING);
-        Vec3 click = hit.getLocation();
-        for (ControlDeskBlockEntity.ControlType type : ControlDeskBlockEntity.ControlType.values()) {
-            if (desk.isInstalled(type)
-                    && ControlDeskBlock.hitBounds(ControlDeskBlock.installBounds(type, facing, pos), click)) {
-                return type;
-            }
-        }
-        return null;
+    /** 准星指向的方块是否为控制台。 */
+    private static boolean isControlDesk(Minecraft mc, BlockHitResult hit) {
+        return mc.level.getBlockState(hit.getBlockPos()).getBlock() instanceof ControlDeskBlock;
     }
 
     /** 手持控件物品：在安装位显示预览框（绿=可装 / 红=已装）。 */

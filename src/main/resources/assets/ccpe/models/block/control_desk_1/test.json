@@ -23,7 +23,7 @@
 			"name": "stick",
 			"from": [7, 3, 2],
 			"to": [9, 12, 4],
-			"rotation": {"angle": 0, "axis": "y", "origin": [8, 0, 3]},
+			"rotation": {"angle": 0, "axis": "x", "origin": [8, 6, 3]},
 			"faces": {
 				"north": {"uv": [15, 3, 16, 7.5], "texture": "#0"},
 				"east": {"uv": [15, 3, 16, 7.5], "texture": "#0"},

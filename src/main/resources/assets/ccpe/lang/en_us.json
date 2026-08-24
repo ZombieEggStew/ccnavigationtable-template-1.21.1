@@ -86,6 +86,8 @@
   "gui.ccpe.control_desk.joystick_free_mode": "Free Mode",
   "gui.ccpe.control_desk.joystick_free_mode_tip": "In free mode the joystick deflects smoothly; value = ticks to reach full deflection while holding (20 ticks = 1 second, smaller = faster)",
   "gui.ccpe.control_desk.pedal_return_time": "Return Time",
+  "gui.ccpe.control_desk.channel_title": "Control Desk Channel",
+  "gui.ccpe.control_desk.no_modules": "No controls installed",
 
   "gui.ccpe.redstone_transceiver": "Redstone Transceiver",
   "gui.ccpe.redstone_transceiver.hold_to_delete": "Hold left click to delete",

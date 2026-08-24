@@ -3,7 +3,7 @@ package com.zzy205.myfirstmod.block;
 /**
  * 操纵杆倾斜动画参数与目标计算（Flywheel Visual 与 BER 共用单一实现）。
  * <p>
- * 枢轴 (8,3,3) 为用户在 Blockbench 中确定的旋转中心（模型像素，÷16 转块单位）；
+ * 枢轴 (8,6,3) 为用户在 Blockbench 中确定的旋转中心（模型像素，÷16 转块单位）；
  * 倾斜方向：axisX（A/D）绕 Z 轴、axisY（W/S）绕 X 轴，最大 {@link #MAX_DEG} 度。
  * <p>
  * 分层约定：**数值**（{@link ControlDeskBlockEntity} 的轴值，服务端权威）= 每 tick 线性累加
@@ -19,9 +19,9 @@ public final class JoystickTilt {
     /** 最大倾角（度） */
     public static final float MAX_DEG = 15f;
 
-    /** 枢轴（块单位）：Blockbench 旋转中心 (8,3,3) / 16 */
+    /** 枢轴（块单位）：Blockbench 旋转中心 (8,6,3) / 16 */
     public static final float PIVOT_X = 8f / 16f;
-    public static final float PIVOT_Y = 3f / 16f;
+    public static final float PIVOT_Y = 6f / 16f;
     public static final float PIVOT_Z = 3f / 16f;
 
     /** 动画指数逼近衰减系数（每 tick 剩余差距乘该系数，越小越跟手；参考 aeroworks ScrollAnimation 0.3） */

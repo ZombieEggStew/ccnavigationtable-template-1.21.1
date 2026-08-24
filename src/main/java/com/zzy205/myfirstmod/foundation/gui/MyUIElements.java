@@ -24,6 +24,8 @@ public class MyUIElements implements ScreenElement{
     public static final MyUIElements INPUT_DOUBLE = new MyUIElements(0, 176, ATLAS_SIZE_X, 18);
     public static final MyUIElements SCROLL_DOUBLE = new MyUIElements(0, 352, ATLAS_SIZE_X, 18);
 
+    public static final MyUIElements ICON_DISPLAY = new MyUIElements(0, 297, ATLAS_SIZE_X, 18);
+
 
 
     public static final MyUIElements BACKGROUND = new MyUIElements(0, 0, ATLAS_SIZE_X, 169);
