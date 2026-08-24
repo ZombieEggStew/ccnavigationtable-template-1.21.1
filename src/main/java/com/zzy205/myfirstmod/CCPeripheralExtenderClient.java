@@ -13,6 +13,8 @@ import com.zzy205.myfirstmod.client.MonitorGridOverlay;
 import com.zzy205.myfirstmod.client.MonitorBackgrounds;
 import com.zzy205.myfirstmod.client.MonitorOutlineRenderer;
 import com.zzy205.myfirstmod.client.ControlDeskPlacementOverlay;
+import com.zzy205.myfirstmod.client.JoystickOverlay;
+import com.zzy205.myfirstmod.client.SeatControlListener;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import com.zzy205.myfirstmod.screen.RedstoneTransceiverScreen;
 import com.zzy205.myfirstmod.screen.PeripheralExtenderScreen;
@@ -41,6 +43,8 @@ public class CCPeripheralExtenderClient {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         MonitorGridOverlay.register();
         ControlDeskPlacementOverlay.register();
+        SeatControlListener.register();
+        JoystickOverlay.register();
         NeoForge.EVENT_BUS.addListener(MonitorOutlineRenderer::onRenderHighlight);
 
         // 预加载 Monitor 模块模型（仿 control-panels PreLoadedModel 模式）

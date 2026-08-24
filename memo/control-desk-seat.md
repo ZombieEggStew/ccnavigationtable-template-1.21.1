@@ -24,6 +24,7 @@ controlDesk **默认没有控件**（脚踏板/操纵杆），玩家需要**手�
 - 判定①联动存在：坐垫四邻（N/E/S/W 紧邻 1 格）内存在至少一个 controlDesk——这些 controlDesk **全部进入联动**，最多 4 个
 - 判定②玩家在操作：`player.getVehicle() instanceof SeatEntity seat && seat.blockPosition().equals(seatPos)`
 - 「操作模式」= ①+②同时成立；客户端、服务端各自独立现查，天然无陈旧状态
+- 实现：`ControlDeskSeatLink.seatPosOf`（判定②）/ `findLinkedDesks`（判定①）/ `isOperating`（操作模式），客户端 `SeatControlListener` 与后续服务端 payload 校验均调用
 
 **联动目标 = 坐垫四邻的所有 controlDesk（广播）**：玩家按键时，四邻每个 controlDesk 的对应控件一起响应；没安装对应控件的 controlDesk 自动忽略。不需要选定目标。
 
@@ -92,7 +93,9 @@ flowchart LR
 
 ## 按键与交互（部分实现，坐垫驱动待实施）
 
-- **配置界面**：✅ 已实现（扳手右键 / 空手蹲下右键打开模块菜单，`DoubleInputBar` 按键捕获）；按键保存到 BE 待接入
+- **配置界面**：✅ 已实现（扳手右键 / 空手蹲下右键打开模块菜单，`DoubleInputBar` 按键捕获）；按键配置已存 BE（操纵杆四键 + 脚踏板四键，见「配置存储与 Create 蓝图兼容」）
+- **联动判定 + 按键监听（debug 阶段）**：✅ `ControlDeskSeatLink`（判定① 坐垫四邻 N/E/S/W 紧邻 1 格的 controlDesk 全部联动，最多 4 个；判定② 玩家骑乘 Create `SeatEntity`；操作模式 = ①+②，客户端/服务端各自现查零持久化）+ `SeatControlListener`（客户端每 tick 现查：进入操作模式输出联动信息，按下任一联动控制台**已安装控件**所配置的按键 → 边沿检测 debug 日志，含按键含义与归属控制台）；⏳ payload 链路 / BE 状态 / 按键冲突待接入
+- **虚拟摇杆 HUD overlay**：✅ `SeatControlState`（客户端共享状态：操作模式 / 有无操纵杆 / joyX,joyY）+ `JoystickOverlay`（`RenderGuiEvent.Post` 右下角绘制底座圆环 + 摇杆头，位置 = 圆心 + 方向向量 × 行程）；向量 = 操纵杆方向槽位**并集**（任一联动控制台该方向绑定的键按下即生效）+ **对角归一化**（W+D → 0.707,0.707），joyY +1 = 前推(W)（屏幕 y 向下，渲染时取反）；贴图 `textures/gui/virtual_joystick_base.png`(64×64) / `virtual_joystick_knob.png`(24×24) 为占位，可替换
 - **按键可配置**：KeyMapping 注册（左踏板/右踏板/操纵杆 W/A/S/D），玩家设定的按键**覆盖已有按键**——自定义 KeyConflictContext（坐垫操作模式激活我们的键、原版 Q 丢物品/E 物品栏/WASD 移动失效；离开坐垫恢复）。实现前先验证 NeoForge `KeyMapping.setKeyConflictContext` 行为
 - **潜行键不覆盖**（Create 坐垫按潜行=下车，必须保留）
 - **默认按键**：左踏板 踩下=Q / 抬起=E、右踏板 踩下=E / 抬起=Q、WASD=操纵杆（W 前推 / S 后拉 / A 左摆 / D 右摆）
@@ -132,8 +135,8 @@ flowchart LR
 ## 实施顺序
 
 1. ✅ 控件安装系统：控件物品 + 安装/卸载交互 + BE 存储 + 蓝图兼容 + 安装预览 + 叠加渲染（含踩坑经验）
-2. ⏳ 判定工具 + 服务端校验骨架（坐垫四邻联动 + 玩家骑乘判定，无 UI 效果，可断点验证）
-3. ⏳ 客户端按键监听 + payload 链路（重点验证按键冲突 KeyConflictContext 方案）
+2. ✅ 判定工具（`ControlDeskSeatLink`：坐垫四邻联动 + 玩家骑乘判定，客户端/服务端共用）✅ 客户端按键监听 debug 阶段（`SeatControlListener` 边沿检测 + 日志）；⏳ 服务端校验骨架 + payload 链路
+3. ⏳ payload 链路 + 按键冲突 KeyConflictContext 方案验证（debug 监听已就绪，接 payload 即用）
 4. ⏳ BE 状态 + 服务端权威更新 + 广播同步
 5. ⏳ 动画（踏板平移、操纵杆 30° 倾斜）
 6. 🔶 配置 GUI：✅ 菜单背景 + 双按键绑定条 + 双滚轮条（回正/档位）+ 操纵杆全部配置持久化 + 脚踏板回正时间条与按键绑定持久化 已完成；⏳ 脚踏板触发模式配置 + 其余控件
