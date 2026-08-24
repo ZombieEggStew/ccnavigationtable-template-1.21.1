@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.compat.cc;
 
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
 
 /**
  * 控制台频道注册表 —— 维护 频道 → ControlDeskBlockEntity 的一对一映射。
@@ -19,5 +20,11 @@ public final class ControlDeskRegistry {
     /** 注销控制台。 */
     public static void unregister(int channel, ControlDeskBlockEntity be) {
         GlobalChannelRegistry.unregister(channel, be);
+    }
+
+    /** 按频道号查询控制台方块实体；该频道被其他设备占用返回 null。 */
+    public static ControlDeskBlockEntity get(int channel) {
+        BlockEntity owner = GlobalChannelRegistry.get(channel);
+        return owner instanceof ControlDeskBlockEntity desk ? desk : null;
     }
 }

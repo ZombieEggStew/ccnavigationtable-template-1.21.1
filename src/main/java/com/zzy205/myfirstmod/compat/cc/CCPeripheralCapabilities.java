@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity;
@@ -36,6 +37,11 @@ public final class CCPeripheralCapabilities {
                 PeripheralCapability.get(),
                 MyModBlockEntities.monitor_entity.get(),
                 (be, side) -> ((MonitorBlockEntity) be).getPeripheral()
+        );
+        event.registerBlockEntity(
+                PeripheralCapability.get(),
+                MyModBlockEntities.control_desk_entity.get(),
+                (be, side) -> ((ControlDeskBlockEntity) be).getPeripheral()
         );
     }
 }

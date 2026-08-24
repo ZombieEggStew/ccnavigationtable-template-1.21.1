@@ -169,7 +169,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `channel/ChannelRegistry.java` | 通用频道注册表 `ChannelRegistry<O>`：按频道登记、查询和释放外围设备；最小空闲分配、冲突顺延、僵尸清理、占用变化回调 |
 | `channel/ChannelScrollHelper.java` | GUI 滚轮选择频道/ID：钳位 → 跳过占用 → 边界反向再跳占，支持 Shift 步进 |
 
-传感器与显示器共享同一全局频道命名空间（`compat/cc/GlobalChannelRegistry`，内部是同一个 `ChannelRegistry` 实例），保证频道全局唯一。
+传感器、显示器与控制台共享同一全局频道命名空间（`compat/cc/GlobalChannelRegistry`，内部是同一个 `ChannelRegistry` 实例），保证频道全局唯一。
 
 ## CC:Tweaked 与其他兼容层
 
@@ -180,7 +180,8 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/GlobalChannelRegistry.java` | 传感器+显示器+控制台共享的全局频道注册表 |
 | `compat/cc/PeripheralExtenderRegistry.java` | 传感器频道登记表（委托全局注册表） |
 | `compat/cc/MonitorRegistry.java` | Monitor 频道登记表（委托全局注册表） |
-| `compat/cc/ControlDeskRegistry.java` | 控制台频道登记表（委托全局注册表） |
+| `compat/cc/ControlDeskRegistry.java` | 控制台频道登记表（委托全局注册表，`get(channel)` 供 `pe.getPeripheral` 查找） |
+| `compat/cc/ControlDeskPeripheral.java` | 控制台的 `IPeripheral` 实现（`getType()` = `"ccpe:control_desk"`；Lua API 留空待实施） |
 | `compat/cc/MonitorPeripheral.java` | Monitor 的 `IPeripheral` 实现（模块/屏幕查询入口） |
 | `compat/cc/ModuleHandle.java` | 模块/屏幕 Lua 实例的抽象基类（通用 get/set/tooltip） |
 | `compat/cc/ModuleHandleRegistry.java` | 按模块类型把 Java 记录包装成对应的 Lua handle |

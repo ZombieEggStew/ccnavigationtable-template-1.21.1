@@ -1,8 +1,10 @@
 package com.zzy205.myfirstmod.block;
 
 import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
+import com.zzy205.myfirstmod.compat.cc.ControlDeskPeripheral;
 import com.zzy205.myfirstmod.compat.cc.ControlDeskRegistry;
 import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
+import dan200.computercraft.api.peripheral.IPeripheral;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -12,6 +14,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -122,6 +125,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private int channel = -1;
     /** 所有已被占用的频道号快照（服务端设置，客户端通过 updateTag 同步，菜单用它跳过已占用频道） */
     private int[] occupiedChannels = new int[0];
+    /** CC:T 外设实例（懒加载），避免直接在 BE 上实现 IPeripheral 导致 getType() 冲突（对齐 MonitorBlockEntity） */
+    @Nullable
+    private IPeripheral peripheral;
 
     public ControlDeskBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.control_desk_entity.get(), pos, state);
@@ -151,6 +157,14 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** 全局频道号。 */
     public int getChannel() {
         return channel;
+    }
+
+    /** 获取 CC:T 外设实例（懒加载；经 pe.getPeripheral(ch) / peripheral.wrap 获取，Lua API 待实施）。 */
+    public IPeripheral getPeripheral() {
+        if (peripheral == null) {
+            peripheral = new ControlDeskPeripheral(this);
+        }
+        return peripheral;
     }
 
     /** 获取已占用频道号数组（客户端配置菜单用它跳过已占用频道）。 */
