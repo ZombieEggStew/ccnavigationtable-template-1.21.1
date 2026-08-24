@@ -20,7 +20,8 @@ import java.util.function.Consumer;
  * （必须 setIdentityTransform，translate 为累加语义，否则模型每帧漂移）。
  * 操纵杆本体（joystick）叠加倾斜：绕枢轴 (8,6,3)（见 {@link JoystickTilt}）倾斜，
  * 目标 = 模拟轴（每 tick 线性累加，{@link com.zzy205.myfirstmod.client.SeatControlState}）× 15°；
- * 动画用指数逼近追逐目标（aeroworks SMOOTHED 模式，帧时间修正），本实例持有平滑值。
+ * 踏板本体（pedal / pedal_right）叠加平移：向模型空间 +z 平移压下值 × 1px（见 {@link PedalMotion}）；
+ * 动画均用指数逼近追逐目标（aeroworks SMOOTHED 模式，帧时间修正），本实例持有平滑值。
  * 模型按与底座相同的方块空间（北向）建模，渲染时平移到方块位置 + 绕方块中心 Y 旋转到 FACING。
  */
 public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBlockEntity>
@@ -35,6 +36,9 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     /** 操纵杆动画倾斜值（度）：指数逼近追逐 {@link JoystickTilt#targetDeg} */
     private float smoothTiltX;
     private float smoothTiltY;
+    /** 踏板动画平移量（块单位）：指数逼近追逐 {@link PedalMotion#targetPx}（左/右） */
+    private float smoothPedalLeft;
+    private float smoothPedalRight;
 
     public ControlDeskVisual(VisualizationContext ctx, ControlDeskBlockEntity blockEntity, float partialTick) {
         super(ctx, blockEntity, partialTick);
@@ -55,12 +59,21 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         boolean joystickWanted = be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK);
 
         this.pedalBase = syncInstance(this.pedalBase, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL_BASE, facing, null);
-        this.pedal = syncInstance(this.pedal, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL, facing, null);
-        this.pedalRight = syncInstance(this.pedalRight, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL_RIGHT, facing, null);
+
+        // 踏板本体：动画 = 指数逼近追逐目标（数值层线性累加，动画层指数），目标平移量 = 压下值 × 1px
+        float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
+        float[] pedalTarget = PedalMotion.targetPx(be);
+        this.smoothPedalLeft = JoystickTilt.approach(this.smoothPedalLeft, pedalTarget[0], frameTicks);
+        this.smoothPedalRight = JoystickTilt.approach(this.smoothPedalRight, pedalTarget[1], frameTicks);
+        final float pedalLeftPx = this.smoothPedalLeft;
+        final float pedalRightPx = this.smoothPedalRight;
+        this.pedal = syncInstance(this.pedal, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL, facing,
+                inst -> inst.translate(0f, 0f, pedalLeftPx));
+        this.pedalRight = syncInstance(this.pedalRight, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL_RIGHT, facing,
+                inst -> inst.translate(0f, 0f, pedalRightPx));
         this.joystickBase = syncInstance(this.joystickBase, joystickWanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_BASE, facing, null);
 
         // 操纵杆本体：动画 = 指数逼近追逐目标（数值层线性累加，动画层指数）
-        float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
         float[] target = JoystickTilt.targetDeg(be);
         this.smoothTiltX = JoystickTilt.approach(this.smoothTiltX, target[0], frameTicks);
         this.smoothTiltY = JoystickTilt.approach(this.smoothTiltY, target[1], frameTicks);

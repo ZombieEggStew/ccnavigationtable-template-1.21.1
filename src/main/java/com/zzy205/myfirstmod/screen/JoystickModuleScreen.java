@@ -12,9 +12,11 @@ import com.zzy205.myfirstmod.network.ControlDeskConfigPayload;
 
 import net.createmod.catnip.gui.element.ScreenElement;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * 操纵杆设置菜单 —— 背景复用 {@link MonitorModuleScreen}（gui_2.png 同区域）。
@@ -51,6 +53,10 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
 
     private final BlockPos deskPos;
 
+    /** 关闭后返回的上级菜单（控制台配置菜单）；null 则直接回到游戏 */
+    @Nullable
+    private Screen returnScreen;
+
     private DoubleInputBar inputBar;        // 1. W/S（前后）键位绑定条
     private DoubleScrollValueBar pitchBar;  // 2. 前后轴设置条（回正时间 + 档位模式）
     private DoubleInputBar inputBar2;       // 3. A/D（左右）键位绑定条
@@ -66,6 +72,12 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
     public JoystickModuleScreen(BlockPos deskPos) {
         super(Component.empty());
         this.deskPos = deskPos;
+    }
+
+    /** 设置关闭后返回的上级菜单（链式）；由控制台配置菜单打开时传入，关闭后回到配置菜单而非游戏。 */
+    public JoystickModuleScreen withReturnTo(Screen returnScreen) {
+        this.returnScreen = returnScreen;
+        return this;
     }
 
     @Override
@@ -226,7 +238,12 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
                 gearToggleYaw.isSelected(), gearCountYaw, freeSpeedYaw,
                 inputBar.getLeftKey(), inputBar.getRightKey(),
                 inputBar2.getLeftKey(), inputBar2.getRightKey()));
-        super.onClose();
+        // 有上级菜单（配置菜单）时返回它，否则直接回到游戏
+        if (returnScreen != null && this.minecraft != null) {
+            this.minecraft.setScreen(returnScreen);
+        } else {
+            super.onClose();
+        }
     }
 
     @Override

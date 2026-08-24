@@ -49,7 +49,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public static final String DEFAULT_JOYSTICK_KEY_RIGHT = "key.keyboard.d";
 
     /** 脚踏板回正时间（tick）默认值与范围（与 PedalModuleScreen 滚轮条一致；左右两个踏板共用同一值）。 */
-    public static final int DEFAULT_PEDAL_RETURN_TIME = 20;
+    public static final int DEFAULT_PEDAL_RETURN_TIME = 2;
     public static final int MIN_PEDAL_RETURN_TIME = 0;
     public static final int MAX_PEDAL_RETURN_TIME = 100;
 
@@ -71,6 +71,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_JOYSTICK_FREE_SPEED_YAW = "JoystickFreeSpeedYaw";
     private static final String TAG_JOYSTICK_AXIS_X = "JoystickAxisX";   // 运行时轴状态（不落盘，仅 getUpdateTag 同步）
     private static final String TAG_JOYSTICK_AXIS_Y = "JoystickAxisY";
+    private static final String TAG_PEDAL_LEFT_AXIS = "PedalLeftAxis";   // 运行时踏板轴（不落盘，仅 getUpdateTag 同步）
+    private static final String TAG_PEDAL_RIGHT_AXIS = "PedalRightAxis";
     private static final String TAG_JOYSTICK_KEY_UP = "JoystickKeyUp";
     private static final String TAG_JOYSTICK_KEY_DOWN = "JoystickKeyDown";
     private static final String TAG_JOYSTICK_KEY_LEFT = "JoystickKeyLeft";
@@ -97,11 +99,14 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     // ── 运行时轴状态（服务端权威，不持久化；经 getUpdateTag/getUpdatePacket 同步到客户端） ──
     private float joystickAxisX;   // 操纵杆轴 X（-1..1）：+1 = 右摆(D)，-1 = 左摆(A)
     private float joystickAxisY;   // 操纵杆轴 Y（-1..1）：+1 = 前推(W)，-1 = 后拉(S)
-    // 输入租约：最近一次操作输入（玩家 + 坐垫 + 四方向按住态）；服务端每 tick 校验租约并模拟轴动力学
+    private float pedalLeftAxis;   // 左踏板轴（-1..1，运行时）：+1 = 踩下（+z 1px）/ -1 = 抬起（-z 1px），见 PedalMotion
+    private float pedalRightAxis;  // 右踏板轴（-1..1，运行时）
+    // 输入租约：最近一次操作输入（玩家 + 坐垫 + 操纵杆四方向 + 踏板四键按住态）；服务端每 tick 校验租约并模拟动力学
     private UUID inputPlayer;
     private BlockPos inputSeatPos;
     private boolean inputUp, inputDown, inputLeft, inputRight;
     private boolean prevUp, prevDown, prevLeft, prevRight;
+    private boolean inputPedalLeftDown, inputPedalLeftUp, inputPedalRightDown, inputPedalRightUp;
     private String joystickKeyUp = DEFAULT_JOYSTICK_KEY_UP;
     private String joystickKeyDown = DEFAULT_JOYSTICK_KEY_DOWN;
     private String joystickKeyLeft = DEFAULT_JOYSTICK_KEY_LEFT;
@@ -193,13 +198,19 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public boolean remove(ControlType type) {
         if (!isInstalled(type)) return false;
         switch (type) {
-            case PEDAL -> pedalInstalled = false;
+            case PEDAL -> {
+                pedalInstalled = false;
+                // 卸下踏板：运行时轴值与输入租约一并清除（重新安装后从中间位置开始）
+                pedalLeftAxis = 0f;
+                pedalRightAxis = 0f;
+                clearInput();
+            }
             case JOYSTICK -> {
                 joystickInstalled = false;
                 // 卸下操纵杆：运行时轴状态与输入租约一并清除（重新安装后从中心开始）
                 joystickAxisX = 0f;
                 joystickAxisY = 0f;
-                clearJoystickInput();
+                clearInput();
             }
         }
         notifyChange();
@@ -302,12 +313,25 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return joystickAxisY;
     }
 
+    /** 左踏板轴（-1..1，运行时）：+1 = 踩下（动画 +z 1px）/ -1 = 抬起（动画 -z 1px），见 {@link PedalMotion}。 */
+    public float getPedalLeftAxis() {
+        return pedalLeftAxis;
+    }
+
+    /** 右踏板轴（-1..1，运行时）：+1 = 踩下（动画 +z 1px）/ -1 = 抬起（动画 -z 1px），见 {@link PedalMotion}。 */
+    public float getPedalRightAxis() {
+        return pedalRightAxis;
+    }
+
     /**
      * 写入坐垫操作输入（运行时，服务端调用；按玩家/坐垫租约记录，租约变化时重置边沿历史，
      * 避免换人/换坐垫后第一次按键不触发档位边沿）。
+     * 参数 = 操纵杆四方向按住态 + 踏板四键按住态（踩下/抬起）。
      */
-    public void setJoystickInput(UUID player, BlockPos seatPos,
-                                 boolean up, boolean down, boolean left, boolean right) {
+    public void setSeatInput(UUID player, BlockPos seatPos,
+                             boolean up, boolean down, boolean left, boolean right,
+                             boolean pedalLeftDown, boolean pedalLeftUp,
+                             boolean pedalRightDown, boolean pedalRightUp) {
         boolean leaseChanged = !Objects.equals(inputPlayer, player) || !Objects.equals(inputSeatPos, seatPos);
         inputPlayer = player;
         inputSeatPos = seatPos;
@@ -315,34 +339,58 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         inputDown = down;
         inputLeft = left;
         inputRight = right;
+        inputPedalLeftDown = pedalLeftDown;
+        inputPedalLeftUp = pedalLeftUp;
+        inputPedalRightDown = pedalRightDown;
+        inputPedalRightUp = pedalRightUp;
         if (leaseChanged) {
             prevUp = prevDown = prevLeft = prevRight = false;
         }
     }
 
     /** 清除输入租约（操作者离开坐垫/断线时由服务端 tick 调用）。 */
-    public void clearJoystickInput() {
+    public void clearInput() {
         inputPlayer = null;
         inputSeatPos = null;
         inputUp = inputDown = inputLeft = inputRight = false;
         prevUp = prevDown = prevLeft = prevRight = false;
+        inputPedalLeftDown = inputPedalLeftUp = inputPedalRightDown = inputPedalRightUp = false;
     }
 
     /**
-     * 服务端每 tick 模拟操纵杆轴动力学（自由模式按下线性累加/松开按回正时间归零；
-     * 档位模式无回正、按下边沿进/退一档）；轴值变化时广播到客户端。
-     * 配置取本 BE 自己的两轴设置（X 轴用 Yaw 系列，Y 轴用 Pitch 系列）。
+     * 服务端每 tick 模拟控件动力学：
+     * <ul>
+     *   <li>操纵杆（已安装时）：自由模式按下线性累加/松开按回正时间归零；档位模式无回正、按下边沿进/退一档；</li>
+     *   <li>踏板（已安装时）：踩下键按住 → 轴向 +1 累加（+z 1px）；抬起键按住 → 轴向 -1 累加（-z 1px）；都不按 → 按回正时间向 0 归零；</li>
+     * </ul>
+     * 轴/压下值变化时广播到客户端。
+     * 配置取本 BE 自己的设置（操纵杆 X 轴用 Yaw 系列、Y 轴用 Pitch 系列；踏板左右共用回正时间）。
      */
     public static void tickServer(Level level, BlockPos pos, BlockState state, ControlDeskBlockEntity be) {
-        if (level == null || level.isClientSide || !be.joystickInstalled) return;
+        if (level == null || level.isClientSide) return;
+        boolean hasJoystick = be.joystickInstalled;
+        boolean hasPedal = be.pedalInstalled;
+        if (!hasJoystick && !hasPedal) return;
         // 输入租约校验：操作者不再坐在输入坐垫上（离开/换坐垫/断线）→ 清除输入
-        // （档位模式轴值保持，自由模式自然回正）
+        // （档位模式轴值保持、自由模式/踏板自然回正）
         if (be.inputPlayer != null) {
             Player p = ((ServerLevel) level).getPlayerByUUID(be.inputPlayer);
             if (p == null || !Objects.equals(ControlDeskSeatLink.seatPosOf(p), be.inputSeatPos)) {
-                be.clearJoystickInput();
+                be.clearInput();
             }
         }
+        if (hasJoystick) {
+            simulateJoystick(be);
+        } else {
+            be.prevUp = be.prevDown = be.prevLeft = be.prevRight = false;
+        }
+        if (hasPedal) {
+            simulatePedals(be);
+        }
+    }
+
+    /** 操纵杆轴动力学（自由模式 / 档位模式），轴值变化时广播。 */
+    private static void simulateJoystick(ControlDeskBlockEntity be) {
         boolean anyInput = be.inputUp || be.inputDown || be.inputLeft || be.inputRight;
         if (!anyInput && be.joystickAxisX == 0f && be.joystickAxisY == 0f) {
             be.prevUp = be.prevDown = be.prevLeft = be.prevRight = false;
@@ -371,6 +419,31 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (newX != be.joystickAxisX || newY != be.joystickAxisY) {
             be.joystickAxisX = newX;
             be.joystickAxisY = newY;
+            be.notifyChange();
+        }
+    }
+
+    /**
+     * 踏板动力学（数值层，左右独立，轴 -1..1）：踩下键按住 → 向 +1 累加 {@link PedalMotion#PRESS_STEP}（按下即满偏）；
+     * 抬起键按住 → 向 -1 累加（抬起即满偏）；都不按 → 按回正时间向 0 线性归零（{@link JoystickTilt#returnStep}）。
+     * 轴值变化时广播。
+     */
+    private static void simulatePedals(ControlDeskBlockEntity be) {
+        boolean anyInput = be.inputPedalLeftDown || be.inputPedalLeftUp
+                || be.inputPedalRightDown || be.inputPedalRightUp;
+        if (!anyInput && be.pedalLeftAxis == 0f && be.pedalRightAxis == 0f) {
+            return;
+        }
+        float leftTarget = (be.inputPedalLeftDown && !be.inputPedalLeftUp) ? 1f
+                : ((be.inputPedalLeftUp && !be.inputPedalLeftDown) ? -1f : 0f);
+        float rightTarget = (be.inputPedalRightDown && !be.inputPedalRightUp) ? 1f
+                : ((be.inputPedalRightUp && !be.inputPedalRightDown) ? -1f : 0f);
+        float returnStep = JoystickTilt.returnStep(be.pedalReturnTime);
+        float newLeft = JoystickTilt.stepAxis(be.pedalLeftAxis, leftTarget, PedalMotion.PRESS_STEP, returnStep);
+        float newRight = JoystickTilt.stepAxis(be.pedalRightAxis, rightTarget, PedalMotion.PRESS_STEP, returnStep);
+        if (newLeft != be.pedalLeftAxis || newRight != be.pedalRightAxis) {
+            be.pedalLeftAxis = newLeft;
+            be.pedalRightAxis = newRight;
             be.notifyChange();
         }
     }
@@ -518,6 +591,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_JOYSTICK_AXIS_Y)) {
             joystickAxisY = tag.getFloat(TAG_JOYSTICK_AXIS_Y);
         }
+        if (tag.contains(TAG_PEDAL_LEFT_AXIS)) {
+            pedalLeftAxis = tag.getFloat(TAG_PEDAL_LEFT_AXIS);
+        }
+        if (tag.contains(TAG_PEDAL_RIGHT_AXIS)) {
+            pedalRightAxis = tag.getFloat(TAG_PEDAL_RIGHT_AXIS);
+        }
         if (tag.contains(TAG_JOYSTICK_KEY_UP)) {
             joystickKeyUp = tag.getString(TAG_JOYSTICK_KEY_UP);
         }
@@ -595,6 +674,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         // 运行时轴状态（服务端权威）：随 getUpdatePacket / 区块加载同步，客户端渲染直接读它
         tag.putFloat(TAG_JOYSTICK_AXIS_X, joystickAxisX);
         tag.putFloat(TAG_JOYSTICK_AXIS_Y, joystickAxisY);
+        // 运行时踏板轴（服务端权威）：同上
+        tag.putFloat(TAG_PEDAL_LEFT_AXIS, pedalLeftAxis);
+        tag.putFloat(TAG_PEDAL_RIGHT_AXIS, pedalRightAxis);
         tag.putString(TAG_JOYSTICK_KEY_UP, joystickKeyUp);
         tag.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         tag.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);

@@ -116,12 +116,12 @@ public class ControlDeskConfigScreen extends AbstractMonitorScreen {
         this.addRenderableWidget(doneBtn);
     }
 
-    /** 点击已安装控件列表的行：按控件类型打开对应的模块配置菜单。 */
+    /** 点击已安装控件列表的行：按控件类型打开对应的模块配置菜单（关闭后返回本配置菜单）。 */
     private void openModuleConfig(int index) {
         if (index < 0 || index >= moduleTypes.size() || this.minecraft == null) return;
         switch (moduleTypes.get(index)) {
-            case JOYSTICK -> this.minecraft.setScreen(new JoystickModuleScreen(deskPos));
-            case PEDAL -> this.minecraft.setScreen(new PedalModuleScreen(deskPos));
+            case JOYSTICK -> this.minecraft.setScreen(new JoystickModuleScreen(deskPos).withReturnTo(this));
+            case PEDAL -> this.minecraft.setScreen(new PedalModuleScreen(deskPos).withReturnTo(this));
         }
     }
 

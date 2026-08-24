@@ -11,9 +11,11 @@ import com.zzy205.myfirstmod.network.PedalConfigPayload;
 
 import net.createmod.catnip.gui.element.ScreenElement;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * 脚踏板设置菜单 —— 背景复用 {@link MonitorModuleScreen}（gui_2.png 同区域）。
@@ -46,6 +48,10 @@ public class PedalModuleScreen extends AbstractMonitorScreen {
 
     private final BlockPos deskPos;
 
+    /** 关闭后返回的上级菜单（控制台配置菜单）；null 则直接回到游戏 */
+    @Nullable
+    private Screen returnScreen;
+
     private DoubleInputBar inputBar;      // 1. 左踏板按键绑定条
     private DoubleInputBar inputBar2;     // 2. 右踏板按键绑定条
     private ScrollValueBar returnBar;     // 3. 回正时间条（icon RECOVER）
@@ -53,6 +59,12 @@ public class PedalModuleScreen extends AbstractMonitorScreen {
     public PedalModuleScreen(BlockPos deskPos) {
         super(Component.empty());
         this.deskPos = deskPos;
+    }
+
+    /** 设置关闭后返回的上级菜单（链式）；由控制台配置菜单打开时传入，关闭后回到配置菜单而非游戏。 */
+    public PedalModuleScreen withReturnTo(Screen returnScreen) {
+        this.returnScreen = returnScreen;
+        return this;
     }
 
     @Override
@@ -118,7 +130,12 @@ public class PedalModuleScreen extends AbstractMonitorScreen {
                 returnBar.getValue(),
                 inputBar.getLeftKey(), inputBar.getRightKey(),
                 inputBar2.getLeftKey(), inputBar2.getRightKey()));
-        super.onClose();
+        // 有上级菜单（配置菜单）时返回它，否则直接回到游戏
+        if (returnScreen != null && this.minecraft != null) {
+            this.minecraft.setScreen(returnScreen);
+        } else {
+            super.onClose();
+        }
     }
 
     @Override

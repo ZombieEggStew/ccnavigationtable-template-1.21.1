@@ -26,12 +26,15 @@ import java.util.Map;
  * 与 {@link ControlDeskVisual} 共享同一套朝向约定：模型按与底座相同的方块空间（北向）建模，
  * 渲染时绕方块中心 Y 旋转到 FACING（BER 的 PoseStack 已平移到方块位置，无需再平移）。
  * 操纵杆本体叠加倾斜：绕枢轴 (8,6,3) 倾斜（SuperByteBuffer 变换链，与 Create HarvesterRenderer
- * pivot 模式一致），倾斜 = 模拟轴 × 15°（轴值动力学由 SeatControlListener 推进），见 {@link JoystickTilt}。
+ * pivot 模式一致），倾斜 = 模拟轴 × 15°（轴值动力学由服务端 BE tick 推进），见 {@link JoystickTilt}。
+ * 踏板本体叠加平移：向模型空间 +z 平移压下值 × 1px（踩下 = 前后平移，见 {@link PedalMotion}）。
  */
 public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBlockEntity> {
 
     /** 每个控制台独立的操纵杆动画倾斜值（度）{tiltX, tiltY}：指数逼近追逐目标 */
     private final Map<BlockPos, float[]> smoothTilts = new HashMap<>();
+    /** 每个控制台独立的踏板动画平移量（块单位）{leftPx, rightPx}：指数逼近追逐目标 */
+    private final Map<BlockPos, float[]> smoothPedals = new HashMap<>();
 
     public ControlDeskRenderer(BlockEntityRendererProvider.Context context) {}
 
@@ -48,8 +51,15 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
 
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)) {
             renderPart(MyModPartialModels.CONTROL_DESK_PEDAL_BASE, state, facing, ms, vb, light);
-            renderPart(MyModPartialModels.CONTROL_DESK_PEDAL, state, facing, ms, vb, light);
-            renderPart(MyModPartialModels.CONTROL_DESK_PEDAL_RIGHT, state, facing, ms, vb, light);
+            float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
+            float[] smooth = smoothPedals.computeIfAbsent(be.getBlockPos(), k -> new float[2]);
+            float[] target = PedalMotion.targetPx(be);
+            smooth[0] = JoystickTilt.approach(smooth[0], target[0], frameTicks);
+            smooth[1] = JoystickTilt.approach(smooth[1], target[1], frameTicks);
+            renderPedal(MyModPartialModels.CONTROL_DESK_PEDAL, state, facing, ms, vb, light, smooth[0]);
+            renderPedal(MyModPartialModels.CONTROL_DESK_PEDAL_RIGHT, state, facing, ms, vb, light, smooth[1]);
+        } else {
+            smoothPedals.remove(be.getBlockPos());
         }
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)) {
             renderPart(MyModPartialModels.CONTROL_DESK_JOYSTICK_BASE, state, facing, ms, vb, light);
@@ -57,6 +67,18 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         } else {
             smoothTilts.remove(be.getBlockPos());
         }
+    }
+
+    /** 踏板本体：facing 旋转 + 向模型空间 +z 平移（动画 = 指数逼近追逐压下值 × 1px）。 */
+    private static void renderPedal(dev.engine_room.flywheel.lib.model.baked.PartialModel model,
+                                    BlockState state, Direction facing,
+                                    PoseStack ms, VertexConsumer vb, int light, float zPx) {
+        SuperByteBuffer buffer = CachedBuffers.partial(model, state);
+        buffer.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
+        if (zPx != 0f) {
+            buffer.translate(0f, 0f, zPx);
+        }
+        buffer.light(light).renderInto(ms, vb);
     }
 
     /** 操纵杆本体：facing 旋转 + 绕枢轴 (8,6,3) 倾斜（动画 = 指数逼近追逐模拟轴 × 15°）。 */

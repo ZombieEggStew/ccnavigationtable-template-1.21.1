@@ -34,8 +34,11 @@ import java.util.Set;
  */
 public class SeatControlListener {
 
-    /** 操纵杆方向槽位（用于把各控制台的按键绑定聚合成方向向量）。 */
-    private enum JoyDir { UP, DOWN, LEFT, RIGHT }
+    /** 控件方向槽位（用于把各控制台的按键绑定聚合成方向向量 / 踏板按下态）。 */
+    private enum ControlDir {
+        UP, DOWN, LEFT, RIGHT,
+        PEDAL_LEFT_DOWN, PEDAL_LEFT_UP, PEDAL_RIGHT_DOWN, PEDAL_RIGHT_UP
+    }
 
     /** 上一次 tick 处于按下状态的按键名（InputConstants.Key.getName() 格式） */
     private static final Set<String> lastDown = new HashSet<>();
@@ -53,9 +56,9 @@ public class SeatControlListener {
             return;
         }
         if (mc.screen != null) {
-            // GUI 打开时不判定按键；向服务端发一次释放（自由模式回正 / 档位模式保持），避免操纵杆卡在按住状态
+            // GUI 打开时不判定按键；向服务端发一次释放（自由模式回正 / 档位模式保持 / 踏板回正），避免控件卡在按住状态
             if (lastSeatPos != null) {
-                sendInput(lastSeatPos, false, false, false, false);
+                sendInput(lastSeatPos, false, false, false, false, false, false, false, false);
             }
             return;
         }
@@ -64,7 +67,7 @@ public class SeatControlListener {
         if (seatPos == null) {
             // 离开坐垫：发一次释放（服务端租约校验也会兜底清除）
             if (lastSeatPos != null) {
-                sendInput(lastSeatPos, false, false, false, false);
+                sendInput(lastSeatPos, false, false, false, false, false, false, false, false);
             }
             reset();
             return;
@@ -131,25 +134,35 @@ public class SeatControlListener {
                 .filter(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK))
                 .findFirst().orElse(null);
         boolean hasJoystick = joyDesk != null;
+        boolean hasPedal = desks.stream()
+                .anyMatch(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL));
 
+        // 各方向/踏板键的按下态（方向槽位并集，任一联动控制台该方向绑定的键按下即生效）
         boolean rawX = false, rawY = false;
         boolean up = false, down = false, left = false, right = false;
+        boolean pedalLeftDown = false, pedalLeftUp = false, pedalRightDown = false, pedalRightUp = false;
         for (Binding binding : bindings) {
-            if (binding.dir() == null || !nowDown.contains(binding.keyName())) continue;
+            if (!nowDown.contains(binding.keyName())) continue;
             switch (binding.dir()) {
                 case UP -> { up = true; rawY = true; }
                 case DOWN -> { down = true; rawY = true; }
                 case LEFT -> { left = true; rawX = true; }
                 case RIGHT -> { right = true; rawX = true; }
+                case PEDAL_LEFT_DOWN -> pedalLeftDown = true;
+                case PEDAL_LEFT_UP -> pedalLeftUp = true;
+                case PEDAL_RIGHT_DOWN -> pedalRightDown = true;
+                case PEDAL_RIGHT_UP -> pedalRightUp = true;
+                case null -> {}
             }
         }
+
         float targetX = right && !left ? 1f : (left && !right ? -1f : 0f);
         float targetY = up && !down ? 1f : (down && !up ? -1f : 0f);
         // 档位模式需要按键「按下边沿」（当前按下 且 上一 tick 该方向无键按下）
-        boolean upEdge = up && !anyDirDown(bindings, JoyDir.UP, lastDown);
-        boolean downEdge = down && !anyDirDown(bindings, JoyDir.DOWN, lastDown);
-        boolean leftEdge = left && !anyDirDown(bindings, JoyDir.LEFT, lastDown);
-        boolean rightEdge = right && !anyDirDown(bindings, JoyDir.RIGHT, lastDown);
+        boolean upEdge = up && !anyDirDown(bindings, ControlDir.UP, lastDown);
+        boolean downEdge = down && !anyDirDown(bindings, ControlDir.DOWN, lastDown);
+        boolean leftEdge = left && !anyDirDown(bindings, ControlDir.LEFT, lastDown);
+        boolean rightEdge = right && !anyDirDown(bindings, ControlDir.RIGHT, lastDown);
         int returnTicksX = joyDesk != null ? joyDesk.getJoystickReturnTimeYaw()
                 : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME;
         int returnTicksY = joyDesk != null ? joyDesk.getJoystickReturnTime()
@@ -178,9 +191,10 @@ public class SeatControlListener {
         SeatControlState.setGearHold(gearModeX, gearModeY);
         SeatControlState.update(true, hasJoystick, axisX, axisY, rawX, rawY, Math.abs(axisX), Math.abs(axisY));
 
-        // 运行时输入上报服务端（服务端权威模拟 + getUpdatePacket 广播；有操纵杆的联动台才需要）
-        if (hasJoystick) {
-            sendInput(seatPos, up, down, left, right);
+        // 运行时输入上报服务端（服务端权威模拟 + getUpdatePacket 广播；装操纵杆或踏板的联动台才需要）
+        if (hasJoystick || hasPedal) {
+            sendInput(seatPos, up, down, left, right,
+                    pedalLeftDown, pedalLeftUp, pedalRightDown, pedalRightUp);
         }
 
         lastDown.clear();
@@ -188,16 +202,19 @@ public class SeatControlListener {
     }
 
     /** 上一 tick 该方向是否有键按下（档位模式「按下边沿」判定用）。 */
-    private static boolean anyDirDown(List<Binding> bindings, JoyDir dir, Set<String> down) {
+    private static boolean anyDirDown(List<Binding> bindings, ControlDir dir, Set<String> down) {
         for (Binding b : bindings) {
             if (b.dir() == dir && down.contains(b.keyName())) return true;
         }
         return false;
     }
 
-    /** 发送坐垫操作输入到服务端（服务端校验后驱动 BE 轴状态，见 ControlDeskPacketHandlers）。 */
-    private static void sendInput(BlockPos seatPos, boolean up, boolean down, boolean left, boolean right) {
-        PacketDistributor.sendToServer(new SeatInputPayload(seatPos, up, down, left, right));
+    /** 发送坐垫操作输入到服务端（服务端校验后驱动 BE 控件状态，见 ControlDeskPacketHandlers）。 */
+    private static void sendInput(BlockPos seatPos, boolean up, boolean down, boolean left, boolean right,
+                                  boolean pedalLeftDown, boolean pedalLeftUp,
+                                  boolean pedalRightDown, boolean pedalRightUp) {
+        PacketDistributor.sendToServer(new SeatInputPayload(seatPos, up, down, left, right,
+                pedalLeftDown, pedalLeftUp, pedalRightDown, pedalRightUp));
     }
 
     private static void reset() {
@@ -208,8 +225,8 @@ public class SeatControlListener {
 
     // ════════════════ 按键收集 ════════════════
 
-    /** 一条按键绑定：按键名（getName() 格式）+ 含义 + 归属控制台位置 + 操纵杆方向槽位（踏板为 null）。 */
-    private record Binding(String keyName, String label, BlockPos deskPos, JoyDir dir) {}
+    /** 一条按键绑定：按键名（getName() 格式）+ 含义 + 归属控制台位置 + 控件方向槽位。 */
+    private record Binding(String keyName, String label, BlockPos deskPos, ControlDir dir) {}
 
     /** 收集联动控制台已安装控件的全部按键绑定（未安装的控件忽略，空绑定跳过）。 */
     private static List<Binding> collectBindings(List<ControlDeskBlockEntity> desks) {
@@ -217,22 +234,22 @@ public class SeatControlListener {
         for (ControlDeskBlockEntity desk : desks) {
             BlockPos pos = desk.getBlockPos();
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)) {
-                add(out, pos, desk.getPedalKeyLeftDown(), "左踏板 踩下", null);
-                add(out, pos, desk.getPedalKeyLeftUp(), "左踏板 抬起", null);
-                add(out, pos, desk.getPedalKeyRightDown(), "右踏板 踩下", null);
-                add(out, pos, desk.getPedalKeyRightUp(), "右踏板 抬起", null);
+                add(out, pos, desk.getPedalKeyLeftDown(), "左踏板 踩下", ControlDir.PEDAL_LEFT_DOWN);
+                add(out, pos, desk.getPedalKeyLeftUp(), "左踏板 抬起", ControlDir.PEDAL_LEFT_UP);
+                add(out, pos, desk.getPedalKeyRightDown(), "右踏板 踩下", ControlDir.PEDAL_RIGHT_DOWN);
+                add(out, pos, desk.getPedalKeyRightUp(), "右踏板 抬起", ControlDir.PEDAL_RIGHT_UP);
             }
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)) {
-                add(out, pos, desk.getJoystickKeyUp(), "操纵杆 前推", JoyDir.UP);
-                add(out, pos, desk.getJoystickKeyDown(), "操纵杆 后拉", JoyDir.DOWN);
-                add(out, pos, desk.getJoystickKeyLeft(), "操纵杆 左摆", JoyDir.LEFT);
-                add(out, pos, desk.getJoystickKeyRight(), "操纵杆 右摆", JoyDir.RIGHT);
+                add(out, pos, desk.getJoystickKeyUp(), "操纵杆 前推", ControlDir.UP);
+                add(out, pos, desk.getJoystickKeyDown(), "操纵杆 后拉", ControlDir.DOWN);
+                add(out, pos, desk.getJoystickKeyLeft(), "操纵杆 左摆", ControlDir.LEFT);
+                add(out, pos, desk.getJoystickKeyRight(), "操纵杆 右摆", ControlDir.RIGHT);
             }
         }
         return out;
     }
 
-    private static void add(List<Binding> out, BlockPos pos, String keyName, String label, JoyDir dir) {
+    private static void add(List<Binding> out, BlockPos pos, String keyName, String label, ControlDir dir) {
         if (keyName != null && !keyName.isEmpty()) {
             out.add(new Binding(keyName, label, pos, dir));
         }

@@ -61,7 +61,7 @@ public final class ControlDeskPacketHandlers {
                 }
         );
 
-        // 客户端→服务端（运行时每 tick）：坐垫操作输入 → 服务端权威驱动操纵杆轴状态
+        // 客户端→服务端（运行时每 tick）：坐垫操作输入 → 服务端权威驱动操纵杆轴状态 / 踏板压下值
         // 校验：玩家确实骑乘在该坐垫上（防作弊/异常）；联动控制台由坐垫四邻现查（判定①）
         registrar.playToServer(
                 SeatInputPayload.TYPE,
@@ -73,9 +73,12 @@ public final class ControlDeskPacketHandlers {
                     if (actualSeat == null || !actualSeat.equals(payload.seatPos())) return;
                     for (ControlDeskBlockEntity desk
                             : ControlDeskSeatLink.findLinkedDesks(player.level(), payload.seatPos())) {
-                        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)) {
-                            desk.setJoystickInput(player.getUUID(), payload.seatPos(),
-                                    payload.up(), payload.down(), payload.left(), payload.right());
+                        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
+                                || desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)) {
+                            desk.setSeatInput(player.getUUID(), payload.seatPos(),
+                                    payload.up(), payload.down(), payload.left(), payload.right(),
+                                    payload.pedalLeftDown(), payload.pedalLeftUp(),
+                                    payload.pedalRightDown(), payload.pedalRightUp());
                         }
                     }
                 }
