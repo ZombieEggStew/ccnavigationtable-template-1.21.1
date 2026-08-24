@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
+import com.mojang.logging.LogUtils;
 import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
 import com.zzy205.myfirstmod.compat.cc.ControlDeskPeripheral;
 import com.zzy205.myfirstmod.compat.cc.ControlDeskRegistry;
@@ -15,6 +16,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -24,6 +26,8 @@ import java.util.UUID;
  * NBT 持久化 + 同步（兼容 Create 蓝图，参考 RedstoneTransceiverBlockEntity）。
  */
 public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNBT {
+
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     /** 可安装到控制台的控件类型 */
     public enum ControlType {
@@ -138,6 +142,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         super.onLoad();
         if (this.level != null && !this.level.isClientSide) {
             int assigned = ControlDeskRegistry.register(this.channel, this);
+            LOGGER.info("[ControlDesk] BE@{} onLoad 注册频道：期望={} 实际={}（registry size={}）",
+                    this.worldPosition.toShortString(), this.channel, assigned, GlobalChannelRegistry.size());
             if (assigned != this.channel) {
                 this.channel = assigned;
                 this.setChanged();
@@ -179,6 +185,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (newChannel < 0) return;
         if (newChannel == this.channel) return;
         int assigned = ControlDeskRegistry.register(newChannel, this);
+        LOGGER.info("[ControlDesk] BE@{} setChannel：请求={} 实际注册={}（registry size={}）",
+                this.worldPosition.toShortString(), newChannel, assigned, GlobalChannelRegistry.size());
         this.channel = assigned;
         notifyChange();
     }
@@ -325,6 +333,16 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
 
     public float getJoystickAxisY() {
         return joystickAxisY;
+    }
+
+    /** X 轴（A/D）是否有按键动作（原始值，服务端输入租约）：左/右方向键任一按住。 */
+    public boolean isJoystickXActive() {
+        return inputLeft || inputRight;
+    }
+
+    /** Y 轴（W/S）是否有按键动作（原始值，服务端输入租约）：前/后方向键任一按住。 */
+    public boolean isJoystickYActive() {
+        return inputUp || inputDown;
     }
 
     /** 左踏板轴（-1..1，运行时）：+1 = 踩下（动画 +z 1px）/ -1 = 抬起（动画 -z 1px），见 {@link PedalMotion}。 */

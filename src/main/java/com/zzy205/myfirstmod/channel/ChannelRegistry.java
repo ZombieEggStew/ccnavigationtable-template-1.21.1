@@ -104,6 +104,11 @@ public final class ChannelRegistry<O> {
         if (removed && onChange != null) onChange.run();
     }
 
+    /** 清空全部频道占用（服务器停止/世界关闭时调用，避免静态注册表跨世界残留）。 */
+    public void clear() {
+        byChannel.clear();
+    }
+
     /** 注销所有满足条件的占用者（一次性广播）。 */
     public void unregisterIf(Predicate<O> filter) {
         boolean removed = byChannel.entrySet().removeIf(e -> filter.test(e.getValue()));

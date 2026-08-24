@@ -5,6 +5,7 @@ import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralCapabilities;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralExtenderSetup;
+import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.network.ModPackets;
@@ -16,6 +17,8 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import org.slf4j.Logger;
 
@@ -46,6 +49,9 @@ public class CCPeripheralExtender {
         // 注册 CC:T 外设 capability（支持 peripheral.wrap / peripheral.find）
         modEventBus.addListener(RegisterCapabilitiesEvent.class, CCPeripheralCapabilities::register);
 
+        // 全局频道注册表是静态字段：服务器停止（回主菜单/关世界）时清空，防止旧世界设备残留占用频道
+        NeoForge.EVENT_BUS.addListener(CCPeripheralExtender::onServerStopping);
+
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
         modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
@@ -59,5 +65,10 @@ public class CCPeripheralExtender {
             CCPeripheralExtenderSetup.register();
             LOGGER.info("CC:Tweaked sensor API registered");
         }
+    }
+
+    /** 服务器停止（关世界/回主菜单）：清空静态全局频道注册表，避免跨世界残留占用频道。 */
+    private static void onServerStopping(ServerStoppingEvent event) {
+        GlobalChannelRegistry.clear();
     }
 }

@@ -84,4 +84,15 @@ public final class GlobalChannelRegistry {
     public static int size() {
         return REGISTRY.size();
     }
+
+    /**
+     * 清空全部频道占用（服务器停止时调用）。
+     * <p>
+     * REGISTRY 是静态字段，跨世界/跨存档持续存在；旧世界的 BlockEntity 在关世界时
+     * 不会调用 {@code setRemoved}（僵尸清理只按 isRemoved 判定），若不清理会导致旧世界
+     * 设备一直占用频道，把新世界的设备顺延到更高频道、且 {@code pe.getPeripheral} 命中旧条目。
+     */
+    public static void clear() {
+        REGISTRY.clear();
+    }
 }
