@@ -29,6 +29,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ModelEvent;
+import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
@@ -44,7 +45,6 @@ public class CCPeripheralExtenderClient {
         MonitorGridOverlay.register();
         ControlDeskPlacementOverlay.register();
         SeatControlListener.register();
-        JoystickOverlay.register();
         NeoForge.EVENT_BUS.addListener(MonitorOutlineRenderer::onRenderHighlight);
 
         // 预加载 Monitor 模块模型（仿 control-panels PreLoadedModel 模式）
@@ -78,6 +78,12 @@ public class CCPeripheralExtenderClient {
         // 初始化自定义 PartialModel（参照 Create 的 AllPartialModels.init()）
         MyModPartialModels.init();
         event.enqueueWork(MonitorBackgrounds::reload);
+    }
+
+    @SubscribeEvent
+    static void registerGuiLayers(RegisterGuiLayersEvent event) {
+        // 虚拟摇杆 HUD（挂在原版 HOTBAR 之上）
+        JoystickOverlay.register(event);
     }
 
     @SubscribeEvent

@@ -1,0 +1,24 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "ccpe:block/my_monitor_tex",
+		"particle": "ccpe:block/my_monitor_tex"
+	},
+	"elements": [
+		{
+			"name": "base",
+			"from": [0, 8, 8],
+			"to": [16, 10, 16],
+			"rotation": {"angle": 0, "axis": "y", "origin": [13, 8, 4]},
+			"faces": {
+				"north": {"uv": [12, 12.25, 16, 12.75], "texture": "#0"},
+				"east": {"uv": [5, 12.25, 7, 12.75], "texture": "#0"},
+				"south": {"uv": [12, 12.25, 16, 12.75], "texture": "#0"},
+				"west": {"uv": [5, 12.25, 7, 12.75], "texture": "#0"},
+				"up": {"uv": [5, 8, 7, 12], "rotation": 90, "texture": "#0"},
+				"down": {"uv": [5, 8, 7, 12], "rotation": 270, "texture": "#0"}
+			}
+		}
+	]
+}

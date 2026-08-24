@@ -56,6 +56,11 @@ public class Config {
             .comment("Monitor 模块边框/预览框线条粗细倍率 (0.0-2.0)。默认: 1.0")
             .defineInRange("monitorOutlineLineWidth", 1.0, 0.0, 2.0);
 
+    // ── 客户端：坐垫操作模式 HUD ──
+    public static final ModConfigSpec.BooleanValue JOYSTICK_OVERLAY_ENABLED = CLIENT_BUILDER
+            .comment("坐垫操作模式下显示虚拟摇杆 HUD（默认关闭，避免破坏沉浸感；需要时在客户端配置中开启）。")
+            .define("joystickOverlayEnabled", false);
+
     static final ModConfigSpec SPEC = BUILDER.build();
     static final ModConfigSpec CLIENT_SPEC = CLIENT_BUILDER.build();
 }

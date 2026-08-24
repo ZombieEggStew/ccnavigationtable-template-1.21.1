@@ -55,6 +55,7 @@ public class MyIcons implements ScreenElement {
     public static final MyIcons PEDAL_RIGHT_UP = new MyIcons(0, 5);
     public static final MyIcons PEDAL_RIGHT_DOWN = new MyIcons(1, 5);
     public static final MyIcons RECOVER = new MyIcons(2, 5);
+    public static final MyIcons FREE_MODE = new MyIcons(3, 5);
 
 
 

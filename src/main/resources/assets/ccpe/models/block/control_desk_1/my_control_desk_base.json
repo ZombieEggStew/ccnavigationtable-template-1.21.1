@@ -3,7 +3,7 @@
 	"credit": "Made with Blockbench",
 	"textures": {
 		"0": "ccpe:block/control_desk",
-		"particle": "ccpe:block/control_desk"
+		"particle": "ccpe:block/my_monitor_tex"
 	},
 	"elements": [
 		{

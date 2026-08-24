@@ -31,6 +31,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public static final int MIN_GEAR_COUNT = 1;
     public static final int MAX_GEAR_COUNT = 8;
 
+    /** 操纵杆自由模式累加速度（满偏所需 tick 数，速度 = 1/数值 每 tick）默认值与范围（与 JoystickModuleScreen 滚轮条一致）。 */
+    public static final int DEFAULT_JOYSTICK_FREE_SPEED = 20;
+    public static final int MIN_JOYSTICK_FREE_SPEED = 1;
+    public static final int MAX_JOYSTICK_FREE_SPEED = 100;
+
     /** 操纵杆四向按键默认值（InputConstants.Key.getName() 格式，如 "key.keyboard.w"；空串 = 未绑定）。 */
     public static final String DEFAULT_JOYSTICK_KEY_UP = "key.keyboard.w";
     public static final String DEFAULT_JOYSTICK_KEY_DOWN = "key.keyboard.s";
@@ -56,6 +61,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_GEAR_COUNT_PITCH = "GearCountPitch";
     private static final String TAG_GEAR_MODE_YAW = "GearModeYaw";
     private static final String TAG_GEAR_COUNT_YAW = "GearCountYaw";
+    private static final String TAG_JOYSTICK_FREE_SPEED_PITCH = "JoystickFreeSpeedPitch";
+    private static final String TAG_JOYSTICK_FREE_SPEED_YAW = "JoystickFreeSpeedYaw";
     private static final String TAG_JOYSTICK_KEY_UP = "JoystickKeyUp";
     private static final String TAG_JOYSTICK_KEY_DOWN = "JoystickKeyDown";
     private static final String TAG_JOYSTICK_KEY_LEFT = "JoystickKeyLeft";
@@ -74,6 +81,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private int gearCountPitch = DEFAULT_GEAR_COUNT;                    // 前后轴档位数
     private boolean gearModeYaw;                                        // 左右轴档位模式开关
     private int gearCountYaw = DEFAULT_GEAR_COUNT;                      // 左右轴档位数
+    private int freeSpeedPitch = DEFAULT_JOYSTICK_FREE_SPEED;           // 前后轴自由模式满偏 tick 数
+    private int freeSpeedYaw = DEFAULT_JOYSTICK_FREE_SPEED;             // 左右轴自由模式满偏 tick 数
     private String joystickKeyUp = DEFAULT_JOYSTICK_KEY_UP;
     private String joystickKeyDown = DEFAULT_JOYSTICK_KEY_DOWN;
     private String joystickKeyLeft = DEFAULT_JOYSTICK_KEY_LEFT;
@@ -164,6 +173,14 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return gearCountYaw;
     }
 
+    public int getJoystickFreeSpeedPitch() {
+        return freeSpeedPitch;
+    }
+
+    public int getJoystickFreeSpeedYaw() {
+        return freeSpeedYaw;
+    }
+
     /** 设置两轴档位模式（开关 + 档位数，档位数钳位到 [MIN, MAX]）。服务端调用。 */
     public void setGearConfig(boolean pitchMode, int pitchCount, boolean yawMode, int yawCount) {
         int pc = clampGearCount(pitchCount);
@@ -181,6 +198,20 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
 
     private static int clampGearCount(int count) {
         return Math.max(MIN_GEAR_COUNT, Math.min(MAX_GEAR_COUNT, count));
+    }
+
+    /** 设置两轴自由模式满偏 tick 数（累加速度 = 1/数值 每 tick），钳位到 [MIN, MAX]。服务端调用。 */
+    public void setJoystickFreeSpeed(int pitchTicks, int yawTicks) {
+        int pt = clampFreeSpeed(pitchTicks);
+        int yt = clampFreeSpeed(yawTicks);
+        if (freeSpeedPitch == pt && freeSpeedYaw == yt) return;
+        freeSpeedPitch = pt;
+        freeSpeedYaw = yt;
+        notifyChange();
+    }
+
+    private static int clampFreeSpeed(int ticks) {
+        return Math.max(MIN_JOYSTICK_FREE_SPEED, Math.min(MAX_JOYSTICK_FREE_SPEED, ticks));
     }
 
     public String getJoystickKeyUp() {
@@ -274,6 +305,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putInt(TAG_GEAR_COUNT_PITCH, gearCountPitch);
         tag.putBoolean(TAG_GEAR_MODE_YAW, gearModeYaw);
         tag.putInt(TAG_GEAR_COUNT_YAW, gearCountYaw);
+        tag.putInt(TAG_JOYSTICK_FREE_SPEED_PITCH, freeSpeedPitch);
+        tag.putInt(TAG_JOYSTICK_FREE_SPEED_YAW, freeSpeedYaw);
         tag.putString(TAG_JOYSTICK_KEY_UP, joystickKeyUp);
         tag.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         tag.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);
@@ -308,6 +341,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         }
         if (tag.contains(TAG_GEAR_COUNT_YAW)) {
             gearCountYaw = tag.getInt(TAG_GEAR_COUNT_YAW);
+        }
+        if (tag.contains(TAG_JOYSTICK_FREE_SPEED_PITCH)) {
+            freeSpeedPitch = tag.getInt(TAG_JOYSTICK_FREE_SPEED_PITCH);
+        }
+        if (tag.contains(TAG_JOYSTICK_FREE_SPEED_YAW)) {
+            freeSpeedYaw = tag.getInt(TAG_JOYSTICK_FREE_SPEED_YAW);
         }
         if (tag.contains(TAG_JOYSTICK_KEY_UP)) {
             joystickKeyUp = tag.getString(TAG_JOYSTICK_KEY_UP);
@@ -349,6 +388,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putInt(TAG_GEAR_COUNT_PITCH, gearCountPitch);
         compound.putBoolean(TAG_GEAR_MODE_YAW, gearModeYaw);
         compound.putInt(TAG_GEAR_COUNT_YAW, gearCountYaw);
+        compound.putInt(TAG_JOYSTICK_FREE_SPEED_PITCH, freeSpeedPitch);
+        compound.putInt(TAG_JOYSTICK_FREE_SPEED_YAW, freeSpeedYaw);
         compound.putString(TAG_JOYSTICK_KEY_UP, joystickKeyUp);
         compound.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         compound.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);
@@ -371,6 +412,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putInt(TAG_GEAR_COUNT_PITCH, gearCountPitch);
         tag.putBoolean(TAG_GEAR_MODE_YAW, gearModeYaw);
         tag.putInt(TAG_GEAR_COUNT_YAW, gearCountYaw);
+        tag.putInt(TAG_JOYSTICK_FREE_SPEED_PITCH, freeSpeedPitch);
+        tag.putInt(TAG_JOYSTICK_FREE_SPEED_YAW, freeSpeedYaw);
         tag.putString(TAG_JOYSTICK_KEY_UP, joystickKeyUp);
         tag.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         tag.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);

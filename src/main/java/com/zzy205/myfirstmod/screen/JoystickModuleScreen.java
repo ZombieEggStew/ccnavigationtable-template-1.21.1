@@ -22,11 +22,12 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * 布局（自上而下）：
  * <ol>
  *   <li>前后键位绑定条（W/S）</li>
- *   <li>前后轴设置条（回正时间 + 档位模式，双滚轮条）</li>
+ *   <li>前后轴设置条（回正时间 + 档位/自由模式，双滚轮条）</li>
  *   <li>左右键位绑定条（A/D）</li>
- *   <li>左右轴设置条（回正时间 + 档位模式，双滚轮条）</li>
+ *   <li>左右轴设置条（回正时间 + 档位/自由模式，双滚轮条）</li>
  * </ol>
- * 全部配置已持久化（两轴回正时间 + 两轴档位模式 + 四向按键）。
+ * 全部配置已持久化（两轴回正时间 + 两轴档位模式/档位数 + 两轴自由模式累加速度 + 四向按键）。
+ * 右槽数值随档位开关切换含义：未选中（自由模式）显示满偏 tick 数，选中（档位模式）显示档位数，两值独立记忆。
  */
 public class JoystickModuleScreen extends AbstractMonitorScreen {
 
@@ -56,6 +57,11 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
     private DoubleScrollValueBar yawBar;    // 4. 左右轴设置条（回正时间 + 档位模式）
     private ToggleButton gearTogglePitch;   // 前后轴档位模式开关（挂在 pitchBar 右图标位）
     private ToggleButton gearToggleYaw;     // 左右轴档位模式开关（挂在 yawBar 右图标位）
+    // 右槽两模式各自记忆的数值（随 toggle 状态切换显示：自由模式=满偏 tick 数，档位模式=档位数）
+    private int gearCountPitch;
+    private int gearCountYaw;
+    private int freeSpeedPitch;
+    private int freeSpeedYaw;
 
     public JoystickModuleScreen(BlockPos deskPos) {
         super(Component.empty());
@@ -74,6 +80,8 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
         int gearCountPitch = ControlDeskBlockEntity.DEFAULT_GEAR_COUNT;
         boolean gearModeYaw = false;
         int gearCountYaw = ControlDeskBlockEntity.DEFAULT_GEAR_COUNT;
+        int freeSpeedPitch = ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED;
+        int freeSpeedYaw = ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED;
         String keyUp = ControlDeskBlockEntity.DEFAULT_JOYSTICK_KEY_UP;
         String keyDown = ControlDeskBlockEntity.DEFAULT_JOYSTICK_KEY_DOWN;
         String keyLeft = ControlDeskBlockEntity.DEFAULT_JOYSTICK_KEY_LEFT;
@@ -86,11 +94,17 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
             gearCountPitch = desk.getGearCountPitch();
             gearModeYaw = desk.isGearModeYaw();
             gearCountYaw = desk.getGearCountYaw();
+            freeSpeedPitch = desk.getJoystickFreeSpeedPitch();
+            freeSpeedYaw = desk.getJoystickFreeSpeedYaw();
             keyUp = desk.getJoystickKeyUp();
             keyDown = desk.getJoystickKeyDown();
             keyLeft = desk.getJoystickKeyLeft();
             keyRight = desk.getJoystickKeyRight();
         }
+        this.gearCountPitch = gearCountPitch;
+        this.gearCountYaw = gearCountYaw;
+        this.freeSpeedPitch = freeSpeedPitch;
+        this.freeSpeedYaw = freeSpeedYaw;
 
         // 1. 前后键位绑定条（W/S）
         this.inputBar = new DoubleInputBar(
@@ -99,9 +113,10 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
                 .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.bind_tip"));
         this.addRenderableWidget(this.inputBar);
 
-        // 2. 前后轴设置条（回正时间 + 档位模式，均已持久化）
+        // 2. 前后轴设置条（回正时间 + 档位/自由模式，均已持久化）
         this.gearTogglePitch = createGearToggle(gearModePitch);
-        this.pitchBar = createAxisBar(winLeft, winTop, PITCH_CONFIG_BAR_Y, returnTime, gearCountPitch, this.gearTogglePitch);
+        this.pitchBar = createAxisBar(winLeft, winTop, PITCH_CONFIG_BAR_Y, returnTime, gearCountPitch, freeSpeedPitch, this.gearTogglePitch);
+        this.gearTogglePitch.withCallback(() -> onGearToggle(false));
         this.addRenderableWidget(this.pitchBar);
 
         // 3. 左右键位绑定条（A/D）
@@ -111,9 +126,10 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
                 .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.bind_tip"));
         this.addRenderableWidget(this.inputBar2);
 
-        // 4. 左右轴设置条（回正时间 + 档位模式，均已持久化）
+        // 4. 左右轴设置条（回正时间 + 档位/自由模式，均已持久化）
         this.gearToggleYaw = createGearToggle(gearModeYaw);
-        this.yawBar = createAxisBar(winLeft, winTop, YAW_CONFIG_BAR_Y, returnTimeYaw, gearCountYaw, this.gearToggleYaw);
+        this.yawBar = createAxisBar(winLeft, winTop, YAW_CONFIG_BAR_Y, returnTimeYaw, gearCountYaw, freeSpeedYaw, this.gearToggleYaw);
+        this.gearToggleYaw.withCallback(() -> onGearToggle(true));
         this.addRenderableWidget(this.yawBar);
 
         // 右下角"完成"按钮
@@ -129,9 +145,9 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
         this.addRenderableWidget(doneBtn);
     }
 
-    /** 档位模式开关（ToggleButton，icon 用 INDEX，挂在轴设置条右图标位）。 */
+    /** 档位模式开关（ToggleButton：未选中=自由模式 icon FREE_MODE，选中=档位模式 icon INDEX）。 */
     private static ToggleButton createGearToggle(boolean selected) {
-        ToggleButton toggle = new ToggleButton(0, 0, MyIcons.INDEX, MyIcons.INDEX, 0x80FF80);
+        ToggleButton toggle = new ToggleButton(0, 0, MyIcons.INDEX, MyIcons.FREE_MODE, 0x80FF80);
         toggle.setSelected(selected);
         toggle
             .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode"))
@@ -139,31 +155,75 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
             .addToolTipOnOff(
                 Component.translatable("gui.ccpe.control_desk.toggle_on"),
                 Component.translatable("gui.ccpe.control_desk.toggle_off"));
-        toggle.withCallback(() -> toggle.setSelected(!toggle.isSelected()));
         return toggle;
     }
 
-    /** 轴设置条（DoubleScrollValueBar）：左=回正时间（icon RECOVER），右=档位模式（ToggleButton）。 */
-    private static DoubleScrollValueBar createAxisBar(int winLeft, int winTop, int y, int returnTime, int gearCount, ToggleButton gearToggle) {
-        return new DoubleScrollValueBar(
+    /**
+     * 轴设置条（DoubleScrollValueBar）：左=回正时间（icon RECOVER），
+     * 右=ToggleButton（自由/档位模式）+ 对应模式的数值（随 toggle 状态切换，两值独立记忆）。
+     */
+    private static DoubleScrollValueBar createAxisBar(int winLeft, int winTop, int y,
+                                                      int returnTime, int gearCount, int freeSpeed, ToggleButton gearToggle) {
+        boolean gearMode = gearToggle.isSelected();
+        DoubleScrollValueBar bar = new DoubleScrollValueBar(
                 winLeft, winTop + y, WIN_W, BAR_TEX_H,
-                MyIcons.RECOVER, MyIcons.INDEX, returnTime, gearCount)
+                MyIcons.RECOVER, MyIcons.INDEX, returnTime, gearMode ? gearCount : freeSpeed)
                 .rangeLeft(ControlDeskBlockEntity.MIN_JOYSTICK_RETURN_TIME, ControlDeskBlockEntity.MAX_JOYSTICK_RETURN_TIME)
-                .rangeRight(ControlDeskBlockEntity.MIN_GEAR_COUNT, ControlDeskBlockEntity.MAX_GEAR_COUNT)
                 .withToggleButtonRight(gearToggle)
                 .addToolTipTitleLeft(Component.translatable("gui.ccpe.control_desk.joystick_return_time"))
-                .addToolTipInstructionLeft(Component.translatable("gui.ccpe.control_desk.return_time_tip"))
-                .addToolTipTitleRight(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode"))
-                .addToolTipInstructionRight(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode_tip"));
+                .addToolTipInstructionLeft(Component.translatable("gui.ccpe.control_desk.return_time_tip"));
+        // 右槽数值含义随模式变化：范围 + tooltip 按当前模式设置
+        applyRightMode(bar, gearMode, gearCount, freeSpeed);
+        return bar;
+    }
+
+    /** 档位模式开关点击：切换模式，右槽数值/范围/tooltip 随状态切换（两模式数值独立记忆）。 */
+    private void onGearToggle(boolean yaw) {
+        ToggleButton toggle = yaw ? gearToggleYaw : gearTogglePitch;
+        DoubleScrollValueBar bar = yaw ? yawBar : pitchBar;
+        // 先保存当前显示模式的数值，再切换
+        if (yaw) {
+            if (toggle.isSelected()) gearCountYaw = bar.getRightValue();
+            else freeSpeedYaw = bar.getRightValue();
+        } else {
+            if (toggle.isSelected()) gearCountPitch = bar.getRightValue();
+            else freeSpeedPitch = bar.getRightValue();
+        }
+        boolean gearMode = !toggle.isSelected();
+        toggle.setSelected(gearMode);
+        applyRightMode(bar, gearMode, yaw ? gearCountYaw : gearCountPitch, yaw ? freeSpeedYaw : freeSpeedPitch);
+    }
+
+    /** 按模式恢复右槽数值（数值 + 范围 + tooltip 一并切换）。 */
+    private static void applyRightMode(DoubleScrollValueBar bar, boolean gearMode, int gearCount, int freeSpeed) {
+        if (gearMode) {
+            bar.setRightValue(gearCount).rangeRight(
+                    ControlDeskBlockEntity.MIN_GEAR_COUNT, ControlDeskBlockEntity.MAX_GEAR_COUNT);
+            bar.setRightTooltip(
+                    Component.translatable("gui.ccpe.control_desk.joystick_gear_mode"),
+                    Component.translatable("gui.ccpe.control_desk.joystick_gear_mode_tip"));
+        } else {
+            bar.setRightValue(freeSpeed).rangeRight(
+                    ControlDeskBlockEntity.MIN_JOYSTICK_FREE_SPEED, ControlDeskBlockEntity.MAX_JOYSTICK_FREE_SPEED);
+            bar.setRightTooltip(
+                    Component.translatable("gui.ccpe.control_desk.joystick_free_mode"),
+                    Component.translatable("gui.ccpe.control_desk.joystick_free_mode_tip"));
+        }
     }
 
     @Override
     public void onClose() {
-        // 两轴回正时间 + 两轴档位模式 + 四向按键写回服务端 BE（服务端权威：saveAdditional 落盘 + getUpdatePacket 同步 + 蓝图兼容）
+        // 先保存当前显示模式的数值（右槽数值随 toggle 状态切换含义）
+        if (gearTogglePitch.isSelected()) gearCountPitch = pitchBar.getRightValue();
+        else freeSpeedPitch = pitchBar.getRightValue();
+        if (gearToggleYaw.isSelected()) gearCountYaw = yawBar.getRightValue();
+        else freeSpeedYaw = yawBar.getRightValue();
+        // 两轴回正时间 + 两轴档位模式/档位数 + 两轴自由速度 + 四向按键写回服务端 BE
+        // （服务端权威：saveAdditional 落盘 + getUpdatePacket 同步 + 蓝图兼容）
         PacketDistributor.sendToServer(new ControlDeskConfigPayload(deskPos,
                 pitchBar.getLeftValue(), yawBar.getLeftValue(),
-                gearTogglePitch.isSelected(), pitchBar.getRightValue(),
-                gearToggleYaw.isSelected(), yawBar.getRightValue(),
+                gearTogglePitch.isSelected(), gearCountPitch, freeSpeedPitch,
+                gearToggleYaw.isSelected(), gearCountYaw, freeSpeedYaw,
                 inputBar.getLeftKey(), inputBar.getRightKey(),
                 inputBar2.getLeftKey(), inputBar2.getRightKey()));
         super.onClose();

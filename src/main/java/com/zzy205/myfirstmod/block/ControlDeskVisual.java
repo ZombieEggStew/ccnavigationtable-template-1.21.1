@@ -8,6 +8,7 @@ import dev.engine_room.flywheel.lib.model.Models;
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import dev.engine_room.flywheel.lib.visual.AbstractBlockEntityVisual;
 import dev.engine_room.flywheel.lib.visual.SimpleDynamicVisual;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -17,6 +18,9 @@ import java.util.function.Consumer;
  * 控制台 Flywheel Visual：按 BE 已安装控件状态叠加渲染控件（底座 + 本体）。
  * 安装状态变化时动态创建/删除实例；实例存在期间每帧重置变换并刷新 facing 旋转
  * （必须 setIdentityTransform，translate 为累加语义，否则模型每帧漂移）。
+ * 操纵杆本体（joystick）叠加倾斜：绕枢轴 (8,3,3)（见 {@link JoystickTilt}）倾斜，
+ * 目标 = 模拟轴（每 tick 线性累加，{@link com.zzy205.myfirstmod.client.SeatControlState}）× 15°；
+ * 动画用指数逼近追逐目标（aeroworks SMOOTHED 模式，帧时间修正），本实例持有平滑值。
  * 模型按与底座相同的方块空间（北向）建模，渲染时平移到方块位置 + 绕方块中心 Y 旋转到 FACING。
  */
 public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBlockEntity>
@@ -27,6 +31,10 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     private TransformedInstance pedalBase;
     private TransformedInstance joystick;
     private TransformedInstance joystickBase;
+
+    /** 操纵杆动画倾斜值（度）：指数逼近追逐 {@link JoystickTilt#targetDeg} */
+    private float smoothTiltX;
+    private float smoothTiltY;
 
     public ControlDeskVisual(VisualizationContext ctx, ControlDeskBlockEntity blockEntity, float partialTick) {
         super(ctx, blockEntity, partialTick);
@@ -46,16 +54,26 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         boolean pedalWanted = be.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL);
         boolean joystickWanted = be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK);
 
-        this.pedalBase = syncInstance(this.pedalBase, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL_BASE, facing);
-        this.pedal = syncInstance(this.pedal, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL, facing);
-        this.pedalRight = syncInstance(this.pedalRight, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL_RIGHT, facing);
-        this.joystickBase = syncInstance(this.joystickBase, joystickWanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_BASE, facing);
-        this.joystick = syncInstance(this.joystick, joystickWanted, MyModPartialModels.CONTROL_DESK_JOYSTICK, facing);
+        this.pedalBase = syncInstance(this.pedalBase, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL_BASE, facing, null);
+        this.pedal = syncInstance(this.pedal, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL, facing, null);
+        this.pedalRight = syncInstance(this.pedalRight, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL_RIGHT, facing, null);
+        this.joystickBase = syncInstance(this.joystickBase, joystickWanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_BASE, facing, null);
+
+        // 操纵杆本体：动画 = 指数逼近追逐目标（数值层线性累加，动画层指数）
+        float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
+        float[] target = JoystickTilt.targetDeg(be);
+        this.smoothTiltX = JoystickTilt.approach(this.smoothTiltX, target[0], frameTicks);
+        this.smoothTiltY = JoystickTilt.approach(this.smoothTiltY, target[1], frameTicks);
+        final float tiltX = this.smoothTiltX;
+        final float tiltY = this.smoothTiltY;
+        this.joystick = syncInstance(this.joystick, joystickWanted, MyModPartialModels.CONTROL_DESK_JOYSTICK, facing,
+                inst -> applyTilt(inst, tiltX, tiltY));
     }
 
-    /** 按安装状态创建/删除实例；存在的实例每帧重置变换 + 平移到位 + 旋转到 facing 并标记更新。 */
+    /** 按安装状态创建/删除实例；存在的实例每帧重置变换 + 平移到位 + 旋转到 facing + 追加额外变换并标记更新。 */
     private TransformedInstance syncInstance(TransformedInstance instance, boolean wanted,
-                                             PartialModel model, Direction facing) {
+                                             PartialModel model, Direction facing,
+                                             Consumer<TransformedInstance> extra) {
         if (wanted && instance == null) {
             instance = this.instancerProvider()
                     .instancer(InstanceTypes.TRANSFORMED, Models.partial(model))
@@ -68,9 +86,21 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
             instance.setIdentityTransform();
             instance.translate(this.getVisualPosition());
             instance.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
+            if (extra != null) {
+                extra.accept(instance);
+            }
             instance.setChanged();
         }
         return instance;
+    }
+
+    /** 绕枢轴 (8,3,3) 倾斜：tiltY 绕 X 轴（W/S 前后），tiltX 绕 Z 轴（A/D 左右）。 */
+    private static void applyTilt(TransformedInstance inst, float tiltX, float tiltY) {
+        if (tiltX == 0f && tiltY == 0f) return;
+        inst.translate(JoystickTilt.PIVOT_X, JoystickTilt.PIVOT_Y, JoystickTilt.PIVOT_Z);
+        inst.rotateX((float) Math.toRadians(tiltY));
+        inst.rotateZ((float) Math.toRadians(tiltX));
+        inst.translate(-JoystickTilt.PIVOT_X, -JoystickTilt.PIVOT_Y, -JoystickTilt.PIVOT_Z);
     }
 
     @Override

@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.ControlDeskSeatLink;
+import com.zzy205.myfirstmod.block.JoystickTilt;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
@@ -81,6 +82,10 @@ public class SeatControlListener {
             CCPeripheralExtender.LOGGER.info(sb.toString());
         }
 
+        // 联动控制台列表写入共享状态（供各控制台动画判断是否被本地玩家操控）
+        SeatControlState.setLinkedDesks(desks.stream()
+                .map(ControlDeskBlockEntity::getBlockPos).toList());
+
         List<Binding> bindings = collectBindings(desks);
         long window = mc.getWindow().getWindow();
         Set<String> nowDown = new HashSet<>();
@@ -102,29 +107,66 @@ public class SeatControlListener {
             CCPeripheralExtender.LOGGER.info(msg.toString());
         }
 
-        // 操纵杆方向向量：方向槽位并集（任一联动控制台该方向绑定的键按下即生效），对角按下归一化
-        boolean hasJoystick = false;
-        float joyX = 0f, joyY = 0f;
+        // ── 操纵杆模拟轴（真实的模拟量，每 tick 线性累加）──
+        // 每个轴独立：目标 = 方向键（方向槽位并集，任一联动控制台该方向绑定的键按下即生效）；
+        // 自由模式：按下按 1/满偏tick 累加（速度可配置），松开每 tick 向 0 累加 1/回正时间（0 = 关闭回正，保持不动）；
+        // 档位模式：按下即满偏（PRESS_STEP=1），轴值吸附到最近档位（含中位 0）。
+        // 配置取联动中第一个装了操纵杆的控制台（X 轴用 Yaw 配置，Y 轴用 Pitch 配置）。
+        ControlDeskBlockEntity joyDesk = desks.stream()
+                .filter(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK))
+                .findFirst().orElse(null);
+        boolean hasJoystick = joyDesk != null;
+
+        boolean rawX = false, rawY = false;
+        boolean up = false, down = false, left = false, right = false;
         for (Binding binding : bindings) {
-            if (binding.dir() == null) continue;
-            hasJoystick = true;
-            if (!nowDown.contains(binding.keyName())) continue;
+            if (binding.dir() == null || !nowDown.contains(binding.keyName())) continue;
             switch (binding.dir()) {
-                case UP -> joyY += 1f;
-                case DOWN -> joyY -= 1f;
-                case LEFT -> joyX -= 1f;
-                case RIGHT -> joyX += 1f;
+                case UP -> { up = true; rawY = true; }
+                case DOWN -> { down = true; rawY = true; }
+                case LEFT -> { left = true; rawX = true; }
+                case RIGHT -> { right = true; rawX = true; }
             }
         }
-        if (joyX != 0f && joyY != 0f) {
-            float inv = 0.70710678f; // 1/sqrt(2)：对角归一化
-            joyX *= inv;
-            joyY *= inv;
-        }
-        SeatControlState.update(true, hasJoystick, joyX, joyY);
+        float targetX = right && !left ? 1f : (left && !right ? -1f : 0f);
+        float targetY = up && !down ? 1f : (down && !up ? -1f : 0f);
+        int returnTicksX = joyDesk != null ? joyDesk.getJoystickReturnTimeYaw()
+                : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME;
+        int returnTicksY = joyDesk != null ? joyDesk.getJoystickReturnTime()
+                : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME;
+        boolean gearModeX = joyDesk != null && joyDesk.isGearModeYaw();
+        boolean gearModeY = joyDesk != null && joyDesk.isGearModePitch();
+        int gearCountX = joyDesk != null ? joyDesk.getGearCountYaw() : ControlDeskBlockEntity.DEFAULT_GEAR_COUNT;
+        int gearCountY = joyDesk != null ? joyDesk.getGearCountPitch() : ControlDeskBlockEntity.DEFAULT_GEAR_COUNT;
+        int freeSpeedTicksX = joyDesk != null ? joyDesk.getJoystickFreeSpeedYaw()
+                : ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED;
+        int freeSpeedTicksY = joyDesk != null ? joyDesk.getJoystickFreeSpeedPitch()
+                : ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED;
+
+        // 自由模式：按下按 1/满偏tick 累加（速度可配置）；档位模式：按下即满偏 + 轴值吸附到最近档位
+        float axisX = stepAxis(SeatControlState.getAxisX(), targetX,
+                gearModeX ? JoystickTilt.PRESS_STEP : JoystickTilt.pressStep(freeSpeedTicksX),
+                JoystickTilt.returnStep(returnTicksX));
+        float axisY = stepAxis(SeatControlState.getAxisY(), targetY,
+                gearModeY ? JoystickTilt.PRESS_STEP : JoystickTilt.pressStep(freeSpeedTicksY),
+                JoystickTilt.returnStep(returnTicksY));
+        if (gearModeX) axisX = JoystickTilt.nearestGear(axisX, gearCountX);
+        if (gearModeY) axisY = JoystickTilt.nearestGear(axisY, gearCountY);
+
+        SeatControlState.update(true, hasJoystick, axisX, axisY, rawX, rawY, Math.abs(axisX), Math.abs(axisY));
 
         lastDown.clear();
         lastDown.addAll(nowDown);
+    }
+
+    /** 每轴线性累加：按下向目标累加 pressStep（1 = 满偏）；松开向 0 累加 returnStep（0 = 关闭回正保持不动）。 */
+    private static float stepAxis(float value, float target, float pressStep, float returnStep) {
+        if (target > 0f) return Math.min(1f, value + pressStep);
+        if (target < 0f) return Math.max(-1f, value - pressStep);
+        if (returnStep <= 0f) return value;
+        if (value > 0f) return Math.max(0f, value - returnStep);
+        if (value < 0f) return Math.min(0f, value + returnStep);
+        return 0f;
     }
 
     private static void reset() {

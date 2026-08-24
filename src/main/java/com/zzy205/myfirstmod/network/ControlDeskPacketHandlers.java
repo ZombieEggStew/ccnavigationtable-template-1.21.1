@@ -6,7 +6,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 /**
  * controlDesk 相关网络包处理。
  * <ul>
- *   <li>{@link ControlDeskConfigPayload} — 客户端→服务端：保存操纵杆配置（两轴回正时间 + 两轴档位模式 + 四向按键）</li>
+ *   <li>{@link ControlDeskConfigPayload} — 客户端→服务端：保存操纵杆配置（两轴回正时间 + 两轴档位模式/档位数 + 两轴自由模式速度 + 四向按键）</li>
  *   <li>{@link PedalConfigPayload} — 客户端→服务端：保存脚踏板配置（回正时间 + 四向按键）</li>
  * </ul>
  */
@@ -26,6 +26,7 @@ public final class ControlDeskPacketHandlers {
                         be.setJoystickReturnTimeYaw(payload.returnTimeYaw());
                         be.setGearConfig(payload.gearModePitch(), payload.gearCountPitch(),
                                 payload.gearModeYaw(), payload.gearCountYaw());
+                        be.setJoystickFreeSpeed(payload.freeSpeedPitch(), payload.freeSpeedYaw());
                         be.setJoystickKeys(payload.keyUp(), payload.keyDown(), payload.keyLeft(), payload.keyRight());
                     }
                 }

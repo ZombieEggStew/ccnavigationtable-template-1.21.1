@@ -83,6 +83,8 @@
   "gui.ccpe.control_desk.toggle_off": "Off",
   "gui.ccpe.control_desk.joystick_gear_mode": "Gear Mode",
   "gui.ccpe.control_desk.joystick_gear_mode_tip": "When enabled, joystick deflection snaps to the configured gears",
+  "gui.ccpe.control_desk.joystick_free_mode": "Free Mode",
+  "gui.ccpe.control_desk.joystick_free_mode_tip": "In free mode the joystick deflects smoothly; value = ticks to reach full deflection while holding (20 ticks = 1 second, smaller = faster)",
   "gui.ccpe.control_desk.pedal_return_time": "Return Time",
 
   "gui.ccpe.redstone_transceiver": "Redstone Transceiver",

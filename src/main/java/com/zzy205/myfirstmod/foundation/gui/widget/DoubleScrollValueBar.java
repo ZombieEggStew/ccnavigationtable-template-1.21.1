@@ -266,6 +266,18 @@ public class DoubleScrollValueBar extends AbstractWidget implements TooltipWidge
         return this;
     }
 
+    /** 整体替换右槽位 tooltip（标题 + 说明），用于右槽数值含义随状态（如档位/自由模式）变化时。 */
+    public DoubleScrollValueBar setRightTooltip(Component title, Component instruction) {
+        tooltipLinesRight.clear();
+        if (title != null) {
+            tooltipLinesRight.add(title.copy().withStyle(Style.EMPTY.withColor(0x528FDE)));
+        }
+        if (instruction != null) {
+            tooltipLinesRight.add(instruction.copy().withStyle(Style.EMPTY.withColor(0x545454).withItalic(true)));
+        }
+        return this;
+    }
+
     /** 悬停时渲染 tooltip（由外层 Screen 在 super.render() 之后调用，确保在最上层）。 */
     @Override
     public void renderTooltip(GuiGraphics g, int mouseX, int mouseY) {
