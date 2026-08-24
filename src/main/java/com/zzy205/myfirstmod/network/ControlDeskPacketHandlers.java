@@ -1,6 +1,8 @@
 package com.zzy205.myfirstmod.network;
 
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
+import com.zzy205.myfirstmod.block.ControlDeskSeatLink;
+import net.minecraft.core.BlockPos;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 /**
@@ -8,6 +10,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  * <ul>
  *   <li>{@link ControlDeskConfigPayload} — 客户端→服务端：保存操纵杆配置（两轴回正时间 + 两轴档位模式/档位数 + 两轴自由模式速度 + 四向按键）</li>
  *   <li>{@link PedalConfigPayload} — 客户端→服务端：保存脚踏板配置（回正时间 + 四向按键）</li>
+ *   <li>{@link SeatInputPayload} — 客户端→服务端（运行时每 tick）：坐垫操作输入，服务端校验后驱动 BE 轴状态</li>
  * </ul>
  */
 public final class ControlDeskPacketHandlers {
@@ -41,6 +44,26 @@ public final class ControlDeskPacketHandlers {
                     if (be != null) {
                         be.setPedalReturnTime(payload.returnTime());
                         be.setPedalKeys(payload.leftUp(), payload.leftDown(), payload.rightUp(), payload.rightDown());
+                    }
+                }
+        );
+
+        // 客户端→服务端（运行时每 tick）：坐垫操作输入 → 服务端权威驱动操纵杆轴状态
+        // 校验：玩家确实骑乘在该坐垫上（防作弊/异常）；联动控制台由坐垫四邻现查（判定①）
+        registrar.playToServer(
+                SeatInputPayload.TYPE,
+                SeatInputPayload.STREAM_CODEC,
+                (payload, ctx) -> {
+                    var player = ctx.player();
+                    if (player == null) return;
+                    BlockPos actualSeat = ControlDeskSeatLink.seatPosOf(player);
+                    if (actualSeat == null || !actualSeat.equals(payload.seatPos())) return;
+                    for (ControlDeskBlockEntity desk
+                            : ControlDeskSeatLink.findLinkedDesks(player.level(), payload.seatPos())) {
+                        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)) {
+                            desk.setJoystickInput(player.getUUID(), payload.seatPos(),
+                                    payload.up(), payload.down(), payload.left(), payload.right());
+                        }
                     }
                 }
         );

@@ -5,10 +5,12 @@ import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.ControlDeskSeatLink;
 import com.zzy205.myfirstmod.block.JoystickTilt;
+import com.zzy205.myfirstmod.network.SeatInputPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -18,13 +20,15 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 坐垫操作模式按键监听（阶段二：debug 输出 + 操纵杆方向向量，payload / BE 状态待接入）。
+ * 坐垫操作模式按键监听（阶段二：debug 输出 + 操纵杆方向向量 + 运行时输入上报）。
  * <p>
  * 每 tick 现查操作模式（骑乘 Create 坐垫 + 坐垫四邻有 controlDesk，见 {@link ControlDeskSeatLink}）：
  * <ul>
  *   <li>进入操作模式时输出联动信息（坐垫位置 + 联动控制台列表），用于验证判定①</li>
  *   <li>玩家按下任一联动控制台<b>已安装控件</b>所配置的按键（边沿检测）→ debug 输出按键名 / 含义 / 归属控制台</li>
- *   <li>持续计算操纵杆方向向量（方向槽位并集 + 对角归一化）→ 写入 {@link SeatControlState}，供 HUD overlay 显示</li>
+ *   <li>持续计算操纵杆方向向量（方向槽位并集）→ 写入 {@link SeatControlState}（仅 HUD overlay 用），
+ *       并通过 {@link SeatInputPayload} 每 tick 上报服务端 —— 服务端是操纵杆轴状态的权威来源（见
+ *       {@link ControlDeskBlockEntity#tickServer}），渲染直接读 BE 轴值</li>
  * </ul>
  * 按键来源：联动各 controlDesk 的 BE 配置（客户端从 BE 读配置，服务端权威同步；未安装控件的控制台自动忽略）。
  */
@@ -48,10 +52,20 @@ public class SeatControlListener {
             reset();
             return;
         }
-        if (mc.screen != null) return; // GUI 打开时不判定按键
+        if (mc.screen != null) {
+            // GUI 打开时不判定按键；向服务端发一次释放（自由模式回正 / 档位模式保持），避免操纵杆卡在按住状态
+            if (lastSeatPos != null) {
+                sendInput(lastSeatPos, false, false, false, false);
+            }
+            return;
+        }
 
         BlockPos seatPos = ControlDeskSeatLink.seatPosOf(mc.player);
         if (seatPos == null) {
+            // 离开坐垫：发一次释放（服务端租约校验也会兜底清除）
+            if (lastSeatPos != null) {
+                sendInput(lastSeatPos, false, false, false, false);
+            }
             reset();
             return;
         }
@@ -110,7 +124,8 @@ public class SeatControlListener {
         // ── 操纵杆模拟轴（真实的模拟量，每 tick 线性累加）──
         // 每个轴独立：目标 = 方向键（方向槽位并集，任一联动控制台该方向绑定的键按下即生效）；
         // 自由模式：按下按 1/满偏tick 累加（速度可配置），松开每 tick 向 0 累加 1/回正时间（0 = 关闭回正，保持不动）；
-        // 档位模式：按下即满偏（PRESS_STEP=1），轴值吸附到最近档位（含中位 0）。
+        // 档位模式：关闭自动回正，检测按键按下边沿（上一 tick 该方向无键按下），进/退一档（轴值 = -1 + 2k/(档位数-1)，步长 2/(档位数-1)）；
+        //   离开坐垫时档位保持（物理换挡杆语义，见 SeatControlState.gearHold*）。
         // 配置取联动中第一个装了操纵杆的控制台（X 轴用 Yaw 配置，Y 轴用 Pitch 配置）。
         ControlDeskBlockEntity joyDesk = desks.stream()
                 .filter(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK))
@@ -130,6 +145,11 @@ public class SeatControlListener {
         }
         float targetX = right && !left ? 1f : (left && !right ? -1f : 0f);
         float targetY = up && !down ? 1f : (down && !up ? -1f : 0f);
+        // 档位模式需要按键「按下边沿」（当前按下 且 上一 tick 该方向无键按下）
+        boolean upEdge = up && !anyDirDown(bindings, JoyDir.UP, lastDown);
+        boolean downEdge = down && !anyDirDown(bindings, JoyDir.DOWN, lastDown);
+        boolean leftEdge = left && !anyDirDown(bindings, JoyDir.LEFT, lastDown);
+        boolean rightEdge = right && !anyDirDown(bindings, JoyDir.RIGHT, lastDown);
         int returnTicksX = joyDesk != null ? joyDesk.getJoystickReturnTimeYaw()
                 : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME;
         int returnTicksY = joyDesk != null ? joyDesk.getJoystickReturnTime()
@@ -143,30 +163,41 @@ public class SeatControlListener {
         int freeSpeedTicksY = joyDesk != null ? joyDesk.getJoystickFreeSpeedPitch()
                 : ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED;
 
-        // 自由模式：按下按 1/满偏tick 累加（速度可配置）；档位模式：按下即满偏 + 轴值吸附到最近档位
-        float axisX = stepAxis(SeatControlState.getAxisX(), targetX,
-                gearModeX ? JoystickTilt.PRESS_STEP : JoystickTilt.pressStep(freeSpeedTicksX),
-                JoystickTilt.returnStep(returnTicksX));
-        float axisY = stepAxis(SeatControlState.getAxisY(), targetY,
-                gearModeY ? JoystickTilt.PRESS_STEP : JoystickTilt.pressStep(freeSpeedTicksY),
-                JoystickTilt.returnStep(returnTicksY));
-        if (gearModeX) axisX = JoystickTilt.nearestGear(axisX, gearCountX);
-        if (gearModeY) axisY = JoystickTilt.nearestGear(axisY, gearCountY);
+        // 自由模式：按下按 1/满偏tick 累加（速度可配置）；档位模式：无自动回正，按下边沿进/退一档
+        // （本地模拟仅供 HUD overlay；服务端用同一套 JoystickTilt 动力学权威模拟 BE 轴值）
+        float axisX = gearModeX
+                ? JoystickTilt.stepGear(SeatControlState.getAxisX(), rightEdge, leftEdge, gearCountX)
+                : JoystickTilt.stepAxis(SeatControlState.getAxisX(), targetX,
+                        JoystickTilt.pressStep(freeSpeedTicksX), JoystickTilt.returnStep(returnTicksX));
+        float axisY = gearModeY
+                ? JoystickTilt.stepGear(SeatControlState.getAxisY(), upEdge, downEdge, gearCountY)
+                : JoystickTilt.stepAxis(SeatControlState.getAxisY(), targetY,
+                        JoystickTilt.pressStep(freeSpeedTicksY), JoystickTilt.returnStep(returnTicksY));
 
+        // 档位模式开启的轴：离开坐垫（clear）时保持档位不归零（仅 overlay 本地模拟）
+        SeatControlState.setGearHold(gearModeX, gearModeY);
         SeatControlState.update(true, hasJoystick, axisX, axisY, rawX, rawY, Math.abs(axisX), Math.abs(axisY));
+
+        // 运行时输入上报服务端（服务端权威模拟 + getUpdatePacket 广播；有操纵杆的联动台才需要）
+        if (hasJoystick) {
+            sendInput(seatPos, up, down, left, right);
+        }
 
         lastDown.clear();
         lastDown.addAll(nowDown);
     }
 
-    /** 每轴线性累加：按下向目标累加 pressStep（1 = 满偏）；松开向 0 累加 returnStep（0 = 关闭回正保持不动）。 */
-    private static float stepAxis(float value, float target, float pressStep, float returnStep) {
-        if (target > 0f) return Math.min(1f, value + pressStep);
-        if (target < 0f) return Math.max(-1f, value - pressStep);
-        if (returnStep <= 0f) return value;
-        if (value > 0f) return Math.max(0f, value - returnStep);
-        if (value < 0f) return Math.min(0f, value + returnStep);
-        return 0f;
+    /** 上一 tick 该方向是否有键按下（档位模式「按下边沿」判定用）。 */
+    private static boolean anyDirDown(List<Binding> bindings, JoyDir dir, Set<String> down) {
+        for (Binding b : bindings) {
+            if (b.dir() == dir && down.contains(b.keyName())) return true;
+        }
+        return false;
+    }
+
+    /** 发送坐垫操作输入到服务端（服务端校验后驱动 BE 轴状态，见 ControlDeskPacketHandlers）。 */
+    private static void sendInput(BlockPos seatPos, boolean up, boolean down, boolean left, boolean right) {
+        PacketDistributor.sendToServer(new SeatInputPayload(seatPos, up, down, left, right));
     }
 
     private static void reset() {

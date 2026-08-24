@@ -103,7 +103,10 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
-        return null;
+        // 服务端每 tick 模拟操纵杆轴动力学（输入租约 + 自由/档位模式），客户端不 tick
+        if (level.isClientSide) return null;
+        return createTickerHelper(type, MyModBlockEntities.control_desk_entity.get(),
+                ControlDeskBlockEntity::tickServer);
     }
 
     // ════════════════════ 控件安装 / 卸载 ════════════════════

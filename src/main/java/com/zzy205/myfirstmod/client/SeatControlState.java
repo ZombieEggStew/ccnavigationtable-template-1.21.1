@@ -28,6 +28,9 @@ public final class SeatControlState {
     private static boolean rawY;         // 原始值：Y 轴有无按键动作
     private static float analogX;        // 轴值 0..1：X 轴模拟量幅度
     private static float analogY;        // 轴值 0..1：Y 轴模拟量幅度
+    /** 档位保持（每 tick 由监听器按档位模式写入）：该轴处于档位模式时，离开坐垫不清零轴值（物理换挡杆语义）。 */
+    private static boolean gearHoldX;
+    private static boolean gearHoldY;
     /** 当前联动（坐垫四邻）的 controlDesk 位置，供各控制台动画判断是否被本地玩家操控 */
     private static final List<BlockPos> linkedDesks = new ArrayList<>(4);
 
@@ -58,10 +61,31 @@ public final class SeatControlState {
         return linkedDesks.contains(pos);
     }
 
-    /** 离开操作模式时清零。 */
+    /**
+     * 离开操作模式时清零；档位保持的轴保留轴值（模拟量同步为 |axis|），
+     * 且任一轴处于档位保持时保留联动列表（供 {@link #isLinkedDesk} 判定「曾联动的控制台」以显示档位保持）。
+     */
     public static void clear() {
-        update(false, false, 0f, 0f, false, false, 0f, 0f);
-        linkedDesks.clear();
+        float keepX = gearHoldX ? axisX : 0f;
+        float keepY = gearHoldY ? axisY : 0f;
+        update(false, false, keepX, keepY, false, false, Math.abs(keepX), Math.abs(keepY));
+        if (!gearHoldX && !gearHoldY) {
+            linkedDesks.clear();
+        }
+    }
+
+    /** 设置两轴档位保持标志（操作模式下每 tick 由监听器按档位模式写入）。 */
+    public static void setGearHold(boolean x, boolean y) {
+        gearHoldX = x;
+        gearHoldY = y;
+    }
+
+    public static boolean isGearHoldX() {
+        return gearHoldX;
+    }
+
+    public static boolean isGearHoldY() {
+        return gearHoldY;
     }
 
     public static boolean isOperating() {

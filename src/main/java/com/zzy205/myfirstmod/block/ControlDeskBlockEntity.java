@@ -5,10 +5,14 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * 控制台方块实体 — 保存已安装控件（踏板一对 / 操纵杆）。
@@ -63,6 +67,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_GEAR_COUNT_YAW = "GearCountYaw";
     private static final String TAG_JOYSTICK_FREE_SPEED_PITCH = "JoystickFreeSpeedPitch";
     private static final String TAG_JOYSTICK_FREE_SPEED_YAW = "JoystickFreeSpeedYaw";
+    private static final String TAG_JOYSTICK_AXIS_X = "JoystickAxisX";   // 运行时轴状态（不落盘，仅 getUpdateTag 同步）
+    private static final String TAG_JOYSTICK_AXIS_Y = "JoystickAxisY";
     private static final String TAG_JOYSTICK_KEY_UP = "JoystickKeyUp";
     private static final String TAG_JOYSTICK_KEY_DOWN = "JoystickKeyDown";
     private static final String TAG_JOYSTICK_KEY_LEFT = "JoystickKeyLeft";
@@ -83,6 +89,15 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private int gearCountYaw = DEFAULT_GEAR_COUNT;                      // 左右轴档位数
     private int freeSpeedPitch = DEFAULT_JOYSTICK_FREE_SPEED;           // 前后轴自由模式满偏 tick 数
     private int freeSpeedYaw = DEFAULT_JOYSTICK_FREE_SPEED;             // 左右轴自由模式满偏 tick 数
+
+    // ── 运行时轴状态（服务端权威，不持久化；经 getUpdateTag/getUpdatePacket 同步到客户端） ──
+    private float joystickAxisX;   // 操纵杆轴 X（-1..1）：+1 = 右摆(D)，-1 = 左摆(A)
+    private float joystickAxisY;   // 操纵杆轴 Y（-1..1）：+1 = 前推(W)，-1 = 后拉(S)
+    // 输入租约：最近一次操作输入（玩家 + 坐垫 + 四方向按住态）；服务端每 tick 校验租约并模拟轴动力学
+    private UUID inputPlayer;
+    private BlockPos inputSeatPos;
+    private boolean inputUp, inputDown, inputLeft, inputRight;
+    private boolean prevUp, prevDown, prevLeft, prevRight;
     private String joystickKeyUp = DEFAULT_JOYSTICK_KEY_UP;
     private String joystickKeyDown = DEFAULT_JOYSTICK_KEY_DOWN;
     private String joystickKeyLeft = DEFAULT_JOYSTICK_KEY_LEFT;
@@ -120,7 +135,13 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (!isInstalled(type)) return false;
         switch (type) {
             case PEDAL -> pedalInstalled = false;
-            case JOYSTICK -> joystickInstalled = false;
+            case JOYSTICK -> {
+                joystickInstalled = false;
+                // 卸下操纵杆：运行时轴状态与输入租约一并清除（重新安装后从中心开始）
+                joystickAxisX = 0f;
+                joystickAxisY = 0f;
+                clearJoystickInput();
+            }
         }
         notifyChange();
         return true;
@@ -212,6 +233,87 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
 
     private static int clampFreeSpeed(int ticks) {
         return Math.max(MIN_JOYSTICK_FREE_SPEED, Math.min(MAX_JOYSTICK_FREE_SPEED, ticks));
+    }
+
+    public float getJoystickAxisX() {
+        return joystickAxisX;
+    }
+
+    public float getJoystickAxisY() {
+        return joystickAxisY;
+    }
+
+    /**
+     * 写入坐垫操作输入（运行时，服务端调用；按玩家/坐垫租约记录，租约变化时重置边沿历史，
+     * 避免换人/换坐垫后第一次按键不触发档位边沿）。
+     */
+    public void setJoystickInput(UUID player, BlockPos seatPos,
+                                 boolean up, boolean down, boolean left, boolean right) {
+        boolean leaseChanged = !Objects.equals(inputPlayer, player) || !Objects.equals(inputSeatPos, seatPos);
+        inputPlayer = player;
+        inputSeatPos = seatPos;
+        inputUp = up;
+        inputDown = down;
+        inputLeft = left;
+        inputRight = right;
+        if (leaseChanged) {
+            prevUp = prevDown = prevLeft = prevRight = false;
+        }
+    }
+
+    /** 清除输入租约（操作者离开坐垫/断线时由服务端 tick 调用）。 */
+    public void clearJoystickInput() {
+        inputPlayer = null;
+        inputSeatPos = null;
+        inputUp = inputDown = inputLeft = inputRight = false;
+        prevUp = prevDown = prevLeft = prevRight = false;
+    }
+
+    /**
+     * 服务端每 tick 模拟操纵杆轴动力学（自由模式按下线性累加/松开按回正时间归零；
+     * 档位模式无回正、按下边沿进/退一档）；轴值变化时广播到客户端。
+     * 配置取本 BE 自己的两轴设置（X 轴用 Yaw 系列，Y 轴用 Pitch 系列）。
+     */
+    public static void tickServer(Level level, BlockPos pos, BlockState state, ControlDeskBlockEntity be) {
+        if (level == null || level.isClientSide || !be.joystickInstalled) return;
+        // 输入租约校验：操作者不再坐在输入坐垫上（离开/换坐垫/断线）→ 清除输入
+        // （档位模式轴值保持，自由模式自然回正）
+        if (be.inputPlayer != null) {
+            Player p = ((ServerLevel) level).getPlayerByUUID(be.inputPlayer);
+            if (p == null || !Objects.equals(ControlDeskSeatLink.seatPosOf(p), be.inputSeatPos)) {
+                be.clearJoystickInput();
+            }
+        }
+        boolean anyInput = be.inputUp || be.inputDown || be.inputLeft || be.inputRight;
+        if (!anyInput && be.joystickAxisX == 0f && be.joystickAxisY == 0f) {
+            be.prevUp = be.prevDown = be.prevLeft = be.prevRight = false;
+            return;
+        }
+        // 按下边沿（相对上一 tick 输入）
+        boolean upEdge = be.inputUp && !be.prevUp;
+        boolean downEdge = be.inputDown && !be.prevDown;
+        boolean leftEdge = be.inputLeft && !be.prevLeft;
+        boolean rightEdge = be.inputRight && !be.prevRight;
+        be.prevUp = be.inputUp;
+        be.prevDown = be.inputDown;
+        be.prevLeft = be.inputLeft;
+        be.prevRight = be.inputRight;
+
+        float targetX = (be.inputRight && !be.inputLeft) ? 1f : ((be.inputLeft && !be.inputRight) ? -1f : 0f);
+        float targetY = (be.inputUp && !be.inputDown) ? 1f : ((be.inputDown && !be.inputUp) ? -1f : 0f);
+        float newX = be.gearModeYaw
+                ? JoystickTilt.stepGear(be.joystickAxisX, rightEdge, leftEdge, be.gearCountYaw)
+                : JoystickTilt.stepAxis(be.joystickAxisX, targetX,
+                        JoystickTilt.pressStep(be.freeSpeedYaw), JoystickTilt.returnStep(be.joystickReturnTimeYaw));
+        float newY = be.gearModePitch
+                ? JoystickTilt.stepGear(be.joystickAxisY, upEdge, downEdge, be.gearCountPitch)
+                : JoystickTilt.stepAxis(be.joystickAxisY, targetY,
+                        JoystickTilt.pressStep(be.freeSpeedPitch), JoystickTilt.returnStep(be.joystickReturnTime));
+        if (newX != be.joystickAxisX || newY != be.joystickAxisY) {
+            be.joystickAxisX = newX;
+            be.joystickAxisY = newY;
+            be.notifyChange();
+        }
     }
 
     public String getJoystickKeyUp() {
@@ -348,6 +450,13 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_JOYSTICK_FREE_SPEED_YAW)) {
             freeSpeedYaw = tag.getInt(TAG_JOYSTICK_FREE_SPEED_YAW);
         }
+        // 运行时轴状态：getUpdatePacket / 区块加载同步读这里（不落盘，saveAdditional 不含 → 服务端读盘恒为 0）
+        if (tag.contains(TAG_JOYSTICK_AXIS_X)) {
+            joystickAxisX = tag.getFloat(TAG_JOYSTICK_AXIS_X);
+        }
+        if (tag.contains(TAG_JOYSTICK_AXIS_Y)) {
+            joystickAxisY = tag.getFloat(TAG_JOYSTICK_AXIS_Y);
+        }
         if (tag.contains(TAG_JOYSTICK_KEY_UP)) {
             joystickKeyUp = tag.getString(TAG_JOYSTICK_KEY_UP);
         }
@@ -414,6 +523,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putInt(TAG_GEAR_COUNT_YAW, gearCountYaw);
         tag.putInt(TAG_JOYSTICK_FREE_SPEED_PITCH, freeSpeedPitch);
         tag.putInt(TAG_JOYSTICK_FREE_SPEED_YAW, freeSpeedYaw);
+        // 运行时轴状态（服务端权威）：随 getUpdatePacket / 区块加载同步，客户端渲染直接读它
+        tag.putFloat(TAG_JOYSTICK_AXIS_X, joystickAxisX);
+        tag.putFloat(TAG_JOYSTICK_AXIS_Y, joystickAxisY);
         tag.putString(TAG_JOYSTICK_KEY_UP, joystickKeyUp);
         tag.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         tag.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);
