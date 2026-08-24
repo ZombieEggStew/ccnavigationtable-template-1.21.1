@@ -79,7 +79,7 @@ flowchart LR
 ### 控件设置菜单（JoystickModuleScreen / PedalModuleScreen）
 
 - 两屏幕均继承 `AbstractMonitorScreen`；背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169 + 标题控件名）；`ControlDeskPlacementOverlay` 按命中控件类型分发
-- `JoystickModuleScreen`（操纵杆）布局（自上而下）：① 前后键位绑定条（W/S，默认 w/s）② 前后轴设置条 `DoubleScrollValueBar`（左=回正时间 icon RECOVER 默认 20 tick 范围 0..100；右=档位模式 ToggleButton icon=INDEX 默认 4 档范围 1..8）③ 左右键位绑定条（A/D，默认 a/d）④ 左右轴设置条（同上结构）；`PedalModuleScreen`（脚踏板）：双按键绑定条 左踏板/右踏板（PEDAL_LEFT_UP / PEDAL_RIGHT_UP）
+- `JoystickModuleScreen`（操纵杆）布局（自上而下）：① 前后键位绑定条（W/S，默认 w/s）② 前后轴设置条 `DoubleScrollValueBar`（左=回正时间 icon RECOVER 默认 20 tick 范围 0..100；右=档位模式 ToggleButton icon=INDEX 默认 4 档范围 1..8）③ 左右键位绑定条（A/D，默认 a/d）④ 左右轴设置条（同上结构）；`PedalModuleScreen`（脚踏板）：① 左踏板按键绑定条（PEDAL_LEFT_UP / PEDAL_LEFT_DOWN）② 右踏板按键绑定条（PEDAL_RIGHT_UP / PEDAL_RIGHT_DOWN）③ 回正时间条 `ScrollValueBar`（icon RECOVER，默认 20 tick 范围 0..100，左右两踏板共用）
 - **操纵杆配置已全部持久化**：BE NBT（两轴回正时间 `JoystickReturnTime`/`JoystickReturnTimeYaw` + 两轴档位模式 `GearModePitch`/`GearCountPitch`/`GearModeYaw`/`GearCountYaw` + 四向按键 `JoystickKeyUp/Down/Left/Right`，旧存档缺失字段时保持默认）+ `saveAdditional`/`loadAdditional`/`writeSafe`/`getUpdateTag` 四路径 + `getUpdatePacket` 同步；屏幕打开时读客户端 BE 初始化、`onClose` 经 `ControlDeskConfigPayload`（pos + 两轴回正时间 + 两轴档位开关/档位数 + 4 键，共 11 字段）→ 服务端 setter（`setJoystickReturnTime`/`setJoystickReturnTimeYaw`/`setGearConfig`/`setJoystickKeys`）
 
 ### DoubleInputBar（双按键绑定条，`foundation/gui/widget/`）
@@ -95,7 +95,7 @@ flowchart LR
 - **配置界面**：✅ 已实现（扳手右键 / 空手蹲下右键打开模块菜单，`DoubleInputBar` 按键捕获）；按键保存到 BE 待接入
 - **按键可配置**：KeyMapping 注册（左踏板/右踏板/操纵杆 W/A/S/D），玩家设定的按键**覆盖已有按键**——自定义 KeyConflictContext（坐垫操作模式激活我们的键、原版 Q 丢物品/E 物品栏/WASD 移动失效；离开坐垫恢复）。实现前先验证 NeoForge `KeyMapping.setKeyConflictContext` 行为
 - **潜行键不覆盖**（Create 坐垫按潜行=下车，必须保留）
-- **默认按键**：Q=左踏板、E=右踏板、WASD=操纵杆（W 前推 / S 后拉 / A 左摆 / D 右摆）
+- **默认按键**：左踏板 踩下=Q / 抬起=E、右踏板 踩下=E / 抬起=Q、WASD=操纵杆（W 前推 / S 后拉 / A 左摆 / D 右摆）
 - **按键目标**：**广播**给坐垫四邻所有联动的 controlDesk（没装对应控件的自动忽略）
 - **触发模式**：踏板两种（按住式=按住踩/松开抬、切换式=按一下踩住/再按抬起），可配置；操纵杆固定按住式（不适用切换式）
 - 按键状态按边沿/持续发送 payload
@@ -126,7 +126,8 @@ flowchart LR
   3. 配置变更后 `sendBlockUpdated` + 先落盘再保存蓝图（自动存档 ~30s 间隔，会回滚未落盘配置）
 - **阶段一已按此实现**：BE 的控件安装状态 NBT 持久化 + `getUpdatePacket` + `writeSafe` 全部就位
 - **操纵杆配置已全部持久化**：两轴回正时间 + 两轴档位模式（开关 + 档位数，默认关 / 4 档）+ 四向按键（默认 w/s/a/d）存 BE NBT 四路径全覆盖；`JoystickModuleScreen` 打开时读客户端 BE 初始化、`onClose` 经 `ControlDeskConfigPayload`（11 字段）→ 服务端 setter（`notifyChange` 同步）
-- **待接入**：脚踏板按键绑定配置 + 触发模式（`onBindCaptured` → BE NBT）
+- **脚踏板配置已全部持久化**：回正时间（`PedalReturnTime`，左右共用）+ 四个按键绑定（`PedalKeyLeftUp`/`PedalKeyLeftDown`/`PedalKeyRightUp`/`PedalKeyRightDown`）存 BE NBT 四路径全覆盖；`PedalModuleScreen` 打开时读客户端 BE 初始化、`onClose` 经 `PedalConfigPayload`（5 字段，与操纵杆包分离防互覆盖）→ 服务端 setter（`setPedalReturnTime`/`setPedalKeys`）
+- **待接入**：踏板触发模式（按住式/切换式）
 
 ## 实施顺序
 
@@ -135,7 +136,7 @@ flowchart LR
 3. ⏳ 客户端按键监听 + payload 链路（重点验证按键冲突 KeyConflictContext 方案）
 4. ⏳ BE 状态 + 服务端权威更新 + 广播同步
 5. ⏳ 动画（踏板平移、操纵杆 30° 倾斜）
-6. 🔶 配置 GUI：✅ 菜单背景 + 双按键绑定条 + 双滚轮条（回正/档位）+ 操纵杆全部配置持久化 已完成；⏳ 脚踏板按键绑定/触发模式配置 + 其余控件
+6. 🔶 配置 GUI：✅ 菜单背景 + 双按键绑定条 + 双滚轮条（回正/档位）+ 操纵杆全部配置持久化 + 脚踏板回正时间条与按键绑定持久化 已完成；⏳ 脚踏板触发模式配置 + 其余控件
 7. ⏳ CC 外设 + Lua API（Lua 侧验证信号）
 
 ## 待确认 / 风险清单
@@ -144,7 +145,7 @@ flowchart LR
 |---|---|---|
 | 1 | 按键冲突方案需进游戏验证（NeoForge KeyConflictContext 对原版键的实际效果） | 按键 |
 | 2 | 按键绑定存 BE 后，多个玩家对同一 controlDesk 的按键习惯冲突如何处理（配置跟随机器 vs 跟随玩家） | 配置 |
-| 3 | 按键配置保存链路（`DoubleInputBar.onBindCaptured` → `ControlDeskBlockEntity` NBT + `getUpdatePacket`/`writeSafe` 蓝图兼容）待实施 | 配置 |
+| 3 | 按键/回正时间配置保存链路已实施（操纵杆 + 脚踏板，`ControlDeskBlockEntity` NBT + `getUpdatePacket`/`writeSafe` 蓝图兼容）；触发模式（按住式/切换式）UI 待做 | 配置 |
 | 4 | 踏板平移行程/操纵杆 30° 的具体动画参数 | 动画 |
 | 5 | 广播语义：坐垫四邻多个 controlDesk 同时响应时，各自控件安装情况不同（未安装的忽略）——需确认无额外要求 | 联动 |
 | 6 | 安装位固定为北侧 z0..8 三块（左踏板 x11..16 / 操纵杆 x5..11 / 右踏板 x0..5），`ControlDeskBlock` 的 `*_SHAPE` 常量可调——确认当前位置满意 | 安装位 |

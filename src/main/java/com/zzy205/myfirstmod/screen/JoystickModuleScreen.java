@@ -152,7 +152,7 @@ public class JoystickModuleScreen extends AbstractMonitorScreen {
                 .rangeRight(ControlDeskBlockEntity.MIN_GEAR_COUNT, ControlDeskBlockEntity.MAX_GEAR_COUNT)
                 .withToggleButtonRight(gearToggle)
                 .addToolTipTitleLeft(Component.translatable("gui.ccpe.control_desk.joystick_return_time"))
-                .addToolTipInstructionLeft(Component.translatable("gui.ccpe.control_desk.joystick_return_time_tip"))
+                .addToolTipInstructionLeft(Component.translatable("gui.ccpe.control_desk.return_time_tip"))
                 .addToolTipTitleRight(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode"))
                 .addToolTipInstructionRight(Component.translatable("gui.ccpe.control_desk.joystick_gear_mode_tip"));
     }

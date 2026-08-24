@@ -1,18 +1,30 @@
 package com.zzy205.myfirstmod.screen;
 
+import com.simibubi.create.foundation.gui.AllIcons;
+import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.foundation.gui.MyIcons;
 import com.zzy205.myfirstmod.foundation.gui.MyUIElements;
 import com.zzy205.myfirstmod.foundation.gui.widget.DoubleInputBar;
+import com.zzy205.myfirstmod.foundation.gui.widget.HoverTintIconButton;
+import com.zzy205.myfirstmod.foundation.gui.widget.ScrollValueBar;
+import com.zzy205.myfirstmod.network.PedalConfigPayload;
 
+import net.createmod.catnip.gui.element.ScreenElement;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
- * 脚踏板设置菜单 —— 背景复用 {@link MonitorModuleScreen}（gui_2.png 同区域），
- * 双按键绑定条对应「左踏板 / 右踏板」。
+ * 脚踏板设置菜单 —— 背景复用 {@link MonitorModuleScreen}（gui_2.png 同区域）。
  * 打开方式：手持扳手右键 或 空手蹲下右键，准星命中已安装的脚踏板（由客户端 ControlDeskPlacementOverlay 打开）。
- * 当前阶段：窗口背景 + 标题 + 双输入条（渲染骨架，按键配置保存到 BE 待接入）。
+ * 布局（自上而下）：
+ * <ol>
+ *   <li>左踏板按键绑定条（PEDAL_LEFT_UP / PEDAL_LEFT_DOWN）</li>
+ *   <li>右踏板按键绑定条（PEDAL_RIGHT_UP / PEDAL_RIGHT_DOWN）</li>
+ *   <li>回正时间条（ScrollValueBar，icon RECOVER，左右两个踏板共用）</li>
+ * </ol>
+ * 全部配置已持久化（回正时间 + 四个按键绑定）。
  */
 public class PedalModuleScreen extends AbstractMonitorScreen {
 
@@ -23,7 +35,20 @@ public class PedalModuleScreen extends AbstractMonitorScreen {
     private static final int TITLE_Y = 4;
     private static final int TITLE_COLOR = 0x404040;
 
+    private static final int DONE_BTN_RIGHT = 25;
+    private static final int DONE_BTN_BOTTOM = 24;
+
+    // ── 横条布局（自上而下） ──
+    private static final int BAR_TEX_H = 28;
+    private static final int LEFT_KEY_BAR_Y = 18;                          // 1. 左踏板按键绑定条
+    private static final int RIGHT_KEY_BAR_Y = LEFT_KEY_BAR_Y + BAR_TEX_H; // 2. 右踏板按键绑定条
+    private static final int RETURN_BAR_Y = RIGHT_KEY_BAR_Y + BAR_TEX_H;   // 3. 回正时间条（两踏板共用）
+
     private final BlockPos deskPos;
+
+    private DoubleInputBar inputBar;      // 1. 左踏板按键绑定条
+    private DoubleInputBar inputBar2;     // 2. 右踏板按键绑定条
+    private ScrollValueBar returnBar;     // 3. 回正时间条（icon RECOVER）
 
     public PedalModuleScreen(BlockPos deskPos) {
         super(Component.empty());
@@ -35,11 +60,65 @@ public class PedalModuleScreen extends AbstractMonitorScreen {
         int winLeft = (this.width - WIN_W) / 2;
         int winTop = (this.height - WIN_H) / 2;
 
-        // 双按键绑定条：左踏板 / 右踏板（捕获逻辑在 DoubleInputBar；捕获结果后续接入 BE 配置）
-        DoubleInputBar inputBar = new DoubleInputBar(
-                winLeft, winTop + 18, WIN_W, 28, MyIcons.PEDAL_LEFT_UP, MyIcons.PEDAL_RIGHT_UP)
+        // 从客户端 BE 读取当前配置（服务端权威数据经 getUpdatePacket / 区块加载同步到客户端）；BE 缺失时用默认值
+        int returnTime = ControlDeskBlockEntity.DEFAULT_PEDAL_RETURN_TIME;
+        String leftUp = ControlDeskBlockEntity.DEFAULT_PEDAL_KEY_LEFT_UP;
+        String leftDown = ControlDeskBlockEntity.DEFAULT_PEDAL_KEY_LEFT_DOWN;
+        String rightUp = ControlDeskBlockEntity.DEFAULT_PEDAL_KEY_RIGHT_UP;
+        String rightDown = ControlDeskBlockEntity.DEFAULT_PEDAL_KEY_RIGHT_DOWN;
+        if (this.minecraft != null && this.minecraft.level != null
+                && this.minecraft.level.getBlockEntity(deskPos) instanceof ControlDeskBlockEntity desk) {
+            returnTime = desk.getPedalReturnTime();
+            leftUp = desk.getPedalKeyLeftUp();
+            leftDown = desk.getPedalKeyLeftDown();
+            rightUp = desk.getPedalKeyRightUp();
+            rightDown = desk.getPedalKeyRightDown();
+        }
+
+        // 1. 左踏板按键绑定条
+        this.inputBar = new DoubleInputBar(
+                winLeft, winTop + LEFT_KEY_BAR_Y, WIN_W, BAR_TEX_H, MyIcons.PEDAL_LEFT_UP, MyIcons.PEDAL_LEFT_DOWN)
+                .setLeftKey(leftUp).setRightKey(leftDown)
                 .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.bind_tip"));
-        this.addRenderableWidget(inputBar);
+        this.addRenderableWidget(this.inputBar);
+
+        // 2. 右踏板按键绑定条
+        this.inputBar2 = new DoubleInputBar(
+                winLeft, winTop + RIGHT_KEY_BAR_Y, WIN_W, BAR_TEX_H, MyIcons.PEDAL_RIGHT_UP, MyIcons.PEDAL_RIGHT_DOWN)
+                .setLeftKey(rightUp).setRightKey(rightDown)
+                .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.bind_tip"));
+        this.addRenderableWidget(this.inputBar2);
+
+        // 3. 回正时间条（左右两个踏板共用；范围常量统一在 ControlDeskBlockEntity 定义）
+        this.returnBar = new ScrollValueBar(
+                winLeft, winTop + RETURN_BAR_Y, WIN_W, BAR_TEX_H, returnTime, 0, new int[0])
+                .withIcon(MyIcons.RECOVER)
+                .range(ControlDeskBlockEntity.MIN_PEDAL_RETURN_TIME, ControlDeskBlockEntity.MAX_PEDAL_RETURN_TIME)
+                .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.pedal_return_time"))
+                .addToolTipInstruction(Component.translatable("gui.ccpe.control_desk.return_time_tip"));
+        this.addRenderableWidget(this.returnBar);
+
+        // 右下角"完成"按钮
+        HoverTintIconButton doneBtn = new HoverTintIconButton(
+                winLeft + WIN_W - DONE_BTN_RIGHT,
+                winTop + WIN_H - DONE_BTN_BOTTOM,
+                (ScreenElement) AllIcons.I_CONFIRM,
+                0x80FF80);
+        doneBtn.setWidth(18);
+        doneBtn.setHeight(18);
+        doneBtn.withCallback(this::onClose);
+        doneBtn.setToolTip(Component.translatable("gui.ccpe.module_config.done"));
+        this.addRenderableWidget(doneBtn);
+    }
+
+    @Override
+    public void onClose() {
+        // 回正时间 + 四个按键绑定写回服务端 BE（服务端权威：saveAdditional 落盘 + getUpdatePacket 同步 + 蓝图兼容）
+        PacketDistributor.sendToServer(new PedalConfigPayload(deskPos,
+                returnBar.getValue(),
+                inputBar.getLeftKey(), inputBar.getRightKey(),
+                inputBar2.getLeftKey(), inputBar2.getRightKey()));
+        super.onClose();
     }
 
     @Override

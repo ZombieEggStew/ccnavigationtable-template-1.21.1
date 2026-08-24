@@ -37,6 +37,17 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public static final String DEFAULT_JOYSTICK_KEY_LEFT = "key.keyboard.a";
     public static final String DEFAULT_JOYSTICK_KEY_RIGHT = "key.keyboard.d";
 
+    /** 脚踏板回正时间（tick）默认值与范围（与 PedalModuleScreen 滚轮条一致；左右两个踏板共用同一值）。 */
+    public static final int DEFAULT_PEDAL_RETURN_TIME = 20;
+    public static final int MIN_PEDAL_RETURN_TIME = 0;
+    public static final int MAX_PEDAL_RETURN_TIME = 100;
+
+    /** 脚踏板按键默认值（InputConstants.Key.getName() 格式）：左踏板 踩下=Q / 抬起=E，右踏板 踩下=E / 抬起=Q。 */
+    public static final String DEFAULT_PEDAL_KEY_LEFT_UP = "key.keyboard.e";
+    public static final String DEFAULT_PEDAL_KEY_LEFT_DOWN = "key.keyboard.q";
+    public static final String DEFAULT_PEDAL_KEY_RIGHT_UP = "key.keyboard.q";
+    public static final String DEFAULT_PEDAL_KEY_RIGHT_DOWN = "key.keyboard.e";
+
     private static final String TAG_PEDAL = "PedalInstalled";
     private static final String TAG_JOYSTICK = "JoystickInstalled";
     private static final String TAG_JOYSTICK_RETURN_TIME = "JoystickReturnTime";
@@ -49,6 +60,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_JOYSTICK_KEY_DOWN = "JoystickKeyDown";
     private static final String TAG_JOYSTICK_KEY_LEFT = "JoystickKeyLeft";
     private static final String TAG_JOYSTICK_KEY_RIGHT = "JoystickKeyRight";
+    private static final String TAG_PEDAL_RETURN_TIME = "PedalReturnTime";
+    private static final String TAG_PEDAL_KEY_LEFT_UP = "PedalKeyLeftUp";
+    private static final String TAG_PEDAL_KEY_LEFT_DOWN = "PedalKeyLeftDown";
+    private static final String TAG_PEDAL_KEY_RIGHT_UP = "PedalKeyRightUp";
+    private static final String TAG_PEDAL_KEY_RIGHT_DOWN = "PedalKeyRightDown";
 
     private boolean pedalInstalled;
     private boolean joystickInstalled;
@@ -62,6 +78,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private String joystickKeyDown = DEFAULT_JOYSTICK_KEY_DOWN;
     private String joystickKeyLeft = DEFAULT_JOYSTICK_KEY_LEFT;
     private String joystickKeyRight = DEFAULT_JOYSTICK_KEY_RIGHT;
+    private int pedalReturnTime = DEFAULT_PEDAL_RETURN_TIME;   // 左右踏板共用的回正时间（tick）
+    private String pedalKeyLeftUp = DEFAULT_PEDAL_KEY_LEFT_UP;    // 左踏板 抬起键（空串 = 未绑定）
+    private String pedalKeyLeftDown = DEFAULT_PEDAL_KEY_LEFT_DOWN; // 左踏板 踩下键
+    private String pedalKeyRightUp = DEFAULT_PEDAL_KEY_RIGHT_UP;   // 右踏板 抬起键
+    private String pedalKeyRightDown = DEFAULT_PEDAL_KEY_RIGHT_DOWN; // 右踏板 踩下键
 
     public ControlDeskBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.control_desk_entity.get(), pos, state);
@@ -195,6 +216,51 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         notifyChange();
     }
 
+    public int getPedalReturnTime() {
+        return pedalReturnTime;
+    }
+
+    /** 设置脚踏板回正时间（tick），钳位到 [MIN, MAX]；左右两个踏板共用。服务端调用。 */
+    public void setPedalReturnTime(int ticks) {
+        int clamped = Math.max(MIN_PEDAL_RETURN_TIME, Math.min(MAX_PEDAL_RETURN_TIME, ticks));
+        if (pedalReturnTime == clamped) return;
+        pedalReturnTime = clamped;
+        notifyChange();
+    }
+
+    public String getPedalKeyLeftUp() {
+        return pedalKeyLeftUp;
+    }
+
+    public String getPedalKeyLeftDown() {
+        return pedalKeyLeftDown;
+    }
+
+    public String getPedalKeyRightUp() {
+        return pedalKeyRightUp;
+    }
+
+    public String getPedalKeyRightDown() {
+        return pedalKeyRightDown;
+    }
+
+    /** 设置脚踏板按键绑定（InputConstants.Key.getName() 格式，空串 = 未绑定）。服务端调用。 */
+    public void setPedalKeys(String leftUp, String leftDown, String rightUp, String rightDown) {
+        String lu = leftUp == null ? "" : leftUp;
+        String ld = leftDown == null ? "" : leftDown;
+        String ru = rightUp == null ? "" : rightUp;
+        String rd = rightDown == null ? "" : rightDown;
+        if (Objects.equals(pedalKeyLeftUp, lu) && Objects.equals(pedalKeyLeftDown, ld)
+                && Objects.equals(pedalKeyRightUp, ru) && Objects.equals(pedalKeyRightDown, rd)) {
+            return;
+        }
+        pedalKeyLeftUp = lu;
+        pedalKeyLeftDown = ld;
+        pedalKeyRightUp = ru;
+        pedalKeyRightDown = rd;
+        notifyChange();
+    }
+
     // ════════════════════ NBT / 同步（Create 蓝图兼容） ════════════════════
 
     @Override
@@ -212,6 +278,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         tag.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);
         tag.putString(TAG_JOYSTICK_KEY_RIGHT, joystickKeyRight);
+        tag.putInt(TAG_PEDAL_RETURN_TIME, pedalReturnTime);
+        tag.putString(TAG_PEDAL_KEY_LEFT_UP, pedalKeyLeftUp);
+        tag.putString(TAG_PEDAL_KEY_LEFT_DOWN, pedalKeyLeftDown);
+        tag.putString(TAG_PEDAL_KEY_RIGHT_UP, pedalKeyRightUp);
+        tag.putString(TAG_PEDAL_KEY_RIGHT_DOWN, pedalKeyRightDown);
     }
 
     @Override
@@ -250,6 +321,21 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_JOYSTICK_KEY_RIGHT)) {
             joystickKeyRight = tag.getString(TAG_JOYSTICK_KEY_RIGHT);
         }
+        if (tag.contains(TAG_PEDAL_RETURN_TIME)) {
+            pedalReturnTime = tag.getInt(TAG_PEDAL_RETURN_TIME);
+        }
+        if (tag.contains(TAG_PEDAL_KEY_LEFT_UP)) {
+            pedalKeyLeftUp = tag.getString(TAG_PEDAL_KEY_LEFT_UP);
+        }
+        if (tag.contains(TAG_PEDAL_KEY_LEFT_DOWN)) {
+            pedalKeyLeftDown = tag.getString(TAG_PEDAL_KEY_LEFT_DOWN);
+        }
+        if (tag.contains(TAG_PEDAL_KEY_RIGHT_UP)) {
+            pedalKeyRightUp = tag.getString(TAG_PEDAL_KEY_RIGHT_UP);
+        }
+        if (tag.contains(TAG_PEDAL_KEY_RIGHT_DOWN)) {
+            pedalKeyRightDown = tag.getString(TAG_PEDAL_KEY_RIGHT_DOWN);
+        }
     }
 
     /** Create 原理图 / 装置搬运时的「安全 NBT」（Schematicannon 打印保留控件配置）。 */
@@ -267,6 +353,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         compound.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);
         compound.putString(TAG_JOYSTICK_KEY_RIGHT, joystickKeyRight);
+        compound.putInt(TAG_PEDAL_RETURN_TIME, pedalReturnTime);
+        compound.putString(TAG_PEDAL_KEY_LEFT_UP, pedalKeyLeftUp);
+        compound.putString(TAG_PEDAL_KEY_LEFT_DOWN, pedalKeyLeftDown);
+        compound.putString(TAG_PEDAL_KEY_RIGHT_UP, pedalKeyRightUp);
+        compound.putString(TAG_PEDAL_KEY_RIGHT_DOWN, pedalKeyRightDown);
     }
 
     @Override
@@ -284,6 +375,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         tag.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);
         tag.putString(TAG_JOYSTICK_KEY_RIGHT, joystickKeyRight);
+        tag.putInt(TAG_PEDAL_RETURN_TIME, pedalReturnTime);
+        tag.putString(TAG_PEDAL_KEY_LEFT_UP, pedalKeyLeftUp);
+        tag.putString(TAG_PEDAL_KEY_LEFT_DOWN, pedalKeyLeftDown);
+        tag.putString(TAG_PEDAL_KEY_RIGHT_UP, pedalKeyRightUp);
+        tag.putString(TAG_PEDAL_KEY_RIGHT_DOWN, pedalKeyRightDown);
         return tag;
     }
 
