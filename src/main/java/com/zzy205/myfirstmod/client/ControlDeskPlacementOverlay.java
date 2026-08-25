@@ -126,11 +126,13 @@ public class ControlDeskPlacementOverlay {
         }
     }
 
-    private static ControlDeskBlockEntity.ControlType controlTypeOf(ItemStack stack) {
+    /** 手持物品 → 控件类型（供本类预览判定与 {@link ControlDeskGhostPreviewRenderer} 半透明模型预览复用）。 */
+    static ControlDeskBlockEntity.ControlType controlTypeOf(ItemStack stack) {
         if (stack.is(MyModItems.CONTROL_PEDAL.get())) return ControlDeskBlockEntity.ControlType.PEDAL;
         if (stack.is(MyModItems.CONTROL_JOYSTICK.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK;
         if (stack.is(MyModItems.CONTROL_MONITOR_2.get())) return ControlDeskBlockEntity.ControlType.MONITOR_2;
         if (stack.is(MyModItems.CONTROL_THROTTLE.get())) return ControlDeskBlockEntity.ControlType.THROTTLE;
+        if (stack.is(MyModItems.CONTROL_JOYSTICK_2.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK_2;
         return null;
     }
 

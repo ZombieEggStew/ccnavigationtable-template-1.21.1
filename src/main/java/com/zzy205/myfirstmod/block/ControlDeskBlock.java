@@ -65,7 +65,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     private static final VoxelShaper PEDAL_LEFT_SHAPER = VoxelShaper.forHorizontal(PEDAL_LEFT_SHAPE, Direction.NORTH);
     private static final VoxelShaper PEDAL_RIGHT_SHAPER = VoxelShaper.forHorizontal(PEDAL_RIGHT_SHAPE, Direction.NORTH);
     private static final VoxelShaper JOYSTICK_SHAPER = VoxelShaper.forHorizontal(JOYSTICK_SHAPE, Direction.NORTH);
-    // monitor_2 / throttle 共用插槽：桌体后缘上方整宽一条（y 8..14、z 8..16，北向基准），两模块互斥安装
+    // monitor_2 / throttle / joystick_2 共用插槽：桌体后缘上方整宽一条（y 8..14、z 8..16，北向基准），三模块互斥安装
     private static final VoxelShape BACK_SLOT_SHAPE = Block.box(0, 8, 8, 16, 14, 16);
     private static final VoxelShaper BACK_SLOT_SHAPER = VoxelShaper.forHorizontal(BACK_SLOT_SHAPE, Direction.NORTH);
 
@@ -168,7 +168,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             boolean anyInstalled = desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
-                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE);
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2);
             if (!anyInstalled) {
                 // 光桌：没有模块可拆，走默认拆方块
                 return IWrenchable.super.onSneakWrenched(state, context);
@@ -204,6 +205,10 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
                 && hitBounds(installBounds(ControlDeskBlockEntity.ControlType.THROTTLE, facing, pos), click)) {
             return ControlDeskBlockEntity.ControlType.THROTTLE;
+        }
+        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
+                && hitBounds(installBounds(ControlDeskBlockEntity.ControlType.JOYSTICK_2, facing, pos), click)) {
+            return ControlDeskBlockEntity.ControlType.JOYSTICK_2;
         }
         return null;
     }
@@ -243,6 +248,9 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
                 drops.add(new ItemStack(MyModItems.CONTROL_THROTTLE.get()));
             }
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)) {
+                drops.add(new ItemStack(MyModItems.CONTROL_JOYSTICK_2.get()));
+            }
         }
         return drops;
     }
@@ -254,6 +262,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             case JOYSTICK -> MyModItems.CONTROL_JOYSTICK.get();
             case MONITOR_2 -> MyModItems.CONTROL_MONITOR_2.get();
             case THROTTLE -> MyModItems.CONTROL_THROTTLE.get();
+            case JOYSTICK_2 -> MyModItems.CONTROL_JOYSTICK_2.get();
         };
     }
 
@@ -262,6 +271,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         if (stack.is(MyModItems.CONTROL_JOYSTICK.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK;
         if (stack.is(MyModItems.CONTROL_MONITOR_2.get())) return ControlDeskBlockEntity.ControlType.MONITOR_2;
         if (stack.is(MyModItems.CONTROL_THROTTLE.get())) return ControlDeskBlockEntity.ControlType.THROTTLE;
+        if (stack.is(MyModItems.CONTROL_JOYSTICK_2.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK_2;
         return null;
     }
 
@@ -269,7 +279,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
      * 控件安装位的世界 AABB 列表（随 FACING 旋转；PEDAL 为一对左右两个框）。
      * 供安装/拆除预览框与拆除判定（onSneakWrenched 按点击位置命中）使用；
      * 如需调整安装位置，改上面的北向基准 shape 即可。
-     * MONITOR_2 与 THROTTLE 共用 {@link #BACK_SLOT_SHAPE}（桌体后缘上方，互斥安装）。
+     * MONITOR_2 / THROTTLE / JOYSTICK_2 共用 {@link #BACK_SLOT_SHAPE}（桌体后缘上方，互斥安装）。
      */
     public static List<AABB> installBounds(ControlDeskBlockEntity.ControlType type, Direction facing, BlockPos pos) {
         List<AABB> result = new ArrayList<>();
@@ -281,6 +291,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             case JOYSTICK -> result.add(JOYSTICK_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
             case MONITOR_2 -> result.add(BACK_SLOT_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
             case THROTTLE -> result.add(BACK_SLOT_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
+            case JOYSTICK_2 -> result.add(BACK_SLOT_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
         }
         return result;
     }

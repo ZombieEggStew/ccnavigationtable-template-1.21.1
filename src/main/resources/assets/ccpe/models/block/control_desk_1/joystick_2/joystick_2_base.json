@@ -1,6 +1,7 @@
 {
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
+	"render_type": "minecraft:cutout",
 	"textures": {
 		"0": "ccpe:block/control_desk/joystick_2",
 		"particle": "ccpe:block/control_desk/joystick_2"

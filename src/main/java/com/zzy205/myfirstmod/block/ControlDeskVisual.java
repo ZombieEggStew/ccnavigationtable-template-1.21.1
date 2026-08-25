@@ -34,11 +34,13 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     private TransformedInstance pedalBase;
     private TransformedInstance joystick;
     private TransformedInstance joystickBase;
-    /** monitor_2 / throttle（桌体后缘上方插槽，静态渲染） */
+    /** monitor_2 / throttle / joystick_2（桌体后缘上方插槽，静态渲染） */
     private TransformedInstance monitor2;
     private TransformedInstance throttleBase;
     private TransformedInstance throttleHandle;
     private TransformedInstance throttleIndicator;
+    private TransformedInstance joystick2Base;
+    private TransformedInstance joystick2Handle;
 
     /** 操纵杆动画倾斜值（度）：指数逼近追逐 {@link JoystickTilt#targetDeg} */
     private float smoothTiltX;
@@ -76,6 +78,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         boolean joystickWanted = be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK);
         boolean monitor2Wanted = be.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2);
         boolean throttleWanted = be.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE);
+        boolean joystick2Wanted = be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2);
 
         this.pedalBase = syncInstance(this.pedalBase, pedalWanted, MyModPartialModels.CONTROL_DESK_PEDAL_BASE, facing, null);
 
@@ -134,6 +137,10 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
             this.throttleIndicator.colorArgb(ThrottleMotion.indicatorColor(be.getThrottleGear()));
             this.throttleIndicator.setChanged();
         }
+
+        // joystick_2：桌体后缘上方插槽，静态渲染（底座 + 手柄，暂无动画）
+        this.joystick2Base = syncInstance(this.joystick2Base, joystick2Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE, facing, null);
+        this.joystick2Handle = syncInstance(this.joystick2Handle, joystick2Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE, facing, null);
     }
 
     /** 按安装状态创建/删除实例；存在的实例每帧重置变换 + 平移到位 + 旋转到 facing + 追加额外变换并标记更新。 */
@@ -180,6 +187,8 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         if (this.throttleBase != null) consumer.accept(this.throttleBase);
         if (this.throttleHandle != null) consumer.accept(this.throttleHandle);
         if (this.throttleIndicator != null) consumer.accept(this.throttleIndicator);
+        if (this.joystick2Base != null) consumer.accept(this.joystick2Base);
+        if (this.joystick2Handle != null) consumer.accept(this.joystick2Handle);
     }
 
     @Override
@@ -193,6 +202,8 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         if (this.throttleBase != null) this.relight(this.throttleBase);
         if (this.throttleHandle != null) this.relight(this.throttleHandle);
         if (this.throttleIndicator != null) this.relight(this.throttleIndicator);
+        if (this.joystick2Base != null) this.relight(this.joystick2Base);
+        if (this.joystick2Handle != null) this.relight(this.joystick2Handle);
     }
 
     @Override
@@ -206,5 +217,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         if (this.throttleBase != null) this.throttleBase.delete();
         if (this.throttleHandle != null) this.throttleHandle.delete();
         if (this.throttleIndicator != null) this.throttleIndicator.delete();
+        if (this.joystick2Base != null) this.joystick2Base.delete();
+        if (this.joystick2Handle != null) this.joystick2Handle.delete();
     }
 }

@@ -89,6 +89,11 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
             smoothThrottles.remove(be.getBlockPos());
             throttleCharge.remove(be.getBlockPos());
         }
+        // joystick_2：桌体后缘上方插槽，静态渲染（底座 + 手柄，暂无动画）
+        if (be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)) {
+            renderPart(MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE, state, facing, ms, vb, light);
+            renderPart(MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE, state, facing, ms, vb, light);
+        }
     }
 
     /** 踏板本体：facing 旋转 + 向模型空间 +z 平移（动画 = 指数逼近追逐压下值 × 1px）。 */

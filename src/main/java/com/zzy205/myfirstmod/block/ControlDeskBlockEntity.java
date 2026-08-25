@@ -29,7 +29,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
 
     /** 可安装到控制台的控件类型 */
     public enum ControlType {
-        PEDAL, JOYSTICK, MONITOR_2, THROTTLE
+        PEDAL, JOYSTICK, MONITOR_2, THROTTLE, JOYSTICK_2
     }
 
     /** 操纵杆回正时间（tick）默认值与范围（与 JoystickModuleScreen 滚轮条一致）。 */
@@ -82,6 +82,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_JOYSTICK = "JoystickInstalled";
     private static final String TAG_MONITOR_2 = "Monitor2Installed";
     private static final String TAG_THROTTLE = "ThrottleInstalled";
+    private static final String TAG_JOYSTICK_2 = "Joystick2Installed";
     private static final String TAG_JOYSTICK_RETURN_TIME = "JoystickReturnTime";
     private static final String TAG_JOYSTICK_RETURN_TIME_YAW = "JoystickReturnTimeYaw";
     private static final String TAG_GEAR_MODE_PITCH = "GearModePitch";
@@ -113,8 +114,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
 
     private boolean pedalInstalled;
     private boolean joystickInstalled;
-    private boolean monitor2Installed;   // monitor_2 / throttle 共用桌体后缘上方插槽，互斥安装
+    private boolean monitor2Installed;   // monitor_2 / throttle / joystick_2 共用桌体后缘上方插槽，互斥安装
     private boolean throttleInstalled;
+    private boolean joystick2Installed;
     private int joystickReturnTime = DEFAULT_JOYSTICK_RETURN_TIME;      // 前后轴回正时间
     private int joystickReturnTimeYaw = DEFAULT_JOYSTICK_RETURN_TIME;   // 左右轴回正时间
     private boolean gearModePitch;                                      // 前后轴档位模式开关
@@ -228,22 +230,27 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             case JOYSTICK -> joystickInstalled;
             case MONITOR_2 -> monitor2Installed;
             case THROTTLE -> throttleInstalled;
+            case JOYSTICK_2 -> joystick2Installed;
         };
     }
 
-    /** 安装控件；已安装返回 false（不覆盖）。MONITOR_2 与 THROTTLE 共用同一插槽，互斥安装。服务端调用。 */
+    /** 安装控件；已安装返回 false（不覆盖）。MONITOR_2 / THROTTLE / JOYSTICK_2 共用桌体后缘上方插槽，互斥安装。服务端调用。 */
     public boolean install(ControlType type) {
         if (isInstalled(type)) return false;
         switch (type) {
             case PEDAL -> pedalInstalled = true;
             case JOYSTICK -> joystickInstalled = true;
             case MONITOR_2 -> {
-                if (throttleInstalled) return false;
+                if (throttleInstalled || joystick2Installed) return false;
                 monitor2Installed = true;
             }
             case THROTTLE -> {
-                if (monitor2Installed) return false;
+                if (monitor2Installed || joystick2Installed) return false;
                 throttleInstalled = true;
+            }
+            case JOYSTICK_2 -> {
+                if (monitor2Installed || throttleInstalled) return false;
+                joystick2Installed = true;
             }
         }
         notifyChange();
@@ -276,6 +283,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
                 throttleChargeTicks = 0;
                 clearInput();
             }
+            case JOYSTICK_2 -> joystick2Installed = false;
         }
         notifyChange();
         return true;
@@ -717,6 +725,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putBoolean(TAG_JOYSTICK, joystickInstalled);
         tag.putBoolean(TAG_MONITOR_2, monitor2Installed);
         tag.putBoolean(TAG_THROTTLE, throttleInstalled);
+        tag.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);
         tag.putBoolean(TAG_GEAR_MODE_PITCH, gearModePitch);
@@ -749,6 +758,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         joystickInstalled = tag.getBoolean(TAG_JOYSTICK);
         monitor2Installed = tag.getBoolean(TAG_MONITOR_2);
         throttleInstalled = tag.getBoolean(TAG_THROTTLE);
+        joystick2Installed = tag.getBoolean(TAG_JOYSTICK_2);
         // 旧存档无对应字段时保持默认（getInt 缺失返回 0 / getString 缺失返回 ""，需显式判断）
         if (tag.contains(TAG_JOYSTICK_RETURN_TIME)) {
             joystickReturnTime = tag.getInt(TAG_JOYSTICK_RETURN_TIME);
@@ -846,6 +856,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putBoolean(TAG_JOYSTICK, joystickInstalled);
         compound.putBoolean(TAG_MONITOR_2, monitor2Installed);
         compound.putBoolean(TAG_THROTTLE, throttleInstalled);
+        compound.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
         compound.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         compound.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);
         compound.putBoolean(TAG_GEAR_MODE_PITCH, gearModePitch);
@@ -878,6 +889,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putBoolean(TAG_JOYSTICK, joystickInstalled);
         tag.putBoolean(TAG_MONITOR_2, monitor2Installed);
         tag.putBoolean(TAG_THROTTLE, throttleInstalled);
+        tag.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);
         tag.putBoolean(TAG_GEAR_MODE_PITCH, gearModePitch);

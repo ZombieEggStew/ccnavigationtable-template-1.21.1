@@ -86,7 +86,8 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `block/ControlDeskBlockEntity.java` | 控制台方块实体：`ControlType`（PEDAL 一对 / JOYSTICK）+ `install`/`remove`/`isInstalled`；全局频道（`ControlDeskRegistry` 注册/注销 + `occupiedChannels` 快照同步，`setChannel`/`getChannel`）；NBT 持久化（`PedalInstalled`/`JoystickInstalled`/频道/控件配置）+ `getUpdatePacket`/`writeSafe`（`PartialSafeNBT`，蓝图兼容）；服务端 ticker 模拟操纵杆轴动力学 | 控制台控件状态、频道、蓝图兼容、动画数据接入 |
 | `block/ControlDeskVisual.java` | 控制台 Flywheel Visual（`SimpleDynamicVisual`）：按 BE 安装状态**动态创建/删除** TransformedInstance，叠加 底座→本体（踏板双底座/双踏板、操纵杆底座/杆把手）；每帧 `setIdentityTransform()` 必须（translate 累加语义，否则漂移） | 控制台 Flywheel 渲染、安装控件渲染、动画 |
 | `block/ControlDeskRenderer.java` | 控制台原版 BER 回退渲染（Flywheel 不可用时）：按 BE 安装状态叠加控件 PartialModel（底座→本体）；渲染盒 1.5³ 防操纵杆把手（y≈17.4/16）被视锥剔除 | 控制台 BER 回退路径 |
-| `client/ControlDeskPlacementOverlay.java` | 控制台客户端交互：控件安装预览（手持物品，绿=可装/红=已装）；扳手拆除预览（已装控件默认绿、视角命中安装位变红）；**控制台配置菜单打开**（右键边沿 +（扳手右键 或 空手蹲下右键）+ 准星指向控制台 → `ControlDeskConfigScreen`）；拆除预览命中判定共用 `ControlDeskBlock.hitBounds` | 安装预览、拆除预览、菜单打开、安装位调整 |
+| `client/ControlDeskPlacementOverlay.java` | 控制台客户端交互：控件安装预览（手持物品，绿=可装/红=已装）；扳手拆除预览（已装控件默认绿、视角命中安装位变红）；**控制台配置菜单打开**（右键边沿 +（扳手右键 或 空手蹲下右键）+ 准星指向控制台 → `ControlDeskConfigScreen`）；拆除预览命中判定共用 `ControlDeskBlock.hitBounds`；`controlTypeOf`（包可见）供半透明模型预览复用 | 安装预览、拆除预览、菜单打开、安装位调整 |
+| `client/ControlDeskGhostPreviewRenderer.java` | 控件安装**半透明模型预览**（参考 aeroworks SocketPlacementClient）：手持控件物品 + 准星指向控制台且可安装 → `RenderLevelStageEvent.AFTER_BLOCK_ENTITIES` 用 `CachedBuffers.partial` + `RenderType.translucentMovingBlock()` + `color(255,255,255,110)` + 固定光照渲染控件全部部件（底座→本体，与 `ControlDeskRenderer` 一致）；与线框预览共存，已装位置不渲染 | 半透明安装预览、预览透明度/部件调整 |
 
 ### 控制台模型布局（北向基准）
 

@@ -73,6 +73,7 @@
   "item.ccpe.joystick": "Joystick",
   "item.ccpe.monitor_2": "Monitor 2",
   "item.ccpe.throttle": "Throttle",
+  "item.ccpe.joystick_2": "Joystick 2",
 
   "gui.ccpe.control_desk.already_installed": "Control already installed",
   "gui.ccpe.control_desk.bind_unbound": "Unbound",

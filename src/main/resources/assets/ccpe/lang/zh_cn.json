@@ -75,6 +75,7 @@
   "item.ccpe.joystick": "操纵杆",
   "item.ccpe.monitor_2": "监视器 2",
   "item.ccpe.throttle": "油门杆",
+  "item.ccpe.joystick_2": "操纵杆 2",
 
   "gui.ccpe.control_desk.already_installed": "该控件已安装",
   "gui.ccpe.control_desk.bind_unbound": "未绑定",

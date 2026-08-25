@@ -31,11 +31,13 @@ public class MyModItems {
             "pedal", () -> new Item(new Item.Properties()));
     public static final DeferredItem<Item> CONTROL_JOYSTICK = ITEMS.register(
             "joystick", () -> new Item(new Item.Properties()));
-    // monitor_2 / throttle 共用桌体后缘上方插槽（互斥安装）
+    // monitor_2 / throttle / joystick_2 共用桌体后缘上方插槽（互斥安装）
     public static final DeferredItem<Item> CONTROL_MONITOR_2 = ITEMS.register(
             "monitor_2", () -> new Item(new Item.Properties()));
     public static final DeferredItem<Item> CONTROL_THROTTLE = ITEMS.register(
             "throttle", () -> new Item(new Item.Properties()));
+    public static final DeferredItem<Item> CONTROL_JOYSTICK_2 = ITEMS.register(
+            "joystick_2", () -> new Item(new Item.Properties()));
 
     /** 创建指定普通 Monitor 模块的物品栈；未知类型返回空栈。 */
     public static ItemStack monitorModuleStack(ModuleType type) {
