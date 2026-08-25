@@ -6,6 +6,7 @@ import com.zzy205.myfirstmod.compat.cc.ControlDeskRegistry;
 import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
@@ -83,6 +84,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_MONITOR_2 = "Monitor2Installed";
     private static final String TAG_THROTTLE = "ThrottleInstalled";
     private static final String TAG_JOYSTICK_2 = "Joystick2Installed";
+    private static final String TAG_BACK_SLOT_ROTATION = "BackSlotRotation";
     private static final String TAG_JOYSTICK_RETURN_TIME = "JoystickReturnTime";
     private static final String TAG_JOYSTICK_RETURN_TIME_YAW = "JoystickReturnTimeYaw";
     private static final String TAG_GEAR_MODE_PITCH = "GearModePitch";
@@ -117,6 +119,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private boolean monitor2Installed;   // monitor_2 / throttle / joystick_2 共用桌体后缘上方插槽，互斥安装
     private boolean throttleInstalled;
     private boolean joystick2Installed;
+    /** 后缘插槽模块（throttle / joystick_2）的安装朝向（度，0/90/180/270，北向基准；安装时按玩家朝向记录，默认 0 = 不额外旋转） */
+    private int backSlotRotation;
     private int joystickReturnTime = DEFAULT_JOYSTICK_RETURN_TIME;      // 前后轴回正时间
     private int joystickReturnTimeYaw = DEFAULT_JOYSTICK_RETURN_TIME;   // 左右轴回正时间
     private boolean gearModePitch;                                      // 前后轴档位模式开关
@@ -234,8 +238,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         };
     }
 
-    /** 安装控件；已安装返回 false（不覆盖）。MONITOR_2 / THROTTLE / JOYSTICK_2 共用桌体后缘上方插槽，互斥安装。服务端调用。 */
-    public boolean install(ControlType type) {
+    /**
+     * 安装控件；已安装返回 false（不覆盖）。MONITOR_2 / THROTTLE / JOYSTICK_2 共用桌体后缘上方插槽，互斥安装。服务端调用。
+     * {@code installFacing} = 安装时的玩家朝向（THROTTLE / JOYSTICK_2 记录到 {@link #backSlotRotation}；null 时保持原值）。
+     */
+    public boolean install(ControlType type, @Nullable Direction installFacing) {
         if (isInstalled(type)) return false;
         switch (type) {
             case PEDAL -> pedalInstalled = true;
@@ -247,10 +254,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             case THROTTLE -> {
                 if (monitor2Installed || joystick2Installed) return false;
                 throttleInstalled = true;
+                if (installFacing != null) backSlotRotation = rotationFor(installFacing);
             }
             case JOYSTICK_2 -> {
                 if (monitor2Installed || throttleInstalled) return false;
                 joystick2Installed = true;
+                if (installFacing != null) backSlotRotation = rotationFor(installFacing);
             }
         }
         notifyChange();
@@ -295,6 +304,24 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
         }
     }
+
+    /** 后缘插槽模块（throttle / joystick_2）的安装朝向（度，0/90/180/270，北向基准；默认 0 = 不额外旋转）。 */
+    public int getBackSlotRotation() {
+        return backSlotRotation;
+    }
+
+    /**
+     * 安装朝向映射：玩家朝向 → 模块额外旋转（度）。北=0、南=180、西=90、东=270
+     * （与桌体旋转同一约定：模块"面向"安装时的玩家，与 {@code ControlDeskBlock} 的 FACING 旋转公式一致）。
+     */
+    public static int rotationFor(Direction facing) {
+        return Math.floorMod(Math.round(-facing.getOpposite().toYRot()), 360);
+    }
+
+    /** joystick_2 安装朝向旋转的枢轴（模型空间 0..1 归一化：= (12,8,12)/16，即模型自身中心，位于桌体后缘角落）。绕 Y 旋转只取 x/z，y 值不影响结果。 */
+    public static final float JOYSTICK_2_PIVOT_X = 12f / 16f;
+    public static final float JOYSTICK_2_PIVOT_Y = 8f / 16f;
+    public static final float JOYSTICK_2_PIVOT_Z = 12f / 16f;
 
     public int getJoystickReturnTime() {
         return joystickReturnTime;
@@ -726,6 +753,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putBoolean(TAG_MONITOR_2, monitor2Installed);
         tag.putBoolean(TAG_THROTTLE, throttleInstalled);
         tag.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
+        tag.putInt(TAG_BACK_SLOT_ROTATION, backSlotRotation);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);
         tag.putBoolean(TAG_GEAR_MODE_PITCH, gearModePitch);
@@ -759,6 +787,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         monitor2Installed = tag.getBoolean(TAG_MONITOR_2);
         throttleInstalled = tag.getBoolean(TAG_THROTTLE);
         joystick2Installed = tag.getBoolean(TAG_JOYSTICK_2);
+        if (tag.contains(TAG_BACK_SLOT_ROTATION)) {
+            backSlotRotation = tag.getInt(TAG_BACK_SLOT_ROTATION);
+        }
         // 旧存档无对应字段时保持默认（getInt 缺失返回 0 / getString 缺失返回 ""，需显式判断）
         if (tag.contains(TAG_JOYSTICK_RETURN_TIME)) {
             joystickReturnTime = tag.getInt(TAG_JOYSTICK_RETURN_TIME);
@@ -857,6 +888,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putBoolean(TAG_MONITOR_2, monitor2Installed);
         compound.putBoolean(TAG_THROTTLE, throttleInstalled);
         compound.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
+        compound.putInt(TAG_BACK_SLOT_ROTATION, backSlotRotation);
         compound.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         compound.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);
         compound.putBoolean(TAG_GEAR_MODE_PITCH, gearModePitch);
@@ -890,6 +922,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putBoolean(TAG_MONITOR_2, monitor2Installed);
         tag.putBoolean(TAG_THROTTLE, throttleInstalled);
         tag.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
+        tag.putInt(TAG_BACK_SLOT_ROTATION, backSlotRotation);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);
         tag.putBoolean(TAG_GEAR_MODE_PITCH, gearModePitch);

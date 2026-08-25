@@ -12,6 +12,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
@@ -68,10 +69,28 @@ public class ControlDeskGhostPreviewRenderer {
 
         ms.pushPose();
         ms.translate(pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z);
+        // 安装朝向旋转（与安装渲染一致，见 ControlDeskRenderer）：throttle / joystick_2 安装时按玩家朝向记录旋转
+        // （北=0 / 南=180 / 西=90 / 东=270），预览按玩家当前朝向预演；joystick_2 绕自身枢轴旋转，throttle 绕方块中心。
+        int previewRot = (type == ControlDeskBlockEntity.ControlType.THROTTLE
+                || type == ControlDeskBlockEntity.ControlType.JOYSTICK_2)
+                ? ControlDeskBlockEntity.rotationFor(mc.player.getDirection()) : 0;
+        boolean pivotRot = type == ControlDeskBlockEntity.ControlType.JOYSTICK_2;
         for (PartialModel model : partsOf(type)) {
             SuperByteBuffer buffer = CachedBuffers.partial(model, state);
             // 与 BER/Flywheel 同一朝向约定：绕方块中心 Y 旋转到 FACING（rotateCenteredDegrees = 绕 buffer 中心）
             buffer.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
+            if (previewRot != 0) {
+                if (pivotRot) {
+                    // 摇杆2 位于桌体后缘角落：绕自身枢轴 (12,8,12)/16 旋转（与 ControlDeskRenderer.renderPartPivot 一致）
+                    buffer.translate(ControlDeskBlockEntity.JOYSTICK_2_PIVOT_X,
+                            ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Y, ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Z);
+                    buffer.rotate(Mth.DEG_TO_RAD * previewRot, Direction.UP);
+                    buffer.translate(-ControlDeskBlockEntity.JOYSTICK_2_PIVOT_X,
+                            -ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Y, -ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Z);
+                } else {
+                    buffer.rotateCenteredDegrees(previewRot, Direction.UP);
+                }
+            }
             buffer.color(255, 255, 255, GHOST_ALPHA);
             buffer.light(GHOST_LIGHT);
             buffer.renderInto(ms, buffers.getBuffer(renderType));

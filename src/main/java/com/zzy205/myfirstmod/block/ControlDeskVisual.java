@@ -12,6 +12,7 @@ import dev.engine_room.flywheel.lib.visual.SimpleDynamicVisual;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
+import org.joml.Quaternionf;
 
 import java.util.function.Consumer;
 
@@ -105,8 +106,11 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
                 inst -> applyTilt(inst, tiltX, tiltY));
 
         // monitor_2 / throttle：桌体后缘上方插槽（monitor_2 静态；throttle 手柄沿模型空间 x 轴平移）
+        // throttle / joystick_2 额外叠加安装朝向旋转（安装时按玩家朝向记录，见 ControlDeskBlockEntity.getBackSlotRotation）
+        final int backRot = be.getBackSlotRotation();
         this.monitor2 = syncInstance(this.monitor2, monitor2Wanted, MyModPartialModels.CONTROL_DESK_MONITOR_2, facing, null);
-        this.throttleBase = syncInstance(this.throttleBase, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_BASE, facing, null);
+        this.throttleBase = syncInstance(this.throttleBase, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_BASE, facing,
+                backSlotRotate(backRot));
 
         // 油门手柄：档位位置（服务端权威）+ 操作者本地"张力蠕动"（按住向下一档稍微移动，
         // 满 TICKS_PER_GEAR tick 档位步进后张力清零 → 突然快速到位，参考 knob 卡位）。
@@ -130,17 +134,43 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         this.smoothThrottle = ThrottleMotion.approachStep(this.smoothThrottle, throttleTarget, frameTicks);
         final float throttlePx = this.smoothThrottle;
         this.throttleHandle = syncInstance(this.throttleHandle, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_HANDLE, facing,
-                inst -> inst.translate(throttlePx, 0f, 0f));
+                inst -> {
+                    if (backRot != 0) inst.rotateCenteredDegrees(backRot, Direction.UP);
+                    inst.translate(throttlePx, 0f, 0f);
+                });
         // 指示灯：随油门档位大小从暗红（熄灭）→ 亮红（满油门）着色（参考 Create analog lever / Simulated diode）
-        this.throttleIndicator = syncInstance(this.throttleIndicator, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_INDICATOR, facing, null);
+        this.throttleIndicator = syncInstance(this.throttleIndicator, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_INDICATOR, facing,
+                backSlotRotate(backRot));
         if (this.throttleIndicator != null) {
             this.throttleIndicator.colorArgb(ThrottleMotion.indicatorColor(be.getThrottleGear()));
             this.throttleIndicator.setChanged();
         }
 
-        // joystick_2：桌体后缘上方插槽，静态渲染（底座 + 手柄，暂无动画）
-        this.joystick2Base = syncInstance(this.joystick2Base, joystick2Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE, facing, null);
-        this.joystick2Handle = syncInstance(this.joystick2Handle, joystick2Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE, facing, null);
+        // joystick_2：桌体后缘上方插槽，静态渲染（底座 + 手柄，暂无动画）；叠加安装朝向旋转（绕自身枢轴，见 backSlotRotatePivot）
+        this.joystick2Base = syncInstance(this.joystick2Base, joystick2Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE, facing,
+                backSlotRotatePivot(backRot));
+        this.joystick2Handle = syncInstance(this.joystick2Handle, joystick2Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE, facing,
+                backSlotRotatePivot(backRot));
+    }
+
+    /** 后缘插槽模块的安装朝向旋转（度，0/90/180/270）：0 返回 null 跳过（与现有渲染一致），否则返回绕 Y 旋转的额外变换。 */
+    private static Consumer<TransformedInstance> backSlotRotate(int backRot) {
+        if (backRot == 0) return null;
+        final float deg = backRot;
+        return inst -> inst.rotateCenteredDegrees(deg, Direction.UP);
+    }
+
+    /**
+     * joystick_2 的安装朝向旋转：绕自身枢轴 {@link ControlDeskBlockEntity#JOYSTICK_2_PIVOT_X} 旋转
+     * （模型位于桌体后缘角落，绕方块中心转会把模型甩到对角；绕自身中心 (12,8,12)/16 转则原地自旋）。
+     */
+    private static Consumer<TransformedInstance> backSlotRotatePivot(int backRot) {
+        if (backRot == 0) return null;
+        final float deg = backRot;
+        return inst -> inst.rotateAround(new Quaternionf().rotateY((float) Math.toRadians(deg)),
+                ControlDeskBlockEntity.JOYSTICK_2_PIVOT_X,
+                ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Y,
+                ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Z);
     }
 
     /** 按安装状态创建/删除实例；存在的实例每帧重置变换 + 平移到位 + 旋转到 facing + 追加额外变换并标记更新。 */

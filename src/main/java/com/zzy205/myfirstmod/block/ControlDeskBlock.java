@@ -127,7 +127,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             if (!(be instanceof ControlDeskBlockEntity desk)) {
                 return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
             }
-            if (!desk.install(type)) {
+            // 安装成功：throttle / joystick_2 按玩家朝向记录模块旋转（北=0 / 南=180 / 西=90 / 东=270）
+            if (!desk.install(type, player != null ? player.getDirection() : null)) {
                 // 已安装：不消耗物品，提示玩家
                 if (player != null) {
                     player.displayClientMessage(
