@@ -67,23 +67,19 @@ public class ControlDeskGhostPreviewRenderer {
         // PEDAL / JOYSTICK 无放置盒（固定安装位）→ box 保持 null（不平移、不绕盒心旋转）
         int[] box = null;
         float modelCenter = 0f;
-        float placeYBottom = 0f;
         int halfX = 0, halfZ = 0;
         if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
             box = ControlDeskBlock.snappedBoxCenter(pos, facing, hit.getLocation());
             modelCenter = ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER;
-            placeYBottom = ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM;
             halfX = halfZ = ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF;
         } else if (type == ControlDeskBlockEntity.ControlType.THROTTLE) {
             box = new int[]{ControlDeskBlockEntity.THROTTLE_PLACE_X, ControlDeskBlockEntity.THROTTLE_PLACE_Z};
             modelCenter = ControlDeskBlockEntity.THROTTLE_MODEL_CENTER;
-            placeYBottom = ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM;
             halfX = ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X;
             halfZ = ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z;
         } else if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
             box = new int[]{ControlDeskBlockEntity.MONITOR_2_PLACE_X, ControlDeskBlockEntity.MONITOR_2_PLACE_Z};
             modelCenter = ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER;
-            placeYBottom = ControlDeskBlockEntity.MONITOR_2_PLACE_Y_BOTTOM;
             halfX = ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X;
             halfZ = ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z;
         }
@@ -112,8 +108,9 @@ public class ControlDeskGhostPreviewRenderer {
         float boxX = box != null ? box[0] / 16f : 0f;
         float boxZ = box != null ? box[1] / 16f : 0f;
         float shiftX = box != null ? (box[0] - modelCenter) / 16f : 0f;
+        // 模型坐桌面（y8，不下沉；仅预览盒下沉 1px），MODEL_BOTTOM_Y 三个模块均 0
         float shiftY = box != null
-                ? (placeYBottom - ControlDeskBlockEntity.JOYSTICK_2_MODEL_BOTTOM_Y) / 16f : 0f; // 两模块 MODEL_BOTTOM_Y 均 0
+                ? (ControlDeskBlockEntity.MODEL_PLACE_Y - ControlDeskBlockEntity.JOYSTICK_2_MODEL_BOTTOM_Y) / 16f : 0f;
         float shiftZ = box != null ? (box[1] - modelCenter) / 16f : 0f;
         for (PartialModel model : partsOf(type)) {
             SuperByteBuffer buffer = CachedBuffers.partial(model, state);

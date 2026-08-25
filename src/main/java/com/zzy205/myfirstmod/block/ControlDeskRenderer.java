@@ -76,7 +76,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)) {
             SuperByteBuffer buffer = placedBuffer(MyModPartialModels.CONTROL_DESK_MONITOR_2, state, facing,
                     be.getMonitor2PlaceX(), be.getMonitor2PlaceZ(),
-                    ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER, ControlDeskBlockEntity.MONITOR_2_PLACE_Y_BOTTOM, 0);
+                    ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, 0);
             buffer.light(light).renderInto(ms, vb);
         }
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
@@ -86,7 +86,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
             // 指示灯：随油门档位大小着色（参考 Create analog lever / Simulated diode）
             SuperByteBuffer indicator = placedBuffer(MyModPartialModels.CONTROL_DESK_THROTTLE_INDICATOR, state, facing,
                     be.getThrottlePlaceX(), be.getThrottlePlaceZ(),
-                    ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM, backRot);
+                    ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, backRot);
             indicator.light(light)
                     .color(ThrottleMotion.indicatorColor(be.getThrottleGear()))
                     .renderInto(ms, vb);
@@ -200,7 +200,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
                                             PoseStack ms, VertexConsumer vb, int light, int backRot) {
         SuperByteBuffer buffer = placedBuffer(model, state, facing,
                 be.getJoystick2PlaceX(), be.getJoystick2PlaceZ(),
-                ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM, backRot);
+                ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, backRot);
         buffer.light(light).renderInto(ms, vb);
     }
 

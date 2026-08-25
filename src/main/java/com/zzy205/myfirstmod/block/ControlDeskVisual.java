@@ -153,14 +153,14 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     }
 
     /**
-     * joystick_2 放置变换：模型平移到放置位（默认中心 x/z=8、底座底 y=0 → 放置位底 y=7，见
-     * {@link ControlDeskBlockEntity#JOYSTICK_2_MODEL_CENTER} / {@link ControlDeskBlockEntity#JOYSTICK_2_PLACE_Y_BOTTOM}），
+     * joystick_2 放置变换：模型平移到放置位（默认中心 x/z=8、底座底 y=0 → 模型坐桌面 y8，见
+     * {@link ControlDeskBlockEntity#JOYSTICK_2_MODEL_CENTER} / {@link ControlDeskBlockEntity#MODEL_PLACE_Y}），
      * 安装朝向旋转绕放置中心（Y 旋转，枢轴 y 不影响）。
      */
     private static void applyJoystick2Placement(TransformedInstance inst, ControlDeskBlockEntity be) {
         applyPlacement(inst, be.getBackSlotRotation(),
                 be.getJoystick2PlaceX(), be.getJoystick2PlaceZ(),
-                ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM,
+                ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y,
                 ControlDeskBlockEntity.JOYSTICK_2_MODEL_BOTTOM_Y);
     }
 
@@ -171,7 +171,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     private static void applyThrottlePlacement(TransformedInstance inst, ControlDeskBlockEntity be) {
         applyPlacement(inst, be.getBackSlotRotation(),
                 be.getThrottlePlaceX(), be.getThrottlePlaceZ(),
-                ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM,
+                ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y,
                 ControlDeskBlockEntity.THROTTLE_MODEL_BOTTOM_Y);
     }
 
@@ -182,7 +182,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     private static void applyMonitor2Placement(TransformedInstance inst, ControlDeskBlockEntity be) {
         applyPlacement(inst, 0,
                 be.getMonitor2PlaceX(), be.getMonitor2PlaceZ(),
-                ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER, ControlDeskBlockEntity.MONITOR_2_PLACE_Y_BOTTOM,
+                ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y,
                 ControlDeskBlockEntity.MONITOR_2_MODEL_BOTTOM_Y);
     }
 

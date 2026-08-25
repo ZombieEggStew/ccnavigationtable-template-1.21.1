@@ -14,28 +14,29 @@
 - 桌体：`x0..16, y0..8, z8..16`（桌顶面 y=8）。桌顶放置区域 = 8 深 × 16 宽（`z8..16`）。
 - **棋盘网格**：6×14 格、1px/格、四周内缩 1px → `x1..15, z9..15`（15 条竖线 + 7 条横线，`ControlDeskPlacementOverlay.showTopGrid`）。
 - **放置中心** `(placeX, placeZ)`：命中点经 `ControlDeskBlock.snappedBoxCenter` 吸附到 1px 网格整数 px（客户端预览与服务端放置共用同一方法，防偏差）。
-- **占地矩形**：中心 ± 半宽（joystick_2 = 4×4 → `FOOTPRINT_HALF=2`；throttle = 14×6 → `FOOTPRINT_HALF_X=7 / HALF_Z=3`）。**throttle 占地必须完全处于网格内（x1..15 / z9..15）→ 唯一合法放置中心 (8,12)（全占）**。
-- **放置位竖直（预览下沉 1px 规则）**：底 `PLACE_Y_BOTTOM=7`（嵌入桌面 1px）～ 顶 `PLACE_Y_TOP`（joystick_2=16 高9 / throttle=13 高6）。
-- **模型平移**：模型在 Blockbench 中的实际位置（中心 `MODEL_CENTER=8`、底座底 `MODEL_BOTTOM_Y=0`）→ 渲染时平移到放置位：`shift = (placeX-8, 7-0, placeZ-8) / 16`（块单位）。
+- **占地矩形**：中心 ± 半宽（joystick_2 = 4×4 → `FOOTPRINT_HALF=2`；throttle / monitor_2 = 14×6 → `FOOTPRINT_HALF_X=7 / HALF_Z=3`）。**throttle / monitor_2 占地必须完全处于网格内（x1..15 / z9..15）→ 唯一合法放置中心 (8,12)（全占）**。
+- **放置位竖直**：**预览盒下沉 1px**（底 `PLACE_Y_BOTTOM=7`，嵌入桌面示意）～ 顶 `PLACE_Y_TOP`（joystick_2=16 高9 / throttle=13 高6 / monitor_2=19 高12）；**模型坐桌面不下沉**（底 `MODEL_PLACE_Y=8` = 桌顶面）。
+- **模型平移**：模型在 Blockbench 中的实际位置（中心 `MODEL_CENTER=8`、底座底 `MODEL_BOTTOM_Y=0`）→ 渲染时平移到放置位：`shift = (placeX-8, 8-0, placeZ-8) / 16`（块单位，模型坐桌面 y8）。
 
 ## 核心常量（集中在 `ControlDeskBlockEntity`）
 
 | 常量 | 值 | 含义 |
 |---|---|---|
 | `JOYSTICK_2_FOOTPRINT_HALF` | 2 | joystick_2 占地半宽（px）；预览盒与占用阻挡共用 |
-| `JOYSTICK_2_PLACE_Y_BOTTOM` | 7f | joystick_2 放置位底 y（嵌入桌面 1px） |
-| `JOYSTICK_2_PLACE_Y_TOP` | 16f | joystick_2 放置位顶 y（高 9） |
+| `JOYSTICK_2_PLACE_Y_BOTTOM` | 7f | joystick_2 **预览盒底 y**（下沉 1px 嵌入桌面示意；模型坐桌面 y8 见 `MODEL_PLACE_Y`） |
+| `JOYSTICK_2_PLACE_Y_TOP` | 16f | joystick_2 预览盒顶 y（高 9） |
 | `JOYSTICK_2_MODEL_CENTER` | 8f | joystick_2 模型默认中心 x/z（Blockbench 中模型 x6..10 / z6..10 → 8） |
 | `THROTTLE_FOOTPRINT_HALF_X / _Z` | 7 / 3 | throttle 占地半宽（14×6 → x±7 / z±3）；预览盒与占用阻挡共用 |
-| `THROTTLE_PLACE_Y_BOTTOM` | 7f | throttle 放置位底 y（嵌入桌面 1px） |
-| `THROTTLE_PLACE_Y_TOP` | 13f | throttle 放置位顶 y（高 6） |
+| `THROTTLE_PLACE_Y_BOTTOM` | 7f | throttle **预览盒底 y**（下沉 1px 嵌入桌面示意） |
+| `THROTTLE_PLACE_Y_TOP` | 13f | throttle 预览盒顶 y（高 6） |
 | `THROTTLE_MODEL_CENTER` | 8f | throttle 模型默认中心 x/z（Blockbench 中模型 x0.99..15.01 / z4.99..11.01 → 8） |
 | `THROTTLE_PLACE_X / _Z` | 8 / 12 | throttle **唯一合法放置中心**（14×6 全占网格 x1..15 / z9..15） |
 | `MONITOR_2_FOOTPRINT_HALF_X / _Z` | 7 / 3 | monitor_2 占地半宽（14×6 → x±7 / z±3）；预览盒与占用阻挡共用 |
-| `MONITOR_2_PLACE_Y_BOTTOM` | 7f | monitor_2 放置位底 y（嵌入桌面 1px） |
-| `MONITOR_2_PLACE_Y_TOP` | 19f | monitor_2 放置位顶 y（高 12） |
+| `MONITOR_2_PLACE_Y_BOTTOM` | 7f | monitor_2 **预览盒底 y**（下沉 1px 嵌入桌面示意） |
+| `MONITOR_2_PLACE_Y_TOP` | 19f | monitor_2 预览盒顶 y（高 12） |
 | `MONITOR_2_MODEL_CENTER` | 8f | monitor_2 模型默认中心 x/z（Blockbench 中模型 14×6 居中 → 8，**用户会同步改模型**） |
 | `MONITOR_2_PLACE_X / _Z` | 8 / 12 | monitor_2 **唯一合法放置中心**（14×6 全占网格） |
+| `MODEL_PLACE_Y` | 8f | **模型放置底 y（三个模块共用）= 桌顶面：模型坐于桌面不下沉；仅预览盒下沉 1px（`*_PLACE_Y_BOTTOM=7`）** |
 | `JOYSTICK_2_MODEL_BOTTOM_Y` | 0f | 模型底座底 y（joystick_2 / throttle / monitor_2 均 0） |
 | `rotationToFace(Direction, Direction)` | 静态方法 | **joystick_2 安装旋转**：桌体 FACING + 桌→玩家水平方向 → 90° 间隔，让模型 -Z（Blockbench 北向正面）面向玩家：`floorMod(toYRot(facing) - toYRot(toPlayer), 360)`；`toPlayer` 由 `ControlDeskBlock.directionFromDeskTo`（桌体中心→玩家最近基本方向）计算，预览与实装共用 |
 | `rotationToFace180(Direction, Direction)` | 静态方法 | **throttle 安装旋转**：`rotationToFace` 结果量化到最近 0°/180°（油门只能 180° 旋转） |
@@ -101,7 +102,7 @@ flowchart LR
 ### 变换链（关键，三处统一）
 ```
 M = R_facing · [ T(placeX/16, 0.5, placeZ/16) · R_install · T(-placeX/16, -0.5, -placeZ/16) ] · T(shift)
-shift = ( (placeX-8)/16, (7-0)/16, (placeZ-8)/16 )
+shift = ( (placeX-8)/16, (8-0)/16, (placeZ-8)/16 )   // 模型坐桌面 y8（MODEL_PLACE_Y），不下沉
 ```
 - `R_facing`：`rotateCenteredDegrees(-facing.getOpposite().toYRot(), UP)`（与桌体底座模型同约定）
 - `R_install`：安装朝向旋转，绕**放置中心**转（模型已平移到放置位，绕放置中心转才不甩开；Y 旋转枢轴 y 值无关）
@@ -117,7 +118,7 @@ shift = ( (placeX-8)/16, (7-0)/16, (placeZ-8)/16 )
 
 1. **物品**：`MyModItems` 注册 `CONTROL_X`；`MyModCreativeModeTabs` 加入创造模式物品栏；`models/item/x.json` → 用户绘制的物品模型；lang 名称
 2. **枚举与状态**：`ControlType` 加 `X`；BE 加 `xInstalled` + 放置字段（若自由放置）+ NBT 四路径（`saveAdditional`/`loadAdditional` 含 contains 守卫/`writeSafe`/`getUpdateTag`）
-3. **常量**：BE 加 `X_FOOTPRINT_HALF`（占地半宽）、`X_PLACE_Y_BOTTOM/TOP`（放置位竖直）、`X_MODEL_CENTER/MODEL_BOTTOM_Y`（Blockbench 中模型实际位置）；改模型后同步
+3. **常量**：BE 加 `X_FOOTPRINT_HALF`（占地半宽）、`X_PLACE_Y_BOTTOM/TOP`（**预览盒**竖直，模型坐桌面用共享 `MODEL_PLACE_Y=8`）、`X_MODEL_CENTER/MODEL_BOTTOM_Y`（Blockbench 中模型实际位置）；改模型后同步
 4. **块交互**：`ControlDeskBlock.controlTypeOf` / `controlItem` / `getDrops`；`useItemOn` 里计算放置中心（若中心吸附可直接复用 `snappedBoxCenter`，尺寸不同则扩展）；`installBounds` 返回空（自由放置模块）
 5. **安装/拆除**：BE `install` 分支（记录位置 + `blocksPlacement` 检查 + 记录安装朝向旋转）、`remove` 分支（重置位置）；`hitControlType` 加放置盒命中；lang「位置被占用」
 6. **预览**：`ControlDeskPlacementOverlay` 加手持时显示（网格加类型；盒子参考 `showJoystick2Box`，尺寸用常量）；`showRemovePreview` 加放置盒显示；`ControlDeskGhostPreviewRenderer` 加实物预览（若需要）并解除 early-return
@@ -133,7 +134,7 @@ shift = ( (placeX-8)/16, (7-0)/16, (placeZ-8)/16 )
 - 三个自由放置模块互斥已全部改为纯占地判定（monitor_2 / throttle 同占 (8,12) → 天然互斥；joystick_2 网格内也与两者重叠）
 - 网格线是纯显示层（Outliner），逻辑全部基于放置中心 + 占地矩形
 - 安装位置 = 服务端对**右键命中点**吸附（与客户端准星同射线）；多玩家极端场景如需精确可控，可改客户端发 payload（对齐 Monitor 的 PlaceModulePayload 模式）
-- 预览统一「下沉 1px」规则：模块预览盒/实物/实装放置位底都在 y7（嵌入桌面 1px）；网格线在桌顶面（y8，+0.06 防 z-fight），不下沉
+- **预览盒下沉 1px、模型坐桌面**：预览盒/拆除盒底 y7（嵌入桌面示意），**模型实装与 ghost 底 y8（坐于桌面不下沉，`MODEL_PLACE_Y`）**；网格线在桌顶面（y8，+0.06 防 z-fight），不下沉
 - 吸附中心 = 盒子中心（居中吸附）；如需 monitor 式「角落吸附」（准星=模块左上角），改 `snappedBoxCenter` 的取整方式即可
 - 旋转只能 0°/180° 的模块（throttle）：放置中心必须让占地矩形在 0° 与 180° 下重合（中心对称矩形，如 14×6 中心在 (8,12)）——否则两个角度占地不同，占用判定需按旋转区分
 - monitor_2 模型需在 Blockbench 中同步改为 14×6 居中 (8,8)（当前模型 12×8 是过渡态；代码按 MODEL_CENTER=8 设计）

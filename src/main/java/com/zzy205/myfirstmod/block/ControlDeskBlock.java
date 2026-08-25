@@ -236,8 +236,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * joystick_2 放置盒的世界 AABB（北向基准 4×9×4，中心 = 放置中心 placeX/placeZ，底 y7；随 FACING 旋转，
-     * 与渲染/预览一致）。供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
+     * joystick_2 放置盒的世界 AABB（北向基准 4×9×4，中心 = 放置中心 placeX/placeZ，底 y7 = 预览盒下沉 1px
+     * 示意；随 FACING 旋转，与安装预览一致）。供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
      */
     public static AABB joystick2PlaceBox(ControlDeskBlockEntity desk, Direction facing, BlockPos pos) {
         int half = ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF;
@@ -251,8 +251,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * throttle 放置盒的世界 AABB（北向基准 14×6×6，中心 = 放置中心 placeX/placeZ（唯一合法位 (8,12)），底 y7；
-     * 随 FACING 旋转，与渲染/预览一致）。供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
+     * throttle 放置盒的世界 AABB（北向基准 14×6×6，中心 = 放置中心 placeX/placeZ（唯一合法位 (8,12)），底 y7 =
+     * 预览盒下沉 1px 示意；随 FACING 旋转，与安装预览一致）。供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
      */
     public static AABB throttlePlaceBox(ControlDeskBlockEntity desk, Direction facing, BlockPos pos) {
         int cx = desk.getThrottlePlaceX();
@@ -267,8 +267,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * monitor_2 放置盒的世界 AABB（北向基准 14×6×12，中心 = 放置中心 placeX/placeZ（唯一合法位 (8,12)），底 y7；
-     * 随 FACING 旋转，与渲染/预览一致）。供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
+     * monitor_2 放置盒的世界 AABB（北向基准 14×6×12，中心 = 放置中心 placeX/placeZ（唯一合法位 (8,12)），底 y7 =
+     * 预览盒下沉 1px 示意；随 FACING 旋转，与安装预览一致）。供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
      */
     public static AABB monitor2PlaceBox(ControlDeskBlockEntity desk, Direction facing, BlockPos pos) {
         int cx = desk.getMonitor2PlaceX();

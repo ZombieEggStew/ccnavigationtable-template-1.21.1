@@ -437,9 +437,15 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return Math.floorMod(Math.round(theta / 180f) * 180, 360);
     }
 
+    /**
+     * 模型放置底 y（北向模型空间 px，三个自由放置模块共用）：桌顶面 y8 —— 模型<b>坐于桌面不下沉</b>；
+     * 仅<b>预览盒</b>下沉 1px（各模块 {@code *_PLACE_Y_BOTTOM = 7}，嵌入桌面示意）。
+     */
+    public static final float MODEL_PLACE_Y = 8f;
+
     /** joystick_2 占地半宽（北向模型空间 px）：4×4 → ±2px；预览盒与占用阻挡共用。 */
     public static final int JOYSTICK_2_FOOTPRINT_HALF = 2;
-    /** joystick_2 放置位（预览盒/安装渲染共用，北向模型空间 px）：底 y7（嵌入桌面 1px）～ 顶 y16（高 9）。 */
+    /** joystick_2 预览盒底 y（北向模型空间 px，下沉 1px 嵌入桌面示意；模型坐桌面 y8 见 {@link #MODEL_PLACE_Y}）～ 顶 y16（高 9）。 */
     public static final float JOYSTICK_2_PLACE_Y_BOTTOM = 7f;
     public static final float JOYSTICK_2_PLACE_Y_TOP = 16f;
     /** joystick_2 模型默认中心 x/z（模型 x6..10 / z6..10 → 8）与底座底 y（0）：安装渲染时平移到放置位。 */
@@ -448,7 +454,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** throttle 占地半宽（北向模型空间 px）：14×6 → x±7 / z±3；预览盒与占用阻挡共用。 */
     public static final int THROTTLE_FOOTPRINT_HALF_X = 7;
     public static final int THROTTLE_FOOTPRINT_HALF_Z = 3;
-    /** throttle 放置位（预览盒/安装渲染共用，北向模型空间 px）：底 y7（嵌入桌面 1px）～ 顶 y13（高 6）。 */
+    /** throttle 预览盒底 y（北向模型空间 px，下沉 1px 嵌入桌面示意）～ 顶 y13（高 6）。 */
     public static final float THROTTLE_PLACE_Y_BOTTOM = 7f;
     public static final float THROTTLE_PLACE_Y_TOP = 13f;
     /** throttle 模型默认中心 x/z（模型 x0.99..15.01 / z4.99..11.01 → 8）与底座底 y（0）：安装渲染时平移到放置位。 */
@@ -460,7 +466,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** monitor_2 占地半宽（北向模型空间 px）：14×6 → x±7 / z±3；预览盒与占用阻挡共用。 */
     public static final int MONITOR_2_FOOTPRINT_HALF_X = 7;
     public static final int MONITOR_2_FOOTPRINT_HALF_Z = 3;
-    /** monitor_2 放置位（预览盒/安装渲染共用，北向模型空间 px）：底 y7（嵌入桌面 1px）～ 顶 y19（高 12）。 */
+    /** monitor_2 预览盒底 y（北向模型空间 px，下沉 1px 嵌入桌面示意）～ 顶 y19（高 12）。 */
     public static final float MONITOR_2_PLACE_Y_BOTTOM = 7f;
     public static final float MONITOR_2_PLACE_Y_TOP = 19f;
     /** monitor_2 模型默认中心 x/z（Blockbench 中模型 14×6 居中 → 8，用户会同步调整模型）与底座底 y（0）。 */

@@ -97,7 +97,7 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
   - 操纵杆：`joystick.json`（杆 `x7..9, y3..12, z2..4` + 把手 `x6.8..9.2, y12..17.4, z1.8..4.2`）；`joystick_base.json`（底座 `x5..11, y0..8, z0..8`）。
   - 物品栏模型：`models/item/pedal.json` → `block/pedal/pedal_item`；`models/item/joystick.json` → `block/joystick/joystick_item`（均带 display 变换）。
 - 安装位（预览/拆除/菜单命中共用）：`ControlDeskBlock.installBounds`，北向基准 `*_SHAPE` 常量 + `VoxelShaper` 随 FACING 旋转；北侧空区 z0..8 分三块：左踏板 `x11..16`、操纵杆 `x5..11`、右踏板 `x0..5`（操作者面朝南，左=东=+X）。调整位置改 `ControlDeskBlock` 顶部 `*_SHAPE` 常量。
-- **棋盘网格自由放置（monitor_2 / throttle / joystick_2，原后缘插槽已移除）**：桌顶（北向基准 y8 平面、z8..16）显示 6×14 的 1px 网格（x1..15 / z9..15，`ControlDeskPlacementOverlay.showTopGrid`）；放置中心 = 命中点吸附 1px 格（`ControlDeskBlock.snappedBoxCenter`）；模块渲染平移到放置位（`ControlDeskBlockEntity` 的 `JOYSTICK_2_*` 常量：占地半宽 2 / 放置位底 y7 顶 y16 / 模型默认中心 8 / 底座底 y0），安装朝向旋转绕放置中心；占用阻挡 `blocksPlacement`；扳手拆除命中放置盒 `joystick2PlaceBox`。详见 `memo/control-desk-grid-slot.md`。
+- **棋盘网格自由放置（monitor_2 / throttle / joystick_2，原后缘插槽已移除）**：桌顶（北向基准 y8 平面、z8..16）显示 6×14 的 1px 网格（x1..15 / z9..15，`ControlDeskPlacementOverlay.showTopGrid`）；放置中心 = 命中点吸附 1px 格（`ControlDeskBlock.snappedBoxCenter`）；模块渲染平移到放置位（`ControlDeskBlockEntity` 常量：joystick_2 占地半宽 2 / throttle·monitor_2 占地 14×6（唯一合法位 (8,12)）/ 预览盒底 y7（下沉 1px）顶 y16·13·19 / **模型坐桌面 y8（`MODEL_PLACE_Y`）** / 模型默认中心 8 / 底座底 y0），joystick_2 / throttle 安装朝向旋转绕放置中心（monitor_2 无）；占用阻挡 `blocksPlacement`（矩形）；扳手拆除命中放置盒 `joystick2PlaceBox` / `throttlePlaceBox` / `monitor2PlaceBox`。详见 `memo/control-desk-grid-slot.md`。
 - 渲染约定（已实现）：模型按与底座相同的方块空间（北向）建模，渲染时绕方块中心 Y 旋转到 FACING（与 blockstate 对底座模型的 y 旋转一致）；叠加顺序 底座→本体。
 - 控件物品注册：`item/MyModItems.java` 的 `CONTROL_PEDAL`（"pedal"）/ `CONTROL_JOYSTICK`（"joystick"）。
 
