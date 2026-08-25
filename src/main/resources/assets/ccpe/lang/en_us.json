@@ -90,6 +90,8 @@
   "gui.ccpe.control_desk.pedal_return_time": "Return Time",
   "gui.ccpe.control_desk.pedal_free_speed": "Full-Deflection Time",
   "gui.ccpe.control_desk.pedal_free_speed_tip": "Ticks to reach full deflection while holding a pedal (20 ticks = 1 second, smaller = faster)",
+  "gui.ccpe.control_desk.throttle_ticks_per_gear": "Gear Shift Rate",
+  "gui.ccpe.control_desk.throttle_ticks_per_gear_tip": "Ticks of holding forward/back to shift one gear (20 ticks = 1 second, smaller = faster)",
   "gui.ccpe.control_desk.channel_title": "Control Desk Channel",
   "gui.ccpe.control_desk.no_modules": "No controls installed",
 

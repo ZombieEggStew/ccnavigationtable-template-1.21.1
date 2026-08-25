@@ -11,6 +11,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  *   <li>{@link ControlDeskChannelPayload} — 客户端→服务端：保存控制台全局频道</li>
  *   <li>{@link ControlDeskConfigPayload} — 客户端→服务端：保存操纵杆配置（两轴回正时间 + 两轴档位模式/档位数 + 两轴自由模式速度 + 四向按键）</li>
  *   <li>{@link PedalConfigPayload} — 客户端→服务端：保存脚踏板配置（回正时间 + 四向按键）</li>
+ *   <li>{@link ThrottleConfigPayload} — 客户端→服务端：保存油门杆配置（前进/后退按键）</li>
  *   <li>{@link SeatInputPayload} — 客户端→服务端（运行时每 tick）：坐垫操作输入，服务端校验后驱动 BE 轴状态</li>
  * </ul>
  */
@@ -58,6 +59,19 @@ public final class ControlDeskPacketHandlers {
                         be.setPedalReturnTime(payload.returnTime());
                         be.setPedalFreeSpeed(payload.freeSpeed());
                         be.setPedalKeys(payload.leftUp(), payload.leftDown(), payload.rightUp(), payload.rightDown());
+                    }
+                }
+        );
+
+        // 客户端→服务端：保存 controlDesk 油门杆配置（服务端权威 + 落盘）
+        registrar.playToServer(
+                ThrottleConfigPayload.TYPE,
+                ThrottleConfigPayload.STREAM_CODEC,
+                (payload, ctx) -> {
+                    var be = PacketHelper.findBE(ctx.player().level(), payload.pos(), ControlDeskBlockEntity.class);
+                    if (be != null) {
+                        be.setThrottleKeys(payload.forward(), payload.back());
+                        be.setThrottleTicksPerGear(payload.ticksPerGear());
                     }
                 }
         );

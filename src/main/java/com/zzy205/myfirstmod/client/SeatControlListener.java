@@ -38,10 +38,11 @@ import java.util.Set;
  */
 public class SeatControlListener {
 
-    /** 控件方向槽位（用于把各控制台的按键绑定聚合成方向向量 / 踏板按下态）。 */
+    /** 控件方向槽位（用于把各控制台的按键绑定聚合成方向向量 / 踏板按下态 / 油门前进后退态）。 */
     private enum ControlDir {
         UP, DOWN, LEFT, RIGHT,
-        PEDAL_LEFT_DOWN, PEDAL_LEFT_UP, PEDAL_RIGHT_DOWN, PEDAL_RIGHT_UP
+        PEDAL_LEFT_DOWN, PEDAL_LEFT_UP, PEDAL_RIGHT_DOWN, PEDAL_RIGHT_UP,
+        THROTTLE_FORWARD, THROTTLE_BACK
     }
 
     /** 上一次 tick 处于按下状态的按键名（InputConstants.Key.getName() 格式） */
@@ -146,10 +147,11 @@ public class SeatControlListener {
         boolean hasThrottle = desks.stream()
                 .anyMatch(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE));
 
-        // 各方向/踏板键的按下态（方向槽位并集，任一联动控制台该方向绑定的键按下即生效）
+        // 各方向/踏板/油门键的按下态（方向槽位并集，任一联动控制台该方向绑定的键按下即生效）
         boolean rawX = false, rawY = false;
         boolean up = false, down = false, left = false, right = false;
         boolean pedalLeftDown = false, pedalLeftUp = false, pedalRightDown = false, pedalRightUp = false;
+        boolean throttleForward = false, throttleBack = false;
         for (Binding binding : bindings) {
             if (!nowDown.contains(binding.keyName())) continue;
             switch (binding.dir()) {
@@ -161,17 +163,12 @@ public class SeatControlListener {
                 case PEDAL_LEFT_UP -> pedalLeftUp = true;
                 case PEDAL_RIGHT_DOWN -> pedalRightDown = true;
                 case PEDAL_RIGHT_UP -> pedalRightUp = true;
+                case THROTTLE_FORWARD -> throttleForward = true;
+                case THROTTLE_BACK -> throttleBack = true;
                 case null -> {}
             }
         }
 
-        // 油门：写死按键（原始 GLFW 状态）——空格 = 前进（模型空间 +x）/ 左Ctrl = 后退（-x），
-        // 仅当联动中有装油门杆的控制台时上报（服务端校验后驱动 BE 油门档位）
-        boolean throttleForward = false, throttleBack = false;
-        if (hasThrottle) {
-            throttleForward = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_SPACE) == GLFW.GLFW_PRESS;
-            throttleBack = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS;
-        }
         // 油门操作方向写入共享状态（渲染层"按住蠕动 + 步进突然到位"用；渲染层自行检测方向变化重置张力）
         SeatControlState.setThrottleDir((throttleForward && !throttleBack) ? 1
                 : ((throttleBack && !throttleForward) ? -1 : 0));
@@ -267,6 +264,10 @@ public class SeatControlListener {
                 add(out, pos, desk.getJoystickKeyDown(), "操纵杆 后拉", ControlDir.DOWN);
                 add(out, pos, desk.getJoystickKeyLeft(), "操纵杆 左摆", ControlDir.LEFT);
                 add(out, pos, desk.getJoystickKeyRight(), "操纵杆 右摆", ControlDir.RIGHT);
+            }
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
+                add(out, pos, desk.getThrottleKeyForward(), "油门杆 前进", ControlDir.THROTTLE_FORWARD);
+                add(out, pos, desk.getThrottleKeyBack(), "油门杆 后退", ControlDir.THROTTLE_BACK);
             }
         }
         return out;

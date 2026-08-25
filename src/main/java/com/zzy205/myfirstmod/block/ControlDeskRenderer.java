@@ -142,7 +142,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
             charge[0] = 0f; // 按键按下/松开边沿：张力清零
         }
         if (dir != 0) {
-            charge[0] = Math.min(1f, charge[0] + frameTicks / ThrottleMotion.TICKS_PER_GEAR);
+            charge[0] = Math.min(1f, charge[0] + frameTicks / be.getThrottleTicksPerGear());
         }
         float target = gearPx + ThrottleMotion.tensionPx(dir, charge[0], gearPx);
         float smooth = smoothThrottles.computeIfAbsent(be.getBlockPos(), k -> 0f);

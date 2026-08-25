@@ -24,7 +24,7 @@
 12x10棋盘插槽，lua自由控制，满足不同场景下的互动和信息展示需求。
 
 ### [🪑 控制台](control-desk/overview.md)
-坐垫驱动的控制台：安装脚踏板与操纵杆，坐上 Create 坐垫即可用键盘驱动，控件状态经 Lua 读取。
+坐垫驱动的控制台：安装脚踏板、操纵杆与油门杆，坐上 Create 坐垫即可用键盘驱动，控件状态经 Lua 读取。
 
 ### [📻 红石收发器](redstone-transceiver/overview.md)
 直接读取和发送 Create Redstone Link 信号，无需在计算机旁堆叠红石链接方块。

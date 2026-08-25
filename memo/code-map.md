@@ -121,7 +121,7 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `screen/AbstractMonitorScreen.java` | 中间层 Screen 基类：统一在控件之上渲染子控件 tooltip（`TooltipWidget` 与 Catnip `AbstractSimiWidget`），禁用原版渐变背景，非暂停界面 |
 | `screen/MonitorModuleScreen.java` | Monitor 模块/屏幕通用配置界面（继承 `AbstractMonitorScreen`）；ID 滚轮 + 悬浮文本输入条 + 类型专属配置区，汇总后发送 `ModuleConfigPayload` |
 | `screen/ControlDeskConfigScreen.java` | controlDesk 配置菜单（继承 `AbstractMonitorScreen`）：背景复用 JoystickModuleScreen（`MyUIElements.BACKGROUND` 192×169）；当前含**频道滚轮条**（第一条配置，对齐 MonitorMenuScreen：跳过已占用频道，关闭时经 `ControlDeskChannelPayload` 保存），其余控件后续接入（模块设置区块、按键绑定等） |
-| `screen/JoystickModuleScreen.java` / `screen/PedalModuleScreen.java` | controlDesk 控件（模块）设置菜单（继承 `AbstractMonitorScreen`）：背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169）；操纵杆双按键绑定条 + 双滚轮条、脚踏板按键绑定条 + 回正时间条，配置经 `ControlDeskConfigPayload`/`PedalConfigPayload` 持久化。**入口 = 控制台配置菜单中点击已安装控件行**（`InstalledModulesList` 点击回调按控件类型分发）；`withReturnTo(Screen)` 设置关闭后返回的上级菜单（配置菜单传入自身，模块菜单关闭后回到配置菜单） |
+| `screen/JoystickModuleScreen.java` / `screen/PedalModuleScreen.java` / `screen/ThrottleModuleScreen.java` | controlDesk 控件（模块）设置菜单（继承 `AbstractMonitorScreen`）：背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169）；操纵杆双按键绑定条 + 双滚轮条、脚踏板按键绑定条 + 回正时间条、油门杆前进/后退按键绑定条（`DoubleInputBar`）+ 档位切换节奏条（`ScrollValueBar`），配置经 `ControlDeskConfigPayload`/`PedalConfigPayload`/`ThrottleConfigPayload` 持久化。**入口 = 控制台配置菜单中点击已安装控件行**（`InstalledModulesList` 点击回调按控件类型分发）；`withReturnTo(Screen)` 设置关闭后返回的上级菜单（配置菜单传入自身，模块菜单关闭后回到配置菜单） |
 | `screen/MonitorMenuScreen.java` | Monitor 自身菜单（蹲下+右键空白处/扳手右键打开，继承 `AbstractMonitorScreen`）；频道、背景、俯仰/偏航/偏移共五条滚轮，关闭时发送 `MonitorChannelPayload`/`MonitorBackgroundPayload`/`MonitorTransformPayload` |
 | `screen/ModuleConfigSection.java` | 模块专属配置区接口及空实现 |
 | `screen/ModuleConfigSections.java` | 按模块名称创建配置区的工厂（目前仅 KNOB → `KnobConfigSection`，其余走 Empty）；每次必须创建新实例 |
@@ -155,6 +155,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `network/RemoveScreenPayload.java` | 客户端 → 服务端 | 请求移除屏幕 |
 | `network/MonitorChannelPayload.java` | 客户端 → 服务端 | 保存 Monitor 全局频道号 |
 | `network/ControlDeskChannelPayload.java` | 客户端 → 服务端 | 保存 controlDesk 全局频道号 |
+| `network/ThrottleConfigPayload.java` | 客户端 → 服务端 | 保存 controlDesk 油门杆配置（前进/后退按键 + 档位切换节奏） |
 | `network/MonitorBackgroundPayload.java` | 客户端 → 服务端 | 保存 Monitor 背景选项 |
 | `network/MonitorTransformPayload.java` | 客户端 → 服务端 | 保存 Monitor 俯仰/偏航角度与前后偏移（`setAngles`） |
 | `network/PlayOrderEffectPayload.java` | 服务端 → 客户端 | 广播下单 WiFi 粒子播放位置；客户端本地 `addParticle`（`WiFiParticle.Data` 无法走网络编码） |
@@ -181,9 +182,10 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/PeripheralExtenderRegistry.java` | 传感器频道登记表（委托全局注册表） |
 | `compat/cc/MonitorRegistry.java` | Monitor 频道登记表（委托全局注册表） |
 | `compat/cc/ControlDeskRegistry.java` | 控制台频道登记表（委托全局注册表，`get(channel)` 供 `pe.getPeripheral` 查找） |
-| `compat/cc/ControlDeskPeripheral.java` | 控制台的 `IPeripheral` 实现（`getType()` = `"ccpe:control_desk"`；`getModule("pedal"/"joystick")` 返回模块实例，未安装返回 nil） |
+| `compat/cc/ControlDeskPeripheral.java` | 控制台的 `IPeripheral` 实现（`getType()` = `"ccpe:control_desk"`；`getModule("pedal"/"joystick"/"throttle")` 返回模块实例，未安装返回 nil） |
 | `compat/cc/PedalModuleHandle.java` | 脚踏板模块实例（全部 mainThread=false）：模拟量 `getLeftPedal()/getRightPedal()`（-1..1）+ 差值 `getPedalDifference()`（左−右）+ 方向判断 `isLeftPedalDown/isRightPedalDown`（轴值>0）与 `isLeftPedalUp/isRightPedalUp`（轴值<0） |
 | `compat/cc/JoystickModuleHandle.java` | 操纵杆模块实例：原始值 `isJoystickXActive/YActive` + 轴值 `getJoystickX/Y`（0..1）+ 带符号 `getJoystickXSigned/YSigned`（-1..1，全部 mainThread=false） |
+| `compat/cc/ThrottleModuleHandle.java` | 油门杆模块实例（全部 mainThread=false）：前进/后退按住态 `isThrottleForwardActive/isThrottleBackActive`（读服务端输入租约）+ 档位 `getThrottleGear()`（0..11 整数，锁存不回正）+ 轴值 `getThrottleAxis()`（0..1 = 档位/MAX） |
 | `compat/cc/MonitorPeripheral.java` | Monitor 的 `IPeripheral` 实现（模块/屏幕查询入口） |
 | `compat/cc/ModuleHandle.java` | 模块/屏幕 Lua 实例的抽象基类（通用 get/set/tooltip） |
 | `compat/cc/ModuleHandleRegistry.java` | 按模块类型把 Java 记录包装成对应的 Lua handle |
@@ -212,7 +214,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | 新增方块/物品 | `block/MyModBlocks.java` / `item/MyModItems.java` | `MyModBlockEntities.java`、资源模型、语言文件、创造模式物品栏 |
 | 修改控制台（Control Desk）朝向、碰撞或控件安装 | `block/ControlDeskBlock.java`（朝向/碰撞/安装/卸载/安装位）、`block/ControlDeskBlockEntity.java`（控件状态/NBT/蓝图） | `ControlDeskVisual.java` / `ControlDeskRenderer.java`（渲染）、`client/ControlDeskPlacementOverlay.java`（预览）、`assets/ccpe/models/block/control_desk_1/` |
 | 修改控制台控件物品（踏板/操纵杆）或安装位 | `item/MyModItems.java`（`CONTROL_PEDAL` / `CONTROL_JOYSTICK`）、`ControlDeskBlock.installBounds`（安装位 shape 常量） | `assets/ccpe/models/item/pedal.json` / `joystick.json`、`assets/ccpe/models/block/pedal/`、`assets/ccpe/models/block/joystick/`、语言文件 |
-| 修改控制台配置/模块设置菜单 | `screen/ControlDeskConfigScreen.java`、`screen/JoystickModuleScreen.java`、`foundation/gui/widget/DoubleInputBar.java`（按键捕获） | `ControlDeskPlacementOverlay`（菜单打开）、`ControlDeskBlock`（右键消费）、`ControlDeskBlockEntity`（频道/配置 NBT）、`ControlDeskChannelPayload`、语言文件、`MyUIElements`/`MyIcons` |
+| 修改控制台配置/模块设置菜单 | `screen/ControlDeskConfigScreen.java`、`screen/JoystickModuleScreen.java`、`screen/ThrottleModuleScreen.java`、`foundation/gui/widget/DoubleInputBar.java`（按键捕获） | `ControlDeskPlacementOverlay`（菜单打开）、`ControlDeskBlock`（右键消费）、`ControlDeskBlockEntity`（频道/配置 NBT）、`ControlDeskChannelPayload`、语言文件、`MyUIElements`/`MyIcons` |
 | 修改 Monitor 右键或射线命中 | `block/MonitorBlock.java`（`intersectScreen`/`rayToGrid`）、`client/MonitorHitDetector.java` | `client/MonitorGridOverlay.java`、`MonitorClientRegistry.java` |
 | 修改可动变换（俯仰/偏航/偏移） | `block/MonitorBlock.java`（枢轴常量）、`client/MonitorTransform.java` | `MonitorBlockEntity.setAngles`、`MonitorTransformPayload`、`MonitorMenuScreen`、`MonitorRenderer` |
 | 修改 Monitor 选择框描边 | `client/MonitorOutlineRenderer.java` | `MonitorTransform`、`MonitorBlock` 枢轴常量 |

@@ -11,8 +11,9 @@ import net.createmod.catnip.theme.Color;
  * 默认在最低档（0）——前进（空格，档位 +1）向 +x、后退（左Ctrl，档位 -1）向 -x 回底端；
  * 随 FACING 旋转后仍沿桌面方向。
  * <p>
- * 档位切换：按键按住需满 {@link #TICKS_PER_GEAR}（6）tick 才进/退一档（每档 = 1px），
- * 连续按住每满 6 tick 步进一档；无输入**锁存**（保持当前档位，不回正）。
+ * 档位切换：按键按住需满配置的档位切换节奏（{@link ControlDeskBlockEntity#getThrottleTicksPerGear}，
+ * 默认 {@link #TICKS_PER_GEAR} tick）才进/退一档（每档 = 1px），
+ * 连续按住每满该 tick 数步进一档；无输入**锁存**（保持当前档位，不回正）。
  * **数值**（{@link ControlDeskBlockEntity#getThrottleAxis()} = 档位 / MAX_TRAVEL_PX，
  * 服务端权威）= 离散档位；**动画**（渲染层）= 各渲染端用 {@link #approachStep}
  * 快速逼近追逐档位位置（段落感，参考 Monitor knob 卡位模式，帧时间修正）。
@@ -28,7 +29,7 @@ public final class ThrottleMotion {
     /** 最大行程（块单位） */
     public static final float MAX_TRAVEL = MAX_TRAVEL_PX / 16f;
 
-    /** 档位切换节奏：按键按住每 {@link #TICKS_PER_GEAR}（4）tick 进/退一档（每档 = 1px，满行程 = 11 × 4 = 44 tick） */
+    /** 档位切换节奏默认值（BE 配置默认，ThrottleModuleScreen 可调 1..100）：按键按住每 {@link #TICKS_PER_GEAR}（4）tick 进/退一档（每档 = 1px，满行程 = 11 × 4 = 44 tick） */
     public static final int TICKS_PER_GEAR = 4;
 
     /** 档位切换动画衰减（每 tick 剩余差距乘该系数；步进时"突然变快"到位，参考 knob 卡位） */

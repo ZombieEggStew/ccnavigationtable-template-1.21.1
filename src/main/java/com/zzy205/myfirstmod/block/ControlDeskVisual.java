@@ -121,7 +121,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         }
         if (throttleDir != 0) {
             this.throttleChargeProgress = Math.min(1f,
-                    this.throttleChargeProgress + frameTicks / ThrottleMotion.TICKS_PER_GEAR);
+                    this.throttleChargeProgress + frameTicks / be.getThrottleTicksPerGear());
         }
         float throttleTarget = gearPx + ThrottleMotion.tensionPx(throttleDir, this.throttleChargeProgress, gearPx);
         this.smoothThrottle = ThrottleMotion.approachStep(this.smoothThrottle, throttleTarget, frameTicks);

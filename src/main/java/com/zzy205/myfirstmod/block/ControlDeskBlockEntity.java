@@ -69,8 +69,14 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public static final String DEFAULT_PEDAL_KEY_RIGHT_UP = "key.keyboard.q";
     public static final String DEFAULT_PEDAL_KEY_RIGHT_DOWN = "key.keyboard.e";
 
-    /** 油门杆档位切换节奏写死（后续接配置 UI）：每 {@link ThrottleMotion#TICKS_PER_GEAR} tick 进/退一档。 */
+    /** 油门杆档位切换节奏（tick）默认值与范围（与 ThrottleModuleScreen 滚轮条一致）：按住满 N tick 进/退一档。 */
     public static final int DEFAULT_THROTTLE_TICKS_PER_GEAR = ThrottleMotion.TICKS_PER_GEAR;
+    public static final int MIN_THROTTLE_TICKS_PER_GEAR = 1;
+    public static final int MAX_THROTTLE_TICKS_PER_GEAR = 100;
+
+    /** 油门杆前进/后退按键默认值（InputConstants.Key.getName() 格式；空串 = 未绑定）：空格 = 前进（模型空间 +x）/ 左Ctrl = 后退（-x）。 */
+    public static final String DEFAULT_THROTTLE_KEY_FORWARD = "key.keyboard.space";
+    public static final String DEFAULT_THROTTLE_KEY_BACK = "key.keyboard.left.control";
 
     private static final String TAG_PEDAL = "PedalInstalled";
     private static final String TAG_JOYSTICK = "JoystickInstalled";
@@ -99,6 +105,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_PEDAL_KEY_LEFT_DOWN = "PedalKeyLeftDown";
     private static final String TAG_PEDAL_KEY_RIGHT_UP = "PedalKeyRightUp";
     private static final String TAG_PEDAL_KEY_RIGHT_DOWN = "PedalKeyRightDown";
+    private static final String TAG_THROTTLE_KEY_FORWARD = "ThrottleKeyForward";
+    private static final String TAG_THROTTLE_KEY_BACK = "ThrottleKeyBack";
+    private static final String TAG_THROTTLE_TICKS_PER_GEAR = "ThrottleTicksPerGear";
     private static final String TAG_CHANNEL = "Channel";
     private static final String TAG_OCCUPIED_CHANNELS = "OccupiedChannels";
 
@@ -121,7 +130,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private float pedalLeftAxis;   // 左踏板轴（-1..1，运行时）：+1 = 踩下（+z 1px）/ -1 = 抬起（-z 1px），见 PedalMotion
     private float pedalRightAxis;  // 右踏板轴（-1..1，运行时）
     private int throttleGear;          // 油门档位（0..MAX_TRAVEL_PX，运行时）：0 = 最低档（底端，-x 端），1px = 1 档，锁存不回正
-    private int throttleChargeTicks;   // 档位切换充电（0..TICKS_PER_GEAR，按住满 6 tick 进/退一档）
+    private int throttleChargeTicks;   // 档位切换充电（0..throttleTicksPerGear，按住满 N tick 进/退一档，N 可配置）
     // 输入租约：最近一次操作输入（玩家 + 坐垫 + 操纵杆四方向 + 踏板四键 + 油门两键按住态）；服务端每 tick 校验租约并模拟动力学
     private UUID inputPlayer;
     private BlockPos inputSeatPos;
@@ -139,6 +148,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private String pedalKeyLeftDown = DEFAULT_PEDAL_KEY_LEFT_DOWN; // 左踏板 踩下键
     private String pedalKeyRightUp = DEFAULT_PEDAL_KEY_RIGHT_UP;   // 右踏板 抬起键
     private String pedalKeyRightDown = DEFAULT_PEDAL_KEY_RIGHT_DOWN; // 右踏板 踩下键
+    private String throttleKeyForward = DEFAULT_THROTTLE_KEY_FORWARD; // 油门杆 前进键（模型空间 +x，空串 = 未绑定）
+    private String throttleKeyBack = DEFAULT_THROTTLE_KEY_BACK;      // 油门杆 后退键（模型空间 -x，空串 = 未绑定）
+    private int throttleTicksPerGear = DEFAULT_THROTTLE_TICKS_PER_GEAR; // 档位切换节奏（tick）：按住满 N tick 进/退一档
 
     // ── 全局频道（与传感器/显示器共享 GlobalChannelRegistry 命名空间，频道全局唯一） ──
     /** 全局频道号（-1 表示尚未注册，加载时自动分配） */
@@ -395,6 +407,16 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return throttleGear;
     }
 
+    /** 油门杆前进键是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isThrottleForwardActive() {
+        return inputThrottleForward;
+    }
+
+    /** 油门杆后退键是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isThrottleBackActive() {
+        return inputThrottleBack;
+    }
+
     /**
      * 写入坐垫操作输入（运行时，服务端调用；按玩家/坐垫租约记录，租约变化时重置边沿历史，
      * 避免换人/换坐垫后第一次按键不触发档位边沿）。
@@ -530,8 +552,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     }
 
     /**
-     * 油门档位推进（数值层，档位 0..{@link ThrottleMotion#MAX_TRAVEL_PX}）：前进键（空格）按住充电，
-     * 满 {@link ThrottleMotion#TICKS_PER_GEAR}（6）tick 进一档（+1px）；后退键（左Ctrl）按住同样充电后退一档（-1px）；
+     * 油门档位推进（数值层，档位 0..{@link ThrottleMotion#MAX_TRAVEL_PX}）：前进键按住充电，
+     * 满 {@link #throttleTicksPerGear}（默认 4）tick 进一档（+1px）；后退键按住同样充电后退一档（-1px）；
      * 无输入（或同时按）**锁存**保持当前档位并清零充电；已到顶/底时充电清零不动作。
      * 每个档位切换播放一次 {@code LEVER_CLICK} 音效——音调随档位位置单调上升
      * （前进从低到高、后退从高到低，见 {@link ThrottleMotion#pitchForGear}），最低档不响。
@@ -551,8 +573,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             return;
         }
         be.throttleChargeTicks++;
-        if (be.throttleChargeTicks < ThrottleMotion.TICKS_PER_GEAR) {
-            return; // 充电中（未满 6 tick 不步进）
+        if (be.throttleChargeTicks < be.throttleTicksPerGear) {
+            return; // 充电中（未满配置的 tick 数不步进）
         }
         be.throttleChargeTicks = 0;
         be.throttleGear += dir;
@@ -653,6 +675,39 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         notifyChange();
     }
 
+    public String getThrottleKeyForward() {
+        return throttleKeyForward;
+    }
+
+    public String getThrottleKeyBack() {
+        return throttleKeyBack;
+    }
+
+    /** 设置油门杆前进/后退按键（InputConstants.Key.getName() 格式，空串 = 未绑定）。服务端调用。 */
+    public void setThrottleKeys(String forward, String back) {
+        String f = forward == null ? "" : forward;
+        String b = back == null ? "" : back;
+        if (Objects.equals(throttleKeyForward, f) && Objects.equals(throttleKeyBack, b)) {
+            return;
+        }
+        throttleKeyForward = f;
+        throttleKeyBack = b;
+        notifyChange();
+    }
+
+    /** 油门杆档位切换节奏（tick）：按住满该 tick 数进/退一档（速度 = 1/数值 每 tick）。 */
+    public int getThrottleTicksPerGear() {
+        return throttleTicksPerGear;
+    }
+
+    /** 设置油门杆档位切换节奏（tick），钳位到 [MIN, MAX]。服务端调用。 */
+    public void setThrottleTicksPerGear(int ticks) {
+        int clamped = Math.max(MIN_THROTTLE_TICKS_PER_GEAR, Math.min(MAX_THROTTLE_TICKS_PER_GEAR, ticks));
+        if (throttleTicksPerGear == clamped) return;
+        throttleTicksPerGear = clamped;
+        notifyChange();
+    }
+
     // ════════════════════ NBT / 同步（Create 蓝图兼容） ════════════════════
 
     @Override
@@ -680,6 +735,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_PEDAL_KEY_LEFT_DOWN, pedalKeyLeftDown);
         tag.putString(TAG_PEDAL_KEY_RIGHT_UP, pedalKeyRightUp);
         tag.putString(TAG_PEDAL_KEY_RIGHT_DOWN, pedalKeyRightDown);
+        tag.putString(TAG_THROTTLE_KEY_FORWARD, throttleKeyForward);
+        tag.putString(TAG_THROTTLE_KEY_BACK, throttleKeyBack);
+        tag.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
         tag.putInt(TAG_CHANNEL, channel);
         tag.putIntArray(TAG_OCCUPIED_CHANNELS, occupiedChannels);
     }
@@ -763,6 +821,16 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_PEDAL_KEY_RIGHT_DOWN)) {
             pedalKeyRightDown = tag.getString(TAG_PEDAL_KEY_RIGHT_DOWN);
         }
+        if (tag.contains(TAG_THROTTLE_KEY_FORWARD)) {
+            throttleKeyForward = tag.getString(TAG_THROTTLE_KEY_FORWARD);
+        }
+        if (tag.contains(TAG_THROTTLE_KEY_BACK)) {
+            throttleKeyBack = tag.getString(TAG_THROTTLE_KEY_BACK);
+        }
+        if (tag.contains(TAG_THROTTLE_TICKS_PER_GEAR)) {
+            throttleTicksPerGear = Math.max(MIN_THROTTLE_TICKS_PER_GEAR,
+                    Math.min(MAX_THROTTLE_TICKS_PER_GEAR, tag.getInt(TAG_THROTTLE_TICKS_PER_GEAR)));
+        }
         if (tag.contains(TAG_CHANNEL)) {
             channel = tag.getInt(TAG_CHANNEL);
         }
@@ -796,6 +864,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putString(TAG_PEDAL_KEY_LEFT_DOWN, pedalKeyLeftDown);
         compound.putString(TAG_PEDAL_KEY_RIGHT_UP, pedalKeyRightUp);
         compound.putString(TAG_PEDAL_KEY_RIGHT_DOWN, pedalKeyRightDown);
+        compound.putString(TAG_THROTTLE_KEY_FORWARD, throttleKeyForward);
+        compound.putString(TAG_THROTTLE_KEY_BACK, throttleKeyBack);
+        compound.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
         // 频道是配置（蓝图可分享）；OccupiedChannels 是运行时快照，不写 Safe NBT
         compound.putInt(TAG_CHANNEL, channel);
     }
@@ -833,6 +904,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_PEDAL_KEY_LEFT_DOWN, pedalKeyLeftDown);
         tag.putString(TAG_PEDAL_KEY_RIGHT_UP, pedalKeyRightUp);
         tag.putString(TAG_PEDAL_KEY_RIGHT_DOWN, pedalKeyRightDown);
+        tag.putString(TAG_THROTTLE_KEY_FORWARD, throttleKeyForward);
+        tag.putString(TAG_THROTTLE_KEY_BACK, throttleKeyBack);
+        tag.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
         tag.putInt(TAG_CHANNEL, channel);
         tag.putIntArray(TAG_OCCUPIED_CHANNELS, occupiedChannels);
         return tag;

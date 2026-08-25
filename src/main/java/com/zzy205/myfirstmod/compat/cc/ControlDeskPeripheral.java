@@ -20,6 +20,8 @@ import org.jetbrains.annotations.Nullable;
  * print(pedal.isLeftPedalDown())
  * local joy = d.getModule("joystick")
  * print(joy.getJoystickXSigned())
+ * local th = d.getModule("throttle")
+ * print(th.getThrottleGear())
  * }</pre>
  * <b>注意</b>：CC:Tweaked 把 {@code @LuaFunction} 方法收集成 Lua 表返回；没有任何 Lua 方法的对象
  * 会被判为 unknown type 返回 nil（CobaltLuaMachine#toValue），因此外设至少要有一个 Lua 方法。
@@ -55,6 +57,7 @@ public class ControlDeskPeripheral implements IPeripheral {
      * <ul>
      *   <li>{@code "pedal"} → {@link PedalModuleHandle}（左右踏板踩下判断）</li>
      *   <li>{@code "joystick"} → {@link JoystickModuleHandle}（操纵杆原始值/轴值/带符号）</li>
+     *   <li>{@code "throttle"} → {@link ThrottleModuleHandle}（油门杆前进/后退按住态 + 档位/轴值）</li>
      * </ul>
      * 未安装对应控件或名称未知返回 nil。
      *
@@ -63,7 +66,7 @@ public class ControlDeskPeripheral implements IPeripheral {
      * if pedal then print(pedal.isLeftPedalDown()) end
      * }</pre>
      *
-     * @param name 控件名（"pedal" / "joystick"，大小写不敏感）
+     * @param name 控件名（"pedal" / "joystick" / "throttle"，大小写不敏感）
      */
     @LuaFunction(mainThread = true)
     public final @Nullable Object getModule(String name) {
@@ -73,6 +76,8 @@ public class ControlDeskPeripheral implements IPeripheral {
                     ? new PedalModuleHandle(be) : null;
             case "joystick" -> be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
                     ? new JoystickModuleHandle(be) : null;
+            case "throttle" -> be.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
+                    ? new ThrottleModuleHandle(be) : null;
             default -> null;
         };
     }

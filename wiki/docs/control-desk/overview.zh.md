@@ -1,10 +1,10 @@
 # 控制台
 
-控制台（Control Desk）是坐垫驱动的操作控制台。默认**没有安装任何控件** —— 需要玩家自己安装[脚踏板](pedal.zh.md)和/或[操纵杆](joystick.zh.md)。坐在控制台旁边的 Create 坐垫上即可自动进入**操作模式**：按键驱动所有联动控制台的已安装控件，控件状态通过 CC:T Lua API 暴露。
+控制台（Control Desk）是坐垫驱动的操作控制台。默认**没有安装任何控件** —— 需要玩家自己安装[脚踏板](pedal.zh.md)、[操纵杆](joystick.zh.md)和/或[油门杆](throttle.zh.md)。坐在控制台旁边的 Create 坐垫上即可自动进入**操作模式**：按键驱动所有联动控制台的已安装控件，控件状态通过 CC:T Lua API 暴露。
 
 ## 安装 / 拆除控件
 
-- **安装**：手持控件物品（脚踏板 / 操纵杆）右键控制台。控件安装在该控制台前缘的固定安装位；手持控件物品对准控制台时会显示安装预览框 —— **绿色** = 可安装，**红色** = 已安装。安装消耗 1 个物品（创造模式不消耗）。
+- **安装**：手持控件物品（脚踏板 / 操纵杆 / 油门杆）右键控制台。控件安装在该控制台前缘的固定安装位；手持控件物品对准控制台时会显示安装预览框 —— **绿色** = 可安装，**红色** = 已安装。安装消耗 1 个物品（创造模式不消耗）。
 - **拆除**：手持 Create 扳手**蹲下 + 右键**已安装的控件 —— 只拆除点击命中的那一个，并掉落为物品。
 - **破坏控制台**：已安装的控件会随方块一起掉落。
 - 未安装任何控件的控制台，扳手蹲下右键会走默认的拆方块行为。
@@ -29,6 +29,7 @@
 | 操纵杆 | 前推 / 后拉 / 左摆 / 右摆 | `W` / `S` / `A` / `D` |
 | 左踏板 | 踩下 / 抬起 | `Q` / `E` |
 | 右踏板 | 踩下 / 抬起 | `E` / `Q` |
+| 油门杆 | 前进（升档）/ 后退（降档） | `空格` / `左Ctrl` |
 
 所有按键绑定都**跟随控制台**（存 BE NBT），可在模块设置菜单中配置（见下）。
 
@@ -68,16 +69,18 @@ local desk = peripheral.find("ccpe:control_desk")
 ```lua
 local pedal = desk.getModule("pedal")     -- 未安装脚踏板返回 nil
 local joy   = desk.getModule("joystick")  -- 未安装操纵杆返回 nil
+local th    = desk.getModule("throttle")  -- 未安装油门杆返回 nil
 ```
 
-`desk.getModule(name)` 接受 `"pedal"` / `"joystick"`（大小写不敏感），控件未安装时返回 `nil`。返回的模块实例直接读取**服务端权威的控件状态**：
+`desk.getModule(name)` 接受 `"pedal"` / `"joystick"` / `"throttle"`（大小写不敏感），控件未安装时返回 `nil`。返回的模块实例直接读取**服务端权威的控件状态**：
 
 | 实例 | 方法 |
 |---|---|
 | `pedal` | `getLeftPedal()`、`getRightPedal()`、`getPedalDifference()`、`isLeftPedalDown()`、`isRightPedalDown()`、`isLeftPedalUp()`、`isRightPedalUp()` |
 | `joystick` | `isJoystickXActive()`、`isJoystickYActive()`、`getJoystickX()`、`getJoystickY()`、`getJoystickXSigned()`、`getJoystickYSigned()` |
+| `throttle` | `isThrottleForwardActive()`、`isThrottleBackActive()`、`getThrottleGear()`、`getThrottleAxis()` |
 
-完整的各实例 API 见[脚踏板](pedal.zh.md)与[操纵杆](joystick.zh.md)。所有状态读取方法都是 `mainThread = false`（跑在 CC worker 线程），可以高频轮询。
+完整的各实例 API 见[脚踏板](pedal.zh.md)、[操纵杆](joystick.zh.md)与[油门杆](throttle.zh.md)。所有状态读取方法都是 `mainThread = false`（跑在 CC worker 线程），可以高频轮询。
 
 ## 虚拟摇杆 HUD（可选）
 
