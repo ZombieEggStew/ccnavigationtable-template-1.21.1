@@ -6,6 +6,7 @@ import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.ControlDeskSeatLink;
 import com.zzy205.myfirstmod.block.JoystickTilt;
 import com.zzy205.myfirstmod.network.SeatInputPayload;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
@@ -26,6 +27,9 @@ import java.util.Set;
  * <ul>
  *   <li>进入操作模式时输出联动信息（坐垫位置 + 联动控制台列表），用于验证判定①</li>
  *   <li>玩家按下任一联动控制台<b>已安装控件</b>所配置的按键（边沿检测）→ debug 输出按键名 / 含义 / 归属控制台</li>
+ *   <li>操作模式下 drain 原版 {@link KeyMapping} 的 click（{@code ClientTickEvent.Pre} 先于
+ *       {@code Minecraft.handleKeybinds} 消费，见 {@link #drainConflictingClicks}），避免绑定键
+ *       触发物品栏/聊天/丢弃等点击驱动的原版动作；原始按住态读取（{@link #isDown}）不受影响</li>
  *   <li>持续计算操纵杆方向向量（方向槽位并集）→ 写入 {@link SeatControlState}（仅 HUD overlay 用），
  *       并通过 {@link SeatInputPayload} 每 tick 上报服务端 —— 服务端是操纵杆轴状态的权威来源（见
  *       {@link ControlDeskBlockEntity#tickServer}），渲染直接读 BE 轴值</li>
@@ -104,6 +108,9 @@ public class SeatControlListener {
                 .map(ControlDeskBlockEntity::getBlockPos).toList());
 
         List<Binding> bindings = collectBindings(desks);
+        // 操作模式下提前清空原版 KeyMapping 的 click（必须先于 handleKeybinds 消费，
+        // 否则 E 开物品栏这类点击驱动的原版动作会在控件响应前被触发）
+        drainConflictingClicks(bindings);
         long window = mc.getWindow().getWindow();
         Set<String> nowDown = new HashSet<>();
         for (Binding binding : bindings) {
@@ -256,6 +263,41 @@ public class SeatControlListener {
     }
 
     // ════════════════ 按键状态 ════════════════
+
+    /**
+     * 操作模式下 drain 原版 {@link KeyMapping} 的 click（aeroworks「drain KeyMapping」手法，无需 mixin）。
+     * <p>
+     * 时序依据（NeoForge 21.1.235 patched 源码）：
+     * <ul>
+     *   <li>{@code KeyboardHandler.keyPress} 先 {@code KeyMapping.click()}（clickCount++），
+     *       之后才触发不可取消的 {@code InputEvent.Key} —— 事件来不及拦；</li>
+     *   <li>{@code Minecraft.tick()} 中 {@code ClientTickEvent.Pre} 先于
+     *       {@code Minecraft.handleKeybinds()} 执行，而物品栏/聊天/丢弃/快捷栏等点击驱动动作都在
+     *       {@code handleKeybinds()} 里 {@code consumeClick()} —— 在这里提前清空，
+     *       vanilla 就看不到这次点击。</li>
+     * </ul>
+     * 只清空「联动控制台已安装控件绑定的键」对应的所有 KeyMapping（含鼠标按键映射，如
+     * keyAttack/keyUse/keyPickItem）；本模组读原始 GLFW 状态（{@link #isDown}），不受影响；
+     * 潜行下车是 Create 的按住态行为（不走 clickCount），也不受影响。
+     */
+    private static void drainConflictingClicks(List<Binding> bindings) {
+        if (bindings.isEmpty()) return;
+        Set<InputConstants.Key> controlKeys = new HashSet<>();
+        for (Binding binding : bindings) {
+            try {
+                controlKeys.add(InputConstants.getKey(binding.keyName()));
+            } catch (Exception ignored) {
+                // 无法解析的绑定名（理论上不会出现）直接跳过
+            }
+        }
+        if (controlKeys.isEmpty()) return;
+        Minecraft mc = Minecraft.getInstance();
+        for (KeyMapping mapping : mc.options.keyMappings) {
+            if (controlKeys.contains(mapping.getKey())) {
+                while (mapping.consumeClick()) { /* 清空排队中的点击 */ }
+            }
+        }
+    }
 
     /** 键盘 / 鼠标按键当前是否按下（按键名 → 原始输入状态，参考 Create AllKeys）。 */
     private static boolean isDown(long window, String keyName) {

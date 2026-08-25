@@ -1,0 +1,28 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "ccpe:block/control_desk/my_throttle",
+		"particle": "ccpe:block/control_desk/my_throttle"
+	},
+	"elements": [
+		{
+			"from": [14.01, 8.01, 11],
+			"to": [15.01, 9.01, 13],
+			"rotation": {"angle": 0, "axis": "y", "origin": [15, 0, 11]},
+			"faces": {
+				"east": {"uv": [14, 14, 16, 15], "texture": "#0"},
+				"up": {"uv": [15, 14, 16, 16], "texture": "#0"}
+			}
+		},
+		{
+			"from": [0.99, 8.01, 11],
+			"to": [1.99, 9.01, 13],
+			"rotation": {"angle": 0, "axis": "y", "origin": [1, 0, 11]},
+			"faces": {
+				"west": {"uv": [14, 14, 16, 15], "texture": "#0"},
+				"up": {"uv": [15, 14, 16, 16], "texture": "#0"}
+			}
+		}
+	]
+}

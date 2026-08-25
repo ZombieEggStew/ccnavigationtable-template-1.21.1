@@ -3,7 +3,7 @@
 	"credit": "Made with Blockbench",
 	"textures": {
 		"0": "ccpe:block/control_desk",
-		"particle": "ccpe:block/my_monitor_tex"
+		"particle": "ccpe:block/control_desk/monitor_2"
 	},
 	"elements": [
 		{
@@ -55,49 +55,6 @@
 				"west": {"uv": [8.5, 4.5, 12.5, 7.5], "texture": "#0"},
 				"up": {"uv": [2.5, 12, 5.5, 16], "rotation": 180, "texture": "#0"},
 				"down": {"uv": [8.5, 8, 11.5, 12], "texture": "#0"}
-			}
-		},
-		{
-			"from": [6, 7, 9],
-			"to": [10, 9, 13],
-			"rotation": {"angle": 0, "axis": "y", "origin": [6, 7, 11]},
-			"color": 3,
-			"faces": {
-				"north": {"uv": [0, 0, 4, 2], "texture": "#missing"},
-				"east": {"uv": [0, 0, 4, 2], "texture": "#missing"},
-				"south": {"uv": [0, 0, 4, 2], "texture": "#missing"},
-				"west": {"uv": [0, 0, 4, 2], "texture": "#missing"},
-				"up": {"uv": [0, 0, 4, 4], "texture": "#missing"},
-				"down": {"uv": [0, 0, 4, 4], "texture": "#missing"}
-			}
-		},
-		{
-			"from": [7, 8, 10],
-			"to": [9, 16, 12],
-			"rotation": {"angle": 0, "axis": "y", "origin": [7, 8, 10]},
-			"color": 4,
-			"faces": {
-				"north": {"uv": [0, 1, 2, 9], "texture": "#missing"},
-				"east": {"uv": [0, 1, 2, 9], "texture": "#missing"},
-				"south": {"uv": [0, 1, 2, 9], "texture": "#missing"},
-				"west": {"uv": [0, 1, 2, 9], "texture": "#missing"},
-				"up": {"uv": [0, 0, 2, 2], "texture": "#missing"},
-				"down": {"uv": [0, 0, 2, 2], "texture": "#missing"}
-			}
-		},
-		{
-			"name": "case_exterior",
-			"from": [2, 9, 6],
-			"to": [14, 19, 10],
-			"rotation": {"angle": 22.5, "axis": "x", "origin": [14, 12, 7]},
-			"color": 4,
-			"faces": {
-				"north": {"uv": [11.25, 0, 14.75, 3], "texture": "#missing"},
-				"east": {"uv": [16, 0, 14.75, 3], "texture": "#missing"},
-				"south": {"uv": [11.25, 3, 14.75, 6], "texture": "#missing"},
-				"west": {"uv": [14.75, 0, 16, 3], "texture": "#missing"},
-				"up": {"uv": [14.75, 0, 16, 3], "rotation": 90, "texture": "#missing"},
-				"down": {"uv": [14.75, 0, 16, 3], "rotation": 270, "texture": "#missing"}
 			}
 		}
 	],

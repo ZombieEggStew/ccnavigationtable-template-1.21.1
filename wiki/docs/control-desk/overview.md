@@ -17,7 +17,7 @@ Sitting is all you need — no manual interaction:
 2. All such desks around the seat (up to 4) become **linked** and respond to your keys **simultaneously** (broadcast). A linked desk without the corresponding control installed simply ignores the input.
 3. Press **sneak** to dismount (vanilla Create behavior is preserved).
 
-Linking is based on the seat's four neighbors, not on the desk's facing. The mod only *reads* your key input while you are in operation mode; it never intercepts vanilla key behavior.
+Linking is based on the seat's four neighbors, not on the desk's facing. While you are in operation mode, keys bound to the desk's controls are **drained** from the vanilla key handling before the game processes them — so e.g. pressing `E` drives the pedal instead of opening the inventory. Held-state behavior that is not click-driven (movement, sneak-to-dismount) is untouched.
 
 !!! tip "Seat detection"
     The seat is detected by the **ridden entity**, not the block: operation mode triggers whenever your vehicle is Create's `SeatEntity` (or a subclass of it). Seats from other mods that ride Create's seat entity — such as **Create: Interiors** chairs — work out of the box.

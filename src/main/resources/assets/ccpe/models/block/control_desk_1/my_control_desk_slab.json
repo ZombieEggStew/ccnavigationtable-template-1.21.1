@@ -2,21 +2,20 @@
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
 	"textures": {
-		"0": "ccpe:block/control_desk/control_desk",
-		"particle": "ccpe:block/control_desk/control_desk"
+		"0": "ccpe:block/control_desk/control_desk"
 	},
 	"elements": [
 		{
-			"from": [0, 0, 8],
+			"from": [0, 0, 0],
 			"to": [16, 8, 16],
 			"rotation": {"angle": 0, "axis": "y", "origin": [0, 0, 9]},
 			"faces": {
 				"north": {"uv": [0, 0, 8, 4], "texture": "#0"},
-				"east": {"uv": [0, 4, 4, 8], "texture": "#0"},
+				"east": {"uv": [0, 0, 8, 4], "texture": "#0"},
 				"south": {"uv": [0, 0, 8, 4], "texture": "#0"},
-				"west": {"uv": [0, 4, 4, 8], "texture": "#0"},
-				"up": {"uv": [0, 0, 8, 4], "rotation": 180, "texture": "#0"},
-				"down": {"uv": [0, 0, 8, 4], "texture": "#0"}
+				"west": {"uv": [0, 0, 8, 4], "texture": "#0"},
+				"up": {"uv": [8, 0, 16, 8], "rotation": 180, "texture": "#0"},
+				"down": {"uv": [8, 0, 16, 8], "texture": "#0"}
 			}
 		}
 	],
@@ -39,8 +38,8 @@
 		},
 		"gui": {
 			"rotation": [30, 45, 0],
-			"translation": [-2, 3.25, 0],
-			"scale": [0.8, 0.8, 0.8]
+			"translation": [0.5, 0.5, 0],
+			"scale": [0.6, 0.6, 0.6]
 		}
 	}
 }
