@@ -125,15 +125,22 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             if (!(be instanceof ControlDeskBlockEntity desk)) {
                 return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
             }
-            // 安装成功：throttle / joystick_2 按玩家朝向记录模块旋转（北=0 / 南=180 / 西=90 / 东=270）；
-            // joystick_2 额外按预览盒位置记录放置中心（服务端用右键命中点做同样的吸附，与客户端预览一致）
+            // 安装成功：throttle / joystick_2 按「桌体→玩家的水平方向」记录旋转（throttle 只能 0°/180°，
+            // joystick_2 90° 间隔，均让模型 -Z 面向玩家）+ 放置中心（throttle 恒为唯一合法位 (8,12)；
+            // joystick_2 按右键命中点吸附到 1px 网格，与客户端预览一致）
             int placeX = 8, placeZ = 8;
+            Direction toPlayer = null;
             if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
                 int[] c = snappedBoxCenter(pos, state.getValue(FACING), hitResult.getLocation());
                 placeX = c[0];
                 placeZ = c[1];
+                toPlayer = directionFromDeskTo(player, pos);
+            } else if (type == ControlDeskBlockEntity.ControlType.THROTTLE) {
+                placeX = ControlDeskBlockEntity.THROTTLE_PLACE_X;
+                placeZ = ControlDeskBlockEntity.THROTTLE_PLACE_Z;
+                toPlayer = directionFromDeskTo(player, pos);
             }
-            if (!desk.install(type, player != null ? player.getDirection() : null, placeX, placeZ)) {
+            if (!desk.install(type, placeX, placeZ, toPlayer)) {
                 // 已安装 / 位置被占用：不消耗物品，提示玩家
                 if (player != null) {
                     player.displayClientMessage(
@@ -196,9 +203,9 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 点击位置命中的已安装控件类型（PEDAL 左右两框任一命中即算；JOYSTICK_2 命中放置位 4×9×4 盒子）；
+     * 点击位置命中的已安装控件类型（PEDAL 左右两框任一命中即算；JOYSTICK_2 / THROTTLE 命中各自放置盒）；
      * 未命中返回 null。
-     * （monitor_2 / throttle 已无安装位框，按位置拆除待其放置系统落地后重做）
+     * （monitor_2 尚无放置位框，按位置拆除待其放置系统落地后重做）
      */
     private static ControlDeskBlockEntity.ControlType hitControlType(ControlDeskBlockEntity desk, Direction facing,
                                                                     BlockPos pos, Vec3 click) {
@@ -214,6 +221,10 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 && hitBounds(List.of(joystick2PlaceBox(desk, facing, pos)), click)) {
             return ControlDeskBlockEntity.ControlType.JOYSTICK_2;
         }
+        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
+                && hitBounds(List.of(throttlePlaceBox(desk, facing, pos)), click)) {
+            return ControlDeskBlockEntity.ControlType.THROTTLE;
+        }
         return null;
     }
 
@@ -227,6 +238,22 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         int cz = desk.getJoystick2PlaceZ();
         Vec3 p0 = modelToWorld(pos, cx - half, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM, cz - half, facing);
         Vec3 p1 = modelToWorld(pos, cx + half, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_TOP, cz + half, facing);
+        return new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+    }
+
+    /**
+     * throttle 放置盒的世界 AABB（北向基准 14×6×6，中心 = 放置中心 placeX/placeZ（唯一合法位 (8,12)），底 y7；
+     * 随 FACING 旋转，与渲染/预览一致）。供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
+     */
+    public static AABB throttlePlaceBox(ControlDeskBlockEntity desk, Direction facing, BlockPos pos) {
+        int cx = desk.getThrottlePlaceX();
+        int cz = desk.getThrottlePlaceZ();
+        Vec3 p0 = modelToWorld(pos, cx - ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM, cz - ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z, facing);
+        Vec3 p1 = modelToWorld(pos, cx + ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.THROTTLE_PLACE_Y_TOP, cz + ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z, facing);
         return new AABB(
                 Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
                 Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
@@ -327,11 +354,25 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
+     * 桌体中心 → 玩家的最近水平方向（90° 间隔，北/南/西/东）：joystick_2 安装旋转
+     * （{@link ControlDeskBlockEntity#rotationToFace}）与客户端 ghost 预览共用同一实现，防预览与实装不一致。
+     * 玩家为 null 或恰在桌体中心（getNearest 返回非水平方向）时返回 null。
+     */
+    @Nullable
+    public static Direction directionFromDeskTo(@Nullable Player player, BlockPos pos) {
+        if (player == null) return null;
+        Direction dir = Direction.getNearest(
+                player.getX() - (pos.getX() + 0.5), 0, player.getZ() - (pos.getZ() + 0.5));
+        return dir.getAxis().isHorizontal() ? dir : null;
+    }
+
+    /**
      * 控件安装位的世界 AABB 列表（随 FACING 旋转；PEDAL 为一对左右两个框）。
      * 供安装/拆除预览框与拆除判定（onSneakWrenched 按点击位置命中）使用；
      * 如需调整安装位置，改上面的北向基准 shape 即可。
      * （monitor_2 / throttle / joystick_2 的原后缘插槽已移除，改桌顶 6×14 棋盘网格自由放置 ——
-     * 显示先行（见 {@code ControlDeskPlacementOverlay.showTopGrid}），放置逻辑待做，故返回空列表）
+     * throttle / joystick_2 走各自放置盒（{@link #throttlePlaceBox} / {@link #joystick2PlaceBox}），
+     * monitor_2 无放置位框，故本方法对三者均返回空列表）
      */
     public static List<AABB> installBounds(ControlDeskBlockEntity.ControlType type, Direction facing, BlockPos pos) {
         List<AABB> result = new ArrayList<>();

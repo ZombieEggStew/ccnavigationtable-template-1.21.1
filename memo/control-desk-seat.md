@@ -43,7 +43,7 @@ flowchart LR
 
 ## 控件安装系统（✅ 已实现）
 
-> **⚠️ 2025 更新：monitor_2 / throttle / joystick_2 的后缘插槽（`BACK_SLOT`）已整体移除**，改为**桌顶 6×14 棋盘网格自由放置系统**（joystick_2 已完整接入：桌顶网格 + 4×9×4 预览盒 + 半透明实物 + 放置位置存储/渲染 + 4×4 占用阻挡 + 扳手放置盒拆除）。以下「共用桌体后缘上方插槽、互斥安装」的描述均为旧系统，**详见 `memo/control-desk-grid-slot.md`**（添加新模块的参考）。
+> **⚠️ 2025 更新：monitor_2 / throttle / joystick_2 的后缘插槽（`BACK_SLOT`）已整体移除**，改为**桌顶 6×14 棋盘网格自由放置系统**（joystick_2 已完整接入：桌顶网格 + 4×9×4 预览盒 + 半透明实物 + 放置位置存储/渲染 + 4×4 占用阻挡 + 扳手放置盒拆除；**throttle 已接入**：占地 14×6 全占网格 → 唯一合法位 (8,12) + 14×6×6 预览盒 + 只能 0°/180° 旋转 + 14×6 占用阻挡 + 扳手放置盒拆除）。以下「共用桌体后缘上方插槽、互斥安装」的描述均为旧系统，**详见 `memo/control-desk-grid-slot.md`**（添加新模块的参考）。
 
 ### 实现细节
 
@@ -55,7 +55,7 @@ flowchart LR
   - `getDrops` 覆写 → 方块被破坏（任何方式）时已装控件随掉落
 - **安装预览**（`client/ControlDeskPlacementOverlay`，已注册）：手持控件物品 + 准星指向 controlDesk（原版 `mc.hitResult`）→ Catnip Outliner 在安装位显示预览框，绿=可装 / 红=已装；每 tick 重新 show，离开/换物品自动消失
   - **半透明模型预览**（`client/ControlDeskGhostPreviewRenderer`，已注册，参考 aeroworks `SocketPlacementClient#onRenderLevelStage`）：手持控件物品 + 准星指向 controlDesk 且该位置**可安装**（未装该控件）→ 在安装位渲染控件**半透明模型**（`RenderLevelStageEvent.AFTER_BLOCK_ENTITIES` + `CachedBuffers.partial` + `RenderType.translucentMovingBlock()` + `color(255,255,255,110)` 约 43% + 固定光照 `0xF000F0`；facing 旋转与 BER 同一约定 `rotateCenteredDegrees(-facing.getOpposite().toYRot())`）；与线框预览**共存**（对齐 aeroworks socket 线框 + ghost 模型方案），已装位置仍只显示红色线框；部件列表 = `ControlDeskRenderer` 安装渲染的底座→本体（PEDAL base+左右 / JOYSTICK base+杆 / MONITOR_2 单体 / THROTTLE base+手柄+指示灯 / JOYSTICK_2 base+手柄）
-  - 安装位 AABB = `ControlDeskBlock.installBounds(type, facing, pos)`（北向基准 shape + `VoxelShaper` 随 FACING 旋转；PEDAL 显示左右两个框；JOYSTICK 中框）；**monitor_2 / throttle / joystick_2 无安装位框**（棋盘网格自由放置：手持显示桌顶网格，joystick_2 另显示 4×9×4 预览盒 + 半透明实物，见 `memo/control-desk-grid-slot.md`）
+  - 安装位 AABB = `ControlDeskBlock.installBounds(type, facing, pos)`（北向基准 shape + `VoxelShaper` 随 FACING 旋转；PEDAL 显示左右两个框；JOYSTICK 中框）；**monitor_2 / throttle / joystick_2 无安装位框**（棋盘网格自由放置：手持显示桌顶网格，joystick_2 另显示 4×9×4 预览盒 + 半透明实物、throttle 另显示 14×6×6 预览盒（固定位 (8,12)）+ 半透明实物，见 `memo/control-desk-grid-slot.md`）
 - **渲染**：`ControlDeskVisual`（Flywheel）+ `ControlDeskRenderer`（BER 回退）按 BE 安装状态叠加，渲染顺序 **底座 → 本体**：
   - PEDAL → `pedal_base`（一个模型含左右双底座）+ `pedal`（左）+ `pedal_right`（右）
   - JOYSTICK → `joystick_base` + `joystick`

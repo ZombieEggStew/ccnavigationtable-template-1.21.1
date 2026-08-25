@@ -104,12 +104,10 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         this.joystick = syncInstance(this.joystick, joystickWanted, MyModPartialModels.CONTROL_DESK_JOYSTICK, facing,
                 inst -> applyTilt(inst, tiltX, tiltY));
 
-        // monitor_2 / throttle：桌体后缘上方插槽（monitor_2 静态；throttle 手柄沿模型空间 x 轴平移）
-        // throttle / joystick_2 额外叠加安装朝向旋转（安装时按玩家朝向记录，见 ControlDeskBlockEntity.getBackSlotRotation）
-        final int backRot = be.getBackSlotRotation();
+        // monitor_2：桌体后缘上方插槽（静态）；throttle 已接入棋盘自由放置——模型平移到放置位 + 安装朝向旋转绕放置中心
         this.monitor2 = syncInstance(this.monitor2, monitor2Wanted, MyModPartialModels.CONTROL_DESK_MONITOR_2, facing, null);
         this.throttleBase = syncInstance(this.throttleBase, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_BASE, facing,
-                backSlotRotate(backRot));
+                inst -> applyThrottlePlacement(inst, be));
 
         // 油门手柄：档位位置（服务端权威）+ 操作者本地"张力蠕动"（按住向下一档稍微移动，
         // 满 TICKS_PER_GEAR tick 档位步进后张力清零 → 突然快速到位，参考 knob 卡位）。
@@ -134,12 +132,13 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         final float throttlePx = this.smoothThrottle;
         this.throttleHandle = syncInstance(this.throttleHandle, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_HANDLE, facing,
                 inst -> {
-                    if (backRot != 0) inst.rotateCenteredDegrees(backRot, Direction.UP);
+                    applyThrottlePlacement(inst, be);
+                    // 档位平移（模型空间 x 轴，最后调用 = 最内层，先于 facing/放置旋转作用于模型）
                     inst.translate(throttlePx, 0f, 0f);
                 });
         // 指示灯：随油门档位大小从暗红（熄灭）→ 亮红（满油门）着色（参考 Create analog lever / Simulated diode）
         this.throttleIndicator = syncInstance(this.throttleIndicator, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_INDICATOR, facing,
-                backSlotRotate(backRot));
+                inst -> applyThrottlePlacement(inst, be));
         if (this.throttleIndicator != null) {
             this.throttleIndicator.colorArgb(ThrottleMotion.indicatorColor(be.getThrottleGear()));
             this.throttleIndicator.setChanged();
@@ -152,30 +151,44 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
                 inst -> applyJoystick2Placement(inst, be));
     }
 
-    /** 后缘插槽模块的安装朝向旋转（度，0/90/180/270）：0 返回 null 跳过（与现有渲染一致），否则返回绕 Y 旋转的额外变换。 */
-    private static Consumer<TransformedInstance> backSlotRotate(int backRot) {
-        if (backRot == 0) return null;
-        final float deg = backRot;
-        return inst -> inst.rotateCenteredDegrees(deg, Direction.UP);
-    }
-
     /**
      * joystick_2 放置变换：模型平移到放置位（默认中心 x/z=8、底座底 y=0 → 放置位底 y=7，见
      * {@link ControlDeskBlockEntity#JOYSTICK_2_MODEL_CENTER} / {@link ControlDeskBlockEntity#JOYSTICK_2_PLACE_Y_BOTTOM}），
      * 安装朝向旋转绕放置中心（Y 旋转，枢轴 y 不影响）。
      */
     private static void applyJoystick2Placement(TransformedInstance inst, ControlDeskBlockEntity be) {
-        int backRot = be.getBackSlotRotation();
-        float px = be.getJoystick2PlaceX() / 16f;
-        float pz = be.getJoystick2PlaceZ() / 16f;
+        applyPlacement(inst, be.getBackSlotRotation(),
+                be.getJoystick2PlaceX(), be.getJoystick2PlaceZ(),
+                ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM,
+                ControlDeskBlockEntity.JOYSTICK_2_MODEL_BOTTOM_Y);
+    }
+
+    /**
+     * throttle 放置变换（唯一合法位 (8,12)，见 {@link ControlDeskBlockEntity#THROTTLE_PLACE_X}）：
+     * 与 joystick_2 同链——模型平移到放置位 + 安装朝向旋转（只能 0°/180°）绕放置中心。
+     */
+    private static void applyThrottlePlacement(TransformedInstance inst, ControlDeskBlockEntity be) {
+        applyPlacement(inst, be.getBackSlotRotation(),
+                be.getThrottlePlaceX(), be.getThrottlePlaceZ(),
+                ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM,
+                ControlDeskBlockEntity.THROTTLE_MODEL_BOTTOM_Y);
+    }
+
+    /**
+     * 放置变换公共链（三处渲染统一，见 {@code memo/control-desk-grid-slot.md} 变换链）：
+     * {@code R_facing · [T(px,0.5,pz)·R_backRot·T(-px,-0.5,-pz)] · T(shift)}，
+     * {@code shift = ((px-modelCenter)/16, (placeYBottom-modelBottomY)/16, (pz-modelCenter)/16)}。
+     */
+    private static void applyPlacement(TransformedInstance inst, int backRot,
+                                       int placeX, int placeZ, float modelCenter, float placeYBottom, float modelBottomY) {
+        float px = placeX / 16f;
+        float pz = placeZ / 16f;
         if (backRot != 0) {
             inst.translate(px, 0.5f, pz);
             inst.rotate((float) Math.toRadians(backRot), Direction.UP);
             inst.translate(-px, -0.5f, -pz);
         }
-        inst.translate((be.getJoystick2PlaceX() - ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER) / 16f,
-                (ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM - ControlDeskBlockEntity.JOYSTICK_2_MODEL_BOTTOM_Y) / 16f,
-                (be.getJoystick2PlaceZ() - ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER) / 16f);
+        inst.translate((placeX - modelCenter) / 16f, (placeYBottom - modelBottomY) / 16f, (placeZ - modelCenter) / 16f);
     }
 
     /** 按安装状态创建/删除实例；存在的实例每帧重置变换 + 平移到位 + 旋转到 facing + 追加额外变换并标记更新。 */

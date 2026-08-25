@@ -79,6 +79,10 @@ public class ControlDeskPlacementOverlay {
             if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
                 showJoystick2Box(mc, hit);
             }
+            // throttle：额外显示 3D 放置预览盒（14×6×6，唯一合法位 (8,12) 全占桌顶网格）
+            if (type == ControlDeskBlockEntity.ControlType.THROTTLE) {
+                showThrottleBox(mc, hit);
+            }
             return;
         }
         if (isWrench(held)) {
@@ -122,6 +126,15 @@ public class ControlDeskPlacementOverlay {
                 AABB box = ControlDeskBlock.joystick2PlaceBox(desk, facing, pos);
                 boolean hovered = ControlDeskBlock.hitBounds(List.of(box), click);
                 Outliner.getInstance().showAABB("control-desk/remove/" + pos.toShortString() + "/JOYSTICK_2", box)
+                        .colored(hovered ? COLOR_INVALID : COLOR_VALID)
+                        .lineWidth(1 / 64f);
+                continue;
+            }
+            if (type == ControlDeskBlockEntity.ControlType.THROTTLE) {
+                // 油门：显示放置位 14×6×6 盒子（与安装预览/服务端拆除判定共用 ControlDeskBlock.throttlePlaceBox）
+                AABB box = ControlDeskBlock.throttlePlaceBox(desk, facing, pos);
+                boolean hovered = ControlDeskBlock.hitBounds(List.of(box), click);
+                Outliner.getInstance().showAABB("control-desk/remove/" + pos.toShortString() + "/THROTTLE", box)
                         .colored(hovered ? COLOR_INVALID : COLOR_VALID)
                         .lineWidth(1 / 64f);
                 continue;
@@ -213,15 +226,53 @@ public class ControlDeskPlacementOverlay {
     }
 
     /**
-     * joystick_2 候选放置（中心 cx,cz）是否被阻挡：同类型已装 / 互斥模块（throttle / monitor_2）已装 /
-     * 4×4 与已装模块占用矩形重叠（{@link ControlDeskBlockEntity#blocksPlacement}）。
+     * 手持 throttle：3D 放置预览盒（占地 14×6、高 6，底在桌顶面下方 1px = y7..13）。
+     * throttle 占地 14×6 必须完全处于桌顶网格（x1..15 / z9..15）内 → 唯一合法位置 (8,12)（全占），
+     * 盒子固定显示在该位置（绿=可装 / 红=已装或被占用，与服务端 install 判定一致）。
+     */
+    private static void showThrottleBox(Minecraft mc, BlockHitResult hit) {
+        BlockPos pos = hit.getBlockPos();
+        BlockState state = mc.level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ControlDeskBlock)) return;
+        Direction facing = state.getValue(ControlDeskBlock.FACING);
+
+        int cx = ControlDeskBlockEntity.THROTTLE_PLACE_X;
+        int cz = ControlDeskBlockEntity.THROTTLE_PLACE_Z;
+        boolean blocked = isThrottlePlacementBlocked(mc, pos, cx, cz);
+        Vec3 p0 = gridWorld(pos, cx - ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM, cz - ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z, facing);
+        Vec3 p1 = gridWorld(pos, cx + ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.THROTTLE_PLACE_Y_TOP, cz + ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z, facing);
+        AABB box = new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+        Outliner.getInstance().showAABB("control-desk/box-throttle/" + pos.toShortString(), box)
+                .colored(blocked ? COLOR_INVALID : COLOR_VALID)
+                .lineWidth(1 / 64f);
+    }
+
+    /**
+     * joystick_2 候选放置（中心 cx,cz）是否被阻挡：同类型已装 / monitor_2 已装（互斥）/
+     * 4×4 与已装模块占用矩形重叠（{@link ControlDeskBlockEntity#blocksPlacement}，含 throttle 的 14×6）。
      */
     private static boolean isJoystick2PlacementBlocked(Minecraft mc, BlockPos pos, int cx, int cz) {
         if (!(mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return false;
         return desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
-                || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
                 || desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
-                || desk.blocksPlacement(cx, cz, ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF);
+                || desk.blocksPlacement(cx, cz,
+                        ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF, ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF);
+    }
+
+    /**
+     * throttle 候选放置（唯一合法位 (8,12)）是否被阻挡：同类型已装 / monitor_2 已装（互斥）/
+     * 14×6 与已装模块占用矩形重叠（{@link ControlDeskBlockEntity#blocksPlacement}，含 joystick_2 的 4×4）。
+     */
+    private static boolean isThrottlePlacementBlocked(Minecraft mc, BlockPos pos, int cx, int cz) {
+        if (!(mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return false;
+        return desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
+                || desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
+                || desk.blocksPlacement(cx, cz,
+                        ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X, ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z);
     }
 
     /** 手持物品 → 控件类型（供本类预览判定与 {@link ControlDeskGhostPreviewRenderer} 半透明模型预览复用）。 */
