@@ -129,6 +129,8 @@ public class ControlDeskPlacementOverlay {
     private static ControlDeskBlockEntity.ControlType controlTypeOf(ItemStack stack) {
         if (stack.is(MyModItems.CONTROL_PEDAL.get())) return ControlDeskBlockEntity.ControlType.PEDAL;
         if (stack.is(MyModItems.CONTROL_JOYSTICK.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK;
+        if (stack.is(MyModItems.CONTROL_MONITOR_2.get())) return ControlDeskBlockEntity.ControlType.MONITOR_2;
+        if (stack.is(MyModItems.CONTROL_THROTTLE.get())) return ControlDeskBlockEntity.ControlType.THROTTLE;
         return null;
     }
 

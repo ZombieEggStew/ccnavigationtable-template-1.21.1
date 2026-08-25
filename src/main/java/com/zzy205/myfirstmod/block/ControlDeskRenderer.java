@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
+import com.zzy205.myfirstmod.client.SeatControlState;
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBuffer;
@@ -35,6 +36,10 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
     private final Map<BlockPos, float[]> smoothTilts = new HashMap<>();
     /** 每个控制台独立的踏板动画平移量（块单位）{leftPx, rightPx}：指数逼近追逐目标 */
     private final Map<BlockPos, float[]> smoothPedals = new HashMap<>();
+    /** 每个控制台独立的油门动画平移量（块单位）：指数逼近追逐目标（沿模型空间 x 轴） */
+    private final Map<BlockPos, Float> smoothThrottles = new HashMap<>();
+    /** 每个控制台独立的油门张力充电状态 {progress(0..1), lastDir, lastGearPx}：帧时间平滑推进 */
+    private final Map<BlockPos, float[]> throttleCharge = new HashMap<>();
 
     public ControlDeskRenderer(BlockEntityRendererProvider.Context context) {}
 
@@ -66,6 +71,23 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
             renderJoystick(be, state, facing, ms, vb, light);
         } else {
             smoothTilts.remove(be.getBlockPos());
+        }
+        // monitor_2 / throttle：桌体后缘上方插槽（monitor_2 静态；throttle 手柄沿模型空间 x 轴平移）
+        if (be.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)) {
+            renderPart(MyModPartialModels.CONTROL_DESK_MONITOR_2, state, facing, ms, vb, light);
+        }
+        if (be.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
+            renderPart(MyModPartialModels.CONTROL_DESK_THROTTLE_BASE, state, facing, ms, vb, light);
+            renderThrottleHandle(be, state, facing, ms, vb, light);
+            // 指示灯：随油门档位大小着色（参考 Create analog lever / Simulated diode）
+            SuperByteBuffer indicator = CachedBuffers.partial(MyModPartialModels.CONTROL_DESK_THROTTLE_INDICATOR, state);
+            indicator.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
+            indicator.light(light)
+                    .color(ThrottleMotion.indicatorColor(be.getThrottleGear()))
+                    .renderInto(ms, vb);
+        } else {
+            smoothThrottles.remove(be.getBlockPos());
+            throttleCharge.remove(be.getBlockPos());
         }
     }
 
@@ -101,6 +123,38 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
                     .translate(-JoystickTilt.PIVOT_X, -JoystickTilt.PIVOT_Y, -JoystickTilt.PIVOT_Z);
         }
         stick.light(light).renderInto(ms, vb);
+    }
+
+    /** 油门手柄：facing 旋转 + 沿模型空间 x 轴平移（档位位置 + 操作者本地张力蠕动，步进突然快速到位）。 */
+    private void renderThrottleHandle(ControlDeskBlockEntity be, BlockState state, Direction facing,
+                                      PoseStack ms, VertexConsumer vb, int light) {
+        float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
+        float gearPx = ThrottleMotion.targetPx(be);
+        // 张力充电进度 {progress, lastDir, lastGearPx}：帧时间平滑推进（避免游戏时间整 tick 跳变卡顿）
+        float[] charge = throttleCharge.computeIfAbsent(be.getBlockPos(), k -> new float[3]);
+        if (gearPx != charge[2]) {
+            charge[2] = gearPx;
+            charge[0] = 0f; // 档位步进：张力清零
+        }
+        int dir = SeatControlState.isLinkedDesk(be.getBlockPos()) ? SeatControlState.getThrottleDir() : 0;
+        if (dir != (int) charge[1]) {
+            charge[1] = dir;
+            charge[0] = 0f; // 按键按下/松开边沿：张力清零
+        }
+        if (dir != 0) {
+            charge[0] = Math.min(1f, charge[0] + frameTicks / ThrottleMotion.TICKS_PER_GEAR);
+        }
+        float target = gearPx + ThrottleMotion.tensionPx(dir, charge[0], gearPx);
+        float smooth = smoothThrottles.computeIfAbsent(be.getBlockPos(), k -> 0f);
+        smooth = ThrottleMotion.approachStep(smooth, target, frameTicks);
+        smoothThrottles.put(be.getBlockPos(), smooth);
+
+        SuperByteBuffer handle = CachedBuffers.partial(MyModPartialModels.CONTROL_DESK_THROTTLE_HANDLE, state);
+        handle.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
+        if (smooth != 0f) {
+            handle.translate(smooth, 0f, 0f);
+        }
+        handle.light(light).renderInto(ms, vb);
     }
 
     private static void renderPart(dev.engine_room.flywheel.lib.model.baked.PartialModel model,

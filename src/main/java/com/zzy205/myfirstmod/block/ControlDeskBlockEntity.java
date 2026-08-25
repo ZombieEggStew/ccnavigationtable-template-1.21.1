@@ -10,6 +10,8 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -27,7 +29,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
 
     /** 可安装到控制台的控件类型 */
     public enum ControlType {
-        PEDAL, JOYSTICK
+        PEDAL, JOYSTICK, MONITOR_2, THROTTLE
     }
 
     /** 操纵杆回正时间（tick）默认值与范围（与 JoystickModuleScreen 滚轮条一致）。 */
@@ -67,8 +69,13 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public static final String DEFAULT_PEDAL_KEY_RIGHT_UP = "key.keyboard.q";
     public static final String DEFAULT_PEDAL_KEY_RIGHT_DOWN = "key.keyboard.e";
 
+    /** 油门杆档位切换节奏写死（后续接配置 UI）：每 {@link ThrottleMotion#TICKS_PER_GEAR} tick 进/退一档。 */
+    public static final int DEFAULT_THROTTLE_TICKS_PER_GEAR = ThrottleMotion.TICKS_PER_GEAR;
+
     private static final String TAG_PEDAL = "PedalInstalled";
     private static final String TAG_JOYSTICK = "JoystickInstalled";
+    private static final String TAG_MONITOR_2 = "Monitor2Installed";
+    private static final String TAG_THROTTLE = "ThrottleInstalled";
     private static final String TAG_JOYSTICK_RETURN_TIME = "JoystickReturnTime";
     private static final String TAG_JOYSTICK_RETURN_TIME_YAW = "JoystickReturnTimeYaw";
     private static final String TAG_GEAR_MODE_PITCH = "GearModePitch";
@@ -81,6 +88,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_JOYSTICK_AXIS_Y = "JoystickAxisY";
     private static final String TAG_PEDAL_LEFT_AXIS = "PedalLeftAxis";   // 运行时踏板轴（不落盘，仅 getUpdateTag 同步）
     private static final String TAG_PEDAL_RIGHT_AXIS = "PedalRightAxis";
+    private static final String TAG_THROTTLE_AXIS = "ThrottleAxis";      // 运行时油门轴（不落盘，仅 getUpdateTag 同步）
     private static final String TAG_JOYSTICK_KEY_UP = "JoystickKeyUp";
     private static final String TAG_JOYSTICK_KEY_DOWN = "JoystickKeyDown";
     private static final String TAG_JOYSTICK_KEY_LEFT = "JoystickKeyLeft";
@@ -96,6 +104,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
 
     private boolean pedalInstalled;
     private boolean joystickInstalled;
+    private boolean monitor2Installed;   // monitor_2 / throttle 共用桌体后缘上方插槽，互斥安装
+    private boolean throttleInstalled;
     private int joystickReturnTime = DEFAULT_JOYSTICK_RETURN_TIME;      // 前后轴回正时间
     private int joystickReturnTimeYaw = DEFAULT_JOYSTICK_RETURN_TIME;   // 左右轴回正时间
     private boolean gearModePitch;                                      // 前后轴档位模式开关
@@ -110,12 +120,15 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private float joystickAxisY;   // 操纵杆轴 Y（-1..1）：+1 = 前推(W)，-1 = 后拉(S)
     private float pedalLeftAxis;   // 左踏板轴（-1..1，运行时）：+1 = 踩下（+z 1px）/ -1 = 抬起（-z 1px），见 PedalMotion
     private float pedalRightAxis;  // 右踏板轴（-1..1，运行时）
-    // 输入租约：最近一次操作输入（玩家 + 坐垫 + 操纵杆四方向 + 踏板四键按住态）；服务端每 tick 校验租约并模拟动力学
+    private int throttleGear;          // 油门档位（0..MAX_TRAVEL_PX，运行时）：0 = 最低档（底端，-x 端），1px = 1 档，锁存不回正
+    private int throttleChargeTicks;   // 档位切换充电（0..TICKS_PER_GEAR，按住满 6 tick 进/退一档）
+    // 输入租约：最近一次操作输入（玩家 + 坐垫 + 操纵杆四方向 + 踏板四键 + 油门两键按住态）；服务端每 tick 校验租约并模拟动力学
     private UUID inputPlayer;
     private BlockPos inputSeatPos;
     private boolean inputUp, inputDown, inputLeft, inputRight;
     private boolean prevUp, prevDown, prevLeft, prevRight;
     private boolean inputPedalLeftDown, inputPedalLeftUp, inputPedalRightDown, inputPedalRightUp;
+    private boolean inputThrottleForward, inputThrottleBack;
     private String joystickKeyUp = DEFAULT_JOYSTICK_KEY_UP;
     private String joystickKeyDown = DEFAULT_JOYSTICK_KEY_DOWN;
     private String joystickKeyLeft = DEFAULT_JOYSTICK_KEY_LEFT;
@@ -201,15 +214,25 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return switch (type) {
             case PEDAL -> pedalInstalled;
             case JOYSTICK -> joystickInstalled;
+            case MONITOR_2 -> monitor2Installed;
+            case THROTTLE -> throttleInstalled;
         };
     }
 
-    /** 安装控件；已安装返回 false（不覆盖）。服务端调用。 */
+    /** 安装控件；已安装返回 false（不覆盖）。MONITOR_2 与 THROTTLE 共用同一插槽，互斥安装。服务端调用。 */
     public boolean install(ControlType type) {
         if (isInstalled(type)) return false;
         switch (type) {
             case PEDAL -> pedalInstalled = true;
             case JOYSTICK -> joystickInstalled = true;
+            case MONITOR_2 -> {
+                if (throttleInstalled) return false;
+                monitor2Installed = true;
+            }
+            case THROTTLE -> {
+                if (monitor2Installed) return false;
+                throttleInstalled = true;
+            }
         }
         notifyChange();
         return true;
@@ -231,6 +254,14 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
                 // 卸下操纵杆：运行时轴状态与输入租约一并清除（重新安装后从中心开始）
                 joystickAxisX = 0f;
                 joystickAxisY = 0f;
+                clearInput();
+            }
+            case MONITOR_2 -> monitor2Installed = false;
+            case THROTTLE -> {
+                throttleInstalled = false;
+                // 卸下油门杆：运行时档位与充电清零（重新安装后从最低档开始）
+                throttleGear = 0;
+                throttleChargeTicks = 0;
                 clearInput();
             }
         }
@@ -354,15 +385,26 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return pedalRightAxis;
     }
 
+    /** 油门轴（0..1，运行时）：档位 / MAX_TRAVEL_PX（0 = 最低档/底端，1 = 满前进），见 {@link ThrottleMotion}。 */
+    public float getThrottleAxis() {
+        return throttleGear / (float) ThrottleMotion.MAX_TRAVEL_PX;
+    }
+
+    /** 油门档位（0..MAX_TRAVEL_PX，运行时）：渲染层指示灯/动画直接读它。 */
+    public int getThrottleGear() {
+        return throttleGear;
+    }
+
     /**
      * 写入坐垫操作输入（运行时，服务端调用；按玩家/坐垫租约记录，租约变化时重置边沿历史，
      * 避免换人/换坐垫后第一次按键不触发档位边沿）。
-     * 参数 = 操纵杆四方向按住态 + 踏板四键按住态（踩下/抬起）。
+     * 参数 = 操纵杆四方向按住态 + 踏板四键按住态（踩下/抬起）+ 油门两键按住态（前进/后退）。
      */
     public void setSeatInput(UUID player, BlockPos seatPos,
                              boolean up, boolean down, boolean left, boolean right,
                              boolean pedalLeftDown, boolean pedalLeftUp,
-                             boolean pedalRightDown, boolean pedalRightUp) {
+                             boolean pedalRightDown, boolean pedalRightUp,
+                             boolean throttleForward, boolean throttleBack) {
         boolean leaseChanged = !Objects.equals(inputPlayer, player) || !Objects.equals(inputSeatPos, seatPos);
         inputPlayer = player;
         inputSeatPos = seatPos;
@@ -374,6 +416,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         inputPedalLeftUp = pedalLeftUp;
         inputPedalRightDown = pedalRightDown;
         inputPedalRightUp = pedalRightUp;
+        inputThrottleForward = throttleForward;
+        inputThrottleBack = throttleBack;
         if (leaseChanged) {
             prevUp = prevDown = prevLeft = prevRight = false;
         }
@@ -386,6 +430,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         inputUp = inputDown = inputLeft = inputRight = false;
         prevUp = prevDown = prevLeft = prevRight = false;
         inputPedalLeftDown = inputPedalLeftUp = inputPedalRightDown = inputPedalRightUp = false;
+        inputThrottleForward = inputThrottleBack = false;
     }
 
     /**
@@ -401,7 +446,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (level == null || level.isClientSide) return;
         boolean hasJoystick = be.joystickInstalled;
         boolean hasPedal = be.pedalInstalled;
-        if (!hasJoystick && !hasPedal) return;
+        boolean hasThrottle = be.throttleInstalled;
+        if (!hasJoystick && !hasPedal && !hasThrottle) return;
         // 输入租约校验：操作者不再坐在输入坐垫上（离开/换坐垫/断线）→ 清除输入
         // （档位模式轴值保持、自由模式/踏板自然回正）
         if (be.inputPlayer != null) {
@@ -417,6 +463,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         }
         if (hasPedal) {
             simulatePedals(be);
+        }
+        if (hasThrottle) {
+            simulateThrottle(be);
         }
     }
 
@@ -477,6 +526,40 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             be.pedalLeftAxis = newLeft;
             be.pedalRightAxis = newRight;
             be.notifyChange();
+        }
+    }
+
+    /**
+     * 油门档位推进（数值层，档位 0..{@link ThrottleMotion#MAX_TRAVEL_PX}）：前进键（空格）按住充电，
+     * 满 {@link ThrottleMotion#TICKS_PER_GEAR}（6）tick 进一档（+1px）；后退键（左Ctrl）按住同样充电后退一档（-1px）；
+     * 无输入（或同时按）**锁存**保持当前档位并清零充电；已到顶/底时充电清零不动作。
+     * 每个档位切换播放一次 {@code LEVER_CLICK} 音效——音调随档位位置单调上升
+     * （前进从低到高、后退从高到低，见 {@link ThrottleMotion#pitchForGear}），最低档不响。
+     * 档位变化时广播。
+     */
+    private static void simulateThrottle(ControlDeskBlockEntity be) {
+        boolean forward = be.inputThrottleForward;
+        boolean back = be.inputThrottleBack;
+        if (forward == back) { // 无输入或同时按：锁存（保持档位），充电清零
+            be.throttleChargeTicks = 0;
+            return;
+        }
+        int dir = forward ? 1 : -1;
+        if ((dir > 0 && be.throttleGear >= ThrottleMotion.MAX_TRAVEL_PX)
+                || (dir < 0 && be.throttleGear <= 0)) {
+            be.throttleChargeTicks = 0; // 已到顶/底：充电清零，按住不动作
+            return;
+        }
+        be.throttleChargeTicks++;
+        if (be.throttleChargeTicks < ThrottleMotion.TICKS_PER_GEAR) {
+            return; // 充电中（未满 6 tick 不步进）
+        }
+        be.throttleChargeTicks = 0;
+        be.throttleGear += dir;
+        be.notifyChange();
+        if (be.throttleGear >= 1 && be.getLevel() != null) {
+            be.getLevel().playSound(null, be.getBlockPos(), SoundEvents.LEVER_CLICK,
+                    SoundSource.BLOCKS, ThrottleMotion.SOUND_VOLUME, ThrottleMotion.pitchForGear(be.throttleGear));
         }
     }
 
@@ -577,6 +660,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         super.saveAdditional(tag, registries);
         tag.putBoolean(TAG_PEDAL, pedalInstalled);
         tag.putBoolean(TAG_JOYSTICK, joystickInstalled);
+        tag.putBoolean(TAG_MONITOR_2, monitor2Installed);
+        tag.putBoolean(TAG_THROTTLE, throttleInstalled);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);
         tag.putBoolean(TAG_GEAR_MODE_PITCH, gearModePitch);
@@ -604,6 +689,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         super.loadAdditional(tag, registries);
         pedalInstalled = tag.getBoolean(TAG_PEDAL);
         joystickInstalled = tag.getBoolean(TAG_JOYSTICK);
+        monitor2Installed = tag.getBoolean(TAG_MONITOR_2);
+        throttleInstalled = tag.getBoolean(TAG_THROTTLE);
         // 旧存档无对应字段时保持默认（getInt 缺失返回 0 / getString 缺失返回 ""，需显式判断）
         if (tag.contains(TAG_JOYSTICK_RETURN_TIME)) {
             joystickReturnTime = tag.getInt(TAG_JOYSTICK_RETURN_TIME);
@@ -641,6 +728,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         }
         if (tag.contains(TAG_PEDAL_RIGHT_AXIS)) {
             pedalRightAxis = tag.getFloat(TAG_PEDAL_RIGHT_AXIS);
+        }
+        if (tag.contains(TAG_THROTTLE_AXIS)) {
+            throttleGear = Math.max(0, Math.min(ThrottleMotion.MAX_TRAVEL_PX,
+                    Math.round(tag.getFloat(TAG_THROTTLE_AXIS) * ThrottleMotion.MAX_TRAVEL_PX)));
         }
         if (tag.contains(TAG_JOYSTICK_KEY_UP)) {
             joystickKeyUp = tag.getString(TAG_JOYSTICK_KEY_UP);
@@ -685,6 +776,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public void writeSafe(CompoundTag compound, HolderLookup.Provider registries) {
         compound.putBoolean(TAG_PEDAL, pedalInstalled);
         compound.putBoolean(TAG_JOYSTICK, joystickInstalled);
+        compound.putBoolean(TAG_MONITOR_2, monitor2Installed);
+        compound.putBoolean(TAG_THROTTLE, throttleInstalled);
         compound.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         compound.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);
         compound.putBoolean(TAG_GEAR_MODE_PITCH, gearModePitch);
@@ -712,6 +805,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         CompoundTag tag = super.getUpdateTag(registries);
         tag.putBoolean(TAG_PEDAL, pedalInstalled);
         tag.putBoolean(TAG_JOYSTICK, joystickInstalled);
+        tag.putBoolean(TAG_MONITOR_2, monitor2Installed);
+        tag.putBoolean(TAG_THROTTLE, throttleInstalled);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);
         tag.putBoolean(TAG_GEAR_MODE_PITCH, gearModePitch);
@@ -726,6 +821,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         // 运行时踏板轴（服务端权威）：同上
         tag.putFloat(TAG_PEDAL_LEFT_AXIS, pedalLeftAxis);
         tag.putFloat(TAG_PEDAL_RIGHT_AXIS, pedalRightAxis);
+        // 运行时油门轴（服务端权威）：同上（档位 / MAX_TRAVEL_PX，客户端 loadAdditional 换算回档位）
+        tag.putFloat(TAG_THROTTLE_AXIS, getThrottleAxis());
         tag.putString(TAG_JOYSTICK_KEY_UP, joystickKeyUp);
         tag.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         tag.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);

@@ -75,11 +75,13 @@ public final class ControlDeskPacketHandlers {
                     for (ControlDeskBlockEntity desk
                             : ControlDeskSeatLink.findLinkedDesks(player.level(), payload.seatPos())) {
                         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
-                                || desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)) {
+                                || desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
+                                || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
                             desk.setSeatInput(player.getUUID(), payload.seatPos(),
                                     payload.up(), payload.down(), payload.left(), payload.right(),
                                     payload.pedalLeftDown(), payload.pedalLeftUp(),
-                                    payload.pedalRightDown(), payload.pedalRightUp());
+                                    payload.pedalRightDown(), payload.pedalRightUp(),
+                                    payload.throttleForward(), payload.throttleBack());
                         }
                     }
                 }

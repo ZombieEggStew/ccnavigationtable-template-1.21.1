@@ -33,6 +33,9 @@ public final class SeatControlState {
     private static boolean gearHoldY;
     /** 当前联动（坐垫四邻）的 controlDesk 位置，供各控制台动画判断是否被本地玩家操控 */
     private static final List<BlockPos> linkedDesks = new ArrayList<>(4);
+    // ── 油门张力（操作者本地视觉，供油门手柄渲染"按住蠕动 + 步进突然到位"）──
+    /** 油门操作方向：+1 前进（空格）/ -1 后退（左Ctrl）/ 0 无输入（每 tick 由监听器写入） */
+    private static int throttleDir;
 
     private SeatControlState() {}
 
@@ -69,6 +72,7 @@ public final class SeatControlState {
         float keepX = gearHoldX ? axisX : 0f;
         float keepY = gearHoldY ? axisY : 0f;
         update(false, false, keepX, keepY, false, false, Math.abs(keepX), Math.abs(keepY));
+        throttleDir = 0;
         if (!gearHoldX && !gearHoldY) {
             linkedDesks.clear();
         }
@@ -78,6 +82,15 @@ public final class SeatControlState {
     public static void setGearHold(boolean x, boolean y) {
         gearHoldX = x;
         gearHoldY = y;
+    }
+
+    /** 更新油门操作方向（每 tick 由监听器写入；渲染层自行检测方向变化并重置张力充电进度）。 */
+    public static void setThrottleDir(int dir) {
+        throttleDir = dir;
+    }
+
+    public static int getThrottleDir() {
+        return throttleDir;
     }
 
     public static boolean isGearHoldX() {

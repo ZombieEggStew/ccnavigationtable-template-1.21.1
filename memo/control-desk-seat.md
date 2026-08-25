@@ -45,18 +45,20 @@ flowchart LR
 
 ### 实现细节
 
-- **控件物品**：`item/MyModItems.java` 注册 `CONTROL_PEDAL`（"pedal"）/ `CONTROL_JOYSTICK`（"joystick"），已入创造模式物品栏；物品栏模型 parent 到 `models/block/pedal/pedal_item`、`models/block/joystick/joystick_item`（用户绘制）
-- **BE 存储**（`ControlDeskBlockEntity`）：`ControlType` 枚举（PEDAL 一对 / JOYSTICK）+ `install`/`remove`/`isInstalled`；NBT 字段 `PedalInstalled`/`JoystickInstalled`；实现 `saveAdditional`/`loadAdditional`/`getUpdateTag`/`getUpdatePacket`/`writeSafe`（`PartialSafeNBT`）→ Create 蓝图兼容三件套（见下）
+- **控件物品**：`item/MyModItems.java` 注册 `CONTROL_PEDAL`（"pedal"）/ `CONTROL_JOYSTICK`（"joystick"）/ `CONTROL_MONITOR_2`（"monitor_2"）/ `CONTROL_THROTTLE`（"throttle"），已入创造模式物品栏；物品栏模型 parent 到 `models/block/pedal/pedal_item`、`models/block/joystick/joystick_item`、`models/block/control_desk_1/monitor_2/monitor_2`、`models/block/control_desk_1/throttle/throttle_item`（用户绘制）
+- **BE 存储**（`ControlDeskBlockEntity`）：`ControlType` 枚举（PEDAL 一对 / JOYSTICK / MONITOR_2 / THROTTLE）+ `install`/`remove`/`isInstalled`；NBT 字段 `PedalInstalled`/`JoystickInstalled`/`Monitor2Installed`/`ThrottleInstalled`；实现 `saveAdditional`/`loadAdditional`/`getUpdateTag`/`getUpdatePacket`/`writeSafe`（`PartialSafeNBT`）→ Create 蓝图兼容三件套（见下）；**MONITOR_2 与 THROTTLE 共用桌体后缘上方插槽，互斥安装**（`install` 内判断）
 - **交互**（`ControlDeskBlock`）：
   - 手持控件物品右键 → 服务端安装（非创造消耗 1 个；已装提示 `gui.ccpe.control_desk.already_installed`）
   - 扳手蹲下右键 → 按点击位置拆除对应的**单个**模块并掉落物品（`onSneakWrenched`）；点击不在安装位时不拆；光桌（无模块）走 `IWrenchable` 默认拆方块
   - `getDrops` 覆写 → 方块被破坏（任何方式）时已装控件随掉落
 - **安装预览**（`client/ControlDeskPlacementOverlay`，已注册）：手持控件物品 + 准星指向 controlDesk（原版 `mc.hitResult`）→ Catnip Outliner 在安装位显示预览框，绿=可装 / 红=已装；每 tick 重新 show，离开/换物品自动消失
-  - 安装位 AABB = `ControlDeskBlock.installBounds(type, facing, pos)`（北向基准 shape + `VoxelShaper` 随 FACING 旋转；PEDAL 显示左右两个框）；调整位置改 `ControlDeskBlock` 顶部的 `*_SHAPE` 常量
+  - 安装位 AABB = `ControlDeskBlock.installBounds(type, facing, pos)`（北向基准 shape + `VoxelShaper` 随 FACING 旋转；PEDAL 显示左右两个框；MONITOR_2/THROTTLE 共用桌体后缘上方整宽一条 `(0,8,8)~(16,14,16)`，互斥安装）；调整位置改 `ControlDeskBlock` 顶部的 `*_SHAPE` 常量
 - **渲染**：`ControlDeskVisual`（Flywheel）+ `ControlDeskRenderer`（BER 回退）按 BE 安装状态叠加，渲染顺序 **底座 → 本体**：
   - PEDAL → `pedal_base`（一个模型含左右双底座）+ `pedal`（左）+ `pedal_right`（右）
   - JOYSTICK → `joystick_base` + `joystick`
-  - PartialModel 定义在 `MyModPartialModels`（`CONTROL_DESK_PEDAL*`/`CONTROL_DESK_JOYSTICK*`）
+  - MONITOR_2 → `control_desk_1/monitor_2/monitor_2`（单体，静态）
+  - THROTTLE → `control_desk_1/throttle/throttle_base` + `throttle_handle`（平移动画）+ `throttle_indicator`（**指示灯：随油门档位大小从暗红(0xFF560101)→亮红(0xFFCD0000) 线性着色**，参考 Create analog lever 指示灯 / Simulated throttle_lever diode——BER `SuperByteBuffer.color()`、Flywheel `colorArgb()`，`ThrottleMotion.indicatorColor(gear)`）
+  - PartialModel 定义在 `MyModPartialModels`（`CONTROL_DESK_PEDAL*`/`CONTROL_DESK_JOYSTICK*`/`CONTROL_DESK_MONITOR_2`/`CONTROL_DESK_THROTTLE*`）
 - **选择框/碰撞箱**：`ControlDeskBlock.SHAPE` 单块 `[0,0,8]~[16,8,16]`（对应底座模型），`getShape` 同时承担选择框与碰撞箱，安装控件不改变
 
 ### 踩坑经验（重要）
@@ -65,6 +67,7 @@ flowchart LR
 2. **beginFrame 里动态 `createInstance()`/`delete()` TransformedInstance 是官方支持**（`BlazeBurnerVisual` 火焰/护目镜/帽子/杆子的先例），可以按状态动态增删实例。
 3. **Flywheel `PartialModel` 自动注册**（`PartialModelEventHandler` 在 `ModelEvent.RegisterAdditional` 遍历 `PartialModel.ALL` 注册、`BakingCompleted` 填充），**无需手动注册**；移动模型文件路径不影响加载，模型缺失会烘焙成 missing（渲染为空）。
 4. **控件模型拆分**：本体与底座分开建模（`pedal`/`pedal_right`/`pedal_base`、`joystick`/`joystick_base`），渲染需**分别挂 PartialModel**，别漏底座。
+5. **partial model 透明贴图必须在模型 JSON 里加 `"render_type": "minecraft:cutout"`**：Flywheel `Models.partial` 经 `BakedModelBufferer` 按 `model.getRenderTypes` 分渲染层，缺省 = solid（**忽略 alpha，透明区域渲染成不透明**）；BER 路径固定 `cutoutMipped` 不受 JSON 影响。参考：monitor case（`my_monitor_case.json` 带 cutout）、Simulated throttle_lever 的 button.json 同款声明。
 
 ## 控制台配置菜单（🔶 骨架）与模块设置菜单（✅ 已实现）
 
@@ -103,12 +106,14 @@ flowchart LR
 - **默认按键**：左踏板 踩下=Q / 抬起=E、右踏板 踩下=E / 抬起=Q、WASD=操纵杆（W 前推 / S 后拉 / A 左摆 / D 右摆）
 - **按键目标**：**广播**给坐垫四邻所有联动的 controlDesk（没装对应控件的自动忽略）
 - **触发模式**：踏板两种（按住式=按住踩 → 踏板 +z、按住抬 → 踏板 -z、都松开 → 按回正时间归零，**已实施**；切换式=按一下踩住/再按抬起，待接入），可配置；操纵杆固定按住式（不适用切换式）
+- **油门杆（写死控制，未接配置 UI）**：空格 = 前进（模型空间 +x）/ 左Ctrl = 后退（-x），`SeatControlListener` 读原始 GLFW 状态，经 `SeatInputPayload`（11 字段）上报（联动有装油门杆的控制台才上报）；**档位模式**：1px = 1 档（档位 0..11，默认最低档 0），按住满 {@code TICKS_PER_GEAR}（4）tick 进/退一档（连续按住每满 4 tick 一档），**锁存不回正**；每个档位切换播放一次 LEVER_CLICK（音调随档位上升：前进从低到高、后退从高到低，0.75→1.5）
 - 按键状态 ✅ 每 tick 经 `SeatInputPayload`（坐垫 pos + 四方向按住态）发送；离开坐垫/打开 GUI 时发一次全 false 释放
 
 ## 服务端状态（✅ 已实施：操纵杆轴状态 + 踏板压下值）
 
 - **操纵杆轴状态（浮点 x,y）**：✅ `ControlDeskBlockEntity.joystickAxisX/Y`（-1..1），**服务端权威**；BE 挂服务端 ticker（`ControlDeskBlock.getTicker` → `tickServer`），每 tick 按**本 BE 自己的配置**模拟（自由模式线性累加/回正、档位模式按下边沿步进，共用 `JoystickTilt` 动力学）；轴值变化 `notifyChange` → `getUpdatePacket` 广播
 - **输入租约**：payload 校验通过后写入（玩家 UUID + 坐垫 pos + 四方向按住态）；tickServer 每 tick 校验「玩家仍骑乘在该坐垫上」，否则清除输入（断线/离开兜底）——档位模式轴值保持、自由模式自然回正
+- **油门档位状态**：✅ `ControlDeskBlockEntity.throttleGear`（**0..MAX_TRAVEL_PX**，1px = 1 档，默认最低档 0，服务端权威）+ 输入租约（前进/后退按住态）+ 充电计数 `throttleChargeTicks`；tickServer 模拟（前进按住充电满 {@code TICKS_PER_GEAR}（4）tick 进一档 / 后退同样退一档 / 无输入锁存并清零充电 / 到顶底充电清零不动作）；每个档位切换 `notifyChange` + 播放一次 `LEVER_CLICK`（`ThrottleMotion.pitchForGear` 音调随档位上升 0.75→1.5，最低档不响）；`getThrottleAxis()` = 档位/MAX 经 `getUpdatePacket` 广播；同步/落盘规则同踏板轴（只写 `getUpdateTag`、客户端 `loadAdditional` 的 `contains` 守卫读，不进 `saveAdditional`/`writeSafe`）
 - **payload 处理器**：✅ `SeatInputPayload` 处理器**校验玩家确实坐在该坐垫上**（`ControlDeskSeatLink.seatPosOf`）才把输入写入坐垫四邻装了操纵杆的 BE（防作弊/异常）
 - **状态变更 → 同步客户端**：✅ `getUpdatePacket` 模式；轴状态只**写** `getUpdateTag`、客户端经 `loadAdditional` 的 `contains` 守卫**读**（不落盘、不进 `writeSafe`，蓝图/存档不含运行时状态，服务端读盘恒为 0）
 - **渲染读 BE 轴值**：✅ `JoystickTilt.targetDeg(be)` 直接读客户端 BE 的轴值——所有客户端一致，非联动控制台不受本地玩家输入影响
@@ -117,6 +122,7 @@ flowchart LR
 
 - **操纵杆**：✅ WASD 方向倾斜、松开回中，**最大 15°**（用户定稿，原 30° 作废），绕枢轴 **(8,6,3)**（Blockbench 找的旋转中心，模型像素）；**分层约定：数值层线性累加 + 动画层指数逼近** —— 数值 = **BE 运行时轴状态 `joystickAxisX/Y`（服务端权威，经 getUpdatePacket 同步）**（本地 `SeatControlState` 仅 HUD overlay 用，配置取第一个装操纵杆的控制台）：**自由模式**（档位开关关）按下按 `JoystickTilt.pressStep`（= 1/满偏tick，满偏 tick 数可配置，默认 2）累加、松开每 tick 向 0 累加 1/回正时间 `JoystickTilt.returnStep`（0 = 关闭回正保持不动）；**档位模式**（开关开）**关闭自动回正**，检测按键**按下边沿**（服务端按上一 tick 输入判定），进/退一档：轴值 = 离散档位 `pos(k) = -1 + 2k/(档位数-1)`（相邻档间隔 `JoystickTilt.gearStep` = **2/(档位数-1)**：2 档 = {-1,1}、3 档 = {-1,0,1}、4 档 = {-1,-1/3,1/3,1}；按住不重复步进），钳位两端；**离开坐垫档位保持**（服务端输入租约失效清除输入后：档位模式轴值保持、自由模式自然回正；渲染读 BE 轴值，所有客户端一致，非联动控制台不受本地玩家输入影响）；各 BE 用**自己的**两轴配置模拟（X 轴用 Yaw 系列、Y 轴用 Pitch 系列），CC 接口直接读数值层（BE 轴值）；**动画层**各渲染端（Visual 实例字段 / BER `Map<BlockPos,float[]>` / overlay SMOOTHED map）用 `JoystickTilt.approach` **指数逼近**追逐数值（aeroworks SMOOTHED 模式，`SMOOTH_DECAY=0.3`/tick，帧时间修正 `getGameTimeDeltaTicks`）；曾用 partialTick 线性插值方案（已弃）；Flywheel 路径 `TransformedInstance` 变换链 `rotateCentered → translate(pivot) → rotateX/rotateZ → translate(-pivot)`，BER 路径 SuperByteBuffer 同链（参考 Create HarvesterRenderer pivot 模式）；**方向符号待进游戏验证**（W=前推 / D=右摆 对应 rotateX/rotateZ 正负，反了翻转 `JoystickTilt.targetDeg` 符号）；**档位步进手感待进游戏验证**（每按一次进/退一档、按住不连跳；档位数 = 1 时步长为 0 不动作；**偶数档位（如 4 档）中心 0 不是档位**，从中心首次按下会吸附到最近档位——四舍五入向上取整偏前进方向，如 4 档从中心按前进直接到满偏 1，按后退到 -1/3，若手感不对可改为向下取整）
 - **踏板：踩下/抬起 = 前后平移（不是旋转！）**：✅ 已实施（Visual（Flywheel）+ BER 双路径）。数值 = BE 运行时轴值 `pedalLeftAxis/pedalRightAxis`（-1..1，服务端权威，经 getUpdatePacket 同步，不落盘）——**踩下键按住按满偏时间线性累加（`JoystickTilt.pressStep`，满偏 tick 数可配置 `PedalFreeSpeed`，默认 2）、抬起键按住向 -1 累加、都不按按回正时间线性归零**（`JoystickTilt.stepAxis` + `returnStep`，左右共用 `PedalReturnTime`，默认 2）；**动画层**各渲染端用 `JoystickTilt.approach` 指数逼近追逐 `PedalMotion.targetPx`（= 轴值 × `MAX_TRAVEL` 1px），平移方向 = **模型空间 z 轴**（踩下 = **+z**、抬起 = **-z**，随 FACING 旋转仍沿桌面法线；Flywheel 在 facing 旋转后链式 `translate(0,0,px)`、BER SuperByteBuffer 同链，均为模型空间变换）；**方向符号已进游戏验证**（踩下 +z / 抬起 -z 正确）
+- **油门：手柄沿模型空间 x 轴平移（不是旋转）**：✅ 已实施（Visual（Flywheel）+ BER 双路径）。数值 = BE **离散档位**（0..11，服务端权威）；**动画 = 档位位置 + 操作者本地"张力蠕动"**（`ThrottleMotion.tensionPx`）：按住前进/后退时把手向下一档方向**稍微移动**（≤ 1/3px，`SeatControlState.throttleDir` 驱动，仅联动控制台）；**张力充电进度由渲染层用帧时间平滑推进**（每帧 `frameTicks / TICKS_PER_GEAR` 累加，档位步进/按键边沿清零——避免游戏时间整 tick 跳变导致渲染卡顿），满 {@code TICKS_PER_GEAR}（4）tick 档位步进（客户端观察到档位变化清零）→ **张力清零 + `approachStep` 快速逼近（`STEP_DECAY=0.1`）突然到位**（参考 knob 卡位：吸附档位 + 前半程微扭动）；目标平移量 = 档位 × 1px（`MAX_TRAVEL_PX`=11px；**模型默认 handle 在底端（-x 端），0 偏移起步**），平移方向 = **模型空间 x 轴**（BlockBench 中取的方向，随 FACING 旋转仍沿桌面方向）；**档位模式 / 4 tick 一档 / 张力蠕动 / 帧平滑已按用户定稿**
 
 ## CC 外设（✅ 外设注册 + Lua API 已接入，待 Lua 侧验证信号）
 
@@ -151,6 +157,7 @@ flowchart LR
 5. ✅ 操纵杆倾斜动画（15°、枢轴 8,3,3、**模拟轴动力学驱动**：按下逼近 ±1 / 松开按回正时间归零，Flywheel Visual + BER 双路径）；✅ 踏板平移动画（踩下 = 模型空间 +z 1px / 抬起 = -z 1px、指数逼近平滑，Flywheel Visual + BER 双路径，`PedalMotion` 单一实现）
 6. 🔶 配置 GUI：✅ 控制台配置菜单（`ControlDeskConfigScreen`：扳手右键 / 空手蹲下右键打开；首条配置 = 频道滚轮条，复用全局频道注册表）+ 模块菜单背景 + 双按键绑定条 + 双滚轮条（回正/档位）+ 操纵杆全部配置持久化 + 脚踏板回正时间条与按键绑定持久化 已完成；⏳ 配置菜单其余控件（模块设置区块重新接入、脚踏板触发模式配置等）
 7. ✅ CC 外设注册（`ControlDeskPeripheral` + `pe.getPeripheral` / `peripheral.wrap` 可查，参考 Monitor 链路）✅ Lua API（操纵杆原始值/轴值/带符号 + 踏板踩下判断，直接读 BE 数值层）；⏳ Lua 侧验证信号
+8. ✅ 油门杆（throttle）档位逻辑 + 动画：写死按键（空格=前进 +x / 左Ctrl=后退 -x）→ `SeatInputPayload`（11 字段）→ 服务端校验 → BE 油门**档位**（0..11 离散，服务端权威，`getUpdatePacket` 广播）→ 手柄沿模型空间 x 轴平移（档位 × 1px，`approachStep` 快速逼近段落感）；每档切换 LEVER_CLICK 音效（音调随档位上升 0.75→1.5）；⏳ 接配置 UI（按键绑定 / 档位切换节奏）
 
 ## 待确认 / 风险清单
 
@@ -161,5 +168,5 @@ flowchart LR
 | 3 | 按键/回正时间配置保存链路已实施（操纵杆 + 脚踏板，`ControlDeskBlockEntity` NBT + `getUpdatePacket`/`writeSafe` 蓝图兼容）；触发模式（按住式/切换式）UI 待做 | 配置 |
 | 4 | 踏板平移行程已定 1px（踩下 +z / 抬起 -z，已进游戏验证）；操纵杆方向符号待进游戏验证（反了翻转 `JoystickTilt.targetDeg` 符号） | 动画 |
 | 5 | 广播语义：坐垫四邻多个 controlDesk 同时响应时，各自控件安装情况不同（未安装的忽略）——需确认无额外要求 | 联动 |
-| 6 | 安装位固定为北侧 z0..8 三块（左踏板 x11..16 / 操纵杆 x5..11 / 右踏板 x0..5），`ControlDeskBlock` 的 `*_SHAPE` 常量可调——确认当前位置满意 | 安装位 |
+| 6 | 安装位固定为北侧 z0..8 三块（左踏板 x11..16 / 操纵杆 x5..11 / 右踏板 x0..5）+ 桌体后缘上方整宽插槽（monitor_2 / throttle 共用互斥，y8..14 z8..16），`ControlDeskBlock` 的 `*_SHAPE` 常量可调——确认当前位置满意 | 安装位 |
 | 7 | 触发模式（按住式/切换式）配置 UI 待做 | 配置 GUI |

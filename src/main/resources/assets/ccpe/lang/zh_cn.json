@@ -73,6 +73,8 @@
   "item.ccpe.module_screen": "屏幕模块",
   "item.ccpe.pedal": "脚踏板",
   "item.ccpe.joystick": "操纵杆",
+  "item.ccpe.monitor_2": "监视器 2",
+  "item.ccpe.throttle": "油门杆",
 
   "gui.ccpe.control_desk.already_installed": "该控件已安装",
   "gui.ccpe.control_desk.bind_unbound": "未绑定",

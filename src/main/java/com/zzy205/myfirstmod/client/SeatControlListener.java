@@ -62,7 +62,7 @@ public class SeatControlListener {
         if (mc.screen != null) {
             // GUI 打开时不判定按键；向服务端发一次释放（自由模式回正 / 档位模式保持 / 踏板回正），避免控件卡在按住状态
             if (lastSeatPos != null) {
-                sendInput(lastSeatPos, false, false, false, false, false, false, false, false);
+                sendInput(lastSeatPos, false, false, false, false, false, false, false, false, false, false);
             }
             return;
         }
@@ -71,7 +71,7 @@ public class SeatControlListener {
         if (seatPos == null) {
             // 离开坐垫：发一次释放（服务端租约校验也会兜底清除）
             if (lastSeatPos != null) {
-                sendInput(lastSeatPos, false, false, false, false, false, false, false, false);
+                sendInput(lastSeatPos, false, false, false, false, false, false, false, false, false, false);
             }
             reset();
             return;
@@ -143,6 +143,8 @@ public class SeatControlListener {
         boolean hasJoystick = joyDesk != null;
         boolean hasPedal = desks.stream()
                 .anyMatch(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL));
+        boolean hasThrottle = desks.stream()
+                .anyMatch(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE));
 
         // 各方向/踏板键的按下态（方向槽位并集，任一联动控制台该方向绑定的键按下即生效）
         boolean rawX = false, rawY = false;
@@ -162,6 +164,17 @@ public class SeatControlListener {
                 case null -> {}
             }
         }
+
+        // 油门：写死按键（原始 GLFW 状态）——空格 = 前进（模型空间 +x）/ 左Ctrl = 后退（-x），
+        // 仅当联动中有装油门杆的控制台时上报（服务端校验后驱动 BE 油门档位）
+        boolean throttleForward = false, throttleBack = false;
+        if (hasThrottle) {
+            throttleForward = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_SPACE) == GLFW.GLFW_PRESS;
+            throttleBack = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS;
+        }
+        // 油门操作方向写入共享状态（渲染层"按住蠕动 + 步进突然到位"用；渲染层自行检测方向变化重置张力）
+        SeatControlState.setThrottleDir((throttleForward && !throttleBack) ? 1
+                : ((throttleBack && !throttleForward) ? -1 : 0));
 
         float targetX = right && !left ? 1f : (left && !right ? -1f : 0f);
         float targetY = up && !down ? 1f : (down && !up ? -1f : 0f);
@@ -198,10 +211,11 @@ public class SeatControlListener {
         SeatControlState.setGearHold(gearModeX, gearModeY);
         SeatControlState.update(true, hasJoystick, axisX, axisY, rawX, rawY, Math.abs(axisX), Math.abs(axisY));
 
-        // 运行时输入上报服务端（服务端权威模拟 + getUpdatePacket 广播；装操纵杆或踏板的联动台才需要）
-        if (hasJoystick || hasPedal) {
+        // 运行时输入上报服务端（服务端权威模拟 + getUpdatePacket 广播；装操纵杆/踏板/油门杆的联动台才需要）
+        if (hasJoystick || hasPedal || hasThrottle) {
             sendInput(seatPos, up, down, left, right,
-                    pedalLeftDown, pedalLeftUp, pedalRightDown, pedalRightUp);
+                    pedalLeftDown, pedalLeftUp, pedalRightDown, pedalRightUp,
+                    throttleForward, throttleBack);
         }
 
         lastDown.clear();
@@ -219,9 +233,11 @@ public class SeatControlListener {
     /** 发送坐垫操作输入到服务端（服务端校验后驱动 BE 控件状态，见 ControlDeskPacketHandlers）。 */
     private static void sendInput(BlockPos seatPos, boolean up, boolean down, boolean left, boolean right,
                                   boolean pedalLeftDown, boolean pedalLeftUp,
-                                  boolean pedalRightDown, boolean pedalRightUp) {
+                                  boolean pedalRightDown, boolean pedalRightUp,
+                                  boolean throttleForward, boolean throttleBack) {
         PacketDistributor.sendToServer(new SeatInputPayload(seatPos, up, down, left, right,
-                pedalLeftDown, pedalLeftUp, pedalRightDown, pedalRightUp));
+                pedalLeftDown, pedalLeftUp, pedalRightDown, pedalRightUp,
+                throttleForward, throttleBack));
     }
 
     private static void reset() {
