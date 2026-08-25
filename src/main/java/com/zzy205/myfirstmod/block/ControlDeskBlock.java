@@ -125,9 +125,9 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             if (!(be instanceof ControlDeskBlockEntity desk)) {
                 return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
             }
-            // 安装成功：throttle / joystick_2 按「桌体→玩家的水平方向」记录旋转（throttle 只能 0°/180°，
-            // joystick_2 90° 间隔，均让模型 -Z 面向玩家）+ 放置中心（throttle 恒为唯一合法位 (8,12)；
-            // joystick_2 按右键命中点吸附到 1px 网格，与客户端预览一致）
+            // 安装成功：throttle / joystick_2 按「桌体→玩家的水平方向」记录旋转（throttle 只能 0°/180°、
+            // joystick_2 90° 间隔，均让模型 -Z 面向玩家）；monitor_2 不面向玩家（不记录旋转，只随桌体 FACING）。
+            // 放置中心：throttle / monitor_2 恒为唯一合法位 (8,12)；joystick_2 按右键命中点吸附到 1px 网格，与客户端预览一致
             int placeX = 8, placeZ = 8;
             Direction toPlayer = null;
             if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
@@ -139,6 +139,10 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 placeX = ControlDeskBlockEntity.THROTTLE_PLACE_X;
                 placeZ = ControlDeskBlockEntity.THROTTLE_PLACE_Z;
                 toPlayer = directionFromDeskTo(player, pos);
+            } else if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
+                placeX = ControlDeskBlockEntity.MONITOR_2_PLACE_X;
+                placeZ = ControlDeskBlockEntity.MONITOR_2_PLACE_Z;
+                // toPlayer 保持 null：monitor_2 不做面向玩家的旋转
             }
             if (!desk.install(type, placeX, placeZ, toPlayer)) {
                 // 已安装 / 位置被占用：不消耗物品，提示玩家
@@ -203,9 +207,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 点击位置命中的已安装控件类型（PEDAL 左右两框任一命中即算；JOYSTICK_2 / THROTTLE 命中各自放置盒）；
+     * 点击位置命中的已安装控件类型（PEDAL 左右两框任一命中即算；JOYSTICK_2 / THROTTLE / MONITOR_2 命中各自放置盒）；
      * 未命中返回 null。
-     * （monitor_2 尚无放置位框，按位置拆除待其放置系统落地后重做）
      */
     private static ControlDeskBlockEntity.ControlType hitControlType(ControlDeskBlockEntity desk, Direction facing,
                                                                     BlockPos pos, Vec3 click) {
@@ -224,6 +227,10 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
                 && hitBounds(List.of(throttlePlaceBox(desk, facing, pos)), click)) {
             return ControlDeskBlockEntity.ControlType.THROTTLE;
+        }
+        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
+                && hitBounds(List.of(monitor2PlaceBox(desk, facing, pos)), click)) {
+            return ControlDeskBlockEntity.ControlType.MONITOR_2;
         }
         return null;
     }
@@ -254,6 +261,22 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM, cz - ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z, facing);
         Vec3 p1 = modelToWorld(pos, cx + ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X,
                 ControlDeskBlockEntity.THROTTLE_PLACE_Y_TOP, cz + ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z, facing);
+        return new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+    }
+
+    /**
+     * monitor_2 放置盒的世界 AABB（北向基准 14×6×12，中心 = 放置中心 placeX/placeZ（唯一合法位 (8,12)），底 y7；
+     * 随 FACING 旋转，与渲染/预览一致）。供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
+     */
+    public static AABB monitor2PlaceBox(ControlDeskBlockEntity desk, Direction facing, BlockPos pos) {
+        int cx = desk.getMonitor2PlaceX();
+        int cz = desk.getMonitor2PlaceZ();
+        Vec3 p0 = modelToWorld(pos, cx - ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.MONITOR_2_PLACE_Y_BOTTOM, cz - ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z, facing);
+        Vec3 p1 = modelToWorld(pos, cx + ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.MONITOR_2_PLACE_Y_TOP, cz + ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z, facing);
         return new AABB(
                 Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
                 Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));

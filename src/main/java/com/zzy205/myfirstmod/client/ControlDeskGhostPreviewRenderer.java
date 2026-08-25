@@ -54,11 +54,7 @@ public class ControlDeskGhostPreviewRenderer {
         ItemStack held = mc.player.getMainHandItem();
         ControlDeskBlockEntity.ControlType type = ControlDeskPlacementOverlay.controlTypeOf(held);
         if (type == null) return;
-        // monitor_2：原后缘插槽已移除，放置系统待做——本轮不显示半透明 ghost；
-        // joystick_2 / throttle 已接入棋盘自由放置：实物预览跟随各自 3D 预览盒（见下方盒位平移）
-        if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
-            return;
-        }
+        // joystick_2 / throttle / monitor_2 已接入棋盘自由放置：实物预览跟随各自 3D 预览盒（见下方盒位平移）
         if (!(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) return;
         BlockPos pos = hit.getBlockPos();
         BlockState state = mc.level.getBlockState(pos);
@@ -67,30 +63,33 @@ public class ControlDeskGhostPreviewRenderer {
         if (desk.isInstalled(type)) return; // 已装该控件：不显示半透明模型（红色线框由 overlay 负责）
 
         Direction facing = state.getValue(ControlDeskBlock.FACING);
-        // 预览盒中心与放置常量：joystick_2 跟随准星吸附到 1px 网格；throttle 为唯一合法位 (8,12)（14×6 全占网格）；
+        // 预览盒中心与放置常量：joystick_2 跟随准星吸附到 1px 网格；throttle / monitor_2 为唯一合法位 (8,12)（14×6 全占网格）；
         // PEDAL / JOYSTICK 无放置盒（固定安装位）→ box 保持 null（不平移、不绕盒心旋转）
         int[] box = null;
         float modelCenter = 0f;
         float placeYBottom = 0f;
+        int halfX = 0, halfZ = 0;
         if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
             box = ControlDeskBlock.snappedBoxCenter(pos, facing, hit.getLocation());
             modelCenter = ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER;
             placeYBottom = ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM;
+            halfX = halfZ = ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF;
         } else if (type == ControlDeskBlockEntity.ControlType.THROTTLE) {
             box = new int[]{ControlDeskBlockEntity.THROTTLE_PLACE_X, ControlDeskBlockEntity.THROTTLE_PLACE_Z};
             modelCenter = ControlDeskBlockEntity.THROTTLE_MODEL_CENTER;
             placeYBottom = ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM;
+            halfX = ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X;
+            halfZ = ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z;
+        } else if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
+            box = new int[]{ControlDeskBlockEntity.MONITOR_2_PLACE_X, ControlDeskBlockEntity.MONITOR_2_PLACE_Z};
+            modelCenter = ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER;
+            placeYBottom = ControlDeskBlockEntity.MONITOR_2_PLACE_Y_BOTTOM;
+            halfX = ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X;
+            halfZ = ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z;
         }
-        // 候选位置被阻挡（monitor_2 互斥已装 / 占地矩形占用重叠）→ 不显示实物（盒子在 overlay 中变红）
-        if (box != null) {
-            int halfX = type == ControlDeskBlockEntity.ControlType.JOYSTICK_2
-                    ? ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF : ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X;
-            int halfZ = type == ControlDeskBlockEntity.ControlType.JOYSTICK_2
-                    ? ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF : ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z;
-            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
-                    || desk.blocksPlacement(box[0], box[1], halfX, halfZ)) {
-                return;
-            }
+        // 候选位置被占地矩形占用重叠 → 不显示实物（盒子在 overlay 中变红）
+        if (box != null && desk.blocksPlacement(box[0], box[1], halfX, halfZ)) {
+            return;
         }
 
         Vec3 camera = event.getCamera().getPosition();
@@ -102,7 +101,8 @@ public class ControlDeskGhostPreviewRenderer {
         ms.translate(pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z);
         // 实物预览：模型平移到盒位（模型默认中心 x/z=8、底座底 y=0 → 放置位底 y=7，见 ControlDeskBlockEntity 常量）；
         // 安装朝向旋转绕盒子中心进行（模型已到盒位，绕盒心转才不甩开）。
-        // 安装朝向旋转预览：与实装同公式（桌体 FACING + 桌→玩家水平方向；joystick_2 90° 间隔、throttle 只能 0°/180°）
+        // 安装朝向旋转预览：与实装同公式（桌体 FACING + 桌→玩家水平方向；joystick_2 90° 间隔、throttle 只能 0°/180°、
+        // monitor_2 不面向玩家 → 0）
         Direction toPlayer = ControlDeskBlock.directionFromDeskTo(mc.player, pos);
         int previewRot = switch (type) {
             case JOYSTICK_2 -> ControlDeskBlockEntity.rotationToFace(facing, toPlayer);

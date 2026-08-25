@@ -104,8 +104,9 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         this.joystick = syncInstance(this.joystick, joystickWanted, MyModPartialModels.CONTROL_DESK_JOYSTICK, facing,
                 inst -> applyTilt(inst, tiltX, tiltY));
 
-        // monitor_2：桌体后缘上方插槽（静态）；throttle 已接入棋盘自由放置——模型平移到放置位 + 安装朝向旋转绕放置中心
-        this.monitor2 = syncInstance(this.monitor2, monitor2Wanted, MyModPartialModels.CONTROL_DESK_MONITOR_2, facing, null);
+        // monitor_2：已接入棋盘自由放置——模型平移到放置位，不面向玩家（无安装朝向旋转，仅随桌体 FACING）
+        this.monitor2 = syncInstance(this.monitor2, monitor2Wanted, MyModPartialModels.CONTROL_DESK_MONITOR_2, facing,
+                inst -> applyMonitor2Placement(inst, be));
         this.throttleBase = syncInstance(this.throttleBase, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_BASE, facing,
                 inst -> applyThrottlePlacement(inst, be));
 
@@ -172,6 +173,17 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
                 be.getThrottlePlaceX(), be.getThrottlePlaceZ(),
                 ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM,
                 ControlDeskBlockEntity.THROTTLE_MODEL_BOTTOM_Y);
+    }
+
+    /**
+     * monitor_2 放置变换（唯一合法位 (8,12)，见 {@link ControlDeskBlockEntity#MONITOR_2_PLACE_X}）：
+     * 不面向玩家（backRot 恒 0）——仅平移到放置位，随桌体 FACING 旋转。
+     */
+    private static void applyMonitor2Placement(TransformedInstance inst, ControlDeskBlockEntity be) {
+        applyPlacement(inst, 0,
+                be.getMonitor2PlaceX(), be.getMonitor2PlaceZ(),
+                ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER, ControlDeskBlockEntity.MONITOR_2_PLACE_Y_BOTTOM,
+                ControlDeskBlockEntity.MONITOR_2_MODEL_BOTTOM_Y);
     }
 
     /**

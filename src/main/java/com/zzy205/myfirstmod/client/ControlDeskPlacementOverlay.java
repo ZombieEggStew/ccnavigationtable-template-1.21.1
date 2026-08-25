@@ -70,9 +70,10 @@ public class ControlDeskPlacementOverlay {
         if (type != null) {
             showInstallPreview(mc, hit, type);
             // monitor_2 / throttle / joystick_2 的原后缘插槽已移除（installBounds 为空 → 无 AABB 安装预览框）；
-            // 手持 throttle / joystick_2 时改显桌顶 6×14 棋盘网格（1px 格、内缩 1px；纯显示，放置逻辑待做）
+            // 手持三者时改显桌顶 6×14 棋盘网格（1px 格、内缩 1px；纯显示）
             if (type == ControlDeskBlockEntity.ControlType.THROTTLE
-                    || type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
+                    || type == ControlDeskBlockEntity.ControlType.JOYSTICK_2
+                    || type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
                 showTopGrid(mc, hit);
             }
             // joystick_2：额外显示 3D 放置预览盒（4×9×4，底在桌顶面，跟随准星吸附到 1px 网格）
@@ -82,6 +83,10 @@ public class ControlDeskPlacementOverlay {
             // throttle：额外显示 3D 放置预览盒（14×6×6，唯一合法位 (8,12) 全占桌顶网格）
             if (type == ControlDeskBlockEntity.ControlType.THROTTLE) {
                 showThrottleBox(mc, hit);
+            }
+            // monitor_2：额外显示 3D 放置预览盒（14×6×12，唯一合法位 (8,12) 全占桌顶网格）
+            if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
+                showMonitor2Box(mc, hit);
             }
             return;
         }
@@ -135,6 +140,15 @@ public class ControlDeskPlacementOverlay {
                 AABB box = ControlDeskBlock.throttlePlaceBox(desk, facing, pos);
                 boolean hovered = ControlDeskBlock.hitBounds(List.of(box), click);
                 Outliner.getInstance().showAABB("control-desk/remove/" + pos.toShortString() + "/THROTTLE", box)
+                        .colored(hovered ? COLOR_INVALID : COLOR_VALID)
+                        .lineWidth(1 / 64f);
+                continue;
+            }
+            if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
+                // 监视器2：显示放置位 14×6×12 盒子（与安装预览/服务端拆除判定共用 ControlDeskBlock.monitor2PlaceBox）
+                AABB box = ControlDeskBlock.monitor2PlaceBox(desk, facing, pos);
+                boolean hovered = ControlDeskBlock.hitBounds(List.of(box), click);
+                Outliner.getInstance().showAABB("control-desk/remove/" + pos.toShortString() + "/MONITOR_2", box)
                         .colored(hovered ? COLOR_INVALID : COLOR_VALID)
                         .lineWidth(1 / 64f);
                 continue;
@@ -252,27 +266,62 @@ public class ControlDeskPlacementOverlay {
     }
 
     /**
-     * joystick_2 候选放置（中心 cx,cz）是否被阻挡：同类型已装 / monitor_2 已装（互斥）/
-     * 4×4 与已装模块占用矩形重叠（{@link ControlDeskBlockEntity#blocksPlacement}，含 throttle 的 14×6）。
+     * 手持 monitor_2：3D 放置预览盒（占地 14×6、高 12，底在桌顶面下方 1px = y7..19）。
+     * monitor_2 占地 14×6 必须完全处于桌顶网格（x1..15 / z9..15）内 → 唯一合法位置 (8,12)（全占），
+     * 盒子固定显示在该位置（绿=可装 / 红=已装或被占用，与服务端 install 判定一致）。
+     */
+    private static void showMonitor2Box(Minecraft mc, BlockHitResult hit) {
+        BlockPos pos = hit.getBlockPos();
+        BlockState state = mc.level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ControlDeskBlock)) return;
+        Direction facing = state.getValue(ControlDeskBlock.FACING);
+
+        int cx = ControlDeskBlockEntity.MONITOR_2_PLACE_X;
+        int cz = ControlDeskBlockEntity.MONITOR_2_PLACE_Z;
+        boolean blocked = isMonitor2PlacementBlocked(mc, pos, cx, cz);
+        Vec3 p0 = gridWorld(pos, cx - ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.MONITOR_2_PLACE_Y_BOTTOM, cz - ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z, facing);
+        Vec3 p1 = gridWorld(pos, cx + ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.MONITOR_2_PLACE_Y_TOP, cz + ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z, facing);
+        AABB box = new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+        Outliner.getInstance().showAABB("control-desk/box-monitor2/" + pos.toShortString(), box)
+                .colored(blocked ? COLOR_INVALID : COLOR_VALID)
+                .lineWidth(1 / 64f);
+    }
+
+    /**
+     * joystick_2 候选放置（中心 cx,cz）是否被阻挡：同类型已装 /
+     * 与已装模块占地矩形重叠（{@link ControlDeskBlockEntity#blocksPlacement}，含 throttle / monitor_2 的 14×6）。
      */
     private static boolean isJoystick2PlacementBlocked(Minecraft mc, BlockPos pos, int cx, int cz) {
         if (!(mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return false;
         return desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
-                || desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
                 || desk.blocksPlacement(cx, cz,
                         ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF, ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF);
     }
 
     /**
-     * throttle 候选放置（唯一合法位 (8,12)）是否被阻挡：同类型已装 / monitor_2 已装（互斥）/
-     * 14×6 与已装模块占用矩形重叠（{@link ControlDeskBlockEntity#blocksPlacement}，含 joystick_2 的 4×4）。
+     * throttle 候选放置（唯一合法位 (8,12)）是否被阻挡：同类型已装 /
+     * 与已装模块占地矩形重叠（{@link ControlDeskBlockEntity#blocksPlacement}，含 joystick_2 的 4×4 与 monitor_2 的 14×6）。
      */
     private static boolean isThrottlePlacementBlocked(Minecraft mc, BlockPos pos, int cx, int cz) {
         if (!(mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return false;
         return desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
-                || desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
                 || desk.blocksPlacement(cx, cz,
                         ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X, ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z);
+    }
+
+    /**
+     * monitor_2 候选放置（唯一合法位 (8,12)）是否被阻挡：同类型已装 /
+     * 与已装模块占地矩形重叠（{@link ControlDeskBlockEntity#blocksPlacement}，含 joystick_2 的 4×4 与 throttle 的 14×6）。
+     */
+    private static boolean isMonitor2PlacementBlocked(Minecraft mc, BlockPos pos, int cx, int cz) {
+        if (!(mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return false;
+        return desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
+                || desk.blocksPlacement(cx, cz,
+                        ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X, ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z);
     }
 
     /** 手持物品 → 控件类型（供本类预览判定与 {@link ControlDeskGhostPreviewRenderer} 半透明模型预览复用）。 */

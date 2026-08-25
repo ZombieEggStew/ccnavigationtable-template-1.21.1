@@ -2,7 +2,7 @@
 
 > 记录 controlDesk 桌顶「棋盘网格」自由放置系统的**设计与实现**，作为后续添加新模块（throttle / monitor_2 / 新控件）的参考。
 > **背景**：monitor_2 / throttle / joystick_2 原本共用桌体后缘上方插槽（`BACK_SLOT`，整宽一条、互斥安装）——该插槽已**整体移除**，改为在桌顶显示 6×14 的 1px 棋盘网格，模块自由放置（先做显示，放置逻辑逐步落地）。
-> 本文描述的状态：**joystick_2 已完整接入**（预览 → 放置 → 存储 → 渲染 → 拆除 → 占用阻挡）；**throttle 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，只能 0°/180° 旋转）；monitor_2 未接入自由放置（仍与两者互斥）。
+> 本文描述的状态：**joystick_2 已完整接入**（预览 → 放置 → 存储 → 渲染 → 拆除 → 占用阻挡）；**throttle 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，只能 0°/180° 旋转）；**monitor_2 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，预览框高 12，**不面向玩家**只随桌体 FACING 旋转）。三者互斥已全部改为纯占地判定。
 
 ## 一句话
 
@@ -31,7 +31,12 @@
 | `THROTTLE_PLACE_Y_TOP` | 13f | throttle 放置位顶 y（高 6） |
 | `THROTTLE_MODEL_CENTER` | 8f | throttle 模型默认中心 x/z（Blockbench 中模型 x0.99..15.01 / z4.99..11.01 → 8） |
 | `THROTTLE_PLACE_X / _Z` | 8 / 12 | throttle **唯一合法放置中心**（14×6 全占网格 x1..15 / z9..15） |
-| `JOYSTICK_2_MODEL_BOTTOM_Y` | 0f | 模型底座底 y（joystick_2 / throttle 均 0） |
+| `MONITOR_2_FOOTPRINT_HALF_X / _Z` | 7 / 3 | monitor_2 占地半宽（14×6 → x±7 / z±3）；预览盒与占用阻挡共用 |
+| `MONITOR_2_PLACE_Y_BOTTOM` | 7f | monitor_2 放置位底 y（嵌入桌面 1px） |
+| `MONITOR_2_PLACE_Y_TOP` | 19f | monitor_2 放置位顶 y（高 12） |
+| `MONITOR_2_MODEL_CENTER` | 8f | monitor_2 模型默认中心 x/z（Blockbench 中模型 14×6 居中 → 8，**用户会同步改模型**） |
+| `MONITOR_2_PLACE_X / _Z` | 8 / 12 | monitor_2 **唯一合法放置中心**（14×6 全占网格） |
+| `JOYSTICK_2_MODEL_BOTTOM_Y` | 0f | 模型底座底 y（joystick_2 / throttle / monitor_2 均 0） |
 | `rotationToFace(Direction, Direction)` | 静态方法 | **joystick_2 安装旋转**：桌体 FACING + 桌→玩家水平方向 → 90° 间隔，让模型 -Z（Blockbench 北向正面）面向玩家：`floorMod(toYRot(facing) - toYRot(toPlayer), 360)`；`toPlayer` 由 `ControlDeskBlock.directionFromDeskTo`（桌体中心→玩家最近基本方向）计算，预览与实装共用 |
 | `rotationToFace180(Direction, Direction)` | 静态方法 | **throttle 安装旋转**：`rotationToFace` 结果量化到最近 0°/180°（油门只能 180° 旋转） |
 
@@ -41,13 +46,13 @@
 
 ```mermaid
 flowchart LR
-    A[手持 joystick_2 / throttle + 准星指向控制台] --> B[ControlDeskPlacementOverlay: 桌顶网格 + 放置预览盒 绿/红]
+    A[手持 joystick_2 / throttle / monitor_2 + 准星指向控制台] --> B[ControlDeskPlacementOverlay: 桌顶网格 + 放置预览盒 绿/红]
     B --> C[ControlDeskGhostPreviewRenderer: 半透明实物跟随盒子]
     C --> D[右键安装 useItemOn 服务端]
-    D --> E[放置中心: joystick_2 命中点吸附 / throttle 恒 (8,12)]
-    E --> F[ControlDeskBlockEntity.install: 记录 placeX/Z + 占用检查 + 安装旋转]
+    D --> E[放置中心: joystick_2 命中点吸附 / throttle·monitor_2 恒 (8,12)]
+    E --> F[ControlDeskBlockEntity.install: 记录 placeX/Z + 占用检查 + 安装旋转(monitor_2 无)]
     F --> G[NBT PlaceX/Z + getUpdatePacket 同步]
-    G --> H[渲染 Visual/BER: 模型平移到放置位 + 绕放置中心旋转]
+    G --> H[渲染 Visual/BER: 模型平移到放置位 + 绕放置中心旋转(monitor_2 无)]
     F --> I[占用记录 blocksPlacement: 矩形重叠阻挡安装]
     A2[手持扳手 + 准星] --> J[showRemovePreview: 已装模块线框/放置盒]
     J --> K[蹲下右键 onSneakWrenched: hitControlType 命中放置盒 → remove + 掉落]
@@ -56,19 +61,19 @@ flowchart LR
 ## 各文件职责与关键方法
 
 ### `block/ControlDeskBlockEntity.java`（服务端状态权威）
-- 字段：`joystick2PlaceX/Z`（int，默认 8）、`throttlePlaceX/Z`（int，默认 8/12 = 唯一合法位）、`backSlotRotation`（int，默认 0）
-- `install(type, placeX, placeZ, toPlayer)`：JOYSTICK_2 / THROTTLE 分支记录位置 + `blocksPlacement` 占用检查 + 按 `toPlayer` 记录安装朝向旋转（`rotationToFace` / `rotationToFace180`）；PEDAL / JOYSTICK 忽略位置；MONITOR_2 仍互斥（无占地矩形）
-- `blocksPlacement(cx, cz, halfX, halfZ)`：候选矩形 vs 已装模块占地矩形重叠判定（joystick_2 4×4 + throttle 14×6）；**throttle↔joystick_2 之间已改纯占用判定**（throttle 全占网格 → 实际仍互斥）
-- `remove(type)`：JOYSTICK_2 重置位置 (8,8)；THROTTLE 重置位置 (8,12)
-- `getJoystick2PlaceX/Z()` / `getThrottlePlaceX/Z()` / `getBackSlotRotation()`
-- NBT：`Joystick2PlaceX/Z` + `ThrottlePlaceX/Z`（四路径全覆盖，蓝图兼容；旧存档缺字段保持默认）
+- 字段：`joystick2PlaceX/Z`（int，默认 8）、`throttlePlaceX/Z`（int，默认 8/12）、`monitor2PlaceX/Z`（int，默认 8/12）、`backSlotRotation`（int，默认 0）
+- `install(type, placeX, placeZ, toPlayer)`：JOYSTICK_2 / THROTTLE / MONITOR_2 分支记录位置 + `blocksPlacement` 占用检查；JOYSTICK_2 / THROTTLE 按 `toPlayer` 记录安装朝向旋转（`rotationToFace` / `rotationToFace180`），**monitor_2 不记录旋转**（只随桌体 FACING）；PEDAL / JOYSTICK 忽略位置
+- `blocksPlacement(cx, cz, halfX, halfZ)`：候选矩形 vs 已装模块占地矩形重叠判定（joystick_2 4×4 + throttle / monitor_2 各 14×6）；**三者互斥已全部改为纯占用判定**（monitor_2 / throttle 同占 (8,12) 全占网格 → 天然互斥）
+- `remove(type)`：JOYSTICK_2 重置 (8,8)；THROTTLE / MONITOR_2 重置 (8,12)
+- `getJoystick2PlaceX/Z()` / `getThrottlePlaceX/Z()` / `getMonitor2PlaceX/Z()` / `getBackSlotRotation()`
+- NBT：`Joystick2PlaceX/Z` + `ThrottlePlaceX/Z` + `Monitor2PlaceX/Z`（四路径全覆盖，蓝图兼容；旧存档缺字段保持默认）
 - ~~`rotationFor`（按玩家朝向）已删除~~——throttle / joystick_2 均改用 `rotationToFace` 系列（与桌体 FACING 相关，对任意桌体朝向正确）
 
 ### `block/ControlDeskBlock.java`（交互 + 纯数学工具，服务端/客户端共用）
-- `useItemOn`（服务端安装）：JOYSTICK_2 → `snappedBoxCenter(pos, FACING, hitResult.getLocation())`；THROTTLE → 恒 (8,12)；两者均 `directionFromDeskTo` → `install`；失败提示「已安装」/「位置被占用」（`gui.ccpe.control_desk.position_occupied`）
+- `useItemOn`（服务端安装）：JOYSTICK_2 → `snappedBoxCenter(pos, FACING, hitResult.getLocation())`；THROTTLE / MONITOR_2 → 恒 (8,12)（monitor_2 不传 toPlayer，无旋转）；失败提示「已安装」/「位置被占用」（`gui.ccpe.control_desk.position_occupied`）
 - `onSneakWrenched`（扳手蹲下右键）：`hitControlType` 命中 → `remove` + `Block.popResource` 掉落 + 拆除音效
-- `hitControlType`：PEDAL/JOYSTICK 走 `installBounds` 安装位框；JOYSTICK_2 / THROTTLE 走各自放置盒
-- `joystick2PlaceBox(desk, facing, pos)` / `throttlePlaceBox(desk, facing, pos)` → 世界 AABB（放置盒，拆除命中 + 客户端扳手预览共用）
+- `hitControlType`：PEDAL/JOYSTICK 走 `installBounds` 安装位框；JOYSTICK_2 / THROTTLE / MONITOR_2 走各自放置盒
+- `joystick2PlaceBox(desk, facing, pos)` / `throttlePlaceBox` / `monitor2PlaceBox` → 世界 AABB（放置盒，拆除命中 + 客户端扳手预览共用）
 - `modelToWorld(pos, x, y, z, facing)`：北向基准 px → 世界（私有；`gridWorld` 的纯数学版，无 +0.06 抬高）
 - `snappedBoxCenter(pos, facing, click)` → `{cx, cz}`：命中点 → 北向模型坐标 → 吸附整数 px（**预览与放置共用的唯一吸附实现**）
 - `directionFromDeskTo(player, pos)`：桌体中心 → 玩家最近水平方向（90° 间隔；joystick_2 / throttle 安装旋转 + ghost 预览共用，防偏差）
@@ -76,16 +81,17 @@ flowchart LR
 - `installBounds(type, facing, pos)`：仅 PEDAL（左右两框）/ JOYSTICK 有安装位框；MONITOR_2/THROTTLE/JOYSTICK_2 返回**空列表**（自由放置模块走放置盒）
 
 ### `client/ControlDeskPlacementOverlay.java`（客户端预览，ClientTickEvent.Pre，每 tick 重绘）
-- `showTopGrid`：手持 throttle / joystick_2 时桌顶 6×14 白色网格线（1/128 线宽；y=7.1 + `gridWorld` 的 +0.06 → 恰好桌顶面，防 z-fight）
+- `showTopGrid`：手持 throttle / joystick_2 / monitor_2 时桌顶 6×14 白色网格线（1/128 线宽；y=7.1 + `gridWorld` 的 +0.06 → 恰好桌顶面，防 z-fight）
 - `showJoystick2Box`：手持 joystick_2 时 4×9×4 绿色盒子（1/64 线宽），被阻挡变红；盒子中心 = `ControlDeskBlock.snappedBoxCenter`
 - `showThrottleBox`：手持 throttle 时 14×6×6 绿色盒子（1/64 线宽），**固定显示在唯一合法位 (8,12)**（不跟随准星），被阻挡变红
-- `isJoystick2PlacementBlocked` / `isThrottlePlacementBlocked`：同类型已装 / monitor_2 已装（互斥）/ `blocksPlacement` 占用重叠
-- `showRemovePreview`：手持扳手时已装模块线框（PEDAL/JOYSTICK 安装位框；JOYSTICK_2 / THROTTLE 放置盒），命中变红
+- `showMonitor2Box`：手持 monitor_2 时 14×6×12 绿色盒子（1/64 线宽），**固定显示在唯一合法位 (8,12)**，被阻挡变红
+- `isJoystick2PlacementBlocked` / `isThrottlePlacementBlocked` / `isMonitor2PlacementBlocked`：同类型已装 / `blocksPlacement` 占用重叠（纯占用，无显式互斥）
+- `showRemovePreview`：手持扳手时已装模块线框（PEDAL/JOYSTICK 安装位框；JOYSTICK_2 / THROTTLE / MONITOR_2 放置盒），命中变红
 - `gridWorld`：北向基准 px → 世界（含 +0.06 y 抬高，仅预览绘制用）
 
 ### `client/ControlDeskGhostPreviewRenderer.java`（半透明实物预览，AFTER_BLOCK_ENTITIES）
-- 仅 PEDAL / JOYSTICK / JOYSTICK_2 / THROTTLE 显示（MONITOR_2 未接入）
-- JOYSTICK_2 / THROTTLE：模型平移到预览盒位（`shift`），安装朝向旋转绕盒子中心，被阻挡时不显示
+- PEDAL / JOYSTICK / JOYSTICK_2 / THROTTLE / MONITOR_2 均显示
+- JOYSTICK_2 / THROTTLE / MONITOR_2：模型平移到预览盒位（`shift`），JOYSTICK_2 / THROTTLE 安装朝向旋转绕盒子中心、**MONITOR_2 无旋转**，被阻挡时不显示
 - 变换链：`R_facing · [T(盒心)·R_install·T(-盒心)] · T(shift)`
 
 ### `block/ControlDeskVisual.java`（Flywheel）/ `block/ControlDeskRenderer.java`（BER 回退）
@@ -101,6 +107,7 @@ shift = ( (placeX-8)/16, (7-0)/16, (placeZ-8)/16 )
 - `R_install`：安装朝向旋转，绕**放置中心**转（模型已平移到放置位，绕放置中心转才不甩开；Y 旋转枢轴 y 值无关）
   - joystick_2：`rotationToFace(facing, 桌→玩家方向)`（90° 间隔）——让模型 **-Z（Blockbench 北向正面）面向安装时的玩家**；R_facing 已把 -Z 转到桌体 FACING 方向（操作者所在侧），故常规操作位安装 = 0°
   - throttle：`rotationToFace180(facing, 桌→玩家方向)`（**只能 0°/180°**，`rotationToFace` 结果量化到最近 0/180）
+  - monitor_2：**无 R_install**（不面向玩家，只随桌体 FACING）
 - `T(shift)` 必须是最内层（最后调用）：先于 facing/安装旋转作用于模型空间
 - 位置计算：BE 存整数 `placeX/placeZ`；渲染换算 `/16` 成块单位
 
@@ -115,16 +122,18 @@ shift = ( (placeX-8)/16, (7-0)/16, (placeZ-8)/16 )
 5. **安装/拆除**：BE `install` 分支（记录位置 + `blocksPlacement` 检查 + 记录安装朝向旋转）、`remove` 分支（重置位置）；`hitControlType` 加放置盒命中；lang「位置被占用」
 6. **预览**：`ControlDeskPlacementOverlay` 加手持时显示（网格加类型；盒子参考 `showJoystick2Box`，尺寸用常量）；`showRemovePreview` 加放置盒显示；`ControlDeskGhostPreviewRenderer` 加实物预览（若需要）并解除 early-return
 7. **渲染**：`MyModPartialModels` 加部件；`ControlDeskVisual`（`syncInstance` + 放置变换）+ `ControlDeskRenderer`（放置变换）——三处变换保持一致
-8. **占用**：`blocksPlacement` 加 X 的占地矩形判定（半宽/非方形需扩展参数）；**`install` 里 throttle↔joystick_2 的旧互斥已移除**（改为纯占用判定；monitor_2 接入后再移除其余互斥）
+8. **占用**：`blocksPlacement` 加 X 的占地矩形判定（半宽/非方形需扩展参数）；**三个自由放置模块（joystick_2 / throttle / monitor_2）的旧互斥已全部移除**（改为纯占用判定）
 9. **验证**：预览位置 == 实装位置；四个朝向安装旋转正确；占用阻挡生效；扳手拆除命中放置盒；破坏掉落
 
 ## 当前状态与已知边界
 
 - ✅ joystick_2 完整接入：桌顶网格 + 4×9×4 预览盒 + 半透明实物 + 位置存储/渲染 + 4×4 占用阻挡 + 扳手拆除
 - ✅ throttle 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×6 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + 只能 0°/180° 旋转 + 14×6 占用阻挡 + 扳手拆除
-- ⏳ monitor_2：未接入自由放置——`install` 仍与 throttle / joystick_2 互斥（无占地矩形）；接入时按上面 checklist 走，并移除剩余互斥
+- ✅ monitor_2 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×12 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + **不面向玩家**（仅随桌体 FACING）+ 14×6 占用阻挡 + 扳手拆除
+- 三个自由放置模块互斥已全部改为纯占地判定（monitor_2 / throttle 同占 (8,12) → 天然互斥；joystick_2 网格内也与两者重叠）
 - 网格线是纯显示层（Outliner），逻辑全部基于放置中心 + 占地矩形
 - 安装位置 = 服务端对**右键命中点**吸附（与客户端准星同射线）；多玩家极端场景如需精确可控，可改客户端发 payload（对齐 Monitor 的 PlaceModulePayload 模式）
 - 预览统一「下沉 1px」规则：模块预览盒/实物/实装放置位底都在 y7（嵌入桌面 1px）；网格线在桌顶面（y8，+0.06 防 z-fight），不下沉
 - 吸附中心 = 盒子中心（居中吸附）；如需 monitor 式「角落吸附」（准星=模块左上角），改 `snappedBoxCenter` 的取整方式即可
 - 旋转只能 0°/180° 的模块（throttle）：放置中心必须让占地矩形在 0° 与 180° 下重合（中心对称矩形，如 14×6 中心在 (8,12)）——否则两个角度占地不同，占用判定需按旋转区分
+- monitor_2 模型需在 Blockbench 中同步改为 14×6 居中 (8,8)（当前模型 12×8 是过渡态；代码按 MODEL_CENTER=8 设计）

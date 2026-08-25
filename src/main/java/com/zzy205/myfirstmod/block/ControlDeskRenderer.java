@@ -72,9 +72,12 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         } else {
             smoothTilts.remove(be.getBlockPos());
         }
-        // monitor_2：桌体后缘上方插槽（静态）；throttle 已接入棋盘自由放置——模型平移到放置位 + 安装朝向旋转绕放置中心
+        // monitor_2：已接入棋盘自由放置——模型平移到放置位，不面向玩家（无安装朝向旋转，仅随桌体 FACING）
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)) {
-            renderPart(MyModPartialModels.CONTROL_DESK_MONITOR_2, state, facing, ms, vb, light, 0);
+            SuperByteBuffer buffer = placedBuffer(MyModPartialModels.CONTROL_DESK_MONITOR_2, state, facing,
+                    be.getMonitor2PlaceX(), be.getMonitor2PlaceZ(),
+                    ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER, ControlDeskBlockEntity.MONITOR_2_PLACE_Y_BOTTOM, 0);
+            buffer.light(light).renderInto(ms, vb);
         }
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
             int backRot = be.getBackSlotRotation();
