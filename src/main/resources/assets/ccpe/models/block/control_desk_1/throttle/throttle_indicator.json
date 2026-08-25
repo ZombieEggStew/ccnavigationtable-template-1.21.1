@@ -1,28 +1,20 @@
 {
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
-
+	"render_type": "minecraft:cutout",
 	"textures": {
 		"0": "ccpe:block/control_desk/my_throttle",
 		"particle": "ccpe:block/control_desk/my_throttle"
 	},
 	"elements": [
 		{
-			"from": [14, 8, 11],
-			"to": [15, 9, 13],
-			"rotation": {"angle": 0, "axis": "y", "origin": [15, 0, 11]},
+			"from": [0.99, 7, 8.99],
+			"to": [15.01, 9, 15.01],
+			"rotation": {"angle": 0, "axis": "y", "origin": [12, 8, 10]},
 			"faces": {
-				"east": {"uv": [14, 14, 16, 15], "rotation": 180, "texture": "#0"},
-				"up": {"uv": [15, 14, 16, 16], "texture": "#0"}
-			}
-		},
-		{
-			"from": [1, 8, 11],
-			"to": [2, 9, 13],
-			"rotation": {"angle": 0, "axis": "y", "origin": [1, 0, 11]},
-			"faces": {
-				"west": {"uv": [14, 14, 16, 15], "texture": "#0"},
-				"up": {"uv": [15, 14, 16, 16], "texture": "#0"}
+				"east": {"uv": [0, 6, 1, 12], "rotation": 90, "texture": "#0"},
+				"west": {"uv": [13, 6, 14, 12], "rotation": 270, "texture": "#0"},
+				"up": {"uv": [0, 6, 14, 12], "texture": "#0"}
 			}
 		}
 	],
