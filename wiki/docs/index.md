@@ -21,6 +21,9 @@ A versatile remote terminal that supports:
 ### [🤪 Modular Monitor](monitor/overview.md)
 A 12×10 grid of module slots, freely controllable from Lua, satisfying interaction and information display needs in various scenarios.
 
+### [🪑 Control Desk](control-desk/overview.md)
+A seat-driven control console: install foot pedals and a joystick, sit on a Create seat to drive them with your keyboard, and read the states from Lua.
+
 ### [📻 Redstone Transceiver](redstone-transceiver/overview.md)
 Directly read and send Create Redstone Link signals without stacking redstone link blocks next to your computer.
 

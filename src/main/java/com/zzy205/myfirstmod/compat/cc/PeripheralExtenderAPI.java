@@ -1,6 +1,5 @@
 package com.zzy205.myfirstmod.compat.cc;
 
-import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
@@ -323,8 +322,6 @@ public class PeripheralExtenderAPI implements ILuaAPI {
 
         // 控制台频道 → 返回控制台自身的 CC:T 外设（与显示器共享同一频道命名空间，频道全局唯一）
         ControlDeskBlockEntity desk = ControlDeskRegistry.get(channel);
-        CCPeripheralExtender.LOGGER.info("[pe.getPeripheral] channel={} sensor={} monitor={} desk={}（registry size={}）",
-                channel, sensor != null, monitor != null, desk != null, GlobalChannelRegistry.size());
         if (desk != null) return desk.getPeripheral();
 
         return null;

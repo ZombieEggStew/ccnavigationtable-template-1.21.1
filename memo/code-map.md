@@ -181,7 +181,9 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/PeripheralExtenderRegistry.java` | 传感器频道登记表（委托全局注册表） |
 | `compat/cc/MonitorRegistry.java` | Monitor 频道登记表（委托全局注册表） |
 | `compat/cc/ControlDeskRegistry.java` | 控制台频道登记表（委托全局注册表，`get(channel)` 供 `pe.getPeripheral` 查找） |
-| `compat/cc/ControlDeskPeripheral.java` | 控制台的 `IPeripheral` 实现（`getType()` = `"ccpe:control_desk"`；Lua API：操纵杆原始值/轴值/带符号 + 踏板踩下判断，读 BE 数值层） |
+| `compat/cc/ControlDeskPeripheral.java` | 控制台的 `IPeripheral` 实现（`getType()` = `"ccpe:control_desk"`；`getModule("pedal"/"joystick")` 返回模块实例，未安装返回 nil） |
+| `compat/cc/PedalModuleHandle.java` | 脚踏板模块实例（全部 mainThread=false）：模拟量 `getLeftPedal()/getRightPedal()`（-1..1）+ 差值 `getPedalDifference()`（左−右）+ 方向判断 `isLeftPedalDown/isRightPedalDown`（轴值>0）与 `isLeftPedalUp/isRightPedalUp`（轴值<0） |
+| `compat/cc/JoystickModuleHandle.java` | 操纵杆模块实例：原始值 `isJoystickXActive/YActive` + 轴值 `getJoystickX/Y`（0..1）+ 带符号 `getJoystickXSigned/YSigned`（-1..1，全部 mainThread=false） |
 | `compat/cc/MonitorPeripheral.java` | Monitor 的 `IPeripheral` 实现（模块/屏幕查询入口） |
 | `compat/cc/ModuleHandle.java` | 模块/屏幕 Lua 实例的抽象基类（通用 get/set/tooltip） |
 | `compat/cc/ModuleHandleRegistry.java` | 按模块类型把 Java 记录包装成对应的 Lua handle |

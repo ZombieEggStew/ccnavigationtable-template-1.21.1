@@ -56,6 +56,7 @@ public final class ControlDeskPacketHandlers {
                     var be = PacketHelper.findBE(ctx.player().level(), payload.pos(), ControlDeskBlockEntity.class);
                     if (be != null) {
                         be.setPedalReturnTime(payload.returnTime());
+                        be.setPedalFreeSpeed(payload.freeSpeed());
                         be.setPedalKeys(payload.leftUp(), payload.leftDown(), payload.rightUp(), payload.rightDown());
                     }
                 }

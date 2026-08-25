@@ -9,23 +9,26 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * 客户端→服务端：保存 controlDesk 的脚踏板配置。
- * 含回正时间（tick，左右两个踏板共用）+ 四个按键绑定（InputConstants.Key.getName() 格式，空串 = 未绑定）。
+ * 含回正时间（tick，左右两个踏板共用）+ 满偏时间（tick，踩下/抬起按住到满偏）+ 四个按键绑定
+ * （InputConstants.Key.getName() 格式，空串 = 未绑定）。
  * 与操纵杆配置（{@link ControlDeskConfigPayload}）分开，避免两个屏幕互相覆盖对方的配置。
  */
 public record PedalConfigPayload(BlockPos pos,
                                  int returnTime,
+                                 int freeSpeed,
                                  String leftUp, String leftDown, String rightUp, String rightDown)
         implements CustomPacketPayload {
 
     public static final Type<PedalConfigPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "pedal_config"));
 
-    // composite 重载最多 6 字段，本包恰为 6 字段；沿用 ControlDeskConfigPayload 的手动编解码风格
+    // composite 重载最多 6 字段，本包 7 字段；沿用手动编解码风格
     public static final StreamCodec<RegistryFriendlyByteBuf, PedalConfigPayload> STREAM_CODEC =
             StreamCodec.of(
                     (buf, p) -> {
                         buf.writeBlockPos(p.pos());
                         buf.writeInt(p.returnTime());
+                        buf.writeInt(p.freeSpeed());
                         buf.writeUtf(p.leftUp());
                         buf.writeUtf(p.leftDown());
                         buf.writeUtf(p.rightUp());
@@ -33,6 +36,7 @@ public record PedalConfigPayload(BlockPos pos,
                     },
                     buf -> new PedalConfigPayload(
                             buf.readBlockPos(),
+                            buf.readInt(),
                             buf.readInt(),
                             buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf())
             );

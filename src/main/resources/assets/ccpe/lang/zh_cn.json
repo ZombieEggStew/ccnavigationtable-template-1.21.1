@@ -88,6 +88,8 @@
   "gui.ccpe.control_desk.joystick_free_mode": "自由模式",
   "gui.ccpe.control_desk.joystick_free_mode_tip": "自由模式下操纵杆平滑摆动；数值 = 按住到满偏所需 tick 数（20 tick = 1 秒，越小越快）",
   "gui.ccpe.control_desk.pedal_return_time": "回正时间",
+  "gui.ccpe.control_desk.pedal_free_speed": "满偏时间",
+  "gui.ccpe.control_desk.pedal_free_speed_tip": "数值 = 踩下/抬起按住到满偏所需 tick 数（20 tick = 1 秒，越小越快）",
   "gui.ccpe.control_desk.channel_title": "控制台频道",
   "gui.ccpe.control_desk.no_modules": "未安装控件",
 

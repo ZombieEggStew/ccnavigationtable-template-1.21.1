@@ -25,8 +25,9 @@ import org.jetbrains.annotations.Nullable;
  *   <li>左踏板按键绑定条（PEDAL_LEFT_UP / PEDAL_LEFT_DOWN）</li>
  *   <li>右踏板按键绑定条（PEDAL_RIGHT_UP / PEDAL_RIGHT_DOWN）</li>
  *   <li>回正时间条（ScrollValueBar，icon RECOVER，左右两个踏板共用）</li>
+ *   <li>满偏时间条（ScrollValueBar，icon FREE_MODE，踩下/抬起按住到满偏所需 tick 数）</li>
  * </ol>
- * 全部配置已持久化（回正时间 + 四个按键绑定）。
+ * 全部配置已持久化（回正时间 + 满偏时间 + 四个按键绑定）。
  */
 public class PedalModuleScreen extends AbstractMonitorScreen {
 
@@ -45,6 +46,7 @@ public class PedalModuleScreen extends AbstractMonitorScreen {
     private static final int LEFT_KEY_BAR_Y = 18;                          // 1. 左踏板按键绑定条
     private static final int RIGHT_KEY_BAR_Y = LEFT_KEY_BAR_Y + BAR_TEX_H; // 2. 右踏板按键绑定条
     private static final int RETURN_BAR_Y = RIGHT_KEY_BAR_Y + BAR_TEX_H;   // 3. 回正时间条（两踏板共用）
+    private static final int FREE_SPEED_BAR_Y = RETURN_BAR_Y + BAR_TEX_H;  // 4. 满偏时间条（两踏板共用）
 
     private final BlockPos deskPos;
 
@@ -55,6 +57,7 @@ public class PedalModuleScreen extends AbstractMonitorScreen {
     private DoubleInputBar inputBar;      // 1. 左踏板按键绑定条
     private DoubleInputBar inputBar2;     // 2. 右踏板按键绑定条
     private ScrollValueBar returnBar;     // 3. 回正时间条（icon RECOVER）
+    private ScrollValueBar freeSpeedBar;  // 4. 满偏时间条（icon FREE_MODE）
 
     public PedalModuleScreen(BlockPos deskPos) {
         super(Component.empty());
@@ -74,6 +77,7 @@ public class PedalModuleScreen extends AbstractMonitorScreen {
 
         // 从客户端 BE 读取当前配置（服务端权威数据经 getUpdatePacket / 区块加载同步到客户端）；BE 缺失时用默认值
         int returnTime = ControlDeskBlockEntity.DEFAULT_PEDAL_RETURN_TIME;
+        int freeSpeed = ControlDeskBlockEntity.DEFAULT_PEDAL_FREE_SPEED;
         String leftUp = ControlDeskBlockEntity.DEFAULT_PEDAL_KEY_LEFT_UP;
         String leftDown = ControlDeskBlockEntity.DEFAULT_PEDAL_KEY_LEFT_DOWN;
         String rightUp = ControlDeskBlockEntity.DEFAULT_PEDAL_KEY_RIGHT_UP;
@@ -81,6 +85,7 @@ public class PedalModuleScreen extends AbstractMonitorScreen {
         if (this.minecraft != null && this.minecraft.level != null
                 && this.minecraft.level.getBlockEntity(deskPos) instanceof ControlDeskBlockEntity desk) {
             returnTime = desk.getPedalReturnTime();
+            freeSpeed = desk.getPedalFreeSpeed();
             leftUp = desk.getPedalKeyLeftUp();
             leftDown = desk.getPedalKeyLeftDown();
             rightUp = desk.getPedalKeyRightUp();
@@ -110,6 +115,15 @@ public class PedalModuleScreen extends AbstractMonitorScreen {
                 .addToolTipInstruction(Component.translatable("gui.ccpe.control_desk.return_time_tip"));
         this.addRenderableWidget(this.returnBar);
 
+        // 4. 满偏时间条（踩下/抬起按住到满偏所需 tick 数，速度 = 1/数值 每 tick；左右两个踏板共用）
+        this.freeSpeedBar = new ScrollValueBar(
+                winLeft, winTop + FREE_SPEED_BAR_Y, WIN_W, BAR_TEX_H, freeSpeed, 0, new int[0])
+                .withIcon(MyIcons.FREE_MODE)
+                .range(ControlDeskBlockEntity.MIN_PEDAL_FREE_SPEED, ControlDeskBlockEntity.MAX_PEDAL_FREE_SPEED)
+                .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.pedal_free_speed"))
+                .addToolTipInstruction(Component.translatable("gui.ccpe.control_desk.pedal_free_speed_tip"));
+        this.addRenderableWidget(this.freeSpeedBar);
+
         // 右下角"完成"按钮
         HoverTintIconButton doneBtn = new HoverTintIconButton(
                 winLeft + WIN_W - DONE_BTN_RIGHT,
@@ -125,9 +139,10 @@ public class PedalModuleScreen extends AbstractMonitorScreen {
 
     @Override
     public void onClose() {
-        // 回正时间 + 四个按键绑定写回服务端 BE（服务端权威：saveAdditional 落盘 + getUpdatePacket 同步 + 蓝图兼容）
+        // 回正时间 + 满偏时间 + 四个按键绑定写回服务端 BE（服务端权威：saveAdditional 落盘 + getUpdatePacket 同步 + 蓝图兼容）
         PacketDistributor.sendToServer(new PedalConfigPayload(deskPos,
                 returnBar.getValue(),
+                freeSpeedBar.getValue(),
                 inputBar.getLeftKey(), inputBar.getRightKey(),
                 inputBar2.getLeftKey(), inputBar2.getRightKey()));
         // 有上级菜单（配置菜单）时返回它，否则直接回到游戏

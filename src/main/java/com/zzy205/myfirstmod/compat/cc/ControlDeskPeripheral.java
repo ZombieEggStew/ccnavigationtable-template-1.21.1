@@ -12,14 +12,15 @@ import org.jetbrains.annotations.Nullable;
  * 或 {@code peripheral.wrap(...)}（经 {@link CCPeripheralCapabilities} 能力注册）获取。
  * 与传感器、显示器共享同一全局频道命名空间（频道全局唯一，见 {@link ControlDeskRegistry}）。
  * <p>
- * Lua API（按 memo/control-desk-seat.md 定稿；直接读数值层 = BE 服务端权威状态）：
- * <ul>
- *   <li>操纵杆原始值 {@link #isJoystickXActive}/{@link #isJoystickYActive}（boolean：该轴有无按键动作）</li>
- *   <li>操纵杆轴值 {@link #getJoystickX}/{@link #getJoystickY}（0..1 幅度）+ 带符号
- *       {@link #getJoystickXSigned}/{@link #getJoystickYSigned}（-1..1）</li>
- *   <li>踏板 {@link #isLeftPedalDown}/{@link #isRightPedalDown}（boolean：踏板处于踩下方向，
- *       即轴值 &gt; 0；抬起方向为 false）</li>
- * </ul>
+ * 用法（对齐 Monitor 的「外设 → 模块实例」模式）：先 {@link #getModule(String)} 拿到对应控件的
+ * 模块实例，再在实例上调用状态读取方法（全部 {@code mainThread=false}，Lua 侧高频轮询不占主线程）：
+ * <pre>{@code
+ * local d = pe.getPeripheral(0)
+ * local pedal = d.getModule("pedal")        -- 未安装返回 nil
+ * print(pedal.isLeftPedalDown())
+ * local joy = d.getModule("joystick")
+ * print(joy.getJoystickXSigned())
+ * }</pre>
  * <b>注意</b>：CC:Tweaked 把 {@code @LuaFunction} 方法收集成 Lua 表返回；没有任何 Lua 方法的对象
  * 会被判为 unknown type 返回 nil（CobaltLuaMachine#toValue），因此外设至少要有一个 Lua 方法。
  */
@@ -49,80 +50,30 @@ public class ControlDeskPeripheral implements IPeripheral {
         return be;
     }
 
-    // ═══════════════ 操纵杆：原始值（该轴有无按键动作） ═══════════════
-
     /**
-     * X 轴（A/D）是否有按键动作：左/右方向键任一按住即 true。
+     * 获取指定控件的模块实例（Lua API 在此实例上调用）：
+     * <ul>
+     *   <li>{@code "pedal"} → {@link PedalModuleHandle}（左右踏板踩下判断）</li>
+     *   <li>{@code "joystick"} → {@link JoystickModuleHandle}（操纵杆原始值/轴值/带符号）</li>
+     * </ul>
+     * 未安装对应控件或名称未知返回 nil。
      *
      * <pre>{@code
-     * local d = pe.getPeripheral(0)
-     * print(d.isJoystickXActive())  -- false / true
+     * local pedal = desk.getModule("pedal")
+     * if pedal then print(pedal.isLeftPedalDown()) end
      * }</pre>
+     *
+     * @param name 控件名（"pedal" / "joystick"，大小写不敏感）
      */
     @LuaFunction(mainThread = true)
-    public final boolean isJoystickXActive() {
-        return be.isJoystickXActive();
-    }
-
-    /**
-     * Y 轴（W/S）是否有按键动作：前/后方向键任一按住即 true。
-     */
-    @LuaFunction(mainThread = true)
-    public final boolean isJoystickYActive() {
-        return be.isJoystickYActive();
-    }
-
-    // ═══════════════ 操纵杆：轴值 ═══════════════
-
-    /**
-     * X 轴模拟量幅度（0..1，=|轴值|）：+1 = 右摆满偏 / -1 = 左摆满偏，符号见
-     * {@link #getJoystickXSigned}。
-     */
-    @LuaFunction(mainThread = true)
-    public final double getJoystickX() {
-        return Math.abs(be.getJoystickAxisX());
-    }
-
-    /**
-     * Y 轴模拟量幅度（0..1，=|轴值|）：+1 = 前推满偏 / -1 = 后拉满偏，符号见
-     * {@link #getJoystickYSigned}。
-     */
-    @LuaFunction(mainThread = true)
-    public final double getJoystickY() {
-        return Math.abs(be.getJoystickAxisY());
-    }
-
-    /**
-     * X 轴带符号轴值（-1..1）：+1 = 右摆(D) / -1 = 左摆(A)。
-     */
-    @LuaFunction(mainThread = true)
-    public final double getJoystickXSigned() {
-        return be.getJoystickAxisX();
-    }
-
-    /**
-     * Y 轴带符号轴值（-1..1）：+1 = 前推(W) / -1 = 后拉(S)。
-     */
-    @LuaFunction(mainThread = true)
-    public final double getJoystickYSigned() {
-        return be.getJoystickAxisY();
-    }
-
-    // ═══════════════ 踏板 ═══════════════
-
-    /**
-     * 左踏板是否处于踩下方向（轴值 &gt; 0，含回正过程中的余量）；抬起方向返回 false。
-     */
-    @LuaFunction(mainThread = true)
-    public final boolean isLeftPedalDown() {
-        return be.getPedalLeftAxis() > 0f;
-    }
-
-    /**
-     * 右踏板是否处于踩下方向（轴值 &gt; 0，含回正过程中的余量）；抬起方向返回 false。
-     */
-    @LuaFunction(mainThread = true)
-    public final boolean isRightPedalDown() {
-        return be.getPedalRightAxis() > 0f;
+    public final @Nullable Object getModule(String name) {
+        if (name == null) return null;
+        return switch (name.toLowerCase()) {
+            case "pedal" -> be.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
+                    ? new PedalModuleHandle(be) : null;
+            case "joystick" -> be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
+                    ? new JoystickModuleHandle(be) : null;
+            default -> null;
+        };
     }
 }
