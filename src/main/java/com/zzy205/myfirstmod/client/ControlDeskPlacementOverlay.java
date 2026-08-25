@@ -69,6 +69,16 @@ public class ControlDeskPlacementOverlay {
         ControlDeskBlockEntity.ControlType type = controlTypeOf(held);
         if (type != null) {
             showInstallPreview(mc, hit, type);
+            // monitor_2 / throttle / joystick_2 的原后缘插槽已移除（installBounds 为空 → 无 AABB 安装预览框）；
+            // 手持 throttle / joystick_2 时改显桌顶 6×14 棋盘网格（1px 格、内缩 1px；纯显示，放置逻辑待做）
+            if (type == ControlDeskBlockEntity.ControlType.THROTTLE
+                    || type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
+                showTopGrid(mc, hit);
+            }
+            // joystick_2：额外显示 3D 放置预览盒（4×9×4，底在桌顶面，跟随准星吸附到 1px 网格）
+            if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
+                showJoystick2Box(mc, hit);
+            }
             return;
         }
         if (isWrench(held)) {
@@ -107,6 +117,15 @@ public class ControlDeskPlacementOverlay {
         Vec3 click = hit.getLocation();
         for (ControlDeskBlockEntity.ControlType type : ControlDeskBlockEntity.ControlType.values()) {
             if (!desk.isInstalled(type)) continue;
+            if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
+                // 摇杆2：显示放置位 4×9×4 盒子（与安装预览/服务端拆除判定共用 ControlDeskBlock.joystick2PlaceBox）
+                AABB box = ControlDeskBlock.joystick2PlaceBox(desk, facing, pos);
+                boolean hovered = ControlDeskBlock.hitBounds(List.of(box), click);
+                Outliner.getInstance().showAABB("control-desk/remove/" + pos.toShortString() + "/JOYSTICK_2", box)
+                        .colored(hovered ? COLOR_INVALID : COLOR_VALID)
+                        .lineWidth(1 / 64f);
+                continue;
+            }
             List<AABB> bounds = ControlDeskBlock.installBounds(type, facing, pos);
             // 命中判断与服务端拆除判定共用 ControlDeskBlock.hitBounds（闭区间+容差）
             boolean hovered = ControlDeskBlock.hitBounds(bounds, click);
@@ -124,6 +143,85 @@ public class ControlDeskPlacementOverlay {
                     .colored(color)
                     .lineWidth(1 / 16f);
         }
+    }
+
+    /**
+     * 桌顶 6×14 棋盘网格（1px 格、四周内缩 1px；北向基准 x1..15 / z9..15 / y8，随 FACING 旋转）。
+     * 手持 throttle / joystick_2 时显示（对齐 monitor 的白色 1px 网格线）；纯显示，放置逻辑待做。
+     */
+    private static void showTopGrid(Minecraft mc, BlockHitResult hit) {
+        BlockPos pos = hit.getBlockPos();
+        BlockState state = mc.level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ControlDeskBlock)) return;
+
+        Direction facing = state.getValue(ControlDeskBlock.FACING);
+        Outliner outliner = Outliner.getInstance();
+        String prefix = "control-desk/grid/" + pos.toShortString();
+        float lw = 1 / 128f;
+        // 15 条竖线（x=1..15）+ 7 条横线（z=9..15），y=8（桌顶面，gridWorld 内抬高防 z-fight）
+        for (int i = 0; i <= 14; i++) {
+            Vec3 from = gridWorld(pos, i + 1f, 7.1f, 9f, facing);
+            Vec3 to = gridWorld(pos, i + 1f, 7.1f, 15f, facing);
+            outliner.showLine(prefix + "/v" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
+        }
+        for (int i = 0; i <= 6; i++) {
+            Vec3 from = gridWorld(pos, 1f, 7.1f, 9f + i, facing);
+            Vec3 to = gridWorld(pos, 15f, 7.1f, 9f + i, facing);
+            outliner.showLine(prefix + "/h" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
+        }
+    }
+
+    /** 北向基准模型坐标（px）→ 世界坐标：绕方块中心 Y 旋转到 FACING（与底座模型 rotateCenteredDegrees 同约定）；y 略抬离桌面防 z-fight。 */
+    private static Vec3 gridWorld(BlockPos pos, float x, float y, float z, Direction facing) {
+        float bx = x / 16f;
+        float by = y / 16f + 0.06f; // 略高于桌顶面（0.06 块 ≈ 1px，对齐 monitor GRID_LINE_OFFSET）
+        float bz = z / 16f;
+        return switch (facing) {
+            case NORTH -> new Vec3(pos.getX() + bx, pos.getY() + by, pos.getZ() + bz);
+            case SOUTH -> new Vec3(pos.getX() + (1f - bx), pos.getY() + by, pos.getZ() + (1f - bz));
+            case WEST  -> new Vec3(pos.getX() + bz, pos.getY() + by, pos.getZ() + (1f - bx));
+            case EAST  -> new Vec3(pos.getX() + (1f - bz), pos.getY() + by, pos.getZ() + bx);
+            default    -> new Vec3(pos.getX() + bx, pos.getY() + by, pos.getZ() + bz);
+        };
+    }
+
+    /**
+     * 手持 joystick_2：3D 放置预览盒（占地 4×4、高 9，底在桌顶面下方 1px = y7..16）。
+     * 参考 monitor 的 2D 模块预览（跟随准星、吸附网格）：这里用 {@link Outliner#showAABB} 画 3D 盒子（12 棱边）。
+     * 盒子中心 = 命中点吸附到 1px 网格的整数 px（与服务端放置共用 {@link ControlDeskBlock#snappedBoxCenter}）；
+     * 位置被阻挡（互斥模块已装 / 4×4 占用重叠）时盒子变红。
+     */
+    private static void showJoystick2Box(Minecraft mc, BlockHitResult hit) {
+        BlockPos pos = hit.getBlockPos();
+        BlockState state = mc.level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ControlDeskBlock)) return;
+        Direction facing = state.getValue(ControlDeskBlock.FACING);
+
+        int[] c = ControlDeskBlock.snappedBoxCenter(pos, facing, hit.getLocation());
+        int cx = c[0];
+        int cz = c[1];
+        boolean blocked = isJoystick2PlacementBlocked(mc, pos, cx, cz);
+        int half = ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF;
+        Vec3 p0 = gridWorld(pos, cx - half, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM, cz - half, facing);
+        Vec3 p1 = gridWorld(pos, cx + half, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_TOP, cz + half, facing);
+        AABB box = new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+        Outliner.getInstance().showAABB("control-desk/box/" + pos.toShortString(), box)
+                .colored(blocked ? COLOR_INVALID : COLOR_VALID)
+                .lineWidth(1 / 64f);
+    }
+
+    /**
+     * joystick_2 候选放置（中心 cx,cz）是否被阻挡：同类型已装 / 互斥模块（throttle / monitor_2）已装 /
+     * 4×4 与已装模块占用矩形重叠（{@link ControlDeskBlockEntity#blocksPlacement}）。
+     */
+    private static boolean isJoystick2PlacementBlocked(Minecraft mc, BlockPos pos, int cx, int cz) {
+        if (!(mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return false;
+        return desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
+                || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
+                || desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
+                || desk.blocksPlacement(cx, cz, ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF);
     }
 
     /** 手持物品 → 控件类型（供本类预览判定与 {@link ControlDeskGhostPreviewRenderer} 半透明模型预览复用）。 */

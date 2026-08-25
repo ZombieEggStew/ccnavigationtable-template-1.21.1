@@ -12,7 +12,6 @@ import dev.engine_room.flywheel.lib.visual.SimpleDynamicVisual;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
-import org.joml.Quaternionf;
 
 import java.util.function.Consumer;
 
@@ -146,11 +145,11 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
             this.throttleIndicator.setChanged();
         }
 
-        // joystick_2：桌体后缘上方插槽，静态渲染（底座 + 手柄，暂无动画）；叠加安装朝向旋转（绕自身枢轴，见 backSlotRotatePivot）
+        // joystick_2：静态渲染（底座 + 手柄）；模型平移到放置位（预览盒位置 y7..16），安装朝向旋转绕放置中心
         this.joystick2Base = syncInstance(this.joystick2Base, joystick2Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE, facing,
-                backSlotRotatePivot(backRot));
+                inst -> applyJoystick2Placement(inst, be));
         this.joystick2Handle = syncInstance(this.joystick2Handle, joystick2Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE, facing,
-                backSlotRotatePivot(backRot));
+                inst -> applyJoystick2Placement(inst, be));
     }
 
     /** 后缘插槽模块的安装朝向旋转（度，0/90/180/270）：0 返回 null 跳过（与现有渲染一致），否则返回绕 Y 旋转的额外变换。 */
@@ -161,16 +160,22 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     }
 
     /**
-     * joystick_2 的安装朝向旋转：绕自身枢轴 {@link ControlDeskBlockEntity#JOYSTICK_2_PIVOT_X} 旋转
-     * （模型位于桌体后缘角落，绕方块中心转会把模型甩到对角；绕自身中心 (12,8,12)/16 转则原地自旋）。
+     * joystick_2 放置变换：模型平移到放置位（默认中心 x/z=8、底座底 y=0 → 放置位底 y=7，见
+     * {@link ControlDeskBlockEntity#JOYSTICK_2_MODEL_CENTER} / {@link ControlDeskBlockEntity#JOYSTICK_2_PLACE_Y_BOTTOM}），
+     * 安装朝向旋转绕放置中心（Y 旋转，枢轴 y 不影响）。
      */
-    private static Consumer<TransformedInstance> backSlotRotatePivot(int backRot) {
-        if (backRot == 0) return null;
-        final float deg = backRot;
-        return inst -> inst.rotateAround(new Quaternionf().rotateY((float) Math.toRadians(deg)),
-                ControlDeskBlockEntity.JOYSTICK_2_PIVOT_X,
-                ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Y,
-                ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Z);
+    private static void applyJoystick2Placement(TransformedInstance inst, ControlDeskBlockEntity be) {
+        int backRot = be.getBackSlotRotation();
+        float px = be.getJoystick2PlaceX() / 16f;
+        float pz = be.getJoystick2PlaceZ() / 16f;
+        if (backRot != 0) {
+            inst.translate(px, 0.5f, pz);
+            inst.rotate((float) Math.toRadians(backRot), Direction.UP);
+            inst.translate(-px, -0.5f, -pz);
+        }
+        inst.translate((be.getJoystick2PlaceX() - ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER) / 16f,
+                (ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM - ControlDeskBlockEntity.JOYSTICK_2_MODEL_BOTTOM_Y) / 16f,
+                (be.getJoystick2PlaceZ() - ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER) / 16f);
     }
 
     /** 按安装状态创建/删除实例；存在的实例每帧重置变换 + 平移到位 + 旋转到 facing + 追加额外变换并标记更新。 */

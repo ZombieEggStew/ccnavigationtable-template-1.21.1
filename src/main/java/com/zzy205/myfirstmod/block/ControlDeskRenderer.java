@@ -94,11 +94,10 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
             smoothThrottles.remove(be.getBlockPos());
             throttleCharge.remove(be.getBlockPos());
         }
-        // joystick_2：桌体后缘上方插槽，静态渲染（底座 + 手柄，暂无动画）；叠加安装朝向旋转（绕自身枢轴，见 renderPartPivot）
+        // joystick_2：静态渲染（底座 + 手柄）；模型平移到放置位（预览盒位置），安装朝向旋转绕放置中心
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)) {
-            int backRot = be.getBackSlotRotation();
-            renderPartPivot(MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE, state, facing, ms, vb, light, backRot);
-            renderPartPivot(MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE, state, facing, ms, vb, light, backRot);
+            renderJoystick2Part(MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE, be, state, facing, ms, vb, light);
+            renderJoystick2Part(MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE, be, state, facing, ms, vb, light);
         }
     }
 
@@ -184,19 +183,25 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
     }
 
     /**
-     * joystick_2 静态部件：facing 旋转 + 安装朝向绕自身枢轴 {@link ControlDeskBlockEntity#JOYSTICK_2_PIVOT_X} 旋转
-     * （模型位于桌体后缘角落，绕方块中心转会把模型甩到对角；绕自身中心 (12,8,12)/16 转则原地自旋）。
+     * joystick_2 静态部件：facing 旋转 + 模型平移到放置位（默认中心 x/z=8、底座底 y=0 → 放置位底 y=7）+
+     * 安装朝向旋转绕放置中心（与预览盒/实物预览一致，见 {@link ControlDeskBlockEntity#JOYSTICK_2_MODEL_CENTER}）。
      */
-    private static void renderPartPivot(dev.engine_room.flywheel.lib.model.baked.PartialModel model,
-                                        BlockState state, Direction facing, PoseStack ms,
-                                        VertexConsumer vb, int light, int backRot) {
+    private static void renderJoystick2Part(dev.engine_room.flywheel.lib.model.baked.PartialModel model,
+                                            ControlDeskBlockEntity be, BlockState state, Direction facing,
+                                            PoseStack ms, VertexConsumer vb, int light) {
         SuperByteBuffer buffer = CachedBuffers.partial(model, state);
         buffer.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
+        int backRot = be.getBackSlotRotation();
+        float px = be.getJoystick2PlaceX() / 16f;
+        float pz = be.getJoystick2PlaceZ() / 16f;
         if (backRot != 0) {
-            buffer.translate(ControlDeskBlockEntity.JOYSTICK_2_PIVOT_X, ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Y, ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Z);
+            buffer.translate(px, 0.5f, pz);
             buffer.rotate(Mth.DEG_TO_RAD * backRot, Direction.UP);
-            buffer.translate(-ControlDeskBlockEntity.JOYSTICK_2_PIVOT_X, -ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Y, -ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Z);
+            buffer.translate(-px, -0.5f, -pz);
         }
+        buffer.translate((be.getJoystick2PlaceX() - ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER) / 16f,
+                (ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM - ControlDeskBlockEntity.JOYSTICK_2_MODEL_BOTTOM_Y) / 16f,
+                (be.getJoystick2PlaceZ() - ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER) / 16f);
         buffer.light(light).renderInto(ms, vb);
     }
 

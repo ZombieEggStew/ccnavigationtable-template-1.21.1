@@ -54,12 +54,27 @@ public class ControlDeskGhostPreviewRenderer {
         ItemStack held = mc.player.getMainHandItem();
         ControlDeskBlockEntity.ControlType type = ControlDeskPlacementOverlay.controlTypeOf(held);
         if (type == null) return;
+        // monitor_2 / throttle：原后缘插槽已移除，放置系统待做——本轮不显示半透明 ghost；
+        // joystick_2 已恢复：实物预览跟随 3D 预览盒（见下方盒位平移）
+        if (type == ControlDeskBlockEntity.ControlType.MONITOR_2
+                || type == ControlDeskBlockEntity.ControlType.THROTTLE) {
+            return;
+        }
         if (!(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) return;
         BlockPos pos = hit.getBlockPos();
         BlockState state = mc.level.getBlockState(pos);
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
         if (!(mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return;
         if (desk.isInstalled(type)) return; // 已装该控件：不显示半透明模型（红色线框由 overlay 负责）
+        // joystick_2 候选位置被阻挡（互斥模块已装 / 4×4 占用重叠）→ 不显示实物（盒子在 overlay 中变红）
+        int[] box = type == ControlDeskBlockEntity.ControlType.JOYSTICK_2
+                ? ControlDeskBlock.snappedBoxCenter(pos, state.getValue(ControlDeskBlock.FACING), hit.getLocation())
+                : null;
+        if (box != null && (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
+                || desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
+                || desk.blocksPlacement(box[0], box[1], ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF))) {
+            return;
+        }
 
         Direction facing = state.getValue(ControlDeskBlock.FACING);
         Vec3 camera = event.getCamera().getPosition();
@@ -69,27 +84,32 @@ public class ControlDeskGhostPreviewRenderer {
 
         ms.pushPose();
         ms.translate(pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z);
-        // 安装朝向旋转（与安装渲染一致，见 ControlDeskRenderer）：throttle / joystick_2 安装时按玩家朝向记录旋转
-        // （北=0 / 南=180 / 西=90 / 东=270），预览按玩家当前朝向预演；joystick_2 绕自身枢轴旋转，throttle 绕方块中心。
-        int previewRot = (type == ControlDeskBlockEntity.ControlType.THROTTLE
-                || type == ControlDeskBlockEntity.ControlType.JOYSTICK_2)
+        // joystick_2：实物预览跟随 3D 预览盒——吸附到 1px 网格的盒子中心 (cx,cz)，模型平移到盒位
+        // （模型默认中心 x/z=8、底座底 y=0 → 放置位底 y=7，见 ControlDeskBlockEntity 常量）；
+        // 安装朝向旋转绕盒子中心进行（模型已到盒位，绕盒心转才不甩开）。
+        int previewRot = type == ControlDeskBlockEntity.ControlType.JOYSTICK_2
                 ? ControlDeskBlockEntity.rotationFor(mc.player.getDirection()) : 0;
-        boolean pivotRot = type == ControlDeskBlockEntity.ControlType.JOYSTICK_2;
+        float boxX = box != null ? box[0] / 16f : 0f;
+        float boxZ = box != null ? box[1] / 16f : 0f;
+        float shiftX = box != null
+                ? (box[0] - ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER) / 16f : 0f;
+        float shiftY = box != null
+                ? (ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM - ControlDeskBlockEntity.JOYSTICK_2_MODEL_BOTTOM_Y) / 16f : 0f;
+        float shiftZ = box != null
+                ? (box[1] - ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER) / 16f : 0f;
         for (PartialModel model : partsOf(type)) {
             SuperByteBuffer buffer = CachedBuffers.partial(model, state);
             // 与 BER/Flywheel 同一朝向约定：绕方块中心 Y 旋转到 FACING（rotateCenteredDegrees = 绕 buffer 中心）
             buffer.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
             if (previewRot != 0) {
-                if (pivotRot) {
-                    // 摇杆2 位于桌体后缘角落：绕自身枢轴 (12,8,12)/16 旋转（与 ControlDeskRenderer.renderPartPivot 一致）
-                    buffer.translate(ControlDeskBlockEntity.JOYSTICK_2_PIVOT_X,
-                            ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Y, ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Z);
-                    buffer.rotate(Mth.DEG_TO_RAD * previewRot, Direction.UP);
-                    buffer.translate(-ControlDeskBlockEntity.JOYSTICK_2_PIVOT_X,
-                            -ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Y, -ControlDeskBlockEntity.JOYSTICK_2_PIVOT_Z);
-                } else {
-                    buffer.rotateCenteredDegrees(previewRot, Direction.UP);
-                }
+                // 绕盒子中心做安装朝向旋转（Y 旋转，枢轴 y 值不影响结果）
+                buffer.translate(boxX, 0.5f, boxZ);
+                buffer.rotate(Mth.DEG_TO_RAD * previewRot, Direction.UP);
+                buffer.translate(-boxX, -0.5f, -boxZ);
+            }
+            if (box != null) {
+                // 平移到盒位（最后调用 = 最内层变换，先于 facing/安装旋转作用于模型空间）
+                buffer.translate(shiftX, shiftY, shiftZ);
             }
             buffer.color(255, 255, 255, GHOST_ALPHA);
             buffer.light(GHOST_LIGHT);

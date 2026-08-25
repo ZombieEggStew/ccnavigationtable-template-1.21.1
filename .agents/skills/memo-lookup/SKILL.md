@@ -46,6 +46,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 | `knob-interaction.md` | 旋钮交互数据流 | 修改旋钮拖拽、角度同步或音效时 |
 | `monitor-state-isolation.md` | 多 Monitor 客户端状态规范 | 修改交互状态、动画缓存或 Outliner key 时 |
 | `gui-infrastructure.md` | 已落地 GUI 基础设施 | 修改现有控件的实现细节时 |
+| `control-desk-grid-slot.md` | controlDesk 桌顶棋盘网格自由放置系统（joystick_2 完整接入；常量/数据流/变换链/添加新模块 checklist） | 修改或新增 controlDesk 自由放置模块（throttle / monitor_2 / 新控件）的预览、放置、占用、拆除时 |
 | `create-schematic-nbt.md` | Create 蓝图 NBT 经验记录（保存/部署中的配置丢失问题） | 排查 PeripheralExtender / RedstoneTransceiver 在 Create 蓝图中的行为时 |
 | `neoforge-debugging.md` | 本项目 F5 启动事实 | 调试启动配置或 classpath 时 |
 

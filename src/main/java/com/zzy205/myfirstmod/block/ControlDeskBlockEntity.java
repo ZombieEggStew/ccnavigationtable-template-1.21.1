@@ -84,6 +84,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_MONITOR_2 = "Monitor2Installed";
     private static final String TAG_THROTTLE = "ThrottleInstalled";
     private static final String TAG_JOYSTICK_2 = "Joystick2Installed";
+    private static final String TAG_JOYSTICK_2_PLACE_X = "Joystick2PlaceX";
+    private static final String TAG_JOYSTICK_2_PLACE_Z = "Joystick2PlaceZ";
     private static final String TAG_BACK_SLOT_ROTATION = "BackSlotRotation";
     private static final String TAG_JOYSTICK_RETURN_TIME = "JoystickReturnTime";
     private static final String TAG_JOYSTICK_RETURN_TIME_YAW = "JoystickReturnTimeYaw";
@@ -121,6 +123,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private boolean joystick2Installed;
     /** 后缘插槽模块（throttle / joystick_2）的安装朝向（度，0/90/180/270，北向基准；安装时按玩家朝向记录，默认 0 = 不额外旋转） */
     private int backSlotRotation;
+    /** joystick_2 放置中心（北向模型空间 px，默认 8 = 模型中心）；安装时按预览盒位置（吸附 1px 网格）记录 */
+    private int joystick2PlaceX = 8;
+    private int joystick2PlaceZ = 8;
     private int joystickReturnTime = DEFAULT_JOYSTICK_RETURN_TIME;      // 前后轴回正时间
     private int joystickReturnTimeYaw = DEFAULT_JOYSTICK_RETURN_TIME;   // 左右轴回正时间
     private boolean gearModePitch;                                      // 前后轴档位模式开关
@@ -239,10 +244,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     }
 
     /**
-     * 安装控件；已安装返回 false（不覆盖）。MONITOR_2 / THROTTLE / JOYSTICK_2 共用桌体后缘上方插槽，互斥安装。服务端调用。
-     * {@code installFacing} = 安装时的玩家朝向（THROTTLE / JOYSTICK_2 记录到 {@link #backSlotRotation}；null 时保持原值）。
+     * 安装控件；已安装/位置被占用返回 false。MONITOR_2 / THROTTLE / JOYSTICK_2 目前仍互斥（油门/监视器2 的
+     * 自由放置系统待做），joystick_2 额外按 4×4 占用记录阻挡重叠（{@link #blocksPlacement}）。
+     * {@code installFacing} = 安装时的玩家朝向（THROTTLE / JOYSTICK_2 记录到 {@link #backSlotRotation}；null 时保持原值）；
+     * {@code placeX/placeZ} = joystick_2 放置中心（北向模型空间 px，其余类型忽略）。
      */
-    public boolean install(ControlType type, @Nullable Direction installFacing) {
+    public boolean install(ControlType type, @Nullable Direction installFacing, int placeX, int placeZ) {
         if (isInstalled(type)) return false;
         switch (type) {
             case PEDAL -> pedalInstalled = true;
@@ -258,12 +265,29 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             }
             case JOYSTICK_2 -> {
                 if (monitor2Installed || throttleInstalled) return false;
+                if (blocksPlacement(placeX, placeZ, JOYSTICK_2_FOOTPRINT_HALF)) return false; // 4×4 与已装模块占用重叠
                 joystick2Installed = true;
+                joystick2PlaceX = placeX;
+                joystick2PlaceZ = placeZ;
                 if (installFacing != null) backSlotRotation = rotationFor(installFacing);
             }
         }
         notifyChange();
         return true;
+    }
+
+    /**
+     * 候选放置（中心 cx,cz、半宽 half，北向模型空间 px）是否与已安装模块的占用矩形重叠。
+     * 目前只记录 joystick_2 的 4×4；throttle / monitor_2 的放置系统待做，届时在此按其占地矩形判定。
+     */
+    public boolean blocksPlacement(int cx, int cz, int half) {
+        if (joystick2Installed) {
+            int h = JOYSTICK_2_FOOTPRINT_HALF;
+            if (Math.abs(cx - joystick2PlaceX) < half + h && Math.abs(cz - joystick2PlaceZ) < half + h) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 卸载控件；未安装返回 false。服务端调用。 */
@@ -292,7 +316,13 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
                 throttleChargeTicks = 0;
                 clearInput();
             }
-            case JOYSTICK_2 -> joystick2Installed = false;
+            case JOYSTICK_2 -> {
+                joystick2Installed = false;
+                // 卸下摇杆2：放置位置与输入租约一并清除（重新安装后按新预览位置放置）
+                joystick2PlaceX = 8;
+                joystick2PlaceZ = 8;
+                clearInput();
+            }
         }
         notifyChange();
         return true;
@@ -310,6 +340,16 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return backSlotRotation;
     }
 
+    /** joystick_2 放置中心 X（北向模型空间 px，默认 8 = 模型中心）；安装时按预览盒位置（吸附 1px 网格）记录。 */
+    public int getJoystick2PlaceX() {
+        return joystick2PlaceX;
+    }
+
+    /** joystick_2 放置中心 Z（北向模型空间 px，默认 8 = 模型中心）。 */
+    public int getJoystick2PlaceZ() {
+        return joystick2PlaceZ;
+    }
+
     /**
      * 安装朝向映射：玩家朝向 → 模块额外旋转（度）。北=0、南=180、西=90、东=270
      * （与桌体旋转同一约定：模块"面向"安装时的玩家，与 {@code ControlDeskBlock} 的 FACING 旋转公式一致）。
@@ -318,10 +358,14 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return Math.floorMod(Math.round(-facing.getOpposite().toYRot()), 360);
     }
 
-    /** joystick_2 安装朝向旋转的枢轴（模型空间 0..1 归一化：= (12,8,12)/16，即模型自身中心，位于桌体后缘角落）。绕 Y 旋转只取 x/z，y 值不影响结果。 */
-    public static final float JOYSTICK_2_PIVOT_X = 12f / 16f;
-    public static final float JOYSTICK_2_PIVOT_Y = 8f / 16f;
-    public static final float JOYSTICK_2_PIVOT_Z = 12f / 16f;
+    /** joystick_2 占地半宽（北向模型空间 px）：4×4 → ±2px；预览盒与占用阻挡共用。 */
+    public static final int JOYSTICK_2_FOOTPRINT_HALF = 2;
+    /** joystick_2 放置位（预览盒/安装渲染共用，北向模型空间 px）：底 y7（嵌入桌面 1px）～ 顶 y16（高 9）。 */
+    public static final float JOYSTICK_2_PLACE_Y_BOTTOM = 7f;
+    public static final float JOYSTICK_2_PLACE_Y_TOP = 16f;
+    /** joystick_2 模型默认中心 x/z（模型 x6..10 / z6..10 → 8）与底座底 y（0）：安装渲染时平移到放置位。 */
+    public static final float JOYSTICK_2_MODEL_CENTER = 8f;
+    public static final float JOYSTICK_2_MODEL_BOTTOM_Y = 0f;
 
     public int getJoystickReturnTime() {
         return joystickReturnTime;
@@ -753,6 +797,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putBoolean(TAG_MONITOR_2, monitor2Installed);
         tag.putBoolean(TAG_THROTTLE, throttleInstalled);
         tag.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
+        tag.putInt(TAG_JOYSTICK_2_PLACE_X, joystick2PlaceX);
+        tag.putInt(TAG_JOYSTICK_2_PLACE_Z, joystick2PlaceZ);
         tag.putInt(TAG_BACK_SLOT_ROTATION, backSlotRotation);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);
@@ -787,6 +833,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         monitor2Installed = tag.getBoolean(TAG_MONITOR_2);
         throttleInstalled = tag.getBoolean(TAG_THROTTLE);
         joystick2Installed = tag.getBoolean(TAG_JOYSTICK_2);
+        if (tag.contains(TAG_JOYSTICK_2_PLACE_X)) {
+            joystick2PlaceX = tag.getInt(TAG_JOYSTICK_2_PLACE_X);
+        }
+        if (tag.contains(TAG_JOYSTICK_2_PLACE_Z)) {
+            joystick2PlaceZ = tag.getInt(TAG_JOYSTICK_2_PLACE_Z);
+        }
         if (tag.contains(TAG_BACK_SLOT_ROTATION)) {
             backSlotRotation = tag.getInt(TAG_BACK_SLOT_ROTATION);
         }
@@ -888,6 +940,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putBoolean(TAG_MONITOR_2, monitor2Installed);
         compound.putBoolean(TAG_THROTTLE, throttleInstalled);
         compound.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
+        compound.putInt(TAG_JOYSTICK_2_PLACE_X, joystick2PlaceX);
+        compound.putInt(TAG_JOYSTICK_2_PLACE_Z, joystick2PlaceZ);
         compound.putInt(TAG_BACK_SLOT_ROTATION, backSlotRotation);
         compound.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         compound.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);
@@ -922,6 +976,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putBoolean(TAG_MONITOR_2, monitor2Installed);
         tag.putBoolean(TAG_THROTTLE, throttleInstalled);
         tag.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
+        tag.putInt(TAG_JOYSTICK_2_PLACE_X, joystick2PlaceX);
+        tag.putInt(TAG_JOYSTICK_2_PLACE_Z, joystick2PlaceZ);
         tag.putInt(TAG_BACK_SLOT_ROTATION, backSlotRotation);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME, joystickReturnTime);
         tag.putInt(TAG_JOYSTICK_RETURN_TIME_YAW, joystickReturnTimeYaw);

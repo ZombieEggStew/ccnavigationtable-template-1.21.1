@@ -59,15 +59,13 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
 
     // ── 控件安装位（北向基准 0..16 模型空间，随 FACING 旋转；供安装/拆除预览框与拆除判定使用） ──
     // 北侧空区 z0..8 分成左/中/右：左踏板 x11..16、操纵杆 x5..11、右踏板 x0..5（操作者面朝南，左=东=+X）
+    // （monitor_2 / throttle / joystick_2 的原后缘插槽已移除，改桌顶 6×14 棋盘网格自由放置 —— 显示先行，放置逻辑待做）
     private static final VoxelShape PEDAL_LEFT_SHAPE = Block.box(12, 1, 1, 16, 7, 8);
     private static final VoxelShape PEDAL_RIGHT_SHAPE = Block.box(0, 1, 1, 4, 7, 8);
     private static final VoxelShape JOYSTICK_SHAPE = Block.box(5, 0, 0, 11, 8, 8);
     private static final VoxelShaper PEDAL_LEFT_SHAPER = VoxelShaper.forHorizontal(PEDAL_LEFT_SHAPE, Direction.NORTH);
     private static final VoxelShaper PEDAL_RIGHT_SHAPER = VoxelShaper.forHorizontal(PEDAL_RIGHT_SHAPE, Direction.NORTH);
     private static final VoxelShaper JOYSTICK_SHAPER = VoxelShaper.forHorizontal(JOYSTICK_SHAPE, Direction.NORTH);
-    // monitor_2 / throttle / joystick_2 共用插槽：桌体后缘上方整宽一条（y 8..14、z 8..16，北向基准），三模块互斥安装
-    private static final VoxelShape BACK_SLOT_SHAPE = Block.box(0, 8, 8, 16, 14, 16);
-    private static final VoxelShaper BACK_SLOT_SHAPER = VoxelShaper.forHorizontal(BACK_SLOT_SHAPE, Direction.NORTH);
 
     public ControlDeskBlock(Properties properties) {
         super(properties);
@@ -127,12 +125,21 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             if (!(be instanceof ControlDeskBlockEntity desk)) {
                 return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
             }
-            // 安装成功：throttle / joystick_2 按玩家朝向记录模块旋转（北=0 / 南=180 / 西=90 / 东=270）
-            if (!desk.install(type, player != null ? player.getDirection() : null)) {
-                // 已安装：不消耗物品，提示玩家
+            // 安装成功：throttle / joystick_2 按玩家朝向记录模块旋转（北=0 / 南=180 / 西=90 / 东=270）；
+            // joystick_2 额外按预览盒位置记录放置中心（服务端用右键命中点做同样的吸附，与客户端预览一致）
+            int placeX = 8, placeZ = 8;
+            if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
+                int[] c = snappedBoxCenter(pos, state.getValue(FACING), hitResult.getLocation());
+                placeX = c[0];
+                placeZ = c[1];
+            }
+            if (!desk.install(type, player != null ? player.getDirection() : null, placeX, placeZ)) {
+                // 已安装 / 位置被占用：不消耗物品，提示玩家
                 if (player != null) {
                     player.displayClientMessage(
-                            Component.translatable("gui.ccpe.control_desk.already_installed"), true);
+                            Component.translatable(desk.isInstalled(type)
+                                    ? "gui.ccpe.control_desk.already_installed"
+                                    : "gui.ccpe.control_desk.position_occupied"), true);
                 }
                 return ItemInteractionResult.SUCCESS;
             }
@@ -188,7 +195,11 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         return IWrenchable.super.onSneakWrenched(state, context);
     }
 
-    /** 点击位置命中的已安装控件类型（PEDAL 左右两框任一命中即算）；未命中返回 null。 */
+    /**
+     * 点击位置命中的已安装控件类型（PEDAL 左右两框任一命中即算；JOYSTICK_2 命中放置位 4×9×4 盒子）；
+     * 未命中返回 null。
+     * （monitor_2 / throttle 已无安装位框，按位置拆除待其放置系统落地后重做）
+     */
     private static ControlDeskBlockEntity.ControlType hitControlType(ControlDeskBlockEntity desk, Direction facing,
                                                                     BlockPos pos, Vec3 click) {
         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
@@ -199,19 +210,40 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 && hitBounds(installBounds(ControlDeskBlockEntity.ControlType.JOYSTICK, facing, pos), click)) {
             return ControlDeskBlockEntity.ControlType.JOYSTICK;
         }
-        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
-                && hitBounds(installBounds(ControlDeskBlockEntity.ControlType.MONITOR_2, facing, pos), click)) {
-            return ControlDeskBlockEntity.ControlType.MONITOR_2;
-        }
-        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
-                && hitBounds(installBounds(ControlDeskBlockEntity.ControlType.THROTTLE, facing, pos), click)) {
-            return ControlDeskBlockEntity.ControlType.THROTTLE;
-        }
         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
-                && hitBounds(installBounds(ControlDeskBlockEntity.ControlType.JOYSTICK_2, facing, pos), click)) {
+                && hitBounds(List.of(joystick2PlaceBox(desk, facing, pos)), click)) {
             return ControlDeskBlockEntity.ControlType.JOYSTICK_2;
         }
         return null;
+    }
+
+    /**
+     * joystick_2 放置盒的世界 AABB（北向基准 4×9×4，中心 = 放置中心 placeX/placeZ，底 y7；随 FACING 旋转，
+     * 与渲染/预览一致）。供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
+     */
+    public static AABB joystick2PlaceBox(ControlDeskBlockEntity desk, Direction facing, BlockPos pos) {
+        int half = ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF;
+        int cx = desk.getJoystick2PlaceX();
+        int cz = desk.getJoystick2PlaceZ();
+        Vec3 p0 = modelToWorld(pos, cx - half, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM, cz - half, facing);
+        Vec3 p1 = modelToWorld(pos, cx + half, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_TOP, cz + half, facing);
+        return new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+    }
+
+    /** 北向基准模型坐标（px）→ 世界坐标：绕方块中心 Y 旋转到 FACING（与渲染 rotateCenteredDegrees 同约定）。 */
+    private static Vec3 modelToWorld(BlockPos pos, float x, float y, float z, Direction facing) {
+        float bx = x / 16f;
+        float by = y / 16f;
+        float bz = z / 16f;
+        return switch (facing) {
+            case NORTH -> new Vec3(pos.getX() + bx, pos.getY() + by, pos.getZ() + bz);
+            case SOUTH -> new Vec3(pos.getX() + (1f - bx), pos.getY() + by, pos.getZ() + (1f - bz));
+            case WEST  -> new Vec3(pos.getX() + bz, pos.getY() + by, pos.getZ() + (1f - bx));
+            case EAST  -> new Vec3(pos.getX() + (1f - bz), pos.getY() + by, pos.getZ() + bx);
+            default    -> new Vec3(pos.getX() + bx, pos.getY() + by, pos.getZ() + bz);
+        };
     }
 
     /**
@@ -277,10 +309,29 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
+     * joystick_2 预览盒/放置共用的吸附中心：命中点 → 北向基准模型坐标（px，0..16，与渲染旋转互逆）→
+     * 吸附到 1px 网格整数 px，作为 4×4 盒子中心。返回 {cx, cz}。客户端预览（{@code ControlDeskPlacementOverlay}
+     * / {@code ControlDeskGhostPreviewRenderer}）与服务端放置共用。
+     */
+    public static int[] snappedBoxCenter(BlockPos pos, Direction facing, Vec3 click) {
+        float bx = (float) (click.x - pos.getX());
+        float bz = (float) (click.z - pos.getZ());
+        float mx, mz;
+        switch (facing) {
+            case SOUTH -> { mx = (1f - bx) * 16f; mz = (1f - bz) * 16f; }
+            case WEST  -> { mx = (1f - bz) * 16f; mz = bx * 16f; }
+            case EAST  -> { mx = bz * 16f; mz = (1f - bx) * 16f; }
+            default    -> { mx = bx * 16f; mz = bz * 16f; }
+        }
+        return new int[]{Math.round(mx), Math.round(mz)};
+    }
+
+    /**
      * 控件安装位的世界 AABB 列表（随 FACING 旋转；PEDAL 为一对左右两个框）。
      * 供安装/拆除预览框与拆除判定（onSneakWrenched 按点击位置命中）使用；
      * 如需调整安装位置，改上面的北向基准 shape 即可。
-     * MONITOR_2 / THROTTLE / JOYSTICK_2 共用 {@link #BACK_SLOT_SHAPE}（桌体后缘上方，互斥安装）。
+     * （monitor_2 / throttle / joystick_2 的原后缘插槽已移除，改桌顶 6×14 棋盘网格自由放置 ——
+     * 显示先行（见 {@code ControlDeskPlacementOverlay.showTopGrid}），放置逻辑待做，故返回空列表）
      */
     public static List<AABB> installBounds(ControlDeskBlockEntity.ControlType type, Direction facing, BlockPos pos) {
         List<AABB> result = new ArrayList<>();
@@ -290,9 +341,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 result.add(PEDAL_RIGHT_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
             }
             case JOYSTICK -> result.add(JOYSTICK_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
-            case MONITOR_2 -> result.add(BACK_SLOT_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
-            case THROTTLE -> result.add(BACK_SLOT_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
-            case JOYSTICK_2 -> result.add(BACK_SLOT_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
+            case MONITOR_2, THROTTLE, JOYSTICK_2 -> { /* 无安装位框（插槽已移除） */ }
         }
         return result;
     }
