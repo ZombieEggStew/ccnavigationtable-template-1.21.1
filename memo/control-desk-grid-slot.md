@@ -138,7 +138,14 @@ shift = ( (placeX-8)/16, (8-0)/16, (placeZ-8)/16 )   // 模型坐桌面 y8（MOD
 - ✅ joystick_2 完整接入：桌顶网格 + 4×9×4 预览盒 + 半透明实物 + 位置存储/渲染 + 4×4 占用阻挡 + 扳手拆除 + **输入检测/倾斜动画**（照抄 joystick，配置/轴值独立，枢轴 (8,1,8)，见 `memo/control-desk-seat.md`）
 - ✅ throttle 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×6 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + 只能 0°/180° 旋转 + 14×6 占用阻挡 + 扳手拆除
 - ✅ monitor_2 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×12 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + **不面向玩家**（仅随桌体 FACING）+ 14×6 占用阻挡 + 扳手拆除
-- ✅ **monitor_2 表面小 Monitor（第一步：表面棋盘网格纯显示）**：手持 Monitor 模块物品（toggle_switch / knob / button / screen）且视线命中**已装 monitor_2 的 case 前脸（2D 平面）** → 在屏幕面（北向基准 z=2 平面，12×10 屏幕面内缩 1px → **10×8 格**）画白色网格线（`ControlDeskPlacementOverlay.showMonitor2ScreenGrid`）；网格线随 **case 模型内 22.5° x 旋转**（绕 origin [14,4,3]，`MONITOR_2_SCREEN_TILT_*` 常量）+ 放置平移 + 桌体 FACING 旋转（`monitor2World` 变换链，与渲染一致），**网格线向屏幕内部内凹 0.9px**（用户定稿，防 z-fight）；**放置/交互逻辑后续做**
+- ✅ **monitor_2 表面小 Monitor（完整接入：网格 + 放置 + 交互 + 渲染 + Lua）**：
+  - **网格**：10×8 格（屏幕面 12×10 内缩 1px，`MONITOR_2_GRID_WIDTH/HEIGHT`），**GridState 已参数化**（构造器传宽高，Monitor 保持 12×10 / monitor_2 用 10×8，`getWidth/getHeight`）
+  - **命中**：`Monitor2HitDetector` 独立检测（遍历 `ControlDeskClientRegistry`，facing逆 → shift逆 → case 22.5° 逆，返回 `{pos, facing, distance, screenX, screenY, grid}`，`localToGrid` 10×8 转换）
+  - **客户端交互**：`Monitor2GridOverlay`（对齐 `MonitorGridOverlay`）——手持模块物品显示网格 + 放置预览、右键放置模块、按钮按压/钮子切换/旋钮拖拽（屏幕局部坐标直接由命中给出）、屏幕两点放置、扳手蹲下右键拆除、右键模块/屏幕打开 `MonitorModuleScreen` 配置、悬停 tooltip
+  - **服务端**：`ControlDeskBlockEntity` 实现 `MonitorGridHost` 接口（`getMonitor2Grid` 懒加载 10×8 + 放置/移除/按压/旋钮/屏幕文本全套方法），NBT 四路径持久化（`Monitor2Grid` tag），`monitor2Changed` 同步（`sendBlockUpdated` + `SyncGridPayload`）
+  - **payload 复用**：现有 8 个 Monitor payload（Place/Remove Module、ModulePress、KnobRotate、ModuleConfig、Place/RemoveScreen、SyncGrid）处理器按 pos 处 BE 类型分发（`MonitorGridHost`，Monitor 方块或已装 monitor_2 的 controlDesk 方块）
+  - **渲染**：`ControlDeskVisual`（Flywheel）+ `ControlDeskRenderer`（BER）渲染表面模块（复用 Monitor 模块模型/动画，变换 = 放置 + case 22.5° 旋转 + 屏幕面定位 + 模块初始旋转）；**屏幕 9 宫格 + 文字由 BER 补画**（Flywheel 无法表达，control_desk 注册改 `neverSkipVanillaRender`，renderSafe 在 Flywheel 可用时只画 monitor_2 屏幕、控件模型由 Visual 画）
+  - **Lua**：`ControlDeskPeripheral.getMonitor2Module(id)` / `getMonitor2CellModule(x,y)`（复用 `ModuleHandleRegistry`；`ModuleHandle` 系列改绑定 `MonitorGridHost` 接口，Monitor 与 monitor_2 共用同一套 handle）
 - ✅ **monitor_2 命中检测对齐 Monitor 独立命中**：`Monitor2HitDetector` 不依赖原版 `mc.hitResult`（monitor_2 屏幕在桌面碰撞体上方，准星瞄准屏幕时原版可能 MISS），遍历 `ControlDeskClientRegistry`（客户端已加载控制台坐标注册表，`ControlDeskBlockEntity.onLoad/setRemoved/onChunkUnloaded` 维护）枚举候选，用玩家视线射线 + monitor_2 屏幕面实时变换（facing逆 → shift逆 → case 22.5° 逆，严格互逆于 `monitor2World`）做屏幕面板正面求交 + 背面剔除 + 遮挡检测（`ClipContext.COLLIDER`），取最近命中；Sable 子次元兼容（射线回投 plot 坐标）
 - 三个自由放置模块互斥已全部改为纯占地判定（monitor_2 / throttle 同占 (8,12) → 天然互斥；joystick_2 网格内也与两者重叠）
 - 网格线是纯显示层（Outliner），逻辑全部基于放置中心 + 占地矩形

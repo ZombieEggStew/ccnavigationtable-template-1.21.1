@@ -4,7 +4,6 @@ import com.simibubi.create.AllItems;
 import com.zzy205.myfirstmod.block.ControlDeskBlock;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.item.MyModItems;
-import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.screen.ControlDeskConfigScreen;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
@@ -97,19 +96,6 @@ public class ControlDeskPlacementOverlay {
                 showRemovePreview(mc, hit);
             }
         }
-
-        // ── monitor_2 表面小 Monitor：独立命中检测（瞄准 monitor_2 屏幕面即显示，不依赖 hitResult）──
-        // 手持 Monitor 模块物品（toggle_switch / knob / button / screen）且视线命中已装 monitor_2 的
-        // case 前脸（2D 平面，随 22.5° x 旋转 + 放置平移 + 桌体 FACING 变换）→ 在表面显示 10×8 棋盘网格
-        // （纯显示，放置逻辑后续做）
-        if (isMonitorModuleItem(held)) {
-            showMonitor2ScreenGrid(mc);
-        }
-    }
-
-    /** 手持物品是否为 Monitor 模块物品（toggle_switch / knob / button / screen），用于 monitor_2 表面小 Monitor 的网格显示。 */
-    private static boolean isMonitorModuleItem(ItemStack stack) {
-        return ModuleType.fromItem(stack) != null || stack.is(MyModItems.MODULE_SCREEN.get());
     }
 
     /** 准星指向的方块是否为控制台。 */
@@ -309,48 +295,15 @@ public class ControlDeskPlacementOverlay {
     }
 
     /**
-     * monitor_2 屏幕表面 10×8 棋盘网格（纯显示）：
-     * 手持 Monitor 模块物品（toggle_switch / knob / button / screen）且视线命中<b>已装 monitor_2</b> 的
-     * case 前脸（2D 平面，随 22.5° x 旋转 + 放置平移 + 桌体 FACING 变换，见 {@link Monitor2HitDetector}）
-     * → 在屏幕面（北向基准 z=2 平面，12×10 屏幕面四周内缩 1px）画出 10×8 白色网格线，
-     * 网格线向屏幕内部内凹 0.9px（防 z-fight，用户定稿）。放置逻辑后续做（此步仅显示）。
-     */
-    private static void showMonitor2ScreenGrid(Minecraft mc) {
-        float partialTick = mc.getTimer().getGameTimeDeltaTicks();
-        Monitor2HitDetector.Monitor2Hit hit = Monitor2HitDetector.find(mc.level, mc.player, partialTick);
-        if (hit == null) return;
-
-        BlockPos pos = hit.pos();
-        Direction facing = hit.facing();
-        Outliner outliner = Outliner.getInstance();
-        String prefix = "control-desk/monitor2-grid/" + pos.toShortString();
-        float lw = 1 / 128f;
-        float z = ControlDeskBlockEntity.MONITOR_2_SCREEN_Z;
-
-        // 10×8 格：11 条竖线（x 3..13）+ 9 条横线（y 2..10），四周各内缩 1px
-        for (int i = 0; i <= ControlDeskBlockEntity.MONITOR_2_GRID_WIDTH; i++) {
-            float x = ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1 + i;
-            Vec3 from = monitor2World(pos, x, ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1, z, facing);
-            Vec3 to = monitor2World(pos, x, ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MAX - 1, z, facing);
-            outliner.showLine(prefix + "/v" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
-        }
-        for (int i = 0; i <= ControlDeskBlockEntity.MONITOR_2_GRID_HEIGHT; i++) {
-            float y = ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1 + i;
-            Vec3 from = monitor2World(pos, ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1, y, z, facing);
-            Vec3 to = monitor2World(pos, ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MAX - 1, y, z, facing);
-            outliner.showLine(prefix + "/h" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
-        }
-    }
-
-    /**
      * monitor_2 屏幕面点（北向基准模型空间 px）→ 世界坐标。
      * 变换链与渲染一致：case 22.5° x 旋转（Blockbench 元素 rotation，绕 origin [14,4,3]）→ px/16 →
      * 放置平移 shift = ((placeX-modelCenter)/16, (MODEL_PLACE_Y-modelBottomY)/16, (placeZ-modelCenter)/16)
      * → 桌体 FACING 旋转（绕方块中心 Y，gridWorld 同约定）→ +方块坐标。
-     * 网格线 z 向屏幕内部（+z）偏移 0.9px 内凹（旋转前偏移、旋转后跟随，用户定稿）。
+     * 网格线画在屏幕面本身（无内凹偏移，用户定稿 0px）。
+     * <p>供 {@link Monitor2GridOverlay} 复用（monitor_2 表面网格/模块框绘制）。
      */
-    private static Vec3 monitor2World(BlockPos pos, float x, float y, float z, Direction facing) {
-        // 网格线内凹 0.9px（向屏幕内部 +z，避免与 case 前脸 z-fight）
+    static Vec3 monitor2World(BlockPos pos, float x, float y, float z, Direction facing) {
+        // 网格线画在屏幕面本身（无内凹偏移，用户定稿 0px）
         z += 0.0f;
 
         // case 22.5° x 轴旋转（绕 origin，Blockbench 元素 rotation；方向符号待进游戏验证，反了翻转 TILT_DEG 符号）

@@ -3,20 +3,30 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
+import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
+import com.zzy205.myfirstmod.client.ScreenTextRenderer;
 import com.zzy205.myfirstmod.client.SeatControlState;
+import com.zzy205.myfirstmod.monitor.GridState;
+import com.zzy205.myfirstmod.monitor.ModuleType;
+import com.zzy205.myfirstmod.monitor.ScreenText;
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBuffer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.neoforged.neoforge.client.model.data.ModelData;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
@@ -33,6 +43,8 @@ import java.util.Map;
  */
 public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBlockEntity> {
 
+    private static final RandomSource RANDOM = RandomSource.create(42L);
+
     /** 每个控制台独立的操纵杆动画倾斜值（度）{tiltX, tiltY}：指数逼近追逐目标 */
     private final Map<BlockPos, float[]> smoothTilts = new HashMap<>();
     /** 每个控制台独立的摇杆2 动画倾斜值（度）{tiltX, tiltY}：指数逼近追逐目标（独立于 joystick） */
@@ -43,6 +55,8 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
     private final Map<BlockPos, Float> smoothThrottles = new HashMap<>();
     /** 每个控制台独立的油门张力充电状态 {progress(0..1), lastDir, lastGearPx}：帧时间平滑推进 */
     private final Map<BlockPos, float[]> throttleCharge = new HashMap<>();
+    /** 每个控制台独立的 monitor_2 模块动画值（外层 key=BlockPos，内层 key=moduleId）：按压/旋钮动画 */
+    private final Map<BlockPos, Map<Integer, Float>> monitor2Anims = new HashMap<>();
 
     public ControlDeskRenderer(BlockEntityRendererProvider.Context context) {}
 
@@ -50,12 +64,21 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
     protected void renderSafe(ControlDeskBlockEntity be, float partialTicks, PoseStack ms,
                               MultiBufferSource bufferSource, int light, int overlay) {
         Level level = be.getLevel();
-        if (level == null || VisualizationManager.supportsVisualization(level)) return;
+        boolean shellInstanced = level != null && VisualizationManager.supportsVisualization(level);
+        // Flywheel 可用时控件模型由 ControlDeskVisual 实例化渲染，BER 只补画 monitor_2 屏幕动态内容
+        // （屏幕 9 宫格 + 文字无法用 Flywheel 表达）；Flywheel 不可用时全量渲染。
 
         BlockState state = be.getBlockState();
         Direction facing = state.getValue(ControlDeskBlock.FACING);
 
         VertexConsumer vb = bufferSource.getBuffer(RenderType.cutoutMipped());
+
+        // monitor_2 屏幕 9 宫格 + 文字（无论 Flywheel 是否可用都由 BER 画，对齐 MonitorRenderer）
+        if (be.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)) {
+            renderMonitor2Screens(be, state, facing, ms, bufferSource, light, overlay);
+        }
+
+        if (shellInstanced) return;
 
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)) {
             renderPart(MyModPartialModels.CONTROL_DESK_PEDAL_BASE, state, facing, ms, vb, light, 0);
@@ -81,6 +104,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
                     be.getMonitor2PlaceX(), be.getMonitor2PlaceZ(),
                     ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, 0);
             buffer.light(light).renderInto(ms, vb);
+            renderMonitor2Modules(be, state, facing, ms, bufferSource, light, overlay);
         }
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
             int backRot = be.getBackSlotRotation();
@@ -250,9 +274,218 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         return buffer;
     }
 
+    /**
+     * monitor_2 表面小 Monitor 模块渲染（BER 回退，Flywheel 不可用时）：照抄 {@link MonitorRenderer}
+     * 的模块渲染（模型 + 额外部件 + 动画），但变换链为 monitor_2 的：放置变换（R_facing · T(shift)）
+     * + case 22.5° x 旋转（模型内烘焙）+ 屏幕面定位 + 模块初始旋转 + 按压深度。
+     * 模块动画值按 (BlockPos, moduleId) 隔离，与 Flywheel 路径一致。
+     */
+    private void renderMonitor2Modules(ControlDeskBlockEntity be, BlockState state, Direction facing,
+                                       PoseStack ms, MultiBufferSource bufferSource, int light, int overlay) {
+        var grid = be.getMonitor2Grid();
+        BlockPos pos = be.getBlockPos();
+
+        var beAnims = monitor2Anims.computeIfAbsent(pos, k -> new HashMap<>());
+        beAnims.keySet().removeIf(id -> !grid.getAllModules().containsKey(id));
+        if (grid.getAllModules().isEmpty()) {
+            monitor2Anims.remove(pos);
+            return;
+        }
+
+        float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
+        for (var mod : grid.getAllModules().values()) {
+            var bhv = ModuleRenderBehavior.of(mod.type());
+            boolean isKnob = mod.type() == ModuleType.KNOB;
+
+            // 屏幕面定位（北向基准模型空间 px，内缩 1px 网格 + 模块微调）
+            float px = ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1 + mod.gridX() + bhv.offsetX() * 16f;
+            float py = ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1 + mod.gridY() + bhv.offsetY() * 16f;
+            float pz = ControlDeskBlockEntity.MONITOR_2_SCREEN_Z + bhv.offsetZ() * 16f;
+
+            float target;
+            if (isKnob) {
+                Float visual = Monitor2GridOverlay.getActiveKnobVisualAngle(pos, mod.id());
+                target = visual != null ? visual : grid.getKnobAngle(mod.id());
+            } else {
+                target = grid.isPressed(mod.id()) ? 1f : 0f;
+            }
+            float next = ModuleRenderBehavior.stepAnim(beAnims, mod.id(), isKnob, target,
+                    bhv.animPressSpeed(), bhv.animReleaseSpeed());
+
+            BakedModel model = MonitorPreloadedModels.getModel(mod.type());
+            if (model == null) continue;
+
+            ms.pushPose();
+            applyMonitor2ModuleTransform(ms, be, facing, px, py, pz, mod.type());
+            if (bhv.usePressDepth()) {
+                ms.translate(0f, 0f, ModuleRenderBehavior.ButtonBehavior.PRESS_DEPTH * next / 16f);
+            }
+            // 底座
+            renderModel(ms, bufferSource.getBuffer(Sheets.solidBlockSheet()), model, light, overlay);
+            // 额外部件（拉杆/按钮头/旋钮把手/灯带）
+            float lightLevel = next;
+            if (mod.type() == ModuleType.BUTTON_1X1) {
+                lightLevel = grid.isLightCodeControlled(mod.id())
+                        ? grid.getLightBrightness(mod.id()) : next;
+            }
+            bhv.renderExtra(ms, bufferSource, next, lightLevel, light, overlay);
+            ms.popPose();
+        }
+    }
+
+    /** monitor_2 模块基底变换（PoseStack 版）：facing → 放置平移 → case 22.5° x 旋转 → 屏幕面定位 → 模块初始旋转。 */
+    private static void applyMonitor2ModuleTransform(PoseStack ms, ControlDeskBlockEntity be, Direction facing,
+                                                     float px, float py, float pz, ModuleType type) {
+        // 0. 桌体 FACING 旋转（绕方块中心 Y，PoseStack 已平移到方块位置；与 BER 控件渲染同链）
+        ms.translate(0.5f, 0.5f, 0.5f);
+        ms.mulPose(com.mojang.math.Axis.YP.rotationDegrees(-facing.getOpposite().toYRot()));
+        ms.translate(-0.5f, -0.5f, -0.5f);
+        // 1. 放置变换（平移到放置位，不面向玩家）
+        float shiftX = (be.getMonitor2PlaceX() - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16f;
+        float shiftY = (ControlDeskBlockEntity.MODEL_PLACE_Y - ControlDeskBlockEntity.MONITOR_2_MODEL_BOTTOM_Y) / 16f;
+        float shiftZ = (be.getMonitor2PlaceZ() - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16f;
+        ms.translate(shiftX, shiftY, shiftZ);
+        // 2. case 22.5° x 旋转（绕 origin [14,4,3]，px 单位）
+        ms.translate(ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_X / 16f,
+                ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_Y / 16f,
+                ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_Z / 16f);
+        ms.mulPose(com.mojang.math.Axis.XP.rotationDegrees(ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_DEG));
+        ms.translate(-ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_X / 16f,
+                -ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_Y / 16f,
+                -ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_Z / 16f);
+        // 3. 屏幕面定位（px → 块）
+        ms.translate(px / 16f, py / 16f, pz / 16f);
+        // 4. 模块初始旋转（与 ModuleRenderBehavior.applyInitialRotation 一致）
+        if (type == ModuleType.TOGGLE_SWITCH || type == ModuleType.KNOB) {
+            ms.mulPose(com.mojang.math.Axis.XP.rotationDegrees(-90));
+        }
+    }
+
+    private static void renderModel(PoseStack ps, VertexConsumer consumer, BakedModel model, int light, int overlay) {
+        var pose = ps.last();
+        for (Direction dir : Direction.values()) {
+            for (var q : model.getQuads(null, dir, RANDOM, ModelData.EMPTY, null))
+                consumer.putBulkData(pose, q, 1, 1, 1, 1, light, OverlayTexture.NO_OVERLAY);
+        }
+        for (var q : model.getQuads(null, null, RANDOM, ModelData.EMPTY, null))
+            consumer.putBulkData(pose, q, 1, 1, 1, 1, light, OverlayTexture.NO_OVERLAY);
+    }
+
+    /**
+     * monitor_2 表面屏幕 9 宫格 + 文字渲染（BER，对齐 {@link MonitorRenderer#renderScreen}）。
+     * 变换链与模块渲染一致：facing 旋转（PoseStack 已平移到方块位置）→ 放置平移 → case 22.5° x 旋转
+     * → 屏幕面网格定位；9 宫格部件与 ScreenTextRenderer 的坐标基准均为 monitor_2 屏幕面。
+     */
+    private void renderMonitor2Screens(ControlDeskBlockEntity be, BlockState state, Direction facing,
+                                       PoseStack ms, MultiBufferSource bufferSource, int light, int overlay) {
+        var grid = be.getMonitor2Grid();
+        if (grid.getScreenRegions().isEmpty()) return;
+
+        BakedModel corner = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_CORNER);
+        BakedModel edge   = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_EDGE);
+        BakedModel center = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_CENTER);
+
+        float cellSize   = 1f / 16f;
+        float borderSize = cellSize;
+
+        for (var scr : grid.getScreenRegions()) {
+            // 屏幕面网格定位（北向基准模型空间 px，内缩 1px 网格起点 + 屏幕偏移）
+            float scrX = ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1 + scr.minX();
+            float scrY = ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1 + scr.minY();
+            float scrW = scr.width()  * 16f;
+            float scrH = scr.height() * 16f;
+            float scrZ = ControlDeskBlockEntity.MONITOR_2_SCREEN_Z;
+
+            float innerW = scrW - 2 * borderSize * 16f;
+            float innerH = scrH - 2 * borderSize * 16f;
+
+            VertexConsumer vc = bufferSource.getBuffer(Sheets.solidBlockSheet());
+
+            ms.pushPose();
+            applyMonitor2ModuleTransform(ms, be, facing, 0, 0, 0, null);
+
+            // ── 四个角（绕 Z 轴旋转，法线安全）──
+            if (corner != null) {
+                renderScreenCorner(ms, vc, corner, scrX, scrY, scrZ, 0, light, overlay);
+                renderScreenCorner(ms, vc, corner, scrX + scrW - borderSize * 16f, scrY, scrZ, 90, light, overlay);
+                renderScreenCorner(ms, vc, corner, scrX, scrY + scrH - borderSize * 16f, scrZ, -90, light, overlay);
+                renderScreenCorner(ms, vc, corner, scrX + scrW - borderSize * 16f, scrY + scrH - borderSize * 16f, scrZ, 180, light, overlay);
+            }
+
+            // ── 四边（平铺）──
+            if (edge != null) {
+                int edgeTilesH = Math.max(0, scr.width() - 2);
+                int edgeTilesV = Math.max(0, scr.height() - 2);
+                for (int i = 0; i < edgeTilesV; i++) {
+                    renderScreenCorner(ms, vc, edge, scrX + scrW - borderSize * 16f, scrY + borderSize * 16f + i * cellSize * 16f, scrZ, 180, light, overlay);
+                    renderScreenCorner(ms, vc, edge, scrX, scrY + borderSize * 16f + i * cellSize * 16f, scrZ, 0, light, overlay);
+                }
+                for (int i = 0; i < edgeTilesH; i++) {
+                    renderScreenCorner(ms, vc, edge, scrX + borderSize * 16f + i * cellSize * 16f, scrY, scrZ, 90, light, overlay);
+                    renderScreenCorner(ms, vc, edge, scrX + borderSize * 16f + i * cellSize * 16f, scrY + scrH - borderSize * 16f, scrZ, -90, light, overlay);
+                }
+            }
+
+            // ── 中央面板（XY 双向拉伸）──
+            if (center != null && innerW > 0.001f && innerH > 0.001f) {
+                ms.pushPose();
+                ms.translate((scrX + borderSize * 16f) / 16f, (scrY + borderSize * 16f) / 16f, scrZ / 16f);
+                ms.scale(innerW / 16f, innerH / 16f, 1);
+                renderModel(ms, vc, center, light, overlay);
+                ms.popPose();
+            }
+
+            // ── 屏幕字符 / 图形 ──
+            ScreenText text = grid.getScreenText(scr.id());
+            if (text != null && text.hasContent()) {
+                renderMonitor2ScreenText(ms, bufferSource, scr, text, light);
+            }
+            ms.popPose();
+        }
+    }
+
+    /** 渲染一个角模型，绕格子中心 Z 轴旋转（法线安全）。坐标均为模型空间 px。 */
+    private static void renderScreenCorner(PoseStack ps, VertexConsumer vc, BakedModel corner,
+                                           float cellX, float cellY, float scrZ, float zDegrees,
+                                           int light, int overlay) {
+        float halfCell = 0.5f / 16f;
+        ps.pushPose();
+        ps.translate(cellX / 16f + halfCell, cellY / 16f + halfCell, scrZ / 16f);
+        if (zDegrees != 0) ps.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(zDegrees));
+        ps.translate(-halfCell, -halfCell, 0);
+        renderModel(ps, vc, corner, light, overlay);
+        ps.popPose();
+    }
+
+    /** monitor_2 屏幕格子文本渲染：可绘制区 = 9 宫格内区再内缩 DRAWABLE_INSET（对齐 MonitorRenderer）。 */
+    private void renderMonitor2ScreenText(PoseStack ps, MultiBufferSource bufferSource,
+                                          GridState.ScreenRegion scr, ScreenText text, int light) {
+        float cellSize = 1f / 16f;
+        float drawableInset = (float) ScreenText.DRAWABLE_INSET;
+
+        float scrX = (ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1 + scr.minX()) / 16f;
+        float scrY = (ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1 + scr.minY()) / 16f;
+        float scrW = scr.width() * cellSize;
+        float scrH = scr.height() * cellSize;
+
+        float contentRight = scrX + scrW - drawableInset;
+        float contentTop = scrY + scrH - drawableInset;
+        float contentLeft = scrX + drawableInset;
+        float contentBottom = scrY + drawableInset;
+        float innerWidthUnits = (float) ((scr.width() - 2f * drawableInset * 16f)
+            * ScreenText.RECT_UNITS_PER_PX);
+        float innerHeightUnits = (float) ((scr.height() - 2f * drawableInset * 16f)
+            * ScreenText.RECT_UNITS_PER_PX);
+        // 内容基准面 = 屏幕 9 宫格中心面（monitor_2 屏幕面 z=2）
+        float zBase = (ControlDeskBlockEntity.MONITOR_2_SCREEN_Z + 0.7f) / 16f;
+
+        ScreenTextRenderer.drawAll(ps, bufferSource, text, contentRight, contentTop,
+            contentLeft, contentBottom, innerWidthUnits, innerHeightUnits, zBase);
+    }
+
     @Override
     public @NotNull AABB getRenderBoundingBox(@NotNull ControlDeskBlockEntity blockEntity) {
-        // 操纵杆把手最高到 y≈17.4/16，超出 1 格默认盒；放大避免 BER 兜底路径被视锥剔除
+        // 操纵杆把手最高到 y≈17.4/16，monitor_2 屏幕可到 y≈19/16，超出 1 格默认盒；放大避免 BER 路径被视锥剔除
         return AABB.ofSize(blockEntity.getBlockPos().getCenter(), 1.5, 1.5, 1.5);
     }
 }

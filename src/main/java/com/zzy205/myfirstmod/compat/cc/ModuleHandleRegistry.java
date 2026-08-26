@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
-import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.block.MonitorGridHost;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
 
@@ -12,17 +12,17 @@ import java.util.Map;
  * <p>
  * 每个 {@link ModuleType} 在此注册自己的 handle 工厂；
  * {@link MonitorPeripheral#getCellModule(int, int)} / {@link MonitorPeripheral#getModule(int)}
- * 通过 {@link #create(MonitorBlockEntity, MonitorModule)} 分派到对应类型的模块实例。
+ * 通过 {@link #create(MonitorGridHost, MonitorModule)} 分派到对应类型的模块实例。
  * <p>
  * 为某类型添加专属控制方法（例如钮子开关的 setToggleState）时，在对应子类中补充
  * {@code @LuaFunction} 方法即可；新增模块类型时在此增加一条注册。
  */
 public final class ModuleHandleRegistry {
 
-    /** 模块实例工厂：由 {@link MonitorBlockEntity} + {@link MonitorModule} 构建 handle。 */
+    /** 模块实例工厂：由 {@link MonitorGridHost} + {@link MonitorModule} 构建 handle。 */
     @FunctionalInterface
     public interface Factory {
-        ModuleHandle create(MonitorBlockEntity be, MonitorModule module);
+        ModuleHandle create(MonitorGridHost be, MonitorModule module);
     }
 
     private static final Map<ModuleType, Factory> FACTORIES = new EnumMap<>(ModuleType.class);
@@ -42,7 +42,7 @@ public final class ModuleHandleRegistry {
     }
 
     /** 为指定模块创建 Lua 模块实例；未注册的类型直接抛异常（保证每种类型都有对应 handle）。 */
-    public static ModuleHandle create(MonitorBlockEntity be, MonitorModule module) {
+    public static ModuleHandle create(MonitorGridHost be, MonitorModule module) {
         Factory factory = FACTORIES.get(module.type());
         if (factory == null) {
             throw new IllegalStateException(

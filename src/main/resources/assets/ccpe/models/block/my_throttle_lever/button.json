@@ -3,8 +3,8 @@
 	"credit": "Made with Blockbench",
 	"render_type": "minecraft:cutout",
 	"textures": {
-		"0": "simulated:block/throttle_lever/throttle_lever_1",
-		"particle": "simulated:block/throttle_lever/throttle_lever_1"
+		"0": "ccpe:block/my_throttle_lever/throttle_lever_1",
+		"particle": "ccpe:block/my_throttle_lever/throttle_lever_1"
 	},
 	"elements": [
 		{
@@ -21,6 +21,7 @@
 		{
 			"name": "clutch",
 			"origin": [8, 3, 8],
+			"scope": 0,
 			"color": 0,
 			"children": [0]
 		}

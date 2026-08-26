@@ -1,6 +1,10 @@
 package com.zzy205.myfirstmod.block;
 
+import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
 import com.zzy205.myfirstmod.client.SeatControlState;
+import com.zzy205.myfirstmod.monitor.GridState;
+import com.zzy205.myfirstmod.monitor.ModuleType;
+import com.zzy205.myfirstmod.monitor.MonitorModule;
 import dev.engine_room.flywheel.api.instance.Instance;
 import dev.engine_room.flywheel.api.visualization.VisualizationContext;
 import dev.engine_room.flywheel.lib.instance.InstanceTypes;
@@ -10,9 +14,12 @@ import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import dev.engine_room.flywheel.lib.visual.AbstractBlockEntityVisual;
 import dev.engine_room.flywheel.lib.visual.SimpleDynamicVisual;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -59,6 +66,30 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     private float lastThrottleGearPx;
     private float throttleChargeProgress;
     private int lastThrottleDir;
+
+    // ── monitor_2 表面小 Monitor 模块（复用 Monitor 的模块模型与动画）──
+    /** moduleId → 模块实例（底座 + 额外部件） */
+    private final Map<Integer, ModuleVisual2> monitor2Modules = new HashMap<>();
+    /** monitor_2 模块按压/旋钮动画值（单一实现 {@link ModuleRenderBehavior#stepAnim}） */
+    private final Map<Integer, Float> monitor2Anims = new HashMap<>();
+
+    /** monitor_2 表面单模块的两个实例（底座 + 额外部件：按钮头/钮子拉杆/旋钮把手）。 */
+    private static final class ModuleVisual2 {
+        final ModuleType type;
+        final TransformedInstance base;
+        final TransformedInstance extra;
+
+        ModuleVisual2(ModuleType type, TransformedInstance base, TransformedInstance extra) {
+            this.type = type;
+            this.base = base;
+            this.extra = extra;
+        }
+
+        void delete() {
+            base.delete();
+            if (extra != null) extra.delete();
+        }
+    }
 
     public ControlDeskVisual(VisualizationContext ctx, ControlDeskBlockEntity blockEntity, float partialTick) {
         super(ctx, blockEntity, partialTick);
@@ -112,6 +143,8 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         // monitor_2：已接入棋盘自由放置——模型平移到放置位，不面向玩家（无安装朝向旋转，仅随桌体 FACING）
         this.monitor2 = syncInstance(this.monitor2, monitor2Wanted, MyModPartialModels.CONTROL_DESK_MONITOR_2, facing,
                 inst -> applyMonitor2Placement(inst, be));
+        // monitor_2 表面小 Monitor：渲染表面模块（复用 Monitor 模块模型与动画，变换 = 放置 + case 22.5° 旋转 + 屏幕面定位）
+        this.transformMonitor2Modules(be, facing, frameTicks);
         this.throttleBase = syncInstance(this.throttleBase, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_BASE, facing,
                 inst -> applyThrottlePlacement(inst, be));
 
@@ -201,6 +234,142 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     }
 
     /**
+     * monitor_2 表面小 Monitor 模块渲染（Flywheel）：按网格状态动态创建/删除模块实例。
+     * 变换链 = monitor_2 放置变换（R_facing · T(shift)）+ case 22.5° x 旋转（模型内烘焙）
+     * + 屏幕面定位 + 模块初始旋转 + 动画。与 {@link ControlDeskPlacementOverlay#monitor2World}
+     * 的放置/旋转约定一致，模块定位点同 monitor_2 屏幕面网格坐标（北向基准 px）。
+     */
+    private void transformMonitor2Modules(ControlDeskBlockEntity be, Direction facing, float frameTicks) {
+        // 未安装 monitor_2：删除全部模块实例
+        if (!be.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)) {
+            if (!monitor2Modules.isEmpty()) {
+                monitor2Modules.values().forEach(ModuleVisual2::delete);
+                monitor2Modules.clear();
+                monitor2Anims.clear();
+            }
+            return;
+        }
+
+        GridState grid = be.getMonitor2Grid();
+        final BlockPos pos = be.getBlockPos();
+
+        // 删除已移除的模块实例
+        monitor2Modules.keySet().removeIf(id -> {
+            if (!grid.getAllModules().containsKey(id)) {
+                monitor2Modules.get(id).delete();
+                return true;
+            }
+            return false;
+        });
+
+        for (MonitorModule mod : grid.getAllModules().values()) {
+            ModuleVisual2 mv = monitor2Modules.get(mod.id());
+            if (mv == null) {
+                mv = createMonitor2ModuleVisual(mod.type());
+                monitor2Modules.put(mod.id(), mv);
+                this.relight(mv);
+            }
+
+            var bhv = ModuleRenderBehavior.of(mod.type());
+            boolean isKnob = mod.type() == ModuleType.KNOB;
+
+            // 屏幕面定位（北向基准模型空间 px，内缩 1px 网格 + 模块微调）
+            float px = ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1 + mod.gridX() + bhv.offsetX() * 16f;
+            float py = ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1 + mod.gridY() + bhv.offsetY() * 16f;
+            float pz = ControlDeskBlockEntity.MONITOR_2_SCREEN_Z + bhv.offsetZ() * 16f;
+
+            float target;
+            if (isKnob) {
+                Float visual = Monitor2GridOverlay.getActiveKnobVisualAngle(pos, mod.id());
+                target = visual != null ? visual : grid.getKnobAngle(mod.id());
+            } else {
+                target = grid.isPressed(mod.id()) ? 1f : 0f;
+            }
+            float next = ModuleRenderBehavior.stepAnim(monitor2Anims, mod.id(), isKnob, target,
+                    bhv.animPressSpeed(), bhv.animReleaseSpeed());
+
+            // 底座：放置变换 + case 22.5° 旋转 + 屏幕面定位 + 初始旋转 + 按压深度
+            mv.base.setIdentityTransform();
+            applyMonitor2Base(mv.base, be, facing, px, py, pz, mod.type(), bhv.usePressDepth() ? next : 0f);
+            mv.base.setChanged();
+
+            // 额外部件：底座变换 + 部件动画（与 ModuleRenderBehavior.renderExtra 一致）
+            mv.extra.setIdentityTransform();
+            applyMonitor2Base(mv.extra, be, facing, px, py, pz, mod.type(), 0f);
+            switch (mod.type()) {
+                case BUTTON_1X1 -> mv.extra.translate(0f, 0f,
+                        ModuleRenderBehavior.ButtonBehavior.PRESS_DEPTH * next / 16f);
+                case TOGGLE_SWITCH -> {
+                    mv.extra.translate(1 / 32f, 0f, 1 / 32f);
+                    mv.extra.rotateX((float) Math.toRadians(-30 + next * 60));
+                }
+                case KNOB -> mv.extra.rotateY((float) Math.toRadians(-next));
+            }
+            mv.extra.setChanged();
+        }
+    }
+
+    /**
+     * monitor_2 模块基底变换（底座与额外部件共用，需先经 setIdentityTransform）：
+     * {@code T(pos) · R_facing · T(shift) · Tilt22.5°(case) · T(px,py,pz) · R_initial · T(pressDepth)}。
+     * 与 {@link ControlDeskPlacementOverlay#monitor2World} 的放置/旋转约定一致（北向基准模型空间 px）；
+     * facing/方块位置链与 {@link #syncInstance} 中 monitor_2 本体一致（translate(pos) → rotateCenteredDegrees → applyPlacement）。
+     */
+    private void applyMonitor2Base(TransformedInstance inst, ControlDeskBlockEntity be, Direction facing,
+                                   float px, float py, float pz, ModuleType type, float pressDepth) {
+        // 0. 平移到方块位置 + 桌体 FACING 旋转（与 syncInstance 同链）
+        inst.translate(this.getVisualPosition());
+        inst.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
+        // 1. 放置变换（平移到放置位，不面向玩家）
+        applyPlacement(inst, 0,
+                be.getMonitor2PlaceX(), be.getMonitor2PlaceZ(),
+                ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y,
+                ControlDeskBlockEntity.MONITOR_2_MODEL_BOTTOM_Y);
+        // 2. case 22.5° x 旋转（模型内烘焙，绕 origin [14,4,3]；px 单位 → 除以 16 转块）
+        double rad = Math.toRadians(ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_DEG);
+        inst.translate(ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_X / 16f,
+                ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_Y / 16f,
+                ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_Z / 16f);
+        inst.rotateX((float) rad);
+        inst.translate(-ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_X / 16f,
+                -ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_Y / 16f,
+                -ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_Z / 16f);
+        // 3. 屏幕面定位（px → 块）
+        inst.translate(px / 16f, py / 16f, pz / 16f);
+        // 4. 模块初始旋转（与 ModuleRenderBehavior.applyInitialRotation 一致）
+        if (type == ModuleType.TOGGLE_SWITCH || type == ModuleType.KNOB) {
+            inst.rotateX((float) Math.toRadians(-90));
+        }
+        // 5. 按压深度（按钮：沿 z 凹陷，模块局部）
+        if (pressDepth > 0f) {
+            inst.translate(0f, 0f, ModuleRenderBehavior.ButtonBehavior.PRESS_DEPTH * pressDepth / 16f);
+        }
+    }
+
+    private ModuleVisual2 createMonitor2ModuleVisual(ModuleType type) {
+        PartialModel base = switch (type) {
+            case BUTTON_1X1 -> MyModPartialModels.MODULE_BUTTON_BASE;
+            case TOGGLE_SWITCH -> MyModPartialModels.MODULE_TOGGLE_BASE;
+            case KNOB -> MyModPartialModels.MODULE_KNOB_BASE;
+        };
+        PartialModel extra = switch (type) {
+            case BUTTON_1X1 -> MyModPartialModels.MODULE_BUTTON_HEAD;
+            case TOGGLE_SWITCH -> MyModPartialModels.MODULE_TOGGLE_LEVER;
+            case KNOB -> MyModPartialModels.MODULE_KNOB_HANDLE;
+        };
+        TransformedInstance baseInst = this.instancerProvider()
+                .instancer(InstanceTypes.TRANSFORMED, Models.partial(base)).createInstance();
+        TransformedInstance extraInst = this.instancerProvider()
+                .instancer(InstanceTypes.TRANSFORMED, Models.partial(extra)).createInstance();
+        return new ModuleVisual2(type, baseInst, extraInst);
+    }
+
+    private void relight(ModuleVisual2 mv) {
+        this.relight(mv.base);
+        if (mv.extra != null) this.relight(mv.extra);
+    }
+
+    /**
      * 放置变换公共链（三处渲染统一，见 {@code memo/control-desk-grid-slot.md} 变换链）：
      * {@code R_facing · [T(px,0.5,pz)·R_backRot·T(-px,-0.5,-pz)] · T(shift)}，
      * {@code shift = ((px-modelCenter)/16, (placeYBottom-modelBottomY)/16, (pz-modelCenter)/16)}。
@@ -259,6 +428,10 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         if (this.joystick != null) consumer.accept(this.joystick);
         if (this.joystickBase != null) consumer.accept(this.joystickBase);
         if (this.monitor2 != null) consumer.accept(this.monitor2);
+        for (ModuleVisual2 mv : monitor2Modules.values()) {
+            consumer.accept(mv.base);
+            if (mv.extra != null) consumer.accept(mv.extra);
+        }
         if (this.throttleBase != null) consumer.accept(this.throttleBase);
         if (this.throttleHandle != null) consumer.accept(this.throttleHandle);
         if (this.throttleIndicator != null) consumer.accept(this.throttleIndicator);
@@ -274,6 +447,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         if (this.joystick != null) this.relight(this.joystick);
         if (this.joystickBase != null) this.relight(this.joystickBase);
         if (this.monitor2 != null) this.relight(this.monitor2);
+        for (ModuleVisual2 mv : monitor2Modules.values()) this.relight(mv);
         if (this.throttleBase != null) this.relight(this.throttleBase);
         if (this.throttleHandle != null) this.relight(this.throttleHandle);
         if (this.throttleIndicator != null) this.relight(this.throttleIndicator);
@@ -289,6 +463,9 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         if (this.joystick != null) this.joystick.delete();
         if (this.joystickBase != null) this.joystickBase.delete();
         if (this.monitor2 != null) this.monitor2.delete();
+        monitor2Modules.values().forEach(ModuleVisual2::delete);
+        monitor2Modules.clear();
+        monitor2Anims.clear();
         if (this.throttleBase != null) this.throttleBase.delete();
         if (this.throttleHandle != null) this.throttleHandle.delete();
         if (this.throttleIndicator != null) this.throttleIndicator.delete();

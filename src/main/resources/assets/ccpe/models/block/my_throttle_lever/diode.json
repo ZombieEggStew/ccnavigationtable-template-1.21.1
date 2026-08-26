@@ -2,7 +2,7 @@
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
 	"textures": {
-		"particle": "simulated:block/throttle_lever/throttle_lever_1"
+		"particle": "ccpe:block/my_throttle_lever/throttle_lever_1"
 	},
 	"elements": [
 		{
@@ -28,6 +28,7 @@
 		{
 			"name": "redstone",
 			"origin": [0, 0, 0],
+			"scope": 0,
 			"color": 0,
 			"children": [0, 1]
 		}

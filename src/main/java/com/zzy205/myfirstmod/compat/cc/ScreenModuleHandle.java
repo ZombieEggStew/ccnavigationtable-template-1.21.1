@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
-import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.block.MonitorGridHost;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ScreenText;
 import dan200.computercraft.api.lua.LuaException;
@@ -28,7 +28,7 @@ import java.util.Optional;
  */
 public final class ScreenModuleHandle extends ModuleHandle {
 
-    public ScreenModuleHandle(MonitorBlockEntity be, GridState.ScreenRegion screen) {
+    public ScreenModuleHandle(MonitorGridHost be, GridState.ScreenRegion screen) {
         super(be, screen.id(), GridState.SCREEN_NAME, screen.minX(), screen.minY(),
                 screen.width(), screen.height());
     }

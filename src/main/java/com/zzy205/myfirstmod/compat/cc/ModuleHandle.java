@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
-import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.block.MonitorGridHost;
 import dan200.computercraft.api.lua.LuaFunction;
 
 /**
@@ -12,10 +12,13 @@ import dan200.computercraft.api.lua.LuaFunction;
  * <p>
  * 本类只持有不可变快照，通用读取方法无需 mainThread；子类中需要改动方块状态的
  * 控制方法应标注 {@code @LuaFunction(mainThread = true)}。
+ * <p>
+ * 宿主为 {@link MonitorGridHost}（Monitor 方块实体或 controlDesk 的 monitor_2 模块），
+ * 因此同一套 handle 可同时服务 Monitor 与 monitor_2。
  */
 public abstract class ModuleHandle {
 
-    protected final MonitorBlockEntity be;
+    protected final MonitorGridHost be;
     /** 模块/屏幕在 monitor 内的唯一 ID。 */
     protected final int id;
 
@@ -25,7 +28,7 @@ public abstract class ModuleHandle {
     private final int width;
     private final int height;
 
-    protected ModuleHandle(MonitorBlockEntity be, int id, String type, int x, int y, int width, int height) {
+    protected ModuleHandle(MonitorGridHost be, int id, String type, int x, int y, int width, int height) {
         this.be = be;
         this.id = id;
         this.type = type;
@@ -89,7 +92,7 @@ public abstract class ModuleHandle {
 
     // ═══════════════ Java 侧访问器 ═══════════════
 
-    public final MonitorBlockEntity getBlockEntity() {
+    public final MonitorGridHost getBlockEntity() {
         return be;
     }
 }

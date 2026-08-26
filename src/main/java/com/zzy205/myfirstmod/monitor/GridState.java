@@ -13,12 +13,14 @@ import java.util.List;
 import java.util.ArrayList;
 
 /**
- * 12×10 棋盘网格状态（屏幕面板 14×12，四周各留 1 格边框）。
+ * 棋盘网格状态（默认 12×10；构造器可自定义尺寸，如 monitor_2 用 10×8）。
  * grid[x][y] = moduleId（-1 表示空格，-2 表示屏幕占用）。
  */
 public class GridState {
 
+    /** Monitor 默认网格宽（12 列）。monitor_2 等小型屏用 {@link #GridState(int, int)} 自定义。 */
     public static final int GRID_WIDTH = 12;
+    /** Monitor 默认网格高（10 行）。 */
     public static final int GRID_HEIGHT = 10;
     /** 屏幕类型名（网络 payload / 配置 / Lua getType 共用的标识）。 */
     public static final String SCREEN_NAME = "screen";
@@ -30,7 +32,10 @@ public class GridState {
     public static final int MODULE_ID_MIN = 0;
     public static final int MODULE_ID_MAX = 9999;
 
-    private final int[][] grid = new int[GRID_WIDTH][GRID_HEIGHT];
+    /** 本网格的宽（列数）/ 高（行数），构造器固定。 */
+    private final int gridWidth;
+    private final int gridHeight;
+    private final int[][] grid;
     private final Map<Integer, MonitorModule> modules = new LinkedHashMap<>();
     private final Set<Integer> pressedModules = new HashSet<>();
     /** 按钮模块的玩家点击计数，moduleId → 累计点击次数（瞬时态，不持久化） */
@@ -55,18 +60,30 @@ public class GridState {
     /** 每个屏幕的字符缓冲（显示文本），screenId → ScreenText */
     private final Map<Integer, ScreenText> screenTexts = new java.util.HashMap<>();
 
+    /** 默认 12×10 网格（Monitor）。 */
     public GridState() {
-        for (int x = 0; x < GRID_WIDTH; x++) {
-            for (int y = 0; y < GRID_HEIGHT; y++) {
+        this(GRID_WIDTH, GRID_HEIGHT);
+    }
+
+    /** 自定义尺寸网格（如 monitor_2 的 10×8）。 */
+    public GridState(int width, int height) {
+        this.gridWidth = width;
+        this.gridHeight = height;
+        this.grid = new int[width][height];
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
                 grid[x][y] = -1;
             }
         }
     }
 
+    public int getWidth() { return gridWidth; }
+    public int getHeight() { return gridHeight; }
+
     // ── 访问器 ──
 
     public int getCell(int x, int y) {
-        if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) return -1;
+        if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) return -1;
         return grid[x][y];
     }
 
@@ -96,7 +113,7 @@ public class GridState {
 
     /** 检查矩形区域是否可放置模块。屏幕占用的格子也不可放置。 */
     public boolean canPlace(int x, int y, int w, int h) {
-        if (x < 0 || y < 0 || x + w > GRID_WIDTH || y + h > GRID_HEIGHT) return false;
+        if (x < 0 || y < 0 || x + w > gridWidth || y + h > gridHeight) return false;
         for (int dx = 0; dx < w; dx++) {
             for (int dy = 0; dy < h; dy++) {
                 int cell = grid[x + dx][y + dy];
@@ -164,8 +181,8 @@ public class GridState {
         modules.remove(oldId);
         modules.put(newId, new MonitorModule(newId, mod.type(), mod.gridX(), mod.gridY()));
 
-        for (int x = 0; x < GRID_WIDTH; x++) {
-            for (int y = 0; y < GRID_HEIGHT; y++) {
+        for (int x = 0; x < gridWidth; x++) {
+            for (int y = 0; y < gridHeight; y++) {
                 if (grid[x][y] == oldId) grid[x][y] = newId;
             }
         }
@@ -481,7 +498,7 @@ public class GridState {
         int minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
         int minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
 
-        if (minX < 0 || maxX >= GRID_WIDTH || minY < 0 || maxY >= GRID_HEIGHT) return -1;
+        if (minX < 0 || maxX >= gridWidth || minY < 0 || maxY >= gridHeight) return -1;
         if (maxX - minX + 1 < SCREEN_MIN_SIZE || maxY - minY + 1 < SCREEN_MIN_SIZE) return -1;
         if (!canPlaceScreen(minX, minY, maxX, maxY)) return -1;
 
@@ -598,8 +615,8 @@ public class GridState {
         buttonLabels.clear();
         screenRegions.clear();
         screenTexts.clear();
-        for (int x = 0; x < GRID_WIDTH; x++) {
-            for (int y = 0; y < GRID_HEIGHT; y++) {
+        for (int x = 0; x < gridWidth; x++) {
+            for (int y = 0; y < gridHeight; y++) {
                 grid[x][y] = -1;
             }
         }

@@ -83,13 +83,14 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `block/TransmissionPeripheralRenderer.java` | 传动外设的 Create 动态方块实体渲染（舵机模式下输出端按权威角度渲染） |
 | `block/TransmissionPeripheralVisual.java` | 传动外设的 Create Flywheel Visual 实现（OrientedInstance，舵机模式输出端角度渲染） |
 | `block/ControlDeskBlock.java` | 控制台方块：底座由 blockstate 静态模型渲染；控件安装/卸载/菜单交互（手持控件物品右键安装、扳手蹲下右键按点击位置拆单个模块、`getDrops` 破坏掉落、`onWrenched`/`useItemOn`（空手蹲下）一律消费右键供配置菜单打开——扳手不再旋转方块）；**棋盘网格自由放置**（monitor_2/throttle/joystick_2 无安装位框；`snappedBoxCenter` 命中点→1px 网格吸附中心，客户端预览与服务端放置共用；`joystick2PlaceBox` 放置盒世界 AABB（扳手拆除命中用）；`modelToWorld` 北向基准→世界旋转）；选择框/碰撞箱 = 单块 `[0,0,8]~[16,8,16]`；`installBounds` 安装位 AABB（仅 PEDAL/JOYSTICK）+ `hitBounds` 闭区间容差命中（不能用 `AABB.contains`，点击位置在桌体面 z=8 = 框的 maxZ）；`FACING` 四向朝向 | 控制台朝向、碰撞、控件安装/卸载、菜单交互、放置位置计算、拆除命中 |
-| `block/ControlDeskBlockEntity.java` | 控制台方块实体：`ControlType`（PEDAL 一对 / JOYSTICK / MONITOR_2 / THROTTLE / JOYSTICK_2）+ `install`/`remove`/`isInstalled`；**棋盘网格放置状态**（joystick_2 放置中心 `joystick2PlaceX/Z` + 安装朝向 `backSlotRotation` + `blocksPlacement` 4×4 占用阻挡，详见 `memo/control-desk-grid-slot.md`）；全局频道（`ControlDeskRegistry` 注册/注销 + `occupiedChannels` 快照同步，`setChannel`/`getChannel`）；NBT 持久化（安装标志/放置位置/频道/控件配置）+ `getUpdatePacket`/`writeSafe`（`PartialSafeNBT`，蓝图兼容）；服务端 ticker 模拟操纵杆/摇杆2 轴动力学（`tickServer` → `simulateJoystick` / `simulateJoystick2`，摇杆2 配置/轴值/输入租约独立于 joystick）；**monitor_2 表面小 Monitor 屏幕几何常量**（`MONITOR_2_SCREEN_*` 屏幕面/网格/22.5° 旋转，供 overlay 网格与 `Monitor2HitDetector` 命中共用）；客户端加载/卸载维护 `ControlDeskClientRegistry`（monitor_2 独立命中检测候选枚举） | 控制台控件状态、放置位置、占用阻挡、频道、蓝图兼容、动画数据接入、monitor_2 屏幕几何 |
+| `block/ControlDeskBlockEntity.java` | 控制台方块实体：`ControlType`（PEDAL 一对 / JOYSTICK / MONITOR_2 / THROTTLE / JOYSTICK_2）+ `install`/`remove`/`isInstalled`；**棋盘网格放置状态**（joystick_2 放置中心 `joystick2PlaceX/Z` + 安装朝向 `backSlotRotation` + `blocksPlacement` 4×4 占用阻挡，详见 `memo/control-desk-grid-slot.md`）；全局频道（`ControlDeskRegistry` 注册/注销 + `occupiedChannels` 快照同步，`setChannel`/`getChannel`）；NBT 持久化（安装标志/放置位置/频道/控件配置）+ `getUpdatePacket`/`writeSafe`（`PartialSafeNBT`，蓝图兼容）；服务端 ticker 模拟操纵杆/摇杆2 轴动力学（`tickServer` → `simulateJoystick` / `simulateJoystick2`，摇杆2 配置/轴值/输入租约独立于 joystick）；**monitor_2 表面小 Monitor：实现 `MonitorGridHost` 接口**（`getMonitor2Grid()` 懒加载 10×8 `GridState` + 放置/移除/按压/旋钮/屏幕文本全套方法，`monitor2Changed` 同步 BE + `SyncGridPayload`）+ **monitor_2 屏幕几何常量**（`MONITOR_2_SCREEN_*` 屏幕面/网格/22.5° 旋转，供 overlay 网格与 `Monitor2HitDetector` 命中共用）+ NBT `Monitor2Grid` 四路径；客户端加载/卸载维护 `ControlDeskClientRegistry`（monitor_2 独立命中检测候选枚举） | 控制台控件状态、放置位置、占用阻挡、频道、蓝图兼容、动画数据接入、monitor_2 表面模块/屏幕、monitor_2 屏幕几何 |
 | `block/ControlDeskVisual.java` | 控制台 Flywheel Visual（`SimpleDynamicVisual`）：按 BE 安装状态**动态创建/删除** TransformedInstance，叠加 底座→本体（踏板双底座/双踏板、操纵杆底座/杆把手、摇杆2 底座/手柄）；每帧 `setIdentityTransform()` 必须（translate 累加语义，否则漂移）；操纵杆/摇杆2 手柄叠加倾斜（枢轴 (8,6,3) / (8,1,8)，指数逼近追逐 BE 轴值，见 `JoystickTilt`/`Joystick2Motion`） | 控制台 Flywheel 渲染、安装控件渲染、动画 |
 | `block/ControlDeskRenderer.java` | 控制台原版 BER 回退渲染（Flywheel 不可用时）：按 BE 安装状态叠加控件 PartialModel（底座→本体）；渲染盒 1.5³ 防操纵杆把手（y≈17.4/16）被视锥剔除；操纵杆/摇杆2 手柄倾斜动画与 Flywheel 同链（枢轴参数化） | 控制台 BER 回退路径 |
-| `client/ControlDeskPlacementOverlay.java` | 控制台客户端交互：控件安装预览（手持物品，绿=可装/红=已装或位置被占用）；**棋盘网格显示**（手持 throttle/joystick_2 显桌顶 6×14 网格 `showTopGrid` + joystick_2 4×9×4 预览盒 `showJoystick2Box`，冲突变红 `isJoystick2PlacementBlocked`）；**monitor_2 表面小 Monitor 网格**（手持 Monitor 模块物品 toggle_switch/knob/button/screen + 视线命中已装 monitor_2 的 case 前脸 → `showMonitor2ScreenGrid` 在屏幕面 z=2 画 10×8 白色网格，网格线向屏幕内部内凹 0.9px，随模型内 22.5° x 旋转 + 放置平移 + 桌体 FACING 旋转，`monitor2World` 变换链；**命中走独立检测 `Monitor2HitDetector`，不依赖 mc.hitResult**）；扳手拆除预览（已装控件默认绿、视角命中安装位变红，JOYSTICK_2 用 `joystick2PlaceBox`）；**控制台配置菜单打开**（右键边沿 +（扳手右键 或 空手蹲下右键）+ 准星指向控制台 → `ControlDeskConfigScreen`）；拆除预览命中判定共用 `ControlDeskBlock.hitBounds`；`gridWorld` 北向基准→世界（+0.06 防 z-fight）；`controlTypeOf`（包可见）供半透明模型预览复用 | 安装预览、棋盘网格、放置盒、拆除预览、菜单打开、安装位调整、monitor_2 表面网格 |
+| `client/ControlDeskPlacementOverlay.java` | 控制台客户端交互：控件安装预览（手持物品，绿=可装/红=已装或位置被占用）；**棋盘网格显示**（手持 throttle/joystick_2 显桌顶 6×14 网格 `showTopGrid` + joystick_2 4×9×4 预览盒 `showJoystick2Box`，冲突变红 `isJoystick2PlacementBlocked`）；**monitor_2 屏幕面变换 `monitor2World`**（北向基准模型空间 px → 世界：case 22.5° x 旋转 + 放置平移 + 桌体 FACING 旋转，网格线内凹 0px 用户定稿；供 `Monitor2GridOverlay` 复用）；扳手拆除预览（已装控件默认绿、视角命中安装位变红，JOYSTICK_2 用 `joystick2PlaceBox`）；**控制台配置菜单打开**（右键边沿 +（扳手右键 或 空手蹲下右键）+ 准星指向控制台 → `ControlDeskConfigScreen`）；拆除预览命中判定共用 `ControlDeskBlock.hitBounds`；`gridWorld` 北向基准→世界（+0.06 防 z-fight）；`controlTypeOf`（包可见）供半透明模型预览复用 | 安装预览、棋盘网格、放置盒、拆除预览、菜单打开、安装位调整、monitor_2 屏幕面变换 |
 | `client/ControlDeskGhostPreviewRenderer.java` | 控件安装**半透明实物预览**（参考 aeroworks SocketPlacementClient）：手持控件物品 + 准星指向控制台且可安装 → `RenderLevelStageEvent.AFTER_BLOCK_ENTITIES` 用 `CachedBuffers.partial` + `RenderType.translucentMovingBlock()` + `color(255,255,255,160)` + 固定光照渲染控件全部部件；仅 PEDAL/JOYSTICK/JOYSTICK_2 显示（monitor_2/throttle 未接入自由放置）；joystick_2 模型**平移到预览盒位**（`snappedBoxCenter` 吸附 + 模型默认位置→放置位位移 + 安装朝向绕盒心旋转），被阻挡时不显示 | 半透明安装预览、预览跟随放置盒、透明度/部件调整 |
 | `client/ControlDeskClientRegistry.java` | 客户端已加载 controlDesk 坐标注册表（`ConcurrentHashMap.newKeySet`，onLoad 加 / setRemoved 与 onChunkUnloaded 删，`ControlDeskBlockEntity` 维护）；供 monitor_2 表面小 Monitor 独立命中检测枚举候选（对齐 `MonitorClientRegistry`），坐标保留 plot 语义兼容 Sable | monitor_2 命中检测候选枚举 |
-| `client/Monitor2HitDetector.java` | monitor_2 表面小 Monitor 独立命中检测器（对齐 `MonitorHitDetector`）：遍历 `ControlDeskClientRegistry` 候选控制台（仅已装 MONITOR_2），玩家视线射线 + monitor_2 屏幕面实时变换（facing 逆 → shift 逆 → case 22.5° x 旋转逆，严格互逆于 `ControlDeskPlacementOverlay.monitor2World`）做屏幕面板正面求交 + 背面剔除 + 落点在屏幕面内（x2..14 / y1..11）+ 遮挡检测（`ClipContext.COLLIDER`，controlDesk 底座不覆盖屏幕不自遮挡）+ Sable 射线回投，取最近命中 | monitor_2 屏幕命中、遮挡、Sable 兼容 |
+| `client/Monitor2HitDetector.java` | monitor_2 表面小 Monitor 独立命中检测器（对齐 `MonitorHitDetector`）：遍历 `ControlDeskClientRegistry` 候选控制台（仅已装 MONITOR_2），玩家视线射线 + monitor_2 屏幕面实时变换（facing 逆 → shift 逆 → case 22.5° x 旋转逆，严格互逆于 `ControlDeskPlacementOverlay.monitor2World`）做屏幕面板正面求交 + 背面剔除 + 落点在屏幕面内（x2..14 / y1..11）+ 遮挡检测（`ClipContext.COLLIDER`，controlDesk 底座不覆盖屏幕不自遮挡）+ Sable 射线回投，取最近命中；返回 `{pos, facing, distance, screenX, screenY, grid}`（`localToGrid` 10×8 转换） | monitor_2 屏幕命中、遮挡、Sable 兼容 |
+| `client/Monitor2GridOverlay.java` | monitor_2 表面小 Monitor 客户端完整交互（对齐 `MonitorGridOverlay`）：手持 Monitor 模块物品（toggle_switch/knob/button/screen）且命中 monitor_2 屏幕面 → 显示 10×8 网格 + 模块框 + 放置预览（`monitor2World` 变换）；右键放置模块 / 屏幕两点放置 / 按钮按压 / 钮子切换 / 旋钮拖拽（payload 复用 Monitor 的 8 个包，pos = controlDesk 方块）；扳手蹲下右键拆除；右键模块/屏幕打开 `MonitorModuleScreen`；悬停 tooltip；交互状态按 BlockPos 隔离 | monitor_2 放置/交互/拆除/配置菜单 |
 
 ### 控制台模型布局（北向基准）
 
@@ -107,13 +108,14 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 
 | 文件 | 职责 | 修改场景 |
 |---|---|---|
-| `monitor/GridState.java` | 12×10 网格核心状态（屏幕面板 14×12，四周各留 1 格边框，屏幕占用格标记 `-2`）；模块/屏幕占用、ID（`0..9999` 共享命名空间）、按压/点击计数、玩家锁定、灯带、旋钮角度（含卡位步长）、模块配置、按钮标签、`ScreenRegion` 与屏幕文本缓冲（`screenTexts`）、NBT 序列化 | 任何 Monitor 数据结构或状态转移 |
+| `monitor/GridState.java` | 网格核心状态（**尺寸可参数化**：默认构造器 12×10（Monitor），`GridState(int w, int h)` 自定义（monitor_2 10×8），`getWidth/getHeight`；屏幕面板四周留 1 格边框，屏幕占用格标记 `-2`）；模块/屏幕占用、ID（`0..9999` 共享命名空间）、按压/点击计数、玩家锁定、灯带、旋钮角度（含卡位步长）、模块配置、按钮标签、`ScreenRegion` 与屏幕文本缓冲（`screenTexts`）、NBT 序列化 | 任何 Monitor 数据结构或状态转移、monitor_2 网格 |
 | `monitor/MonitorModule.java` | 不可变模块记录：ID、类型和网格坐标（宽高取自类型） |
 | `monitor/ModuleType.java` | 模块类型：`button_1`(1×1)、`toggle_switch`(1×1)、`knob`(2×2)；名称/尺寸/物品映射（`byName`/`fromItem`） | 新模块类型、尺寸或物品关联 |
 | `monitor/MonitorBackground.java` | Monitor 背景选项（6 个内置键 + 外部 `custom/` 键）与默认值（蓝色棋盘）；显示名可翻译 | 背景选项/默认值变更 |
 | `monitor/ScreenText.java` | 单个屏幕的格子文本缓冲（方案三，LCD 帧缓冲语义）：定长格子数组（字符 + 前景色 + 背景色，写入即覆盖）、光标制（1 起）、`setGrid`/`fill`/`replaceAll`（draw 整屏原子替换）、溢出模式、`setTextScale`（可配格子高宽比）；图形层（矩形/线段/圆）自由定位 + z 层级；NBT 紧凑序列化（int[]） | 屏幕文本/图形数据结构、格子布局、溢出模式 |
 | `monitor/ButtonLabel.java` | 按钮（`button_1`）表面标签数据：文本、位置偏移、字号、颜色、投影；默认值与钳制 | 按钮标签数据或渲染 |
 | `block/ModuleRenderBehavior.java` | 按模块类型选择渲染行为：Button（按压深度 + 灯带指示灯）、Toggle、Knob（旋转）；含灯带纯色面片渲染类型 | 模块动态渲染、按压/旋钮视觉状态 |
+| `block/MonitorGridHost.java` | 网格宿主抽象接口：Monitor 方块实体与 controlDesk 的 monitor_2 模块共有的服务端操作（`getGridState`/放置/移除/按压/旋钮/屏幕文本全套）；**Lua `ModuleHandle` 系列与 Monitor 的 8 个 payload 处理器均按此接口统一分发**（monitor_2 复用 Monitor 的 handle 与网络包，无需复制） | monitor_2 复用 Monitor 交互/渲染/Lua、新增宿主 |
 
 重要约束：模块和屏幕在同一 Monitor 内共享 `0..9999` ID 命名空间。`GridState.trySetId` 修改 ID 时必须同步 re-key：`modules`、`grid[][]`、`pressedModules`、`knobAngles`、`moduleConfigs`、`buttonLabels`（新增字段时别漏）。
 
@@ -149,10 +151,10 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 
 | 文件 | 方向 | 用途 |
 |---|---|---|
-| `network/SyncGridPayload.java` | 服务端 → 客户端 | 同步 Monitor 的完整 GridState NBT（含模块/屏幕/文本/配置） |
+| `network/SyncGridPayload.java` | 服务端 → 客户端 | 同步 Monitor / monitor_2 的完整 GridState NBT（含模块/屏幕/文本/配置）；处理器按 pos 处 BE 类型分发（`MonitorGridHost`） |
 | `network/ModulePressPayload.java` | 客户端 → 服务端 | Button 按下/释放或 Toggle 切换 |
 | `network/ModuleKnobRotatePayload.java` | 客户端 → 服务端 | 同步旋钮累计角度 |
-| `network/PlaceModulePayload.java` | 客户端 → 服务端 | 请求放置模块 |
+| `network/PlaceModulePayload.java` | 客户端 → 服务端 | 请求放置模块（Monitor / monitor_2 共用；处理器经 `MonitorGridHost` 分发） |
 | `network/RemoveModulePayload.java` | 客户端 → 服务端 | 请求移除模块 |
 | `network/ModuleConfigPayload.java` | 客户端 → 服务端 | 修改模块/屏幕 ID 和配置（name/oldId/newId/config） |
 | `network/PlaceScreenPayload.java` | 客户端 → 服务端 | 请求放置矩形屏幕 |
@@ -189,13 +191,13 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/PeripheralExtenderRegistry.java` | 传感器频道登记表（委托全局注册表） |
 | `compat/cc/MonitorRegistry.java` | Monitor 频道登记表（委托全局注册表） |
 | `compat/cc/ControlDeskRegistry.java` | 控制台频道登记表（委托全局注册表，`get(channel)` 供 `pe.getPeripheral` 查找） |
-| `compat/cc/ControlDeskPeripheral.java` | 控制台的 `IPeripheral` 实现（`getType()` = `"ccpe:control_desk"`；`getModule("pedal"/"joystick"/"joystick_2"/"throttle")` 返回模块实例，未安装返回 nil） |
+| `compat/cc/ControlDeskPeripheral.java` | 控制台的 `IPeripheral` 实现（`getType()` = `"ccpe:control_desk"`；`getModule("pedal"/"joystick"/"joystick_2"/"throttle")` 返回控件模块实例，未安装返回 nil；**`getMonitor2Module(id)` / `getMonitor2CellModule(x,y)` 查询 monitor_2 表面模块/屏幕，复用 Monitor 的 `ModuleHandle` 体系**） |
 | `compat/cc/PedalModuleHandle.java` | 脚踏板模块实例（全部 mainThread=false）：模拟量 `getLeftPedal()/getRightPedal()`（-1..1）+ 差值 `getPedalDifference()`（左−右）+ 方向判断 `isLeftPedalDown/isRightPedalDown`（轴值>0）与 `isLeftPedalUp/isRightPedalUp`（轴值<0） |
 | `compat/cc/JoystickModuleHandle.java` | 操纵杆模块实例：原始值 `isJoystickXActive/YActive` + 轴值 `getJoystickX/Y`（0..1）+ 带符号 `getJoystickXSigned/YSigned`（-1..1，全部 mainThread=false） |
 | `compat/cc/Joystick2ModuleHandle.java` | 摇杆2 模块实例（照抄 JoystickModuleHandle，方法名带 2 后缀）：`isJoystick2XActive/YActive` + `getJoystick2X/Y`（0..1）+ `getJoystick2XSigned/YSigned`（-1..1，全部 mainThread=false），读 joystick2 独立轴值 |
 | `compat/cc/ThrottleModuleHandle.java` | 油门杆模块实例（全部 mainThread=false）：前进/后退按住态 `isThrottleForwardActive/isThrottleBackActive`（读服务端输入租约）+ 档位 `getThrottleGear()`（0..11 整数，锁存不回正）+ 轴值 `getThrottleAxis()`（0..1 = 档位/MAX） |
 | `compat/cc/MonitorPeripheral.java` | Monitor 的 `IPeripheral` 实现（模块/屏幕查询入口） |
-| `compat/cc/ModuleHandle.java` | 模块/屏幕 Lua 实例的抽象基类（通用 get/set/tooltip） |
+| `compat/cc/ModuleHandle.java` | 模块/屏幕 Lua 实例的抽象基类（通用 get/set/tooltip；**宿主为 `MonitorGridHost` 接口，Monitor 与 monitor_2 共用同一套 handle**） |
 | `compat/cc/ModuleHandleRegistry.java` | 按模块类型把 Java 记录包装成对应的 Lua handle |
 | `compat/cc/ButtonModuleHandle.java` | 按钮的 Lua API（按下/弹起/点击检测/玩家锁/灯带/标签 setLabel 系列） |
 | `compat/cc/ToggleSwitchModuleHandle.java` | 钮子开关的 Lua API（锁存状态） |
@@ -222,6 +224,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | 新增方块/物品 | `block/MyModBlocks.java` / `item/MyModItems.java` | `MyModBlockEntities.java`、资源模型、语言文件、创造模式物品栏 |
 | 修改控制台（Control Desk）朝向、碰撞或控件安装 | `block/ControlDeskBlock.java`（朝向/碰撞/安装/卸载/安装位/放置吸附/拆除命中）、`block/ControlDeskBlockEntity.java`（控件状态/放置位置/占用/NBT/蓝图） | `ControlDeskVisual.java` / `ControlDeskRenderer.java`（渲染）、`client/ControlDeskPlacementOverlay.java`（预览）、`client/ControlDeskGhostPreviewRenderer.java`（实物预览）、`memo/control-desk-grid-slot.md`（棋盘网格系统参考）、`assets/ccpe/models/block/control_desk_1/` |
 | 修改控制台控件物品或安装位 | `item/MyModItems.java`（`CONTROL_PEDAL` / `CONTROL_JOYSTICK` / `CONTROL_MONITOR_2` / `CONTROL_THROTTLE` / `CONTROL_JOYSTICK_2`）、`ControlDeskBlock.installBounds`（PEDAL/JOYSTICK 安装位 shape 常量）、`ControlDeskBlockEntity` 的 `JOYSTICK_2_*` 常量（自由放置模块的占地/放置位/模型基准） | `assets/ccpe/models/item/*.json`、`assets/ccpe/models/block/pedal/`、`assets/ccpe/models/block/joystick/`、`assets/ccpe/models/block/control_desk_1/joystick_2/`、语言文件 |
+| 修改 monitor_2 表面小 Monitor（放置/交互/渲染/Lua） | `ControlDeskBlockEntity`（`MonitorGridHost` 实现 + `Monitor2Grid` NBT）、`client/Monitor2GridOverlay.java`（交互）、`client/Monitor2HitDetector.java`（命中）、`client/ControlDeskPlacementOverlay.monitor2World`（屏幕面变换）、`MonitorPacketHandlers`（payload 按 `MonitorGridHost` 分发）、`ControlDeskVisual`/`ControlDeskRenderer`（模块+屏幕渲染） | `MonitorGridHost.java`、`compat/cc/ControlDeskPeripheral`（`getMonitor2*` Lua）、`ControlDeskClientRegistry`、`memo/control-desk-grid-slot.md`（monitor_2 表面小 Monitor 段落） |
 | 修改控制台配置/模块设置菜单 | `screen/ControlDeskConfigScreen.java`、`screen/JoystickModuleScreen.java`、`screen/ThrottleModuleScreen.java`、`foundation/gui/widget/DoubleInputBar.java`（按键捕获） | `ControlDeskPlacementOverlay`（菜单打开）、`ControlDeskBlock`（右键消费）、`ControlDeskBlockEntity`（频道/配置 NBT）、`ControlDeskChannelPayload`、语言文件、`MyUIElements`/`MyIcons` |
 | 修改 Monitor 右键或射线命中 | `block/MonitorBlock.java`（`intersectScreen`/`rayToGrid`）、`client/MonitorHitDetector.java` | `client/MonitorGridOverlay.java`、`MonitorClientRegistry.java` |
 | 修改可动变换（俯仰/偏航/偏移） | `block/MonitorBlock.java`（枢轴常量）、`client/MonitorTransform.java` | `MonitorBlockEntity.setAngles`、`MonitorTransformPayload`、`MonitorMenuScreen`、`MonitorRenderer` |

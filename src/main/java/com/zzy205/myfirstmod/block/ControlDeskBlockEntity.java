@@ -5,6 +5,11 @@ import com.zzy205.myfirstmod.client.ControlDeskClientRegistry;
 import com.zzy205.myfirstmod.compat.cc.ControlDeskPeripheral;
 import com.zzy205.myfirstmod.compat.cc.ControlDeskRegistry;
 import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
+import com.zzy205.myfirstmod.monitor.GridState;
+import com.zzy205.myfirstmod.monitor.ModuleType;
+import com.zzy205.myfirstmod.monitor.MonitorModule;
+import com.zzy205.myfirstmod.monitor.ScreenText;
+import com.zzy205.myfirstmod.network.SyncGridPayload;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -15,11 +20,14 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -27,7 +35,7 @@ import java.util.UUID;
  * 控制台方块实体 — 保存已安装控件（踏板一对 / 操纵杆）。
  * NBT 持久化 + 同步（兼容 Create 蓝图，参考 RedstoneTransceiverBlockEntity）。
  */
-public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNBT {
+public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNBT, MonitorGridHost {
 
     /** 可安装到控制台的控件类型 */
     public enum ControlType {
@@ -149,6 +157,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_THROTTLE_TICKS_PER_GEAR = "ThrottleTicksPerGear";
     private static final String TAG_CHANNEL = "Channel";
     private static final String TAG_OCCUPIED_CHANNELS = "OccupiedChannels";
+    private static final String TAG_MONITOR_2_GRID = "Monitor2Grid";
 
     private boolean pedalInstalled;
     private boolean joystickInstalled;
@@ -166,6 +175,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** monitor_2 放置中心（北向模型空间 px，默认 (8,12) = 桌顶网格唯一合法位置，14×6 全占）；安装时记录 */
     private int monitor2PlaceX = 8;
     private int monitor2PlaceZ = 12;
+    /** monitor_2 表面小 Monitor 的网格状态（10×8，懒加载；仅安装 MONITOR_2 时有效，见 {@link #getMonitor2Grid()}） */
+    @Nullable
+    private GridState monitor2Grid;
     private int joystickReturnTime = DEFAULT_JOYSTICK_RETURN_TIME;      // 前后轴回正时间
     private int joystickReturnTimeYaw = DEFAULT_JOYSTICK_RETURN_TIME;   // 左右轴回正时间
     private boolean gearModePitch;                                      // 前后轴档位模式开关
@@ -476,6 +488,416 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** monitor_2 放置中心 Z（北向模型空间 px，唯一合法位 12）。 */
     public int getMonitor2PlaceZ() {
         return monitor2PlaceZ;
+    }
+
+    /**
+     * monitor_2 表面小 Monitor 的网格状态（10×8，懒加载）。
+     * 仅安装 MONITOR_2 时有效；未安装时返回的空网格可用于预览/读取（不落盘）。
+     */
+    public GridState getMonitor2Grid() {
+        if (monitor2Grid == null) {
+            monitor2Grid = new GridState(MONITOR_2_GRID_WIDTH, MONITOR_2_GRID_HEIGHT);
+        }
+        return monitor2Grid;
+    }
+
+    // ═══════════════ monitor_2 表面小 Monitor（MonitorGridHost 实现） ═══════════════
+    // 照抄 MonitorBlockEntity 的服务端方法，操作 getMonitor2Grid()；同步走 notifyChange +
+    // SyncGridPayload（处理器按 BE 类型分发到本 BE 的 monitor_2 grid）。
+
+    @Override
+    public GridState getGridState() {
+        return getMonitor2Grid();
+    }
+
+    /** 尝试放置 monitor_2 表面模块（服务端调用），成功返回 moduleId，失败返回 -1。 */
+    @Override
+    public int tryPlaceModule(int x, int y, ModuleType type) {
+        int id = getMonitor2Grid().tryPlace(x, y, type);
+        if (id >= 0) {
+            monitor2Changed();
+        }
+        return id;
+    }
+
+    /** 移除 monitor_2 表面模块（服务端调用），成功返回被移除的模块类型名，失败返回 null。 */
+    @Override
+    public String tryRemoveModule(int moduleId) {
+        var mod = getMonitor2Grid().tryRemove(moduleId);
+        if (mod != null) {
+            monitor2Changed();
+            return mod.type().name;
+        }
+        return null;
+    }
+
+    /** 玩家点击按钮按下（服务端调用）：始终记录玩家点击；锁定时不改变按下状态。 */
+    @Override
+    public void pressModuleByPlayer(int id) {
+        GridState grid = getMonitor2Grid();
+        grid.recordPlayerClick(id);
+        if (grid.isPlayerLocked(id)) return;
+        grid.press(id);
+        monitor2Changed();
+        if (level != null && !level.isClientSide) {
+            level.playSound(null, worldPosition, SoundEvents.WOODEN_BUTTON_CLICK_ON,
+                    SoundSource.BLOCKS, 0.3f, 0.5f);
+        }
+    }
+
+    /** 玩家释放按钮（服务端调用）：锁定时不改变状态。 */
+    @Override
+    public void releaseModuleByPlayer(int id) {
+        if (getMonitor2Grid().isPlayerLocked(id)) return;
+        releaseModule(id);
+    }
+
+    /** 应用 monitor_2 模块/屏幕的 ID 与配置（服务端调用）。 */
+    @Override
+    public void applyModuleConfig(String name, int oldId, int newId, CompoundTag config) {
+        GridState grid = getMonitor2Grid();
+        boolean changed;
+        if (GridState.SCREEN_NAME.equals(name)) {
+            changed = grid.updateScreen(oldId, newId, config.getString("text"));
+        } else {
+            changed = grid.trySetId(oldId, newId);
+            if (changed) {
+                grid.setModuleConfig(newId, config);
+                if (ModuleType.KNOB == ModuleType.byName(name)) {
+                    grid.setKnobAngle(newId, grid.getKnobAngle(newId));
+                    grid.snapKnobToDetent(newId);
+                }
+            }
+        }
+        if (changed) {
+            monitor2Changed();
+        }
+    }
+
+    /** 新增一个 monitor_2 表面屏幕（服务端调用），自动分配最小空闲 ID；失败返回 -1。 */
+    @Override
+    public int addScreen(int x1, int y1, int x2, int y2) {
+        int id = getMonitor2Grid().addScreen(x1, y1, x2, y2);
+        if (id >= 0) {
+            monitor2Changed();
+        }
+        return id;
+    }
+
+    /** 移除 monitor_2 表面指定格子的屏幕（服务端调用）。 */
+    @Override
+    public boolean removeScreenAt(int gx, int gy) {
+        if (getMonitor2Grid().removeScreenAt(gx, gy)) {
+            monitor2Changed();
+            return true;
+        }
+        return false;
+    }
+
+    /** 同步 monitor_2 网格状态到所有追踪此区块的客户端（对齐 MonitorBlockEntity.syncGridToClients）。 */
+    private void syncMonitor2GridToClients() {
+        if (level instanceof ServerLevel serverLevel) {
+            var payload = new SyncGridPayload(worldPosition, getMonitor2Grid().save(level.registryAccess()));
+            PacketDistributor.sendToPlayersTrackingChunk(serverLevel, new ChunkPos(worldPosition), payload);
+        }
+    }
+
+    /** monitor_2 网格变更：本地标记 + 服务端推送 BE 更新与 grid 数据。 */
+    private void monitor2Changed() {
+        this.setChanged();
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+            syncMonitor2GridToClients();
+        }
+    }
+
+    @Override
+    public void pressModule(int id) {
+        getMonitor2Grid().press(id);
+        monitor2Changed();
+        if (level != null && !level.isClientSide) {
+            level.playSound(null, worldPosition, SoundEvents.WOODEN_BUTTON_CLICK_ON,
+                    SoundSource.BLOCKS, 0.3f, 0.5f);
+        }
+    }
+
+    @Override
+    public void releaseModule(int id) {
+        getMonitor2Grid().release(id);
+        monitor2Changed();
+        if (level != null && !level.isClientSide) {
+            level.playSound(null, worldPosition, SoundEvents.WOODEN_BUTTON_CLICK_OFF,
+                    SoundSource.BLOCKS, 0.3f, 0.5f);
+        }
+    }
+
+    @Override
+    public void toggleModule(int id) {
+        GridState grid = getMonitor2Grid();
+        grid.toggle(id);
+        monitor2Changed();
+        if (level != null && !level.isClientSide) {
+            level.playSound(null, worldPosition, SoundEvents.LEVER_CLICK,
+                    SoundSource.BLOCKS, 0.3f, grid.isPressed(id) ? 1.2f : 1.1f);
+        }
+    }
+
+    @Override
+    public void setToggleState(int id, boolean state) {
+        if (getMonitor2Grid().getModule(id) == null) return;
+        if (getMonitor2Grid().isPressed(id) == state) return;
+        if (state) getMonitor2Grid().press(id); else getMonitor2Grid().release(id);
+        monitor2Changed();
+        if (level != null && !level.isClientSide) {
+            level.playSound(null, worldPosition, SoundEvents.LEVER_CLICK,
+                    SoundSource.BLOCKS, 0.3f, state ? 1.2f : 1.1f);
+        }
+    }
+
+    @Override
+    public void rotateKnob(int id, float angle) {
+        GridState grid = getMonitor2Grid();
+        int step = grid.getDetentStep(id);
+        if (step > 0) angle = GridState.snapToDetent(angle, step);
+        grid.setKnobAngle(id, angle);
+        monitor2Changed();
+    }
+
+    @Override
+    public void setTooltip(int id, String text) {
+        GridState grid = getMonitor2Grid();
+        if (grid.getModule(id) != null) {
+            CompoundTag config = grid.getModuleConfig(id).copy();
+            config.putString("text", text);
+            grid.setModuleConfig(id, config);
+        } else if (grid.getScreenById(id) != null) {
+            grid.updateScreen(id, id, text);
+        } else {
+            return;
+        }
+        monitor2Changed();
+    }
+
+    @Override
+    public void setButtonPlayerControl(int id, boolean enabled) {
+        getMonitor2Grid().setPlayerLocked(id, !enabled);
+        monitor2Changed();
+    }
+
+    @Override
+    public void setButtonLight(int id, float brightness) {
+        getMonitor2Grid().setLightBrightness(id, brightness);
+        getMonitor2Grid().setLightCodeControlled(id, true);
+        monitor2Changed();
+    }
+
+    @Override
+    public void setButtonLightControl(int id, boolean codeControlled) {
+        getMonitor2Grid().setLightCodeControlled(id, codeControlled);
+        monitor2Changed();
+    }
+
+    @Override
+    public void setButtonLabelText(int id, String text) {
+        if (getMonitor2Grid().getModule(id) == null) return;
+        getMonitor2Grid().setButtonLabelText(id, text);
+        monitor2Changed();
+    }
+
+    @Override
+    public void setButtonLabelPosition(int id, double x, double y) {
+        if (getMonitor2Grid().getModule(id) == null) return;
+        getMonitor2Grid().setButtonLabelPosition(id, x, y);
+        monitor2Changed();
+    }
+
+    @Override
+    public void setButtonLabelScale(int id, double scale) {
+        if (getMonitor2Grid().getModule(id) == null) return;
+        getMonitor2Grid().setButtonLabelScale(id, scale);
+        monitor2Changed();
+    }
+
+    @Override
+    public void setButtonLabelColor(int id, int color) {
+        if (getMonitor2Grid().getModule(id) == null) return;
+        getMonitor2Grid().setButtonLabelColor(id, color);
+        monitor2Changed();
+    }
+
+    @Override
+    public void setButtonLabelDropShadow(int id, boolean dropShadow) {
+        if (getMonitor2Grid().getModule(id) == null) return;
+        getMonitor2Grid().setButtonLabelDropShadow(id, dropShadow);
+        monitor2Changed();
+    }
+
+    // ── monitor_2 屏幕（格子模型） ──
+
+    private boolean canMutateMonitor2Screen(int id) {
+        if (level == null || level.isClientSide) return false;
+        return getMonitor2Grid().getScreenById(id) != null;
+    }
+
+    private double monitor2ScreenInnerWidthPx(GridState.ScreenRegion scr) {
+        return scr.width() - 2 * ScreenText.DRAWABLE_INSET * 16;
+    }
+
+    private double monitor2ScreenInnerHeightPx(GridState.ScreenRegion scr) {
+        return scr.height() - 2 * ScreenText.DRAWABLE_INSET * 16;
+    }
+
+    @Override
+    public void screenSetGrid(int id, int cols, int rows) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).setGrid(cols, rows);
+        monitor2Changed();
+    }
+
+    @Override
+    public int[] getScreenGrid(int id) {
+        ScreenText t = getMonitor2Grid().getScreenText(id);
+        if (t == null) return null;
+        return new int[] { t.getCols(), t.getRows() };
+    }
+
+    @Override
+    public void screenSetTextScale(int id, double scale, Double lineSpacing) {
+        if (!canMutateMonitor2Screen(id)) return;
+        GridState.ScreenRegion scr = getMonitor2Grid().getScreenById(id);
+        ScreenText t = getMonitor2Grid().getOrCreateScreenText(id);
+        t.setTextScale(scale, lineSpacing != null ? lineSpacing : ScreenText.LINE_SPACING,
+                monitor2ScreenInnerWidthPx(scr), monitor2ScreenInnerHeightPx(scr));
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenWrite(int id, String text) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).write(text);
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenClear(int id) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).clear();
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenSetCursor(int id, int col, int row) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).setCursorPos(col, row);
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenSetTextColour(int id, int colour) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).setTextColour(colour);
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenSetZIndex(int id, double z) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).setZIndex(z);
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenSetOverflowMode(int id, String mode) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).setOverflowMode(ScreenText.OverflowMode.byName(mode));
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenFill(int id, int col, int row, int w, int h, int colour) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).fill(col, row, w, h, colour);
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenWriteField(int id, int col, int row, int width, String text, String align) {
+        if (!canMutateMonitor2Screen(id)) return;
+        ScreenText t = getMonitor2Grid().getOrCreateScreenText(id);
+        t.writeField(col, row, width, text, ScreenText.Align.byName(align));
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenFillField(int id, int col, int row, int width, int count, int colour, String align) {
+        if (!canMutateMonitor2Screen(id)) return;
+        ScreenText t = getMonitor2Grid().getOrCreateScreenText(id);
+        t.fillField(col, row, width, count, colour, ScreenText.Align.byName(align));
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenDraw(int id, List<int[]> cells,
+                           List<ScreenText.Rect> rects, List<ScreenText.Line> lines, List<ScreenText.Circle> circles) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).replaceAll(cells, rects, lines, circles);
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenReplaceCells(int id, List<int[]> cells) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).replaceCells(cells);
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenReplaceShapes(int id, List<ScreenText.Rect> rects,
+                                    List<ScreenText.Line> lines, List<ScreenText.Circle> circles) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).replaceShapes(rects, lines, circles);
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenDrawRect(int id, double x, double y, double w, double h,
+                               int colour, boolean solid, double lineWidth, Double z) {
+        if (!canMutateMonitor2Screen(id)) return;
+        ScreenText t = getMonitor2Grid().getOrCreateScreenText(id);
+        t.addRect(x, y, w, h, colour, solid, lineWidth, z != null ? z : t.getZIndex());
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenClearRects(int id) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).clearRects();
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenDrawLine(int id, double x1, double y1, double x2, double y2,
+                               int colour, double lineWidth, Double z) {
+        if (!canMutateMonitor2Screen(id)) return;
+        ScreenText t = getMonitor2Grid().getOrCreateScreenText(id);
+        t.addLine(x1, y1, x2, y2, colour, lineWidth, z != null ? z : t.getZIndex());
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenDrawCircle(int id, double cx, double cy, double radius, int colour,
+                                 boolean solid, double lineWidth, int segments, Double z) {
+        if (!canMutateMonitor2Screen(id)) return;
+        ScreenText t = getMonitor2Grid().getOrCreateScreenText(id);
+        t.addCircle(cx, cy, radius, colour, solid, lineWidth, segments, z != null ? z : t.getZIndex());
+        monitor2Changed();
+    }
+
+    @Override
+    public void screenClearShapes(int id) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).clearShapes();
+        monitor2Changed();
     }
 
     /**
@@ -1219,6 +1641,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
         tag.putInt(TAG_CHANNEL, channel);
         tag.putIntArray(TAG_OCCUPIED_CHANNELS, occupiedChannels);
+        // monitor_2 表面网格（仅安装 MONITOR_2 时保存；蓝图/存档可携带表面模块）
+        if (monitor2Grid != null) {
+            tag.put(TAG_MONITOR_2_GRID, monitor2Grid.save(registries));
+        }
     }
 
     @Override
@@ -1381,6 +1807,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_OCCUPIED_CHANNELS)) {
             occupiedChannels = tag.getIntArray(TAG_OCCUPIED_CHANNELS);
         }
+        if (tag.contains(TAG_MONITOR_2_GRID)) {
+            getMonitor2Grid().load(registries, tag.getCompound(TAG_MONITOR_2_GRID));
+        }
     }
 
     /** Create 原理图 / 装置搬运时的「安全 NBT」（Schematicannon 打印保留控件配置）。 */
@@ -1433,6 +1862,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
         // 频道是配置（蓝图可分享）；OccupiedChannels 是运行时快照，不写 Safe NBT
         compound.putInt(TAG_CHANNEL, channel);
+        // monitor_2 表面网格：蓝图可携带表面模块（对齐 Monitor 的 GridState 走 saveAdditional）
+        if (monitor2Grid != null) {
+            compound.put(TAG_MONITOR_2_GRID, monitor2Grid.save(registries));
+        }
     }
 
     @Override
@@ -1495,6 +1928,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
         tag.putInt(TAG_CHANNEL, channel);
         tag.putIntArray(TAG_OCCUPIED_CHANNELS, occupiedChannels);
+        // monitor_2 表面网格：随 BE 更新包同步（客户端读取后即可渲染表面模块）
+        if (monitor2Grid != null) {
+            tag.put(TAG_MONITOR_2_GRID, monitor2Grid.save(registries));
+        }
         return tag;
     }
 

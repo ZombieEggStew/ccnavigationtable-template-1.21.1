@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
-import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.block.MonitorGridHost;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
 import dan200.computercraft.api.lua.LuaFunction;
@@ -16,7 +16,7 @@ import net.minecraft.nbt.CompoundTag;
  */
 public final class KnobModuleHandle extends ModuleHandle {
 
-    public KnobModuleHandle(MonitorBlockEntity be, MonitorModule module) {
+    public KnobModuleHandle(MonitorGridHost be, MonitorModule module) {
         super(be, module.id(), module.type().name, module.gridX(), module.gridY(),
                 module.getWidth(), module.getHeight());
     }

@@ -1,6 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
-import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.block.MonitorGridHost;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
 import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.api.lua.MethodResult;
@@ -12,7 +12,7 @@ import dan200.computercraft.api.lua.MethodResult;
  */
 public final class ButtonModuleHandle extends ModuleHandle {
 
-    public ButtonModuleHandle(MonitorBlockEntity be, MonitorModule module) {
+    public ButtonModuleHandle(MonitorGridHost be, MonitorModule module) {
         super(be, module.id(), module.type().name, module.gridX(), module.gridY(),
                 module.getWidth(), module.getHeight());
     }

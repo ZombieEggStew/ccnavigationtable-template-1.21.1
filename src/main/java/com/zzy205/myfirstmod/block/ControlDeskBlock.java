@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.zzy205.myfirstmod.item.MyModItems;
+import com.zzy205.myfirstmod.monitor.ModuleType;
 import net.createmod.catnip.math.VoxelShaper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -163,6 +164,12 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
 
         // 空手 + 蹲下右键：消费右键（控制台配置菜单由客户端 ControlDeskPlacementOverlay 打开）
         if (stack.isEmpty() && player != null && player.isShiftKeyDown()) {
+            return ItemInteractionResult.SUCCESS;
+        }
+        // Monitor 模块物品（toggle_switch / knob / button / screen）右键：monitor_2 表面放置由客户端
+        // Monitor2GridOverlay 用动态命中检测 + payload 处理；这里仅消费右键，避免原版继续放置物品
+        // （对齐 MonitorBlock.useItemOn 的处理）。
+        if (ModuleType.fromItem(stack) != null || stack.is(MyModItems.MODULE_SCREEN.get())) {
             return ItemInteractionResult.SUCCESS;
         }
         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;

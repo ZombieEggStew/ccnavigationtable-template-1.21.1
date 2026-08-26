@@ -32,8 +32,14 @@ public final class Monitor2HitDetector {
 
     private Monitor2HitDetector() {}
 
-    /** 一次命中的完整信息：控制台位置 + 桌体 FACING + 命中距离。 */
-    public record Monitor2Hit(BlockPos pos, Direction facing, double distance) {}
+    /** 一次命中的完整信息：控制台位置 + 桌体 FACING + 命中距离 + 屏幕局部坐标（模型空间 px，北向基准）+ 网格坐标。 */
+    public record Monitor2Hit(
+            BlockPos pos,
+            Direction facing,
+            double distance,
+            float screenX,
+            float screenY,
+            @Nullable int[] grid) {}
 
     /**
      * 求玩家准心视线命中的最近 monitor_2 屏幕；未命中返回 null。
@@ -60,29 +66,55 @@ public final class Monitor2HitDetector {
             Vec3 o = sub != null ? SableCompat.toLocalPosition(sub, partialTick, eye) : eye;
             Vec3 d = sub != null ? SableCompat.toLocalDirection(sub, partialTick, view) : view;
 
-            double t = intersectScreen(pos, facing, o, d, reach);
-            if (t < 0) continue;
+            double[] hit = intersectScreen(pos, facing, o, d, reach);
+            if (hit == null) continue;
+
+            double t = hit[0];
+            float sx = (float) hit[1];
+            float sy = (float) hit[2];
 
             // 遮挡检测：命中点从 plot 空间投影回世界空间，检查眼→命中点之间是否有其它方块碰撞体遮挡
             Vec3 worldHit = o.add(d.scale(t));
             if (sub != null) worldHit = SableCompat.toWorldPosition(sub, partialTick, worldHit);
             if (isOccluded(level, player, eye, worldHit, t)) continue;
 
+            int[] grid = localToGrid(sx, sy);
             if (best == null || t < best.distance()) {
-                best = new Monitor2Hit(pos, facing, t);
+                best = new Monitor2Hit(pos, facing, t, sx, sy, grid);
             }
         }
         return best;
     }
 
     /**
-     * 视线射线 → monitor_2 屏幕面求交（返回射线参数 t，块单位；未命中返回负数）。
+     * 屏幕局部坐标 [sx, sy]（北向基准模型空间 px）→ 网格坐标 [gridX, gridY]（10×8，内缩 1px）。
+     * 不在网格区域（内缩后的 10×8 格）时返回 null。
+     */
+    @Nullable
+    public static int[] localToGrid(float sx, float sy) {
+        float inset = 1f;
+        if (sx < ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + inset
+                || sx > ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MAX - inset) return null;
+        if (sy < ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + inset
+                || sy > ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MAX - inset) return null;
+
+        int gx = (int) Math.floor(sx - ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN - inset);
+        int gy = (int) Math.floor(sy - ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN - inset);
+        if (gx < 0 || gx >= ControlDeskBlockEntity.MONITOR_2_GRID_WIDTH
+                || gy < 0 || gy >= ControlDeskBlockEntity.MONITOR_2_GRID_HEIGHT) return null;
+        return new int[]{ gx, gy };
+    }
+
+    /**
+     * 视线射线 → monitor_2 屏幕面求交（返回 {@code [t, sx, sy]}：t 射线参数块单位，
+     * sx/sy 落点北向基准模型空间 px；未命中返回 null）。
      * <p>
      * 逆变换顺序与渲染正向相反：facing逆 → shift逆 → case 22.5° 逆，旋转取负、平移取反，
      * 然后在北向基准模型空间与 z={@code MONITOR_2_SCREEN_Z} 平面求交（背面剔除：屏幕法线 -Z，
      * 视线 z 分量必须为正才能从正面命中）。
      */
-    private static double intersectScreen(BlockPos pos, Direction facing, Vec3 origin, Vec3 dir, double maxDistance) {
+    @Nullable
+    private static double[] intersectScreen(BlockPos pos, Direction facing, Vec3 origin, Vec3 dir, double maxDistance) {
         Vec3 block = Vec3.atLowerCornerOf(pos);
         double[] o = { origin.x - block.x, origin.y - block.y, origin.z - block.z };
         double[] d = { dir.x, dir.y, dir.z };
@@ -100,18 +132,14 @@ public final class Monitor2HitDetector {
 
         // 4. 北向基准模型空间 z=SCREEN_Z 平面求交（屏幕法线 -Z，从正面看 d_z > 0）
         double planeZ = ControlDeskBlockEntity.MONITOR_2_SCREEN_Z / 16.0;
-        if (d[2] <= 1e-6) return -1;   // 平行或从背面看 → 剔除
+        if (d[2] <= 1e-6) return null;   // 平行或从背面看 → 剔除
         double t = (planeZ - o[2]) / d[2];
-        if (t < 0 || t > maxDistance) return -1;
+        if (t < 0 || t > maxDistance) return null;
 
-        // 5. 落点（块单位）是否在屏幕面范围内（x2..14 / y1..11，含边框；内缩 1px 的网格区由 overlay 决定）
+        // 5. 落点（块单位 → px）
         double sx = (o[0] + t * d[0]) * 16.0;
         double sy = (o[1] + t * d[1]) * 16.0;
-        if (sx < ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN || sx > ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MAX
-                || sy < ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN || sy > ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MAX) {
-            return -1;
-        }
-        return t;
+        return new double[]{ t, sx, sy };
     }
 
     /** 绕方块中心 (0.5, 0.5, 0.5) 的 Y 旋转逆变换（世界/plot → 北向基准块局部；点与方向就地修改）。 */

@@ -2,8 +2,8 @@
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
 	"textures": {
-		"0": "simulated:block/throttle_lever/throttle_lever_1",
-		"1": "simulated:block/throttle_lever/throttle_lever_0",
+		"0": "ccpe:block/my_throttle_lever/throttle_lever_1",
+		"1": "ccpe:block/my_throttle_lever/throttle_lever_0",
 		"particle": "create:block/brass_casing"
 	},
 	"elements": [
@@ -148,23 +148,27 @@
 		{
 			"name": "throttle",
 			"origin": [20, 0, 0],
+			"scope": 0,
 			"color": 0,
 			"children": [
 				{
 					"name": "diode",
 					"origin": [0, 0, 0],
+					"scope": 0,
 					"color": 0,
 					"children": [0, 1]
 				},
 				{
 					"name": "base",
 					"origin": [20, 0, 0],
+					"scope": 0,
 					"color": 0,
 					"children": [2, 3, 4]
 				},
 				{
 					"name": "arm",
 					"origin": [20, 18.2, 0],
+					"scope": 0,
 					"color": 0,
 					"children": [
 						5,
@@ -172,6 +176,7 @@
 						{
 							"name": "clutch",
 							"origin": [8, 3, 8],
+							"scope": 0,
 							"color": 0,
 							"children": [7]
 						},

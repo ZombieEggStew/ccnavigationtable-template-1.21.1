@@ -30,7 +30,7 @@ import java.util.List;
 /**
  * 显示器 BlockEntity — 持有棋盘网格状态。
  */
-public class MonitorBlockEntity extends BlockEntity {
+public class MonitorBlockEntity extends BlockEntity implements MonitorGridHost {
 
     /** 12×10 棋盘网格 */
     private final GridState gridState = new GridState();
