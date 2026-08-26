@@ -4,6 +4,7 @@ import com.simibubi.create.AllItems;
 import com.zzy205.myfirstmod.block.ControlDeskBlock;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.item.MyModItems;
+import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.screen.ControlDeskConfigScreen;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
@@ -47,52 +48,68 @@ public class ControlDeskPlacementOverlay {
     private static void onClientTick(ClientTickEvent.Pre event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null || mc.screen != null) return;
-        if (!(mc.hitResult instanceof BlockHitResult hit)) return;
 
         ItemStack held = mc.player.getMainHandItem();
 
-        // ── 打开控制台配置菜单：扳手普通右键（不蹲下）或 空手蹲下右键，准星指向控制台任意位置 ──
-        // 扳手蹲下右键 = 拆除（服务端 onSneakWrenched），这里不拦截，让右键事件正常传到服务端
-        boolean useDown = mc.options.keyUse.isDown();
-        boolean useEdge = useDown && !lastUseDown;
-        lastUseDown = useDown;
-        if (useEdge) {
-            boolean wrench = isWrench(held);
-            boolean emptySneak = held.isEmpty() && mc.player.isShiftKeyDown();
-            boolean openMenu = (wrench && !mc.player.isShiftKeyDown()) || emptySneak;
-            if (openMenu && isControlDesk(mc, hit)) {
-                mc.setScreen(new ControlDeskConfigScreen(hit.getBlockPos()));
+        // ── 需要准星命中控制台方块的分支：菜单打开 / 控件安装预览 / 扳手拆除预览 ──
+        // （monitor_2 表面网格走下方独立命中检测，不依赖 hitResult）
+        if (mc.hitResult instanceof BlockHitResult hit) {
+            // ── 打开控制台配置菜单：扳手普通右键（不蹲下）或 空手蹲下右键，准星指向控制台任意位置 ──
+            // 扳手蹲下右键 = 拆除（服务端 onSneakWrenched），这里不拦截，让右键事件正常传到服务端
+            boolean useDown = mc.options.keyUse.isDown();
+            boolean useEdge = useDown && !lastUseDown;
+            lastUseDown = useDown;
+            if (useEdge) {
+                boolean wrench = isWrench(held);
+                boolean emptySneak = held.isEmpty() && mc.player.isShiftKeyDown();
+                boolean openMenu = (wrench && !mc.player.isShiftKeyDown()) || emptySneak;
+                if (openMenu && isControlDesk(mc, hit)) {
+                    mc.setScreen(new ControlDeskConfigScreen(hit.getBlockPos()));
+                    return;
+                }
+            }
+
+            ControlDeskBlockEntity.ControlType type = controlTypeOf(held);
+            if (type != null) {
+                showInstallPreview(mc, hit, type);
+                // monitor_2 / throttle / joystick_2 的原后缘插槽已移除（installBounds 为空 → 无 AABB 安装预览框）；
+                // 手持三者时改显桌顶 6×14 棋盘网格（1px 格、内缩 1px；纯显示）
+                if (type == ControlDeskBlockEntity.ControlType.THROTTLE
+                        || type == ControlDeskBlockEntity.ControlType.JOYSTICK_2
+                        || type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
+                    showTopGrid(mc, hit);
+                }
+                // joystick_2：额外显示 3D 放置预览盒（4×9×4，底在桌顶面，跟随准星吸附到 1px 网格）
+                if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
+                    showJoystick2Box(mc, hit);
+                }
+                // throttle：额外显示 3D 放置预览盒（14×6×6，唯一合法位 (8,12) 全占桌顶网格）
+                if (type == ControlDeskBlockEntity.ControlType.THROTTLE) {
+                    showThrottleBox(mc, hit);
+                }
+                // monitor_2：额外显示 3D 放置预览盒（14×6×12，唯一合法位 (8,12) 全占桌顶网格）
+                if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
+                    showMonitor2Box(mc, hit);
+                }
                 return;
+            }
+            if (isWrench(held)) {
+                showRemovePreview(mc, hit);
             }
         }
 
-        ControlDeskBlockEntity.ControlType type = controlTypeOf(held);
-        if (type != null) {
-            showInstallPreview(mc, hit, type);
-            // monitor_2 / throttle / joystick_2 的原后缘插槽已移除（installBounds 为空 → 无 AABB 安装预览框）；
-            // 手持三者时改显桌顶 6×14 棋盘网格（1px 格、内缩 1px；纯显示）
-            if (type == ControlDeskBlockEntity.ControlType.THROTTLE
-                    || type == ControlDeskBlockEntity.ControlType.JOYSTICK_2
-                    || type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
-                showTopGrid(mc, hit);
-            }
-            // joystick_2：额外显示 3D 放置预览盒（4×9×4，底在桌顶面，跟随准星吸附到 1px 网格）
-            if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
-                showJoystick2Box(mc, hit);
-            }
-            // throttle：额外显示 3D 放置预览盒（14×6×6，唯一合法位 (8,12) 全占桌顶网格）
-            if (type == ControlDeskBlockEntity.ControlType.THROTTLE) {
-                showThrottleBox(mc, hit);
-            }
-            // monitor_2：额外显示 3D 放置预览盒（14×6×12，唯一合法位 (8,12) 全占桌顶网格）
-            if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
-                showMonitor2Box(mc, hit);
-            }
-            return;
+        // ── monitor_2 表面小 Monitor：独立命中检测（瞄准 monitor_2 屏幕面即显示，不依赖 hitResult）──
+        // 手持 Monitor 模块物品（toggle_switch / knob / button / screen）且视线命中已装 monitor_2 的
+        // case 前脸（2D 平面，随 22.5° x 旋转 + 放置平移 + 桌体 FACING 变换）→ 在表面显示 10×8 棋盘网格
+        // （纯显示，放置逻辑后续做）
+        if (isMonitorModuleItem(held)) {
+            showMonitor2ScreenGrid(mc);
         }
-        if (isWrench(held)) {
-            showRemovePreview(mc, hit);
-        }
+    }
+
+    /** 手持物品是否为 Monitor 模块物品（toggle_switch / knob / button / screen），用于 monitor_2 表面小 Monitor 的网格显示。 */
+    private static boolean isMonitorModuleItem(ItemStack stack) {
+        return ModuleType.fromItem(stack) != null || stack.is(MyModItems.MODULE_SCREEN.get());
     }
 
     /** 准星指向的方块是否为控制台。 */
@@ -289,6 +306,75 @@ public class ControlDeskPlacementOverlay {
         Outliner.getInstance().showAABB("control-desk/box-monitor2/" + pos.toShortString(), box)
                 .colored(blocked ? COLOR_INVALID : COLOR_VALID)
                 .lineWidth(1 / 64f);
+    }
+
+    /**
+     * monitor_2 屏幕表面 10×8 棋盘网格（纯显示）：
+     * 手持 Monitor 模块物品（toggle_switch / knob / button / screen）且视线命中<b>已装 monitor_2</b> 的
+     * case 前脸（2D 平面，随 22.5° x 旋转 + 放置平移 + 桌体 FACING 变换，见 {@link Monitor2HitDetector}）
+     * → 在屏幕面（北向基准 z=2 平面，12×10 屏幕面四周内缩 1px）画出 10×8 白色网格线，
+     * 网格线向屏幕内部内凹 0.9px（防 z-fight，用户定稿）。放置逻辑后续做（此步仅显示）。
+     */
+    private static void showMonitor2ScreenGrid(Minecraft mc) {
+        float partialTick = mc.getTimer().getGameTimeDeltaTicks();
+        Monitor2HitDetector.Monitor2Hit hit = Monitor2HitDetector.find(mc.level, mc.player, partialTick);
+        if (hit == null) return;
+
+        BlockPos pos = hit.pos();
+        Direction facing = hit.facing();
+        Outliner outliner = Outliner.getInstance();
+        String prefix = "control-desk/monitor2-grid/" + pos.toShortString();
+        float lw = 1 / 128f;
+        float z = ControlDeskBlockEntity.MONITOR_2_SCREEN_Z;
+
+        // 10×8 格：11 条竖线（x 3..13）+ 9 条横线（y 2..10），四周各内缩 1px
+        for (int i = 0; i <= ControlDeskBlockEntity.MONITOR_2_GRID_WIDTH; i++) {
+            float x = ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1 + i;
+            Vec3 from = monitor2World(pos, x, ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1, z, facing);
+            Vec3 to = monitor2World(pos, x, ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MAX - 1, z, facing);
+            outliner.showLine(prefix + "/v" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
+        }
+        for (int i = 0; i <= ControlDeskBlockEntity.MONITOR_2_GRID_HEIGHT; i++) {
+            float y = ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1 + i;
+            Vec3 from = monitor2World(pos, ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1, y, z, facing);
+            Vec3 to = monitor2World(pos, ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MAX - 1, y, z, facing);
+            outliner.showLine(prefix + "/h" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
+        }
+    }
+
+    /**
+     * monitor_2 屏幕面点（北向基准模型空间 px）→ 世界坐标。
+     * 变换链与渲染一致：case 22.5° x 旋转（Blockbench 元素 rotation，绕 origin [14,4,3]）→ px/16 →
+     * 放置平移 shift = ((placeX-modelCenter)/16, (MODEL_PLACE_Y-modelBottomY)/16, (placeZ-modelCenter)/16)
+     * → 桌体 FACING 旋转（绕方块中心 Y，gridWorld 同约定）→ +方块坐标。
+     * 网格线 z 向屏幕内部（+z）偏移 0.9px 内凹（旋转前偏移、旋转后跟随，用户定稿）。
+     */
+    private static Vec3 monitor2World(BlockPos pos, float x, float y, float z, Direction facing) {
+        // 网格线内凹 0.9px（向屏幕内部 +z，避免与 case 前脸 z-fight）
+        z += 0.0f;
+
+        // case 22.5° x 轴旋转（绕 origin，Blockbench 元素 rotation；方向符号待进游戏验证，反了翻转 TILT_DEG 符号）
+        double rad = Math.toRadians(ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_DEG);
+        double cos = Math.cos(rad), sin = Math.sin(rad);
+        double oy = ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_Y;
+        double oz = ControlDeskBlockEntity.MONITOR_2_SCREEN_TILT_ORIGIN_Z;
+        double dy = y - oy, dz = z - oz;
+        double ry = oy + dy * cos - dz * sin;
+        double rz = oz + dy * sin + dz * cos;
+
+        // px → 块 + 放置平移
+        double bx = x / 16.0 + (ControlDeskBlockEntity.MONITOR_2_PLACE_X - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16.0;
+        double by = ry / 16.0 + (ControlDeskBlockEntity.MODEL_PLACE_Y - ControlDeskBlockEntity.MONITOR_2_MODEL_BOTTOM_Y) / 16.0;
+        double bz = rz / 16.0 + (ControlDeskBlockEntity.MONITOR_2_PLACE_Z - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16.0;
+
+        // 桌体 FACING 旋转（绕方块中心 Y）+ 方块偏移
+        return switch (facing) {
+            case NORTH -> new Vec3(pos.getX() + bx, pos.getY() + by, pos.getZ() + bz);
+            case SOUTH -> new Vec3(pos.getX() + (1 - bx), pos.getY() + by, pos.getZ() + (1 - bz));
+            case WEST -> new Vec3(pos.getX() + bz, pos.getY() + by, pos.getZ() + (1 - bx));
+            case EAST -> new Vec3(pos.getX() + (1 - bz), pos.getY() + by, pos.getZ() + bx);
+            default -> new Vec3(pos.getX() + bx, pos.getY() + by, pos.getZ() + bz);
+        };
     }
 
     /**

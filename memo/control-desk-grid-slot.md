@@ -36,6 +36,12 @@
 | `MONITOR_2_PLACE_Y_TOP` | 19f | monitor_2 预览盒顶 y（高 12） |
 | `MONITOR_2_MODEL_CENTER` | 8f | monitor_2 模型默认中心 x/z（Blockbench 中模型 14×6 居中 → 8，**用户会同步改模型**） |
 | `MONITOR_2_PLACE_X / _Z` | 8 / 12 | monitor_2 **唯一合法放置中心**（14×6 全占网格） |
+| `MONITOR_2_SCREEN_Z` | 2f | monitor_2 **屏幕表面（case 前脸）z 坐标**（北向基准模型空间 px；case 元素 x2..14 / y1..11 / z2..6 的 z=2 前脸） |
+| `MONITOR_2_SCREEN_X_MIN/_MAX` | 2f / 14f | monitor_2 屏幕面 x 范围（12px 宽） |
+| `MONITOR_2_SCREEN_Y_MIN/_MAX` | 1f / 11f | monitor_2 屏幕面 y 范围（10px 高） |
+| `MONITOR_2_GRID_WIDTH/_HEIGHT` | 10 / 8 | monitor_2 表面棋盘网格格数（屏幕面 12×10 → 四周各内缩 1px → 10×8，用户定稿） |
+| `MONITOR_2_SCREEN_TILT_DEG` | 22.5f | monitor_2 case 前脸绕 x 轴旋转角（**模型内烘焙**，monitor_2.json case 元素 rotation） |
+| `MONITOR_2_SCREEN_TILT_ORIGIN_X/Y/Z` | 14f / 4f / 3f | monitor_2 case 旋转原点（Blockbench origin，px） |
 | `MODEL_PLACE_Y` | 8f | **模型放置底 y（三个模块共用）= 桌顶面：模型坐于桌面不下沉；仅预览盒下沉 1px（`*_PLACE_Y_BOTTOM=7`）** |
 | `JOYSTICK_2_MODEL_BOTTOM_Y` | 0f | 模型底座底 y（joystick_2 / throttle / monitor_2 均 0） |
 | `rotationToFace(Direction, Direction)` | 静态方法 | **安装旋转基础公式**：桌体 FACING + 桌→玩家水平方向 → 90° 间隔，让模型 -Z（Blockbench 北向正面）面向玩家：`floorMod(toYRot(facing) - toYRot(toPlayer), 360)`；`toPlayer` 由 `ControlDeskBlock.directionFromDeskTo`（桌体中心→玩家最近基本方向）计算，预览与实装共用 |
@@ -132,6 +138,8 @@ shift = ( (placeX-8)/16, (8-0)/16, (placeZ-8)/16 )   // 模型坐桌面 y8（MOD
 - ✅ joystick_2 完整接入：桌顶网格 + 4×9×4 预览盒 + 半透明实物 + 位置存储/渲染 + 4×4 占用阻挡 + 扳手拆除 + **输入检测/倾斜动画**（照抄 joystick，配置/轴值独立，枢轴 (8,1,8)，见 `memo/control-desk-seat.md`）
 - ✅ throttle 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×6 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + 只能 0°/180° 旋转 + 14×6 占用阻挡 + 扳手拆除
 - ✅ monitor_2 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×12 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + **不面向玩家**（仅随桌体 FACING）+ 14×6 占用阻挡 + 扳手拆除
+- ✅ **monitor_2 表面小 Monitor（第一步：表面棋盘网格纯显示）**：手持 Monitor 模块物品（toggle_switch / knob / button / screen）且视线命中**已装 monitor_2 的 case 前脸（2D 平面）** → 在屏幕面（北向基准 z=2 平面，12×10 屏幕面内缩 1px → **10×8 格**）画白色网格线（`ControlDeskPlacementOverlay.showMonitor2ScreenGrid`）；网格线随 **case 模型内 22.5° x 旋转**（绕 origin [14,4,3]，`MONITOR_2_SCREEN_TILT_*` 常量）+ 放置平移 + 桌体 FACING 旋转（`monitor2World` 变换链，与渲染一致），**网格线向屏幕内部内凹 0.9px**（用户定稿，防 z-fight）；**放置/交互逻辑后续做**
+- ✅ **monitor_2 命中检测对齐 Monitor 独立命中**：`Monitor2HitDetector` 不依赖原版 `mc.hitResult`（monitor_2 屏幕在桌面碰撞体上方，准星瞄准屏幕时原版可能 MISS），遍历 `ControlDeskClientRegistry`（客户端已加载控制台坐标注册表，`ControlDeskBlockEntity.onLoad/setRemoved/onChunkUnloaded` 维护）枚举候选，用玩家视线射线 + monitor_2 屏幕面实时变换（facing逆 → shift逆 → case 22.5° 逆，严格互逆于 `monitor2World`）做屏幕面板正面求交 + 背面剔除 + 遮挡检测（`ClipContext.COLLIDER`），取最近命中；Sable 子次元兼容（射线回投 plot 坐标）
 - 三个自由放置模块互斥已全部改为纯占地判定（monitor_2 / throttle 同占 (8,12) → 天然互斥；joystick_2 网格内也与两者重叠）
 - 网格线是纯显示层（Outliner），逻辑全部基于放置中心 + 占地矩形
 - 安装位置 = 服务端对**右键命中点**吸附（与客户端准星同射线）；多玩家极端场景如需精确可控，可改客户端发 payload（对齐 Monitor 的 PlaceModulePayload 模式）

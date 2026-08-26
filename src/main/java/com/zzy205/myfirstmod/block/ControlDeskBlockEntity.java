@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
+import com.zzy205.myfirstmod.client.ControlDeskClientRegistry;
 import com.zzy205.myfirstmod.compat.cc.ControlDeskPeripheral;
 import com.zzy205.myfirstmod.compat.cc.ControlDeskRegistry;
 import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
@@ -235,6 +236,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     @Override
     public void onLoad() {
         super.onLoad();
+        if (this.level != null && this.level.isClientSide) {
+            // 客户端独立命中检测（monitor_2 表面网格）依赖此注册表枚举候选控制台
+            ControlDeskClientRegistry.add(this.getBlockPos());
+        }
         if (this.level != null && !this.level.isClientSide) {
             int assigned = ControlDeskRegistry.register(this.channel, this);
             if (assigned != this.channel) {
@@ -247,10 +252,21 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
 
     @Override
     public void setRemoved() {
+        if (this.level != null && this.level.isClientSide) {
+            ControlDeskClientRegistry.remove(this.getBlockPos());
+        }
         if (this.level != null && !this.level.isClientSide) {
             ControlDeskRegistry.unregister(this.channel, this);
         }
         super.setRemoved();
+    }
+
+    @Override
+    public void onChunkUnloaded() {
+        if (this.level != null && this.level.isClientSide) {
+            ControlDeskClientRegistry.remove(this.getBlockPos());
+        }
+        super.onChunkUnloaded();
     }
 
     /** 全局频道号。 */
@@ -534,6 +550,21 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** monitor_2 唯一合法放置中心（14×6 占地完全处于桌顶网格 x1..15 / z9..15 → 仅 (8,12)，全占）。 */
     public static final int MONITOR_2_PLACE_X = 8;
     public static final int MONITOR_2_PLACE_Z = 12;
+    /** monitor_2 屏幕表面（case 前脸，北向基准模型空间 px）：case 元素 x2..14 / y1..11 / z2..6 的 z=2 前脸。 */
+    public static final float MONITOR_2_SCREEN_Z = 2f;
+    public static final float MONITOR_2_SCREEN_X_MIN = 2f;
+    public static final float MONITOR_2_SCREEN_X_MAX = 14f;
+    public static final float MONITOR_2_SCREEN_Y_MIN = 1f;
+    public static final float MONITOR_2_SCREEN_Y_MAX = 11f;
+    /** monitor_2 屏幕棋盘网格（格）：屏幕面 12×10 → 四周各内缩 1px → 10×8 格（用户定稿）。 */
+    public static final int MONITOR_2_GRID_WIDTH = 10;
+    public static final int MONITOR_2_GRID_HEIGHT = 8;
+    /** monitor_2 case 前脸绕 x 轴旋转（Blockbench 模型内烘焙，monitor_2.json case 元素 rotation，px）：
+     *  angle 22.5°、origin [14,4,3]（屏幕后仰 22.5°；方向符号待进游戏验证，反了翻转角度符号）。 */
+    public static final float MONITOR_2_SCREEN_TILT_DEG = 22.5f;
+    public static final float MONITOR_2_SCREEN_TILT_ORIGIN_X = 14f;
+    public static final float MONITOR_2_SCREEN_TILT_ORIGIN_Y = 4f;
+    public static final float MONITOR_2_SCREEN_TILT_ORIGIN_Z = 3f;
 
     public int getJoystickReturnTime() {
         return joystickReturnTime;
