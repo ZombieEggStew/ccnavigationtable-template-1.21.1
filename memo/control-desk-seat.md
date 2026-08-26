@@ -135,10 +135,11 @@ flowchart LR
 - ✅ 控制台已注册为 CC:T 外设：`ControlDeskPeripheral`（`getType()` = `"ccpe:control_desk"`，equals 按方块位置），`ControlDeskBlockEntity.getPeripheral()` 懒加载（对齐 `MonitorBlockEntity` 模式）
 - ✅ 查找链路（参考 Monitor，已进游戏验证）：`pe.getPeripheral(ch)`（`PeripheralExtenderAPI.getPeripheral`：先查传感器 → 再查 `MonitorRegistry` → **`ControlDeskRegistry.get(ch)` 分支**）返回控制台外设；`peripheral.wrap(...)` 经 `CCPeripheralCapabilities` 能力注册直接可用；频道与传感器/显示器共享 `GlobalChannelRegistry` 命名空间（全局唯一）
 - ✅ Lua API（按定稿实现，直接读数值层 = BE 服务端权威状态，**对齐 Monitor 的「外设 → 模块实例」模式**）：
-  - 外设 `getModule(name)`（`mainThread=true`，仅构造实例不读状态）→ 返回模块实例：`"pedal"` → `PedalModuleHandle`、`"joystick"` → `JoystickModuleHandle`、`"throttle"` → `ThrottleModuleHandle`；未安装对应控件返回 nil
+  - 外设 `getModule(name)`（`mainThread=true`，仅构造实例不读状态）→ 返回模块实例：`"pedal"` → `PedalModuleHandle`、`"joystick"` → `JoystickModuleHandle`、`"joystick_2"` → `Joystick2ModuleHandle`（照抄 joystick，读独立轴值）、`"throttle"` → `ThrottleModuleHandle`；未安装对应控件返回 nil
   - **模块实例上的状态读取方法全部 `mainThread=false`**（Lua 侧高频轮询直接跑 CC worker 线程，不占主线程）：
     - `PedalModuleHandle`：模拟量 `getLeftPedal()/getRightPedal()`（-1..1：+1 踩下 / -1 抬起）+ 差值 `getPedalDifference()`（右 − 左，-2..2）+ 方向判断 `isLeftPedalDown()/isRightPedalDown()`（轴值 > 0）与 `isLeftPedalUp()/isRightPedalUp()`（轴值 < 0，均含回正余量）
     - `JoystickModuleHandle`：原始值 `isJoystickXActive()/isJoystickYActive()`（boolean：该轴有无按键动作，读服务端输入租约）+ 轴值 `getJoystickX()/getJoystickY()`（0..1 幅度 = |轴值|）+ 带符号 `getJoystickXSigned()/getJoystickYSigned()`（-1..1）
+    - `Joystick2ModuleHandle`：与操纵杆同构（方法名带 2 后缀）：`isJoystick2XActive()/isJoystick2YActive()` + `getJoystick2X()/getJoystick2Y()`（0..1）+ `getJoystick2XSigned()/getJoystick2YSigned()`（-1..1），读 joystick2 独立轴值/租约
     - `ThrottleModuleHandle`：原始值 `isThrottleForwardActive()/isThrottleBackActive()`（boolean：前进/后退键按住态，读服务端输入租约）+ 档位 `getThrottleGear()`（0..11 整数，锁存不回正）+ 轴值 `getThrottleAxis()`（0..1 = 档位/MAX，满前进 = 1）
   - 定稿写的 0/1 按项目惯例实现为 boolean（Lua 中 0 为真值，boolean 语义更正确）
 - **踩坑（重要）**：CC:Tweaked 把 `@LuaFunction` 方法收集成 Lua 表返回；**没有任何 Lua 方法的 IPeripheral 对象会被判为 unknown type 返回 nil**（`CobaltLuaMachine#toValue` 日志 `Received unknown type '...', returning nil`）——`peripheral.wrap/find` 走能力路径不受影响（所以能 wrap 到、但 `pe.getPeripheral` 返回 nil）。Lua API 实现后此问题自然消失，占位 `ping()` 已删
@@ -167,7 +168,7 @@ flowchart LR
 6. 🔶 配置 GUI：✅ 控制台配置菜单（`ControlDeskConfigScreen`：扳手右键 / 空手蹲下右键打开；首条配置 = 频道滚轮条，复用全局频道注册表）+ 模块菜单背景 + 双按键绑定条 + 双滚轮条（回正/档位）+ 操纵杆全部配置持久化 + 脚踏板回正时间条与按键绑定持久化 已完成；⏳ 配置菜单其余控件（模块设置区块重新接入、脚踏板触发模式配置等）
 7. ✅ CC 外设注册（`ControlDeskPeripheral` + `pe.getPeripheral` / `peripheral.wrap` 可查，参考 Monitor 链路）✅ Lua API（操纵杆原始值/轴值/带符号 + 踏板踩下判断 + 油门档位/轴值/按住态，直接读 BE 数值层）；⏳ Lua 侧验证信号
 8. ✅ 油门杆（throttle）档位逻辑 + 动画：写死按键（空格=前进 +x / 左Ctrl=后退 -x）→ `SeatInputPayload`（11 字段）→ 服务端校验 → BE 油门**档位**（0..11 离散，服务端权威，`getUpdatePacket` 广播）→ 手柄沿模型空间 x 轴平移（档位 × 1px，`approachStep` 快速逼近段落感）；每档切换 LEVER_CLICK 音效（音调随档位上升 0.75→1.5）；✅ 接配置 UI（`ThrottleModuleScreen`：`DoubleInputBar` 前进/后退 + `ScrollValueBar` 档位切换节奏 → `ThrottleConfigPayload` → BE NBT 持久化 + `SeatControlListener` 读 BE 配置驱动，渲染端张力充电同步跟随 BE 配置）
-9. ✅ 摇杆2（joystick_2）输入检测 + 动画（照抄 joystick 模块，配置/轴值/输入租约全部独立）：`SeatControlListener` 收集 joystick_2 四向按键（默认 WASD）→ 同一 `SeatInputPayload` → 服务端校验写 `input2*` 租约 → `tickServer` 的 `simulateJoystick2` 用 joystick2 系列配置模拟 `joystick2AxisX/Y`（自由/档位模式）→ `getUpdatePacket` 广播 → Visual/BER 手柄绕枢轴 (8,1,8) 倾斜（15°、指数逼近，`Joystick2Motion` 单一实现）；✅ 配置 UI（`Joystick2ModuleScreen` 照抄 `JoystickModuleScreen` + `Joystick2ConfigPayload` → BE NBT 四路径持久化，入口 = 配置菜单点击摇杆2 行）；⏳ 进游戏验证方向符号与枢轴手感
+9. ✅ 摇杆2（joystick_2）输入检测 + 动画（照抄 joystick 模块，配置/轴值/输入租约全部独立）：`SeatControlListener` 收集 joystick_2 四向按键（默认 WASD）→ 同一 `SeatInputPayload` → 服务端校验写 `input2*` 租约 → `tickServer` 的 `simulateJoystick2` 用 joystick2 系列配置模拟 `joystick2AxisX/Y`（自由/档位模式）→ `getUpdatePacket` 广播 → Visual/BER 手柄绕枢轴 (8,1,8) 倾斜（15°、指数逼近，`Joystick2Motion` 单一实现）；✅ 配置 UI（`Joystick2ModuleScreen` 照抄 `JoystickModuleScreen` + `Joystick2ConfigPayload` → BE NBT 四路径持久化，入口 = 配置菜单点击摇杆2 行）；✅ 安装旋转加基础 +90° 偏移（`rotationToFace2`，预览/实装共用）；✅ Lua API（`getModule("joystick_2")` → `Joystick2ModuleHandle`，照抄 joystick、方法名带 2 后缀，读独立轴值）；⏳ 进游戏验证方向符号与枢轴手感、Lua 侧验证信号
 
 ## 待确认 / 风险清单
 

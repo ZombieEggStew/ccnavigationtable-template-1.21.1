@@ -187,9 +187,10 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/PeripheralExtenderRegistry.java` | 传感器频道登记表（委托全局注册表） |
 | `compat/cc/MonitorRegistry.java` | Monitor 频道登记表（委托全局注册表） |
 | `compat/cc/ControlDeskRegistry.java` | 控制台频道登记表（委托全局注册表，`get(channel)` 供 `pe.getPeripheral` 查找） |
-| `compat/cc/ControlDeskPeripheral.java` | 控制台的 `IPeripheral` 实现（`getType()` = `"ccpe:control_desk"`；`getModule("pedal"/"joystick"/"throttle")` 返回模块实例，未安装返回 nil） |
+| `compat/cc/ControlDeskPeripheral.java` | 控制台的 `IPeripheral` 实现（`getType()` = `"ccpe:control_desk"`；`getModule("pedal"/"joystick"/"joystick_2"/"throttle")` 返回模块实例，未安装返回 nil） |
 | `compat/cc/PedalModuleHandle.java` | 脚踏板模块实例（全部 mainThread=false）：模拟量 `getLeftPedal()/getRightPedal()`（-1..1）+ 差值 `getPedalDifference()`（左−右）+ 方向判断 `isLeftPedalDown/isRightPedalDown`（轴值>0）与 `isLeftPedalUp/isRightPedalUp`（轴值<0） |
 | `compat/cc/JoystickModuleHandle.java` | 操纵杆模块实例：原始值 `isJoystickXActive/YActive` + 轴值 `getJoystickX/Y`（0..1）+ 带符号 `getJoystickXSigned/YSigned`（-1..1，全部 mainThread=false） |
+| `compat/cc/Joystick2ModuleHandle.java` | 摇杆2 模块实例（照抄 JoystickModuleHandle，方法名带 2 后缀）：`isJoystick2XActive/YActive` + `getJoystick2X/Y`（0..1）+ `getJoystick2XSigned/YSigned`（-1..1，全部 mainThread=false），读 joystick2 独立轴值 |
 | `compat/cc/ThrottleModuleHandle.java` | 油门杆模块实例（全部 mainThread=false）：前进/后退按住态 `isThrottleForwardActive/isThrottleBackActive`（读服务端输入租约）+ 档位 `getThrottleGear()`（0..11 整数，锁存不回正）+ 轴值 `getThrottleAxis()`（0..1 = 档位/MAX） |
 | `compat/cc/MonitorPeripheral.java` | Monitor 的 `IPeripheral` 实现（模块/屏幕查询入口） |
 | `compat/cc/ModuleHandle.java` | 模块/屏幕 Lua 实例的抽象基类（通用 get/set/tooltip） |
