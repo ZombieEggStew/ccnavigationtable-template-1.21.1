@@ -1,5 +1,7 @@
 # Control Desk
 
+**Coming Soon**
+
 ![control-desk](../img/control_desk_2.png)
 
 **Designed to optimize space usage and maintain a clear field of view.**
