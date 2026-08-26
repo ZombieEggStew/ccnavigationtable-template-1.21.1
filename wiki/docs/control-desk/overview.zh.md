@@ -1,6 +1,8 @@
 # 控制台
 
-![control-desk](../img/my_control_desk_base.png)
+![control-desk](../img/control_desk_2.png)
+
+**用于解决传统控制方案空间利用率低，模型太大阻挡视野等问题。**
 
 控制台（Control Desk）是坐垫驱动的操作控制台。默认**没有安装任何控件** —— 需要玩家自己安装[脚踏板](pedal.zh.md)、[操纵杆](joystick.zh.md)和/或[油门杆](throttle.zh.md)。坐在控制台旁边的 Create 坐垫上即可自动进入**操作模式**：按键驱动所有联动控制台的已安装控件，控件状态通过 CC:T Lua API 暴露。
 
