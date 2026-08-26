@@ -28,12 +28,15 @@ import java.util.Map;
  * 渲染时绕方块中心 Y 旋转到 FACING（BER 的 PoseStack 已平移到方块位置，无需再平移）。
  * 操纵杆本体叠加倾斜：绕枢轴 (8,6,3) 倾斜（SuperByteBuffer 变换链，与 Create HarvesterRenderer
  * pivot 模式一致），倾斜 = 模拟轴 × 15°（轴值动力学由服务端 BE tick 推进），见 {@link JoystickTilt}。
+ * 摇杆2 手柄叠加倾斜：放置变换后绕枢轴 (8,1,8) 倾斜，逻辑照抄操纵杆（独立轴值/配置），见 {@link Joystick2Motion}。
  * 踏板本体叠加平移：向模型空间 +z 平移压下值 × 1px（踩下 = 前后平移，见 {@link PedalMotion}）。
  */
 public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBlockEntity> {
 
     /** 每个控制台独立的操纵杆动画倾斜值（度）{tiltX, tiltY}：指数逼近追逐目标 */
     private final Map<BlockPos, float[]> smoothTilts = new HashMap<>();
+    /** 每个控制台独立的摇杆2 动画倾斜值（度）{tiltX, tiltY}：指数逼近追逐目标（独立于 joystick） */
+    private final Map<BlockPos, float[]> smoothTilt2s = new HashMap<>();
     /** 每个控制台独立的踏板动画平移量（块单位）{leftPx, rightPx}：指数逼近追逐目标 */
     private final Map<BlockPos, float[]> smoothPedals = new HashMap<>();
     /** 每个控制台独立的油门动画平移量（块单位）：指数逼近追逐目标（沿模型空间 x 轴） */
@@ -94,11 +97,13 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
             smoothThrottles.remove(be.getBlockPos());
             throttleCharge.remove(be.getBlockPos());
         }
-        // joystick_2：静态渲染（底座 + 手柄）；模型平移到放置位（预览盒位置），安装朝向旋转绕放置中心
+        // joystick_2：底座静态 + 手柄倾斜动画；模型平移到放置位（预览盒位置），安装朝向旋转绕放置中心
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)) {
             int backRot = be.getBackSlotRotation();
             renderJoystick2Part(MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE, be, state, facing, ms, vb, light, backRot);
-            renderJoystick2Part(MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE, be, state, facing, ms, vb, light, backRot);
+            renderJoystick2(be, state, facing, ms, vb, light, backRot);
+        } else {
+            smoothTilt2s.remove(be.getBlockPos());
         }
     }
 
@@ -132,6 +137,29 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
                     .rotate(Mth.DEG_TO_RAD * tiltY, Direction.EAST)
                     .rotate(Mth.DEG_TO_RAD * tiltX, Direction.SOUTH)
                     .translate(-JoystickTilt.PIVOT_X, -JoystickTilt.PIVOT_Y, -JoystickTilt.PIVOT_Z);
+        }
+        stick.light(light).renderInto(ms, vb);
+    }
+
+    /** 摇杆2 手柄：放置变换（平移到放置位 + 安装朝向旋转绕放置中心）+ 绕枢轴 (8,1,8) 倾斜（动画 = 指数逼近追逐服务端权威轴值 × 15°，逻辑照抄 {@link #renderJoystick}，见 {@link Joystick2Motion}）。 */
+    private void renderJoystick2(ControlDeskBlockEntity be, BlockState state, Direction facing,
+                                 PoseStack ms, VertexConsumer vb, int light, int backRot) {
+        float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
+        float[] smooth = smoothTilt2s.computeIfAbsent(be.getBlockPos(), k -> new float[2]);
+        float[] target = Joystick2Motion.targetDeg(be);
+        smooth[0] = JoystickTilt.approach(smooth[0], target[0], frameTicks);
+        smooth[1] = JoystickTilt.approach(smooth[1], target[1], frameTicks);
+        float tiltX = smooth[0];
+        float tiltY = smooth[1];
+
+        SuperByteBuffer stick = placedBuffer(MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE, state, facing,
+                be.getJoystick2PlaceX(), be.getJoystick2PlaceZ(),
+                ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, backRot);
+        if (tiltX != 0f || tiltY != 0f) {
+            stick.translate(Joystick2Motion.PIVOT_X, Joystick2Motion.PIVOT_Y, Joystick2Motion.PIVOT_Z)
+                    .rotate(Mth.DEG_TO_RAD * tiltY, Direction.EAST)
+                    .rotate(Mth.DEG_TO_RAD * tiltX, Direction.SOUTH)
+                    .translate(-Joystick2Motion.PIVOT_X, -Joystick2Motion.PIVOT_Y, -Joystick2Motion.PIVOT_Z);
         }
         stick.light(light).renderInto(ms, vb);
     }

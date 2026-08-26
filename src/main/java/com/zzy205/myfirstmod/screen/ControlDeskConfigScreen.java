@@ -121,6 +121,7 @@ public class ControlDeskConfigScreen extends AbstractMonitorScreen {
         if (index < 0 || index >= moduleTypes.size() || this.minecraft == null) return;
         switch (moduleTypes.get(index)) {
             case JOYSTICK -> this.minecraft.setScreen(new JoystickModuleScreen(deskPos).withReturnTo(this));
+            case JOYSTICK_2 -> this.minecraft.setScreen(new Joystick2ModuleScreen(deskPos).withReturnTo(this));
             case PEDAL -> this.minecraft.setScreen(new PedalModuleScreen(deskPos).withReturnTo(this));
             case THROTTLE -> this.minecraft.setScreen(new ThrottleModuleScreen(deskPos).withReturnTo(this));
         }

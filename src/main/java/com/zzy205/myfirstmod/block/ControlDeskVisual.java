@@ -21,6 +21,8 @@ import java.util.function.Consumer;
  * （必须 setIdentityTransform，translate 为累加语义，否则模型每帧漂移）。
  * 操纵杆本体（joystick）叠加倾斜：绕枢轴 (8,6,3)（见 {@link JoystickTilt}）倾斜，
  * 目标 = 模拟轴（每 tick 线性累加，{@link com.zzy205.myfirstmod.client.SeatControlState}）× 15°；
+ * 摇杆2 手柄（joystick_2_handle）叠加倾斜：绕枢轴 (8,1,8)（见 {@link Joystick2Motion}）倾斜，
+ * 目标 = 服务端权威轴值 × 15°（独立配置/轴值，逻辑照抄 joystick）；
  * 踏板本体（pedal / pedal_right）叠加平移：向模型空间 +z 平移压下值 × 1px（见 {@link PedalMotion}）；
  * 油门手柄（throttle_handle）叠加平移：向模型空间 +x 平移档位位置（× 11px，段落感，见 {@link ThrottleMotion}）；
  * 动画均用指数逼近追逐目标（aeroworks SMOOTHED 模式，帧时间修正），本实例持有平滑值。
@@ -45,6 +47,9 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     /** 操纵杆动画倾斜值（度）：指数逼近追逐 {@link JoystickTilt#targetDeg} */
     private float smoothTiltX;
     private float smoothTiltY;
+    /** 摇杆2 动画倾斜值（度）：指数逼近追逐 {@link Joystick2Motion#targetDeg} */
+    private float smoothTilt2X;
+    private float smoothTilt2Y;
     /** 踏板动画平移量（块单位）：指数逼近追逐 {@link PedalMotion#targetPx}（左/右） */
     private float smoothPedalLeft;
     private float smoothPedalRight;
@@ -102,7 +107,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         final float tiltX = this.smoothTiltX;
         final float tiltY = this.smoothTiltY;
         this.joystick = syncInstance(this.joystick, joystickWanted, MyModPartialModels.CONTROL_DESK_JOYSTICK, facing,
-                inst -> applyTilt(inst, tiltX, tiltY));
+                inst -> applyTilt(inst, tiltX, tiltY, JoystickTilt.PIVOT_X, JoystickTilt.PIVOT_Y, JoystickTilt.PIVOT_Z));
 
         // monitor_2：已接入棋盘自由放置——模型平移到放置位，不面向玩家（无安装朝向旋转，仅随桌体 FACING）
         this.monitor2 = syncInstance(this.monitor2, monitor2Wanted, MyModPartialModels.CONTROL_DESK_MONITOR_2, facing,
@@ -145,11 +150,20 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
             this.throttleIndicator.setChanged();
         }
 
-        // joystick_2：静态渲染（底座 + 手柄）；模型平移到放置位（预览盒位置 y7..16），安装朝向旋转绕放置中心
+        // joystick_2：底座静态 + 手柄倾斜动画；模型平移到放置位（预览盒位置 y7..16），安装朝向旋转绕放置中心，
+        // 手柄叠加倾斜：指数逼近追逐目标（数值层线性累加，动画层指数），绕枢轴 (8,1,8) 倾斜（见 Joystick2Motion）
         this.joystick2Base = syncInstance(this.joystick2Base, joystick2Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE, facing,
                 inst -> applyJoystick2Placement(inst, be));
+        float[] target2 = Joystick2Motion.targetDeg(be);
+        this.smoothTilt2X = JoystickTilt.approach(this.smoothTilt2X, target2[0], frameTicks);
+        this.smoothTilt2Y = JoystickTilt.approach(this.smoothTilt2Y, target2[1], frameTicks);
+        final float tilt2X = this.smoothTilt2X;
+        final float tilt2Y = this.smoothTilt2Y;
         this.joystick2Handle = syncInstance(this.joystick2Handle, joystick2Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE, facing,
-                inst -> applyJoystick2Placement(inst, be));
+                inst -> {
+                    applyJoystick2Placement(inst, be);
+                    applyTilt(inst, tilt2X, tilt2Y, Joystick2Motion.PIVOT_X, Joystick2Motion.PIVOT_Y, Joystick2Motion.PIVOT_Z);
+                });
     }
 
     /**
@@ -227,13 +241,14 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         return instance;
     }
 
-    /** 绕枢轴 (8,6,3) 倾斜：tiltY 绕 X 轴（W/S 前后），tiltX 绕 Z 轴（A/D 左右）。 */
-    private static void applyTilt(TransformedInstance inst, float tiltX, float tiltY) {
+    /** 绕枢轴倾斜（模型空间变换，枢轴由调用方传入：joystick (8,6,3) / 摇杆2 (8,1,8)）：tiltY 绕 X 轴（W/S 前后），tiltX 绕 Z 轴（A/D 左右）。 */
+    private static void applyTilt(TransformedInstance inst, float tiltX, float tiltY,
+                                  float pivotX, float pivotY, float pivotZ) {
         if (tiltX == 0f && tiltY == 0f) return;
-        inst.translate(JoystickTilt.PIVOT_X, JoystickTilt.PIVOT_Y, JoystickTilt.PIVOT_Z);
+        inst.translate(pivotX, pivotY, pivotZ);
         inst.rotateX((float) Math.toRadians(tiltY));
         inst.rotateZ((float) Math.toRadians(tiltX));
-        inst.translate(-JoystickTilt.PIVOT_X, -JoystickTilt.PIVOT_Y, -JoystickTilt.PIVOT_Z);
+        inst.translate(-pivotX, -pivotY, -pivotZ);
     }
 
     @Override

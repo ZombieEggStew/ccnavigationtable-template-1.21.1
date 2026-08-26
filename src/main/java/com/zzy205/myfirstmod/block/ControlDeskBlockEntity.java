@@ -54,6 +54,21 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public static final String DEFAULT_JOYSTICK_KEY_LEFT = "key.keyboard.a";
     public static final String DEFAULT_JOYSTICK_KEY_RIGHT = "key.keyboard.d";
 
+    /** 摇杆2 回正时间（tick）默认值（与 Joystick2ModuleScreen 滚轮条一致；配置独立于 joystick，范围复用 joystick 的 MIN/MAX）。 */
+    public static final int DEFAULT_JOYSTICK2_RETURN_TIME = DEFAULT_JOYSTICK_RETURN_TIME;
+
+    /** 摇杆2 档位模式（档位数）默认值（与 Joystick2ModuleScreen 滚轮条一致；范围复用 {@link #MIN_GEAR_COUNT}/{@link #MAX_GEAR_COUNT}）。 */
+    public static final int DEFAULT_JOYSTICK2_GEAR_COUNT = DEFAULT_GEAR_COUNT;
+
+    /** 摇杆2 自由模式累加速度（满偏所需 tick 数，速度 = 1/数值 每 tick）默认值（范围复用 joystick 的 MIN/MAX）。 */
+    public static final int DEFAULT_JOYSTICK2_FREE_SPEED = DEFAULT_JOYSTICK_FREE_SPEED;
+
+    /** 摇杆2 四向按键默认值（照抄 joystick：WASD；InputConstants.Key.getName() 格式，空串 = 未绑定）。 */
+    public static final String DEFAULT_JOYSTICK2_KEY_UP = DEFAULT_JOYSTICK_KEY_UP;
+    public static final String DEFAULT_JOYSTICK2_KEY_DOWN = DEFAULT_JOYSTICK_KEY_DOWN;
+    public static final String DEFAULT_JOYSTICK2_KEY_LEFT = DEFAULT_JOYSTICK_KEY_LEFT;
+    public static final String DEFAULT_JOYSTICK2_KEY_RIGHT = DEFAULT_JOYSTICK_KEY_RIGHT;
+
     /** 脚踏板回正时间（tick）默认值与范围（与 PedalModuleScreen 滚轮条一致；左右两个踏板共用同一值）。 */
     public static final int DEFAULT_PEDAL_RETURN_TIME = 2;
     public static final int MIN_PEDAL_RETURN_TIME = 0;
@@ -108,6 +123,20 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_JOYSTICK_KEY_DOWN = "JoystickKeyDown";
     private static final String TAG_JOYSTICK_KEY_LEFT = "JoystickKeyLeft";
     private static final String TAG_JOYSTICK_KEY_RIGHT = "JoystickKeyRight";
+    private static final String TAG_JOYSTICK2_RETURN_TIME = "Joystick2ReturnTime";            // 摇杆2 配置（独立于 joystick）
+    private static final String TAG_JOYSTICK2_RETURN_TIME_YAW = "Joystick2ReturnTimeYaw";
+    private static final String TAG_GEAR2_MODE_PITCH = "Gear2ModePitch";
+    private static final String TAG_GEAR2_COUNT_PITCH = "Gear2CountPitch";
+    private static final String TAG_GEAR2_MODE_YAW = "Gear2ModeYaw";
+    private static final String TAG_GEAR2_COUNT_YAW = "Gear2CountYaw";
+    private static final String TAG_JOYSTICK2_FREE_SPEED_PITCH = "Joystick2FreeSpeedPitch";
+    private static final String TAG_JOYSTICK2_FREE_SPEED_YAW = "Joystick2FreeSpeedYaw";
+    private static final String TAG_JOYSTICK2_KEY_UP = "Joystick2KeyUp";
+    private static final String TAG_JOYSTICK2_KEY_DOWN = "Joystick2KeyDown";
+    private static final String TAG_JOYSTICK2_KEY_LEFT = "Joystick2KeyLeft";
+    private static final String TAG_JOYSTICK2_KEY_RIGHT = "Joystick2KeyRight";
+    private static final String TAG_JOYSTICK2_AXIS_X = "Joystick2AxisX";                      // 摇杆2 运行时轴状态（不落盘，仅 getUpdateTag 同步）
+    private static final String TAG_JOYSTICK2_AXIS_Y = "Joystick2AxisY";
     private static final String TAG_PEDAL_RETURN_TIME = "PedalReturnTime";
     private static final String TAG_PEDAL_FREE_SPEED = "PedalFreeSpeed";
     private static final String TAG_PEDAL_KEY_LEFT_UP = "PedalKeyLeftUp";
@@ -144,10 +173,24 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private int gearCountYaw = DEFAULT_GEAR_COUNT;                      // 左右轴档位数
     private int freeSpeedPitch = DEFAULT_JOYSTICK_FREE_SPEED;           // 前后轴自由模式满偏 tick 数
     private int freeSpeedYaw = DEFAULT_JOYSTICK_FREE_SPEED;             // 左右轴自由模式满偏 tick 数
+    private int joystick2ReturnTime = DEFAULT_JOYSTICK2_RETURN_TIME;    // 摇杆2 前后轴回正时间（独立于 joystick）
+    private int joystick2ReturnTimeYaw = DEFAULT_JOYSTICK2_RETURN_TIME; // 摇杆2 左右轴回正时间
+    private boolean gear2ModePitch;                                     // 摇杆2 前后轴档位模式开关
+    private int gear2CountPitch = DEFAULT_JOYSTICK2_GEAR_COUNT;         // 摇杆2 前后轴档位数
+    private boolean gear2ModeYaw;                                       // 摇杆2 左右轴档位模式开关
+    private int gear2CountYaw = DEFAULT_JOYSTICK2_GEAR_COUNT;           // 摇杆2 左右轴档位数
+    private int freeSpeed2Pitch = DEFAULT_JOYSTICK2_FREE_SPEED;         // 摇杆2 前后轴自由模式满偏 tick 数
+    private int freeSpeed2Yaw = DEFAULT_JOYSTICK2_FREE_SPEED;           // 摇杆2 左右轴自由模式满偏 tick 数
+    private String joystick2KeyUp = DEFAULT_JOYSTICK2_KEY_UP;           // 摇杆2 前推键（空串 = 未绑定）
+    private String joystick2KeyDown = DEFAULT_JOYSTICK2_KEY_DOWN;       // 摇杆2 后拉键
+    private String joystick2KeyLeft = DEFAULT_JOYSTICK2_KEY_LEFT;       // 摇杆2 左摆键
+    private String joystick2KeyRight = DEFAULT_JOYSTICK2_KEY_RIGHT;     // 摇杆2 右摆键
 
     // ── 运行时轴状态（服务端权威，不持久化；经 getUpdateTag/getUpdatePacket 同步到客户端） ──
     private float joystickAxisX;   // 操纵杆轴 X（-1..1）：+1 = 右摆(D)，-1 = 左摆(A)
     private float joystickAxisY;   // 操纵杆轴 Y（-1..1）：+1 = 前推(W)，-1 = 后拉(S)
+    private float joystick2AxisX;  // 摇杆2 轴 X（-1..1）：+1 = 右摆，-1 = 左摆（独立于 joystick）
+    private float joystick2AxisY;  // 摇杆2 轴 Y（-1..1）：+1 = 前推，-1 = 后拉
     private float pedalLeftAxis;   // 左踏板轴（-1..1，运行时）：+1 = 踩下（+z 1px）/ -1 = 抬起（-z 1px），见 PedalMotion
     private float pedalRightAxis;  // 右踏板轴（-1..1，运行时）
     private int throttleGear;          // 油门档位（0..MAX_TRAVEL_PX，运行时）：0 = 最低档（底端，-x 端），1px = 1 档，锁存不回正
@@ -157,6 +200,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private BlockPos inputSeatPos;
     private boolean inputUp, inputDown, inputLeft, inputRight;
     private boolean prevUp, prevDown, prevLeft, prevRight;
+    // 摇杆2 输入租约（与操纵杆同一份方向输入，独立记录边沿历史——两控件可同时安装、各自模拟）
+    private boolean input2Up, input2Down, input2Left, input2Right;
+    private boolean prev2Up, prev2Down, prev2Left, prev2Right;
     private boolean inputPedalLeftDown, inputPedalLeftUp, inputPedalRightDown, inputPedalRightUp;
     private boolean inputThrottleForward, inputThrottleBack;
     private String joystickKeyUp = DEFAULT_JOYSTICK_KEY_UP;
@@ -288,9 +334,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
                 joystick2Installed = true;
                 joystick2PlaceX = placeX;
                 joystick2PlaceZ = placeZ;
-                // 让模型 -Z（Blockbench 北向正面）面向安装时的玩家（90° 间隔）；toPlayer 为 null 时保持原值
+                // 让模型 -Z（Blockbench 北向正面）面向安装时的玩家（90° 间隔），另加基础 +90° 偏移（模型默认朝向差 90°，见 rotationToFace2）；toPlayer 为 null 时保持原值
                 if (toPlayer != null) {
-                    backSlotRotation = rotationToFace(getBlockState().getValue(ControlDeskBlock.FACING), toPlayer);
+                    backSlotRotation = rotationToFace2(getBlockState().getValue(ControlDeskBlock.FACING), toPlayer);
                 }
             }
         }
@@ -362,9 +408,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             }
             case JOYSTICK_2 -> {
                 joystick2Installed = false;
-                // 卸下摇杆2：放置位置与输入租约一并清除（重新安装后按新预览位置放置）
+                // 卸下摇杆2：放置位置、运行时轴状态与输入租约一并清除（重新安装后从中心开始）
                 joystick2PlaceX = 8;
                 joystick2PlaceZ = 8;
+                joystick2AxisX = 0f;
+                joystick2AxisY = 0f;
                 clearInput();
             }
         }
@@ -438,6 +486,15 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     }
 
     /**
+     * joystick_2 安装朝向：{@link #rotationToFace} 结果 + 基础 {@link #JOYSTICK_2_ROTATION_OFFSET}（+90°）偏移
+     * （模型在 Blockbench 中的默认朝向与「-Z 面向玩家」相差 90°，用户定稿），仍为 90° 间隔（北/南/西/东）。
+     * 预览（ghost）与实装（{@link #install}）共用同一实现，防偏差。
+     */
+    public static int rotationToFace2(Direction deskFacing, @Nullable Direction toPlayer) {
+        return Math.floorMod(rotationToFace(deskFacing, toPlayer) + JOYSTICK_2_ROTATION_OFFSET, 360);
+    }
+
+    /**
      * 模型放置底 y（北向模型空间 px，三个自由放置模块共用）：桌顶面 y8 —— 模型<b>坐于桌面不下沉</b>；
      * 仅<b>预览盒</b>下沉 1px（各模块 {@code *_PLACE_Y_BOTTOM = 7}，嵌入桌面示意）。
      */
@@ -451,6 +508,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** joystick_2 模型默认中心 x/z（模型 x6..10 / z6..10 → 8）与底座底 y（0）：安装渲染时平移到放置位。 */
     public static final float JOYSTICK_2_MODEL_CENTER = 8f;
     public static final float JOYSTICK_2_MODEL_BOTTOM_Y = 0f;
+    /** joystick_2 安装旋转基础偏移（度）：模型默认朝向与「-Z 面向玩家」相差 90°（用户定稿），预览与实装统一加该偏移（见 {@link #rotationToFace2}）。 */
+    public static final int JOYSTICK_2_ROTATION_OFFSET = 90;
     /** throttle 占地半宽（北向模型空间 px）：14×6 → x±7 / z±3；预览盒与占用阻挡共用。 */
     public static final int THROTTLE_FOOTPRINT_HALF_X = 7;
     public static final int THROTTLE_FOOTPRINT_HALF_Z = 3;
@@ -608,7 +667,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /**
      * 写入坐垫操作输入（运行时，服务端调用；按玩家/坐垫租约记录，租约变化时重置边沿历史，
      * 避免换人/换坐垫后第一次按键不触发档位边沿）。
-     * 参数 = 操纵杆四方向按住态 + 踏板四键按住态（踩下/抬起）+ 油门两键按住态（前进/后退）。
+     * 参数 = 操纵杆四方向按住态 + 踏板四键按住态（踩下/抬起）+ 油门两键按住态（前进/后退）；
+     * 同一份方向输入同时写入摇杆2 租约（{@code input2*} / {@code prev2*}，两控件可同时安装、各自模拟）。
      */
     public void setSeatInput(UUID player, BlockPos seatPos,
                              boolean up, boolean down, boolean left, boolean right,
@@ -622,6 +682,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         inputDown = down;
         inputLeft = left;
         inputRight = right;
+        input2Up = up;
+        input2Down = down;
+        input2Left = left;
+        input2Right = right;
         inputPedalLeftDown = pedalLeftDown;
         inputPedalLeftUp = pedalLeftUp;
         inputPedalRightDown = pedalRightDown;
@@ -630,6 +694,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         inputThrottleBack = throttleBack;
         if (leaseChanged) {
             prevUp = prevDown = prevLeft = prevRight = false;
+            prev2Up = prev2Down = prev2Left = prev2Right = false;
         }
     }
 
@@ -639,6 +704,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         inputSeatPos = null;
         inputUp = inputDown = inputLeft = inputRight = false;
         prevUp = prevDown = prevLeft = prevRight = false;
+        input2Up = input2Down = input2Left = input2Right = false;
+        prev2Up = prev2Down = prev2Left = prev2Right = false;
         inputPedalLeftDown = inputPedalLeftUp = inputPedalRightDown = inputPedalRightUp = false;
         inputThrottleForward = inputThrottleBack = false;
     }
@@ -655,9 +722,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public static void tickServer(Level level, BlockPos pos, BlockState state, ControlDeskBlockEntity be) {
         if (level == null || level.isClientSide) return;
         boolean hasJoystick = be.joystickInstalled;
+        boolean hasJoystick2 = be.joystick2Installed;
         boolean hasPedal = be.pedalInstalled;
         boolean hasThrottle = be.throttleInstalled;
-        if (!hasJoystick && !hasPedal && !hasThrottle) return;
+        if (!hasJoystick && !hasJoystick2 && !hasPedal && !hasThrottle) return;
         // 输入租约校验：操作者不再坐在输入坐垫上（离开/换坐垫/断线）→ 清除输入
         // （档位模式轴值保持、自由模式/踏板自然回正）
         if (be.inputPlayer != null) {
@@ -670,6 +738,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             simulateJoystick(be);
         } else {
             be.prevUp = be.prevDown = be.prevLeft = be.prevRight = false;
+        }
+        if (hasJoystick2) {
+            simulateJoystick2(be);
+        } else {
+            be.prev2Up = be.prev2Down = be.prev2Left = be.prev2Right = false;
         }
         if (hasPedal) {
             simulatePedals(be);
@@ -709,6 +782,45 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (newX != be.joystickAxisX || newY != be.joystickAxisY) {
             be.joystickAxisX = newX;
             be.joystickAxisY = newY;
+            be.notifyChange();
+        }
+    }
+
+    /**
+     * 摇杆2 轴动力学（自由模式 / 档位模式，逻辑与 {@link #simulateJoystick} 相同，配置/轴值/边沿历史
+     * 全部独立于 joystick——两控件可同时安装、各自模拟）：读 {@code input2*} / {@code prev2*} 租约，
+     * 用 {@code joystick2} 系列配置模拟到 {@code joystick2AxisX/Y}（X 轴用 Yaw 系列、Y 轴用 Pitch 系列）。
+     * 轴值变化时广播。
+     */
+    private static void simulateJoystick2(ControlDeskBlockEntity be) {
+        boolean anyInput = be.input2Up || be.input2Down || be.input2Left || be.input2Right;
+        if (!anyInput && be.joystick2AxisX == 0f && be.joystick2AxisY == 0f) {
+            be.prev2Up = be.prev2Down = be.prev2Left = be.prev2Right = false;
+            return;
+        }
+        // 按下边沿（相对上一 tick 输入）
+        boolean upEdge = be.input2Up && !be.prev2Up;
+        boolean downEdge = be.input2Down && !be.prev2Down;
+        boolean leftEdge = be.input2Left && !be.prev2Left;
+        boolean rightEdge = be.input2Right && !be.prev2Right;
+        be.prev2Up = be.input2Up;
+        be.prev2Down = be.input2Down;
+        be.prev2Left = be.input2Left;
+        be.prev2Right = be.input2Right;
+
+        float targetX = (be.input2Right && !be.input2Left) ? 1f : ((be.input2Left && !be.input2Right) ? -1f : 0f);
+        float targetY = (be.input2Up && !be.input2Down) ? 1f : ((be.input2Down && !be.input2Up) ? -1f : 0f);
+        float newX = be.gear2ModeYaw
+                ? JoystickTilt.stepGear(be.joystick2AxisX, rightEdge, leftEdge, be.gear2CountYaw)
+                : JoystickTilt.stepAxis(be.joystick2AxisX, targetX,
+                        JoystickTilt.pressStep(be.freeSpeed2Yaw), JoystickTilt.returnStep(be.joystick2ReturnTimeYaw));
+        float newY = be.gear2ModePitch
+                ? JoystickTilt.stepGear(be.joystick2AxisY, upEdge, downEdge, be.gear2CountPitch)
+                : JoystickTilt.stepAxis(be.joystick2AxisY, targetY,
+                        JoystickTilt.pressStep(be.freeSpeed2Pitch), JoystickTilt.returnStep(be.joystick2ReturnTime));
+        if (newX != be.joystick2AxisX || newY != be.joystick2AxisY) {
+            be.joystick2AxisX = newX;
+            be.joystick2AxisY = newY;
             be.notifyChange();
         }
     }
@@ -803,6 +915,134 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         joystickKeyDown = d;
         joystickKeyLeft = l;
         joystickKeyRight = r;
+        notifyChange();
+    }
+
+    // ════════════════════ 摇杆2（joystick_2）配置与运行时状态（独立于 joystick） ════════════════════
+
+    /** 摇杆2 轴 X（-1..1，运行时）：+1 = 右摆，-1 = 左摆（服务端权威，经 getUpdatePacket 同步）。 */
+    public float getJoystick2AxisX() {
+        return joystick2AxisX;
+    }
+
+    /** 摇杆2 轴 Y（-1..1，运行时）：+1 = 前推，-1 = 后拉（服务端权威，经 getUpdatePacket 同步）。 */
+    public float getJoystick2AxisY() {
+        return joystick2AxisY;
+    }
+
+    /** 摇杆2 X 轴是否有按键动作（原始值，服务端输入租约）：左/右方向键任一按住。 */
+    public boolean isJoystick2XActive() {
+        return input2Left || input2Right;
+    }
+
+    /** 摇杆2 Y 轴是否有按键动作（原始值，服务端输入租约）：前/后方向键任一按住。 */
+    public boolean isJoystick2YActive() {
+        return input2Up || input2Down;
+    }
+
+    public int getJoystick2ReturnTime() {
+        return joystick2ReturnTime;
+    }
+
+    /** 设置摇杆2 前后轴回正时间（tick），钳位到 [MIN, MAX]。服务端调用。 */
+    public void setJoystick2ReturnTime(int ticks) {
+        int clamped = Math.max(MIN_JOYSTICK_RETURN_TIME, Math.min(MAX_JOYSTICK_RETURN_TIME, ticks));
+        if (joystick2ReturnTime == clamped) return;
+        joystick2ReturnTime = clamped;
+        notifyChange();
+    }
+
+    public int getJoystick2ReturnTimeYaw() {
+        return joystick2ReturnTimeYaw;
+    }
+
+    /** 设置摇杆2 左右轴回正时间（tick），钳位到 [MIN, MAX]。服务端调用。 */
+    public void setJoystick2ReturnTimeYaw(int ticks) {
+        int clamped = Math.max(MIN_JOYSTICK_RETURN_TIME, Math.min(MAX_JOYSTICK_RETURN_TIME, ticks));
+        if (joystick2ReturnTimeYaw == clamped) return;
+        joystick2ReturnTimeYaw = clamped;
+        notifyChange();
+    }
+
+    public boolean isGear2ModePitch() {
+        return gear2ModePitch;
+    }
+
+    public int getGear2CountPitch() {
+        return gear2CountPitch;
+    }
+
+    public boolean isGear2ModeYaw() {
+        return gear2ModeYaw;
+    }
+
+    public int getGear2CountYaw() {
+        return gear2CountYaw;
+    }
+
+    public int getJoystick2FreeSpeedPitch() {
+        return freeSpeed2Pitch;
+    }
+
+    public int getJoystick2FreeSpeedYaw() {
+        return freeSpeed2Yaw;
+    }
+
+    /** 设置摇杆2 两轴档位模式（开关 + 档位数，档位数钳位到 [MIN, MAX]）。服务端调用。 */
+    public void setGear2Config(boolean pitchMode, int pitchCount, boolean yawMode, int yawCount) {
+        int pc = clampGearCount(pitchCount);
+        int yc = clampGearCount(yawCount);
+        if (gear2ModePitch == pitchMode && gear2CountPitch == pc
+                && gear2ModeYaw == yawMode && gear2CountYaw == yc) {
+            return;
+        }
+        gear2ModePitch = pitchMode;
+        gear2CountPitch = pc;
+        gear2ModeYaw = yawMode;
+        gear2CountYaw = yc;
+        notifyChange();
+    }
+
+    /** 设置摇杆2 两轴自由模式满偏 tick 数（累加速度 = 1/数值 每 tick），钳位到 [MIN, MAX]。服务端调用。 */
+    public void setJoystick2FreeSpeed(int pitchTicks, int yawTicks) {
+        int pt = clampFreeSpeed(pitchTicks);
+        int yt = clampFreeSpeed(yawTicks);
+        if (freeSpeed2Pitch == pt && freeSpeed2Yaw == yt) return;
+        freeSpeed2Pitch = pt;
+        freeSpeed2Yaw = yt;
+        notifyChange();
+    }
+
+    public String getJoystick2KeyUp() {
+        return joystick2KeyUp;
+    }
+
+    public String getJoystick2KeyDown() {
+        return joystick2KeyDown;
+    }
+
+    public String getJoystick2KeyLeft() {
+        return joystick2KeyLeft;
+    }
+
+    public String getJoystick2KeyRight() {
+        return joystick2KeyRight;
+    }
+
+    /** 设置摇杆2 四向按键（InputConstants.Key.getName() 格式，空串 = 未绑定）。服务端调用。 */
+    public void setJoystick2Keys(String up, String down, String left, String right) {
+        String u = up == null ? "" : up;
+        String d = down == null ? "" : down;
+        String l = left == null ? "" : left;
+        String r = right == null ? "" : right;
+        if (Objects.equals(joystick2KeyUp, u) && Objects.equals(joystick2KeyDown, d)
+                && Objects.equals(joystick2KeyLeft, l) && Objects.equals(joystick2KeyRight, r)) {
+            return;
+        }
+        joystick2KeyUp = u;
+        joystick2KeyDown = d;
+        joystick2KeyLeft = l;
+        joystick2KeyRight = r;
         notifyChange();
     }
 
@@ -925,6 +1165,18 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         tag.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);
         tag.putString(TAG_JOYSTICK_KEY_RIGHT, joystickKeyRight);
+        tag.putInt(TAG_JOYSTICK2_RETURN_TIME, joystick2ReturnTime);
+        tag.putInt(TAG_JOYSTICK2_RETURN_TIME_YAW, joystick2ReturnTimeYaw);
+        tag.putBoolean(TAG_GEAR2_MODE_PITCH, gear2ModePitch);
+        tag.putInt(TAG_GEAR2_COUNT_PITCH, gear2CountPitch);
+        tag.putBoolean(TAG_GEAR2_MODE_YAW, gear2ModeYaw);
+        tag.putInt(TAG_GEAR2_COUNT_YAW, gear2CountYaw);
+        tag.putInt(TAG_JOYSTICK2_FREE_SPEED_PITCH, freeSpeed2Pitch);
+        tag.putInt(TAG_JOYSTICK2_FREE_SPEED_YAW, freeSpeed2Yaw);
+        tag.putString(TAG_JOYSTICK2_KEY_UP, joystick2KeyUp);
+        tag.putString(TAG_JOYSTICK2_KEY_DOWN, joystick2KeyDown);
+        tag.putString(TAG_JOYSTICK2_KEY_LEFT, joystick2KeyLeft);
+        tag.putString(TAG_JOYSTICK2_KEY_RIGHT, joystick2KeyRight);
         tag.putInt(TAG_PEDAL_RETURN_TIME, pedalReturnTime);
         tag.putInt(TAG_PEDAL_FREE_SPEED, pedalFreeSpeed);
         tag.putString(TAG_PEDAL_KEY_LEFT_UP, pedalKeyLeftUp);
@@ -999,6 +1251,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_JOYSTICK_AXIS_Y)) {
             joystickAxisY = tag.getFloat(TAG_JOYSTICK_AXIS_Y);
         }
+        if (tag.contains(TAG_JOYSTICK2_AXIS_X)) {
+            joystick2AxisX = tag.getFloat(TAG_JOYSTICK2_AXIS_X);
+        }
+        if (tag.contains(TAG_JOYSTICK2_AXIS_Y)) {
+            joystick2AxisY = tag.getFloat(TAG_JOYSTICK2_AXIS_Y);
+        }
         if (tag.contains(TAG_PEDAL_LEFT_AXIS)) {
             pedalLeftAxis = tag.getFloat(TAG_PEDAL_LEFT_AXIS);
         }
@@ -1020,6 +1278,43 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         }
         if (tag.contains(TAG_JOYSTICK_KEY_RIGHT)) {
             joystickKeyRight = tag.getString(TAG_JOYSTICK_KEY_RIGHT);
+        }
+        // 摇杆2 配置（独立于 joystick；旧存档无字段时保持默认）
+        if (tag.contains(TAG_JOYSTICK2_RETURN_TIME)) {
+            joystick2ReturnTime = tag.getInt(TAG_JOYSTICK2_RETURN_TIME);
+        }
+        if (tag.contains(TAG_JOYSTICK2_RETURN_TIME_YAW)) {
+            joystick2ReturnTimeYaw = tag.getInt(TAG_JOYSTICK2_RETURN_TIME_YAW);
+        }
+        if (tag.contains(TAG_GEAR2_MODE_PITCH)) {
+            gear2ModePitch = tag.getBoolean(TAG_GEAR2_MODE_PITCH);
+        }
+        if (tag.contains(TAG_GEAR2_COUNT_PITCH)) {
+            gear2CountPitch = tag.getInt(TAG_GEAR2_COUNT_PITCH);
+        }
+        if (tag.contains(TAG_GEAR2_MODE_YAW)) {
+            gear2ModeYaw = tag.getBoolean(TAG_GEAR2_MODE_YAW);
+        }
+        if (tag.contains(TAG_GEAR2_COUNT_YAW)) {
+            gear2CountYaw = tag.getInt(TAG_GEAR2_COUNT_YAW);
+        }
+        if (tag.contains(TAG_JOYSTICK2_FREE_SPEED_PITCH)) {
+            freeSpeed2Pitch = tag.getInt(TAG_JOYSTICK2_FREE_SPEED_PITCH);
+        }
+        if (tag.contains(TAG_JOYSTICK2_FREE_SPEED_YAW)) {
+            freeSpeed2Yaw = tag.getInt(TAG_JOYSTICK2_FREE_SPEED_YAW);
+        }
+        if (tag.contains(TAG_JOYSTICK2_KEY_UP)) {
+            joystick2KeyUp = tag.getString(TAG_JOYSTICK2_KEY_UP);
+        }
+        if (tag.contains(TAG_JOYSTICK2_KEY_DOWN)) {
+            joystick2KeyDown = tag.getString(TAG_JOYSTICK2_KEY_DOWN);
+        }
+        if (tag.contains(TAG_JOYSTICK2_KEY_LEFT)) {
+            joystick2KeyLeft = tag.getString(TAG_JOYSTICK2_KEY_LEFT);
+        }
+        if (tag.contains(TAG_JOYSTICK2_KEY_RIGHT)) {
+            joystick2KeyRight = tag.getString(TAG_JOYSTICK2_KEY_RIGHT);
         }
         if (tag.contains(TAG_PEDAL_RETURN_TIME)) {
             pedalReturnTime = tag.getInt(TAG_PEDAL_RETURN_TIME);
@@ -1084,6 +1379,18 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         compound.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);
         compound.putString(TAG_JOYSTICK_KEY_RIGHT, joystickKeyRight);
+        compound.putInt(TAG_JOYSTICK2_RETURN_TIME, joystick2ReturnTime);
+        compound.putInt(TAG_JOYSTICK2_RETURN_TIME_YAW, joystick2ReturnTimeYaw);
+        compound.putBoolean(TAG_GEAR2_MODE_PITCH, gear2ModePitch);
+        compound.putInt(TAG_GEAR2_COUNT_PITCH, gear2CountPitch);
+        compound.putBoolean(TAG_GEAR2_MODE_YAW, gear2ModeYaw);
+        compound.putInt(TAG_GEAR2_COUNT_YAW, gear2CountYaw);
+        compound.putInt(TAG_JOYSTICK2_FREE_SPEED_PITCH, freeSpeed2Pitch);
+        compound.putInt(TAG_JOYSTICK2_FREE_SPEED_YAW, freeSpeed2Yaw);
+        compound.putString(TAG_JOYSTICK2_KEY_UP, joystick2KeyUp);
+        compound.putString(TAG_JOYSTICK2_KEY_DOWN, joystick2KeyDown);
+        compound.putString(TAG_JOYSTICK2_KEY_LEFT, joystick2KeyLeft);
+        compound.putString(TAG_JOYSTICK2_KEY_RIGHT, joystick2KeyRight);
         compound.putInt(TAG_PEDAL_RETURN_TIME, pedalReturnTime);
         compound.putInt(TAG_PEDAL_FREE_SPEED, pedalFreeSpeed);
         compound.putString(TAG_PEDAL_KEY_LEFT_UP, pedalKeyLeftUp);
@@ -1123,6 +1430,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         // 运行时轴状态（服务端权威）：随 getUpdatePacket / 区块加载同步，客户端渲染直接读它
         tag.putFloat(TAG_JOYSTICK_AXIS_X, joystickAxisX);
         tag.putFloat(TAG_JOYSTICK_AXIS_Y, joystickAxisY);
+        tag.putFloat(TAG_JOYSTICK2_AXIS_X, joystick2AxisX);
+        tag.putFloat(TAG_JOYSTICK2_AXIS_Y, joystick2AxisY);
         // 运行时踏板轴（服务端权威）：同上
         tag.putFloat(TAG_PEDAL_LEFT_AXIS, pedalLeftAxis);
         tag.putFloat(TAG_PEDAL_RIGHT_AXIS, pedalRightAxis);
@@ -1132,6 +1441,18 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         tag.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);
         tag.putString(TAG_JOYSTICK_KEY_RIGHT, joystickKeyRight);
+        tag.putInt(TAG_JOYSTICK2_RETURN_TIME, joystick2ReturnTime);
+        tag.putInt(TAG_JOYSTICK2_RETURN_TIME_YAW, joystick2ReturnTimeYaw);
+        tag.putBoolean(TAG_GEAR2_MODE_PITCH, gear2ModePitch);
+        tag.putInt(TAG_GEAR2_COUNT_PITCH, gear2CountPitch);
+        tag.putBoolean(TAG_GEAR2_MODE_YAW, gear2ModeYaw);
+        tag.putInt(TAG_GEAR2_COUNT_YAW, gear2CountYaw);
+        tag.putInt(TAG_JOYSTICK2_FREE_SPEED_PITCH, freeSpeed2Pitch);
+        tag.putInt(TAG_JOYSTICK2_FREE_SPEED_YAW, freeSpeed2Yaw);
+        tag.putString(TAG_JOYSTICK2_KEY_UP, joystick2KeyUp);
+        tag.putString(TAG_JOYSTICK2_KEY_DOWN, joystick2KeyDown);
+        tag.putString(TAG_JOYSTICK2_KEY_LEFT, joystick2KeyLeft);
+        tag.putString(TAG_JOYSTICK2_KEY_RIGHT, joystick2KeyRight);
         tag.putInt(TAG_PEDAL_RETURN_TIME, pedalReturnTime);
         tag.putInt(TAG_PEDAL_FREE_SPEED, pedalFreeSpeed);
         tag.putString(TAG_PEDAL_KEY_LEFT_UP, pedalKeyLeftUp);

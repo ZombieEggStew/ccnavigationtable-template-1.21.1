@@ -10,6 +10,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  * <ul>
  *   <li>{@link ControlDeskChannelPayload} — 客户端→服务端：保存控制台全局频道</li>
  *   <li>{@link ControlDeskConfigPayload} — 客户端→服务端：保存操纵杆配置（两轴回正时间 + 两轴档位模式/档位数 + 两轴自由模式速度 + 四向按键）</li>
+ *   <li>{@link Joystick2ConfigPayload} — 客户端→服务端：保存摇杆2 配置（字段与操纵杆相同，独立于 joystick）</li>
  *   <li>{@link PedalConfigPayload} — 客户端→服务端：保存脚踏板配置（回正时间 + 四向按键）</li>
  *   <li>{@link ThrottleConfigPayload} — 客户端→服务端：保存油门杆配置（前进/后退按键）</li>
  *   <li>{@link SeatInputPayload} — 客户端→服务端（运行时每 tick）：坐垫操作输入，服务端校验后驱动 BE 轴状态</li>
@@ -45,6 +46,23 @@ public final class ControlDeskPacketHandlers {
                                 payload.gearModeYaw(), payload.gearCountYaw());
                         be.setJoystickFreeSpeed(payload.freeSpeedPitch(), payload.freeSpeedYaw());
                         be.setJoystickKeys(payload.keyUp(), payload.keyDown(), payload.keyLeft(), payload.keyRight());
+                    }
+                }
+        );
+
+        // 客户端→服务端：保存 controlDesk 摇杆2 配置（独立于操纵杆，服务端权威 + 落盘）
+        registrar.playToServer(
+                Joystick2ConfigPayload.TYPE,
+                Joystick2ConfigPayload.STREAM_CODEC,
+                (payload, ctx) -> {
+                    var be = PacketHelper.findBE(ctx.player().level(), payload.pos(), ControlDeskBlockEntity.class);
+                    if (be != null) {
+                        be.setJoystick2ReturnTime(payload.returnTime());
+                        be.setJoystick2ReturnTimeYaw(payload.returnTimeYaw());
+                        be.setGear2Config(payload.gearModePitch(), payload.gearCountPitch(),
+                                payload.gearModeYaw(), payload.gearCountYaw());
+                        be.setJoystick2FreeSpeed(payload.freeSpeedPitch(), payload.freeSpeedYaw());
+                        be.setJoystick2Keys(payload.keyUp(), payload.keyDown(), payload.keyLeft(), payload.keyRight());
                     }
                 }
         );
@@ -89,6 +107,7 @@ public final class ControlDeskPacketHandlers {
                     for (ControlDeskBlockEntity desk
                             : ControlDeskSeatLink.findLinkedDesks(player.level(), payload.seatPos())) {
                         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
+                                || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
                                 || desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
                                 || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
                             desk.setSeatInput(player.getUUID(), payload.seatPos(),

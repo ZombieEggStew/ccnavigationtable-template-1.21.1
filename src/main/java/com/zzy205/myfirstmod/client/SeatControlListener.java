@@ -137,11 +137,17 @@ public class SeatControlListener {
         // 自由模式：按下按 1/满偏tick 累加（速度可配置），松开每 tick 向 0 累加 1/回正时间（0 = 关闭回正，保持不动）；
         // 档位模式：关闭自动回正，检测按键按下边沿（上一 tick 该方向无键按下），进/退一档（轴值 = -1 + 2k/(档位数-1)，步长 2/(档位数-1)）；
         //   离开坐垫时档位保持（物理换挡杆语义，见 SeatControlState.gearHold*）。
-        // 配置取联动中第一个装了操纵杆的控制台（X 轴用 Yaw 配置，Y 轴用 Pitch 配置）。
+        // 本地模拟（仅 HUD overlay 显示用）的配置：优先取第一个装了操纵杆的控制台，其次摇杆2（各自配置）；
+        // 服务端权威模拟始终用各 BE 自己的配置（见 ControlDeskBlockEntity.simulateJoystick / simulateJoystick2），
+        // 渲染读 BE 轴值，不依赖这里的本地模拟。
         ControlDeskBlockEntity joyDesk = desks.stream()
                 .filter(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK))
                 .findFirst().orElse(null);
-        boolean hasJoystick = joyDesk != null;
+        ControlDeskBlockEntity joy2Desk = desks.stream()
+                .filter(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2))
+                .findFirst().orElse(null);
+        boolean hasJoystick = joyDesk != null || joy2Desk != null;
+        boolean hasJoystick2 = joy2Desk != null;
         boolean hasPedal = desks.stream()
                 .anyMatch(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL));
         boolean hasThrottle = desks.stream()
@@ -181,17 +187,19 @@ public class SeatControlListener {
         boolean leftEdge = left && !anyDirDown(bindings, ControlDir.LEFT, lastDown);
         boolean rightEdge = right && !anyDirDown(bindings, ControlDir.RIGHT, lastDown);
         int returnTicksX = joyDesk != null ? joyDesk.getJoystickReturnTimeYaw()
-                : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME;
+                : (joy2Desk != null ? joy2Desk.getJoystick2ReturnTimeYaw() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME);
         int returnTicksY = joyDesk != null ? joyDesk.getJoystickReturnTime()
-                : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME;
-        boolean gearModeX = joyDesk != null && joyDesk.isGearModeYaw();
-        boolean gearModeY = joyDesk != null && joyDesk.isGearModePitch();
-        int gearCountX = joyDesk != null ? joyDesk.getGearCountYaw() : ControlDeskBlockEntity.DEFAULT_GEAR_COUNT;
-        int gearCountY = joyDesk != null ? joyDesk.getGearCountPitch() : ControlDeskBlockEntity.DEFAULT_GEAR_COUNT;
+                : (joy2Desk != null ? joy2Desk.getJoystick2ReturnTime() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME);
+        boolean gearModeX = joyDesk != null ? joyDesk.isGearModeYaw() : (joy2Desk != null && joy2Desk.isGear2ModeYaw());
+        boolean gearModeY = joyDesk != null ? joyDesk.isGearModePitch() : (joy2Desk != null && joy2Desk.isGear2ModePitch());
+        int gearCountX = joyDesk != null ? joyDesk.getGearCountYaw()
+                : (joy2Desk != null ? joy2Desk.getGear2CountYaw() : ControlDeskBlockEntity.DEFAULT_GEAR_COUNT);
+        int gearCountY = joyDesk != null ? joyDesk.getGearCountPitch()
+                : (joy2Desk != null ? joy2Desk.getGear2CountPitch() : ControlDeskBlockEntity.DEFAULT_GEAR_COUNT);
         int freeSpeedTicksX = joyDesk != null ? joyDesk.getJoystickFreeSpeedYaw()
-                : ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED;
+                : (joy2Desk != null ? joy2Desk.getJoystick2FreeSpeedYaw() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED);
         int freeSpeedTicksY = joyDesk != null ? joyDesk.getJoystickFreeSpeedPitch()
-                : ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED;
+                : (joy2Desk != null ? joy2Desk.getJoystick2FreeSpeedPitch() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED);
 
         // 自由模式：按下按 1/满偏tick 累加（速度可配置）；档位模式：无自动回正，按下边沿进/退一档
         // （本地模拟仅供 HUD overlay；服务端用同一套 JoystickTilt 动力学权威模拟 BE 轴值）
@@ -208,8 +216,8 @@ public class SeatControlListener {
         SeatControlState.setGearHold(gearModeX, gearModeY);
         SeatControlState.update(true, hasJoystick, axisX, axisY, rawX, rawY, Math.abs(axisX), Math.abs(axisY));
 
-        // 运行时输入上报服务端（服务端权威模拟 + getUpdatePacket 广播；装操纵杆/踏板/油门杆的联动台才需要）
-        if (hasJoystick || hasPedal || hasThrottle) {
+        // 运行时输入上报服务端（服务端权威模拟 + getUpdatePacket 广播；装操纵杆/摇杆2/踏板/油门杆的联动台才需要）
+        if (hasJoystick || hasJoystick2 || hasPedal || hasThrottle) {
             sendInput(seatPos, up, down, left, right,
                     pedalLeftDown, pedalLeftUp, pedalRightDown, pedalRightUp,
                     throttleForward, throttleBack);
@@ -264,6 +272,14 @@ public class SeatControlListener {
                 add(out, pos, desk.getJoystickKeyDown(), "操纵杆 后拉", ControlDir.DOWN);
                 add(out, pos, desk.getJoystickKeyLeft(), "操纵杆 左摆", ControlDir.LEFT);
                 add(out, pos, desk.getJoystickKeyRight(), "操纵杆 右摆", ControlDir.RIGHT);
+            }
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)) {
+                // 摇杆2 与操纵杆同方向槽位（广播语义：任一联动控制台该方向绑定的键按下即生效）；
+                // 默认按键照抄 joystick（WASD），可经 Joystick2ModuleScreen 改绑
+                add(out, pos, desk.getJoystick2KeyUp(), "摇杆2 前推", ControlDir.UP);
+                add(out, pos, desk.getJoystick2KeyDown(), "摇杆2 后拉", ControlDir.DOWN);
+                add(out, pos, desk.getJoystick2KeyLeft(), "摇杆2 左摆", ControlDir.LEFT);
+                add(out, pos, desk.getJoystick2KeyRight(), "摇杆2 右摆", ControlDir.RIGHT);
             }
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
                 add(out, pos, desk.getThrottleKeyForward(), "油门杆 前进", ControlDir.THROTTLE_FORWARD);

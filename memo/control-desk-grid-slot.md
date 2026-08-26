@@ -2,7 +2,7 @@
 
 > 记录 controlDesk 桌顶「棋盘网格」自由放置系统的**设计与实现**，作为后续添加新模块（throttle / monitor_2 / 新控件）的参考。
 > **背景**：monitor_2 / throttle / joystick_2 原本共用桌体后缘上方插槽（`BACK_SLOT`，整宽一条、互斥安装）——该插槽已**整体移除**，改为在桌顶显示 6×14 的 1px 棋盘网格，模块自由放置（先做显示，放置逻辑逐步落地）。
-> 本文描述的状态：**joystick_2 已完整接入**（预览 → 放置 → 存储 → 渲染 → 拆除 → 占用阻挡）；**throttle 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，只能 0°/180° 旋转）；**monitor_2 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，预览框高 12，**不面向玩家**只随桌体 FACING 旋转）。三者互斥已全部改为纯占地判定。
+> 本文描述的状态：**joystick_2 已完整接入**（预览 → 放置 → 存储 → 渲染 → 拆除 → 占用阻挡；**输入检测 + 倾斜动画已接入**，照抄 joystick 模块、配置/轴值独立，见 `memo/control-desk-seat.md`）；**throttle 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，只能 0°/180° 旋转）；**monitor_2 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，预览框高 12，**不面向玩家**只随桌体 FACING 旋转）。三者互斥已全部改为纯占地判定。
 
 ## 一句话
 
@@ -38,7 +38,8 @@
 | `MONITOR_2_PLACE_X / _Z` | 8 / 12 | monitor_2 **唯一合法放置中心**（14×6 全占网格） |
 | `MODEL_PLACE_Y` | 8f | **模型放置底 y（三个模块共用）= 桌顶面：模型坐于桌面不下沉；仅预览盒下沉 1px（`*_PLACE_Y_BOTTOM=7`）** |
 | `JOYSTICK_2_MODEL_BOTTOM_Y` | 0f | 模型底座底 y（joystick_2 / throttle / monitor_2 均 0） |
-| `rotationToFace(Direction, Direction)` | 静态方法 | **joystick_2 安装旋转**：桌体 FACING + 桌→玩家水平方向 → 90° 间隔，让模型 -Z（Blockbench 北向正面）面向玩家：`floorMod(toYRot(facing) - toYRot(toPlayer), 360)`；`toPlayer` 由 `ControlDeskBlock.directionFromDeskTo`（桌体中心→玩家最近基本方向）计算，预览与实装共用 |
+| `rotationToFace(Direction, Direction)` | 静态方法 | **安装旋转基础公式**：桌体 FACING + 桌→玩家水平方向 → 90° 间隔，让模型 -Z（Blockbench 北向正面）面向玩家：`floorMod(toYRot(facing) - toYRot(toPlayer), 360)`；`toPlayer` 由 `ControlDeskBlock.directionFromDeskTo`（桌体中心→玩家最近基本方向）计算，预览与实装共用 |
+| `rotationToFace2(Direction, Direction)` | 静态方法 | **joystick_2 安装旋转**：`rotationToFace` 结果 + 基础 **+90°** 偏移（`JOYSTICK_2_ROTATION_OFFSET=90`，模型默认朝向与「-Z 面向玩家」差 90°，用户定稿）→ `floorMod(rotationToFace + 90, 360)`；预览（ghost）与实装（install）共用 |
 | `rotationToFace180(Direction, Direction)` | 静态方法 | **throttle 安装旋转**：`rotationToFace` 结果量化到最近 0°/180°（油门只能 180° 旋转） |
 
 > 改模型位置（Blockbench）后必须同步 `MODEL_CENTER` / `MODEL_BOTTOM_Y`；改模块尺寸（占地/高度）后必须同步 `FOOTPRINT_HALF` / `PLACE_Y_BOTTOM` / `PLACE_Y_TOP`。
@@ -106,7 +107,7 @@ shift = ( (placeX-8)/16, (8-0)/16, (placeZ-8)/16 )   // 模型坐桌面 y8（MOD
 ```
 - `R_facing`：`rotateCenteredDegrees(-facing.getOpposite().toYRot(), UP)`（与桌体底座模型同约定）
 - `R_install`：安装朝向旋转，绕**放置中心**转（模型已平移到放置位，绕放置中心转才不甩开；Y 旋转枢轴 y 值无关）
-  - joystick_2：`rotationToFace(facing, 桌→玩家方向)`（90° 间隔）——让模型 **-Z（Blockbench 北向正面）面向安装时的玩家**；R_facing 已把 -Z 转到桌体 FACING 方向（操作者所在侧），故常规操作位安装 = 0°
+  - joystick_2：`rotationToFace2(facing, 桌→玩家方向)`（90° 间隔，= `rotationToFace` + **基础 +90°**）——让模型 **-Z（Blockbench 北向正面）面向安装时的玩家**后再整体转 90°（模型默认朝向差 90°，用户定稿）；R_facing 已把 -Z 转到桌体 FACING 方向（操作者所在侧），故常规操作位安装 ≈ 90°
   - throttle：`rotationToFace180(facing, 桌→玩家方向)`（**只能 0°/180°**，`rotationToFace` 结果量化到最近 0/180）
   - monitor_2：**无 R_install**（不面向玩家，只随桌体 FACING）
 - `T(shift)` 必须是最内层（最后调用）：先于 facing/安装旋转作用于模型空间
@@ -128,7 +129,7 @@ shift = ( (placeX-8)/16, (8-0)/16, (placeZ-8)/16 )   // 模型坐桌面 y8（MOD
 
 ## 当前状态与已知边界
 
-- ✅ joystick_2 完整接入：桌顶网格 + 4×9×4 预览盒 + 半透明实物 + 位置存储/渲染 + 4×4 占用阻挡 + 扳手拆除
+- ✅ joystick_2 完整接入：桌顶网格 + 4×9×4 预览盒 + 半透明实物 + 位置存储/渲染 + 4×4 占用阻挡 + 扳手拆除 + **输入检测/倾斜动画**（照抄 joystick，配置/轴值独立，枢轴 (8,1,8)，见 `memo/control-desk-seat.md`）
 - ✅ throttle 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×6 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + 只能 0°/180° 旋转 + 14×6 占用阻挡 + 扳手拆除
 - ✅ monitor_2 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×12 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + **不面向玩家**（仅随桌体 FACING）+ 14×6 占用阻挡 + 扳手拆除
 - 三个自由放置模块互斥已全部改为纯占地判定（monitor_2 / throttle 同占 (8,12) → 天然互斥；joystick_2 网格内也与两者重叠）

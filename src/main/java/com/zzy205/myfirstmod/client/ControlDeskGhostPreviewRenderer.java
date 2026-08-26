@@ -101,7 +101,8 @@ public class ControlDeskGhostPreviewRenderer {
         // monitor_2 不面向玩家 → 0）
         Direction toPlayer = ControlDeskBlock.directionFromDeskTo(mc.player, pos);
         int previewRot = switch (type) {
-            case JOYSTICK_2 -> ControlDeskBlockEntity.rotationToFace(facing, toPlayer);
+            // joystick_2 在「-Z 面向玩家」基础上加固定 +90° 偏移（模型默认朝向差 90°，见 rotationToFace2）
+            case JOYSTICK_2 -> ControlDeskBlockEntity.rotationToFace2(facing, toPlayer);
             case THROTTLE -> ControlDeskBlockEntity.rotationToFace180(facing, toPlayer);
             default -> 0;
         };

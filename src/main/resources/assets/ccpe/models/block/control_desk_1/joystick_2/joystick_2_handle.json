@@ -7,15 +7,15 @@
 	},
 	"elements": [
 		{
-			"from": [7.3, 6.6, 6.7],
-			"to": [8.7, 8, 7.3],
+			"from": [8.7, 6.6, 7.3],
+			"to": [9.3, 8, 8.7],
 			"rotation": {"angle": 0, "axis": "y", "origin": [8, -1, 8]},
 			"faces": {
-				"north": {"uv": [11, 0, 13, 2], "texture": "#0"},
-				"east": {"uv": [14, 0, 15, 2], "rotation": 180, "texture": "#0"},
-				"west": {"uv": [14, 0, 15, 2], "texture": "#0"},
-				"up": {"uv": [14, 0, 15, 2], "rotation": 270, "texture": "#0"},
-				"down": {"uv": [14, 0, 15, 2], "rotation": 90, "texture": "#0"}
+				"north": {"uv": [14, 0, 15, 2], "texture": "#0"},
+				"east": {"uv": [11, 0, 13, 2], "texture": "#0"},
+				"south": {"uv": [14, 0, 15, 2], "rotation": 180, "texture": "#0"},
+				"up": {"uv": [14, 0, 15, 2], "texture": "#0"},
+				"down": {"uv": [14, 0, 15, 2], "texture": "#0"}
 			}
 		},
 		{
