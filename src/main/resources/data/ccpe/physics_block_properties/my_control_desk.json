@@ -1,0 +1,7 @@
+{
+  "selector": "ccpe:my_control_desk",
+  "properties": {
+    "sable:mass": 0.25,
+    "sable:volume": 0.25
+  }
+}

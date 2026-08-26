@@ -1,0 +1,7 @@
+{
+  "selector": "ccpe:my_monitor",
+  "properties": {
+    "sable:mass": 0.5,
+    "sable:volume": 0.5
+  }
+}
