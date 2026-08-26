@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.compat.cc;
 
 import com.simibubi.create.AllSoundEvents;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.block.MonitorGridHost;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
 import com.zzy205.myfirstmod.network.PlayOrderEffectPayload;
@@ -14,9 +15,13 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Monitor 的 CC:Tweaked 外设实现。
+ * Monitor 的 CC:Tweaked 外设实现（模块/屏幕查询入口）。
  * <p>
- * 通过 {@code pe.getPeripheral(ch)} 或 {@code peripheral.wrap(...)} 获取。
+ * 通过 {@code pe.getPeripheral(ch)} 或 {@code peripheral.wrap(...)} 获取（type = "ccpe:monitor"）。
+ * <p>
+ * 宿主参数化为 {@link MonitorGridHost}：controlDesk 的 monitor_2 表面小 Monitor 复用同一类
+ * （经 {@code ControlDeskPeripheral.getModule("monitor")} 获取，type = "ccpe:monitor_2"），
+ * 模块/屏幕查询方法完全同款，作用在各自网格上。
  * 提供模块/屏幕查询：{@link #getCellModule(int, int)} / {@link #getModule(int)}，
  * 返回的 {@link ModuleHandle} 即为可在 Lua 侧进一步操作的「模块实例」。
  * <p>
@@ -25,15 +30,23 @@ import org.jetbrains.annotations.Nullable;
  */
 public class MonitorPeripheral implements IPeripheral {
 
-    private final MonitorBlockEntity be;
+    private final MonitorGridHost be;
+    private final String type;
 
+    /** Monitor 方块宿主（type = "ccpe:monitor"）。 */
     public MonitorPeripheral(MonitorBlockEntity be) {
+        this(be, "ccpe:monitor");
+    }
+
+    /** 任意网格宿主（monitor_2 经 ControlDeskPeripheral.getModule("monitor") 传入，type = "ccpe:monitor_2"）。 */
+    public MonitorPeripheral(MonitorGridHost be, String type) {
         this.be = be;
+        this.type = type;
     }
 
     @Override
     public String getType() {
-        return "ccpe:monitor";
+        return type;
     }
 
     @Override
@@ -45,7 +58,7 @@ public class MonitorPeripheral implements IPeripheral {
         return false;
     }
 
-    public MonitorBlockEntity getBlockEntity() {
+    public MonitorGridHost getBlockEntity() {
         return be;
     }
 

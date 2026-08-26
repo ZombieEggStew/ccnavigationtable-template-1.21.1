@@ -73,6 +73,15 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     /** monitor_2 模块按压/旋钮动画值（单一实现 {@link ModuleRenderBehavior#stepAnim}） */
     private final Map<Integer, Float> monitor2Anims = new HashMap<>();
 
+    /** 供 ControlDeskRenderer（BER）读取的 monitor_2 模块动画值，外层 key=BlockPos，内层 key=moduleId */
+    private static final Map<BlockPos, Map<Integer, Float>> ACTIVE_ANIMS = new HashMap<>();
+
+    /** BER 读取模块动画值（按钮灯带/标签深度用）；无 Visual 时返回 null。 */
+    public static Float getModuleAnim(BlockPos pos, int moduleId) {
+        Map<Integer, Float> anims = ACTIVE_ANIMS.get(pos);
+        return anims == null ? null : anims.get(moduleId);
+    }
+
     /** monitor_2 表面单模块的两个实例（底座 + 额外部件：按钮头/钮子拉杆/旋钮把手）。 */
     private static final class ModuleVisual2 {
         final ModuleType type;
@@ -240,8 +249,10 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
      * 的放置/旋转约定一致，模块定位点同 monitor_2 屏幕面网格坐标（北向基准 px）。
      */
     private void transformMonitor2Modules(ControlDeskBlockEntity be, Direction facing, float frameTicks) {
+        final BlockPos pos = be.getBlockPos();
         // 未安装 monitor_2：删除全部模块实例
         if (!be.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)) {
+            ACTIVE_ANIMS.remove(pos);
             if (!monitor2Modules.isEmpty()) {
                 monitor2Modules.values().forEach(ModuleVisual2::delete);
                 monitor2Modules.clear();
@@ -251,7 +262,9 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         }
 
         GridState grid = be.getMonitor2Grid();
-        final BlockPos pos = be.getBlockPos();
+
+        // 发布本帧动画值（供 BER 按钮灯带/标签深度读取，对齐 MonitorVisual）
+        ACTIVE_ANIMS.put(pos, this.monitor2Anims);
 
         // 删除已移除的模块实例
         monitor2Modules.keySet().removeIf(id -> {
@@ -273,10 +286,11 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
             var bhv = ModuleRenderBehavior.of(mod.type());
             boolean isKnob = mod.type() == ModuleType.KNOB;
 
-            // 屏幕面定位（北向基准模型空间 px，内缩 1px 网格 + 模块微调）
+            // 屏幕面定位（北向基准模型空间 px，内缩 1px 网格 + 模块微调）；模块向外凸 1px（见 MONITOR_2_MODULE_PROTRUDE_PX）
             float px = ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1 + mod.gridX() + bhv.offsetX() * 16f;
             float py = ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1 + mod.gridY() + bhv.offsetY() * 16f;
-            float pz = ControlDeskBlockEntity.MONITOR_2_SCREEN_Z + bhv.offsetZ() * 16f;
+            float pz = ControlDeskBlockEntity.MONITOR_2_SCREEN_Z - ControlDeskBlockEntity.MONITOR_2_MODULE_PROTRUDE_PX
+                    + bhv.offsetZ() * 16f;
 
             float target;
             if (isKnob) {
@@ -466,6 +480,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         monitor2Modules.values().forEach(ModuleVisual2::delete);
         monitor2Modules.clear();
         monitor2Anims.clear();
+        ACTIVE_ANIMS.remove(this.blockEntity.getBlockPos());
         if (this.throttleBase != null) this.throttleBase.delete();
         if (this.throttleHandle != null) this.throttleHandle.delete();
         if (this.throttleIndicator != null) this.throttleIndicator.delete();

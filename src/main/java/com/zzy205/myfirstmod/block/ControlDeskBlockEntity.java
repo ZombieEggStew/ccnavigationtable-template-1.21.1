@@ -974,6 +974,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public static final int MONITOR_2_PLACE_Z = 12;
     /** monitor_2 屏幕表面（case 前脸，北向基准模型空间 px）：case 元素 x2..14 / y1..11 / z2..6 的 z=2 前脸。 */
     public static final float MONITOR_2_SCREEN_Z = 2f;
+    /** monitor_2 表面模块锚点相对屏幕面的凸出量（北向模型空间 px，模块背面本地 z=1px → 锚点 = 屏幕面 − 1px 使背面贴屏幕面、整体向外凸 1px；屏幕 9 宫格/文字仍贴屏幕面）。 */
+    public static final float MONITOR_2_MODULE_PROTRUDE_PX = 1f;
     public static final float MONITOR_2_SCREEN_X_MIN = 2f;
     public static final float MONITOR_2_SCREEN_X_MAX = 14f;
     public static final float MONITOR_2_SCREEN_Y_MIN = 1f;

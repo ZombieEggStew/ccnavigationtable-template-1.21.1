@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.client;
 
 import com.simibubi.create.AllItems;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.block.ControlDeskBlock;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
@@ -51,6 +52,15 @@ public class Monitor2GridOverlay {
 
     private static final float GRID_LINE_OFFSET = 0.0f;   // 网格线画在屏幕面本身（用户定稿 0px）
     private static Component hoveredTooltip;
+
+    /** DEBUG：9 宫格部件锚点可视化（四角/四边/中心各一色十字线）。排查 9 宫格错位用，定位后置 false 或删除。 */
+    private static final boolean DEBUG_SCREEN_PATCH = false;
+
+    /** DEBUG：monitor_2 命中检测调试（命中点十字 + 屏幕面/网格边界框 + 命中数值日志）。进游戏收集信息用，定位后置 false 或删除。 */
+    private static final boolean DEBUG_HIT = false;
+
+    /** DEBUG_HIT 的日志节流计数器（每 N tick 打一次，防刷屏）。 */
+    private static int debugHitTick = 0;
 
     /** 单个 monitor_2 的客户端交互状态（按 BlockPos 隔离）。 */
     static class InteractionState {
@@ -144,6 +154,10 @@ public class Monitor2GridOverlay {
         // ── 独立命中检测：瞄准 monitor_2 屏幕面 ──
         Monitor2HitDetector.Monitor2Hit hit = Monitor2HitDetector.find(level, player, partialTick);
         if (hit == null) {
+            if (DEBUG_HIT && (++debugHitTick & 19) == 0) {
+                CCPeripheralExtender.LOGGER.info("[Monitor2Hit] 未命中 monitor_2 屏幕（准星 {}）",
+                        mc.hitResult != null ? mc.hitResult.getType() : "无 hitResult");
+            }
             hoveredKnobPos = null;
             hoveredKnobModuleId = -1;
             return;
@@ -154,6 +168,14 @@ public class Monitor2GridOverlay {
         float screenX = hit.screenX();
         float screenY = hit.screenY();
         int[] gp = hit.grid();
+
+        // DEBUG：命中数值日志（节流每 20 tick 一次）
+        if (DEBUG_HIT && (++debugHitTick & 19) == 0) {
+            CCPeripheralExtender.LOGGER.info("[Monitor2Hit] 命中 pos={} facing={} dist={} screenX={} screenY={} grid={}",
+                    pos.toShortString(), facing, String.format("%.2f", hit.distance()),
+                    String.format("%.2f", screenX), String.format("%.2f", screenY),
+                    gp == null ? "null" : "[" + gp[0] + "," + gp[1] + "]");
+        }
 
         ControlDeskBlockEntity desk = level.getBlockEntity(pos) instanceof ControlDeskBlockEntity d ? d : null;
         GridState grid = desk != null ? desk.getMonitor2Grid() : new GridState(
@@ -174,6 +196,17 @@ public class Monitor2GridOverlay {
         String keyPrefix = "control-desk/monitor2/" + pos.toShortString();
 
         Outliner outliner = Outliner.getInstance();
+
+        // DEBUG：命中点可视化（黄色十字 = 命中点；白色框 = 屏幕面 x2..14/y1..11；青色框 = 网格区 x3..13/y2..10）
+        if (DEBUG_HIT) {
+            drawHitDebug(outliner, pos, facing, screenX, screenY, gp, keyPrefix);
+        }
+
+        // DEBUG：绘制 9 宫格各部件锚点十字线，收集错位信息
+        if (DEBUG_SCREEN_PATCH && desk != null) {
+            drawScreenPatchDebug(outliner, pos, facing, grid, keyPrefix);
+        }
+
         int moduleColor = (Config.MONITOR_OUTLINE_A.get() << 24)
                 | (Config.MONITOR_OUTLINE_R.get() << 16)
                 | (Config.MONITOR_OUTLINE_G.get() << 8)
@@ -400,6 +433,108 @@ public class Monitor2GridOverlay {
             Vec3 to = world(pos, x1, y, z, facing);
             o.showLine(keyPrefix + "/grid_h" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
+    }
+
+    /**
+     * DEBUG：把 9 宫格各部件锚点画成彩色十字线（与 {@link ControlDeskRenderer#renderMonitor2Screens}
+     * 相同的坐标公式），用于排查 9 宫格错位。
+     * 颜色：左上=红 右上=绿 左下=蓝 右下=黄 左/右/上/下边=青 中心=品红。
+     */
+    private static void drawScreenPatchDebug(Outliner o, BlockPos pos, Direction facing, GridState grid, String keyPrefix) {
+        for (var scr : grid.getScreenRegions()) {
+            float scrX = ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1 + scr.minX();
+            float scrY = ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1 + scr.minY();
+            float scrW = scr.width();
+            float scrH = scr.height();
+            float scrZ = ControlDeskBlockEntity.MONITOR_2_SCREEN_Z - ControlDeskBlockEntity.MONITOR_2_MODULE_PROTRUDE_PX;
+            float border = 1f; // 1px 边框（borderSize*16）
+
+            // 四个角（锚点 = 角模型中心，即格子中心）
+            marker(o, pos, facing, scrX, scrY, scrZ, 0xFF0000, keyPrefix + "/dbg_tl");
+            marker(o, pos, facing, scrX + scrW - border, scrY, scrZ, 0x00FF00, keyPrefix + "/dbg_tr");
+            marker(o, pos, facing, scrX, scrY + scrH - border, scrZ, 0x0000FF, keyPrefix + "/dbg_bl");
+            marker(o, pos, facing, scrX + scrW - border, scrY + scrH - border, scrZ, 0xFFFF00, keyPrefix + "/dbg_br");
+
+            // 四边
+            int tilesH = Math.max(0, scr.width() - 2);
+            int tilesV = Math.max(0, scr.height() - 2);
+            for (int i = 0; i < tilesV; i++) {
+                float y = scrY + 1f + i * 1f;
+                marker(o, pos, facing, scrX, y, scrZ, 0x00FFFF, keyPrefix + "/dbg_l" + i);
+                marker(o, pos, facing, scrX + scrW - 1f, y, scrZ, 0x00FFFF, keyPrefix + "/dbg_r" + i);
+            }
+            for (int i = 0; i < tilesH; i++) {
+                float x = scrX + 1f + i * 1f;
+                marker(o, pos, facing, x, scrY, scrZ, 0x00FFFF, keyPrefix + "/dbg_t" + i);
+                marker(o, pos, facing, x, scrY + scrH - 1f, scrZ, 0x00FFFF, keyPrefix + "/dbg_b" + i);
+            }
+
+            // 中心面板（锚点 = 内区左下角）
+            marker(o, pos, facing, scrX + 1f, scrY + 1f, scrZ, 0xFF00FF, keyPrefix + "/dbg_center");
+        }
+    }
+
+    /** DEBUG：在 (sx, sy, sz)（模型空间 px）画一个小十字线。 */
+    private static void marker(Outliner o, BlockPos pos, Direction facing,
+                               float sx, float sy, float sz, int color, String key) {
+        float r = 0.5f; // 十字半长（px）
+        Vec3 c = world(pos, sx, sy, sz, facing);
+        Vec3 dx = world(pos, sx + r, sy, sz, facing);
+        Vec3 dy = world(pos, sx, sy + r, sz, facing);
+        Vec3 dxn = world(pos, sx - r, sy, sz, facing);
+        Vec3 dyn = world(pos, sx, sy - r, sz, facing);
+        o.showLine(key + "_x", dxn, dx).colored(color).lineWidth(1 / 32f);
+        o.showLine(key + "_y", dyn, dy).colored(color).lineWidth(1 / 32f);
+    }
+
+    /**
+     * DEBUG：monitor_2 命中检测可视化。
+     * <ul>
+     *   <li>黄色十字 = Monitor2HitDetector 返回的命中点 (screenX, screenY)，画在屏幕面 z=SCREEN_Z</li>
+     *   <li>白色框 = 屏幕面边界（x2..14 / y1..11）</li>
+     *   <li>青色框 = 网格区域边界（内缩 1px：x3..13 / y2..10）</li>
+     *   <li>红色小框 = localToGrid 得到的格 (gp)</li>
+     * </ul>
+     * 用来核对：准星所指位置 ↔ 命中点 ↔ 网格坐标是否一致；若命中点偏出白框或黄十字与准星不符，即为变换/单位问题。
+     */
+    private static void drawHitDebug(Outliner o, BlockPos pos, Direction facing,
+                                     float screenX, float screenY, int[] gp, String keyPrefix) {
+        float z = ControlDeskBlockEntity.MONITOR_2_SCREEN_Z + GRID_LINE_OFFSET;
+        // 命中点十字（黄）
+        marker(o, pos, facing, screenX, screenY, z, 0xFFFF00, keyPrefix + "/dbg_hit");
+        // 屏幕面边界（白，细线）
+        drawRectLines(o, pos, facing,
+                ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN, ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN,
+                ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MAX, ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MAX,
+                z, 0xFFFFFF, keyPrefix + "/dbg_screen", 1 / 128f);
+        // 网格区域边界（青，细线）
+        drawRectLines(o, pos, facing,
+                ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1, ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1,
+                ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MAX - 1, ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MAX - 1,
+                z, 0x00FFFF, keyPrefix + "/dbg_grid", 1 / 128f);
+        // gp 格（红，粗线）
+        if (gp != null) {
+            drawRectLines(o, pos, facing,
+                    ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1 + gp[0],
+                    ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1 + gp[1],
+                    ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1 + gp[0] + 1,
+                    ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1 + gp[1] + 1,
+                    z, 0xFF0000, keyPrefix + "/dbg_gp", 1 / 32f);
+        }
+    }
+
+    /** DEBUG：在屏幕面 (x0,y0)-(x1,y1) 画矩形四边（模型空间 px）。 */
+    private static void drawRectLines(Outliner o, BlockPos pos, Direction facing,
+                                      float x0, float y0, float x1, float y1,
+                                      float z, int color, String key, float lw) {
+        Vec3 p00 = world(pos, x0, y0, z, facing);
+        Vec3 p10 = world(pos, x1, y0, z, facing);
+        Vec3 p11 = world(pos, x1, y1, z, facing);
+        Vec3 p01 = world(pos, x0, y1, z, facing);
+        o.showLine(key + "_t", p00, p10).colored(color).lineWidth(lw);
+        o.showLine(key + "_r", p10, p11).colored(color).lineWidth(lw);
+        o.showLine(key + "_b", p11, p01).colored(color).lineWidth(lw);
+        o.showLine(key + "_l", p01, p00).colored(color).lineWidth(lw);
     }
 
     private static void drawModuleOutline(Outliner o, BlockPos pos,

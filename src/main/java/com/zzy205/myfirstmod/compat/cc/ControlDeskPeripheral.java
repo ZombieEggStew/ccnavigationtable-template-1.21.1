@@ -67,15 +67,20 @@ public class ControlDeskPeripheral implements IPeripheral {
      *   <li>{@code "joystick"} → {@link JoystickModuleHandle}（操纵杆原始值/轴值/带符号）</li>
      *   <li>{@code "joystick_2"} → {@link Joystick2ModuleHandle}（摇杆2 原始值/轴值/带符号，独立于 joystick，照抄）</li>
      *   <li>{@code "throttle"} → {@link ThrottleModuleHandle}（油门杆前进/后退按住态 + 档位/轴值）</li>
+     *   <li>{@code "monitor"} → {@link MonitorPeripheral}（type = "ccpe:monitor_2"）：monitor_2 表面小 Monitor
+     *       的模块/屏幕查询入口，方法与 Monitor 外设完全同款（{@code getCellModule(x,y)} / {@code getModule(id)}，
+     *       返回的 handle 与 Monitor 相同）；monitor_2 未安装返回 nil</li>
      * </ul>
      * 未安装对应控件或名称未知返回 nil。
      *
      * <pre>{@code
      * local pedal = desk.getModule("pedal")
      * if pedal then print(pedal.isLeftPedalDown()) end
+     * local m = desk.getModule("monitor")      -- monitor_2 表面小 Monitor（方法同 Monitor 外设）
+     * if m then print(m.getCellModule(3, 4).getType()) end
      * }</pre>
      *
-     * @param name 控件名（"pedal" / "joystick" / "joystick_2" / "throttle"，大小写不敏感）
+     * @param name 控件名（"pedal" / "joystick" / "joystick_2" / "throttle" / "monitor"，大小写不敏感）
      */
     @LuaFunction(mainThread = true)
     public final @Nullable Object getModule(String name) {
@@ -89,6 +94,8 @@ public class ControlDeskPeripheral implements IPeripheral {
                     ? new Joystick2ModuleHandle(be) : null;
             case "throttle" -> be.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
                     ? new ThrottleModuleHandle(be) : null;
+            case "monitor" -> be.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
+                    ? new MonitorPeripheral(be, "ccpe:monitor_2") : null;
             default -> null;
         };
     }

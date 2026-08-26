@@ -37,6 +37,7 @@
 | `MONITOR_2_MODEL_CENTER` | 8f | monitor_2 模型默认中心 x/z（Blockbench 中模型 14×6 居中 → 8，**用户会同步改模型**） |
 | `MONITOR_2_PLACE_X / _Z` | 8 / 12 | monitor_2 **唯一合法放置中心**（14×6 全占网格） |
 | `MONITOR_2_SCREEN_Z` | 2f | monitor_2 **屏幕表面（case 前脸）z 坐标**（北向基准模型空间 px；case 元素 x2..14 / y1..11 / z2..6 的 z=2 前脸） |
+| `MONITOR_2_MODULE_PROTRUDE_PX` | 1f | monitor_2 **表面模块/屏幕锚点相对屏幕面的凸出量**（px）：模块背面本地 z=1px → 锚点 = 屏幕面 − 1px（背面贴屏幕面、整体向外凸 1px）；**模块模型与屏幕 9 宫格/文字共用**（网格线/命中面仍贴屏幕面） |
 | `MONITOR_2_SCREEN_X_MIN/_MAX` | 2f / 14f | monitor_2 屏幕面 x 范围（12px 宽） |
 | `MONITOR_2_SCREEN_Y_MIN/_MAX` | 1f / 11f | monitor_2 屏幕面 y 范围（10px 高） |
 | `MONITOR_2_GRID_WIDTH/_HEIGHT` | 10 / 8 | monitor_2 表面棋盘网格格数（屏幕面 12×10 → 四周各内缩 1px → 10×8，用户定稿） |
@@ -137,16 +138,17 @@ shift = ( (placeX-8)/16, (8-0)/16, (placeZ-8)/16 )   // 模型坐桌面 y8（MOD
 
 - ✅ joystick_2 完整接入：桌顶网格 + 4×9×4 预览盒 + 半透明实物 + 位置存储/渲染 + 4×4 占用阻挡 + 扳手拆除 + **输入检测/倾斜动画**（照抄 joystick，配置/轴值独立，枢轴 (8,1,8)，见 `memo/control-desk-seat.md`）
 - ✅ throttle 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×6 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + 只能 0°/180° 旋转 + 14×6 占用阻挡 + 扳手拆除
-- ✅ monitor_2 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×12 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + **不面向玩家**（仅随桌体 FACING）+ 14×6 占用阻挡 + 扳手拆除
-- ✅ **monitor_2 表面小 Monitor（完整接入：网格 + 放置 + 交互 + 渲染 + Lua）**：
+- ✅ monitor_2 完整接入（已进游戏验证）：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×12 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + **不面向玩家**（仅随桌体 FACING）+ 14×6 占用阻挡 + 扳手拆除
+- ✅ **monitor_2 表面小 Monitor（完整接入：网格 + 放置 + 交互 + 渲染 + Lua；Lua 全链路已进游戏验证通过）**：
   - **网格**：10×8 格（屏幕面 12×10 内缩 1px，`MONITOR_2_GRID_WIDTH/HEIGHT`），**GridState 已参数化**（构造器传宽高，Monitor 保持 12×10 / monitor_2 用 10×8，`getWidth/getHeight`）
   - **命中**：`Monitor2HitDetector` 独立检测（遍历 `ControlDeskClientRegistry`，facing逆 → shift逆 → case 22.5° 逆，返回 `{pos, facing, distance, screenX, screenY, grid}`，`localToGrid` 10×8 转换）
   - **客户端交互**：`Monitor2GridOverlay`（对齐 `MonitorGridOverlay`）——手持模块物品显示网格 + 放置预览、右键放置模块、按钮按压/钮子切换/旋钮拖拽（屏幕局部坐标直接由命中给出）、屏幕两点放置、扳手蹲下右键拆除、右键模块/屏幕打开 `MonitorModuleScreen` 配置、悬停 tooltip
   - **服务端**：`ControlDeskBlockEntity` 实现 `MonitorGridHost` 接口（`getMonitor2Grid` 懒加载 10×8 + 放置/移除/按压/旋钮/屏幕文本全套方法），NBT 四路径持久化（`Monitor2Grid` tag），`monitor2Changed` 同步（`sendBlockUpdated` + `SyncGridPayload`）
   - **payload 复用**：现有 8 个 Monitor payload（Place/Remove Module、ModulePress、KnobRotate、ModuleConfig、Place/RemoveScreen、SyncGrid）处理器按 pos 处 BE 类型分发（`MonitorGridHost`，Monitor 方块或已装 monitor_2 的 controlDesk 方块）
-  - **渲染**：`ControlDeskVisual`（Flywheel）+ `ControlDeskRenderer`（BER）渲染表面模块（复用 Monitor 模块模型/动画，变换 = 放置 + case 22.5° 旋转 + 屏幕面定位 + 模块初始旋转）；**屏幕 9 宫格 + 文字由 BER 补画**（Flywheel 无法表达，control_desk 注册改 `neverSkipVanillaRender`，renderSafe 在 Flywheel 可用时只画 monitor_2 屏幕、控件模型由 Visual 画）
-  - **Lua**：`ControlDeskPeripheral.getMonitor2Module(id)` / `getMonitor2CellModule(x,y)`（复用 `ModuleHandleRegistry`；`ModuleHandle` 系列改绑定 `MonitorGridHost` 接口，Monitor 与 monitor_2 共用同一套 handle）
-- ✅ **monitor_2 命中检测对齐 Monitor 独立命中**：`Monitor2HitDetector` 不依赖原版 `mc.hitResult`（monitor_2 屏幕在桌面碰撞体上方，准星瞄准屏幕时原版可能 MISS），遍历 `ControlDeskClientRegistry`（客户端已加载控制台坐标注册表，`ControlDeskBlockEntity.onLoad/setRemoved/onChunkUnloaded` 维护）枚举候选，用玩家视线射线 + monitor_2 屏幕面实时变换（facing逆 → shift逆 → case 22.5° 逆，严格互逆于 `monitor2World`）做屏幕面板正面求交 + 背面剔除 + 遮挡检测（`ClipContext.COLLIDER`），取最近命中；Sable 子次元兼容（射线回投 plot 坐标）
+  - **渲染**：`ControlDeskVisual`（Flywheel）+ `ControlDeskRenderer`（BER）渲染表面模块（复用 Monitor 模块模型/动画，变换 = 放置 + case 22.5° 旋转 + 屏幕面定位 + 模块初始旋转）；**屏幕 9 宫格 + 文字 + 图形由 BER 补画**（Flywheel 无法表达，control_desk 注册改 `neverSkipVanillaRender`，renderSafe 在 Flywheel 可用时只画 monitor_2 屏幕、控件模型由 Visual 画；**随 Lua 测试验证：9 宫格、屏幕字符/自由图形渲染正常**）；**旋钮表面角度/卡位文字与按钮灯带/标签已补上**（对齐 Monitor：Flywheel 可用时 BER 经 `renderMonitor2ModuleDecorations` 补画 `ModuleSurfaceRenderer.renderKnobAngle`/`renderButtonLabel` + `ButtonBehavior.renderIndicator`，动画深度读 `ControlDeskVisual.getModuleAnim`；BER 回退时全量渲染补画角度/标签，灯带由 `renderExtra` 画）
+  - **9 宫格/模块表面装饰走共享类**：`ControlDeskRenderer` 与 `MonitorRenderer` 共用 `Screen9GridRenderer`（`ScreenPlane` 接口提供屏幕面起点/z，统一块单位——monitor_2 不再有 px 换算，防「只改一半」类 bug）与 `ModuleSurfaceRenderer`（`KnobDisplaySource.MONITOR_2` 包 `Monitor2GridOverlay.getActiveKnobAngle`/`getHoveredKnobModuleId`）
+  - **Lua**：`ControlDeskPeripheral.getModule("monitor")` → `MonitorPeripheral`（type = `"ccpe:monitor_2"`，宿主参数化为 `MonitorGridHost`，方法与 Monitor 外设完全同款）→ `getCellModule(x,y)` / `getModule(id)` 返回模块/屏幕 handle（复用 `ModuleHandleRegistry`；`ModuleHandle` 系列绑定 `MonitorGridHost` 接口，Monitor 与 monitor_2 共用同一套 handle）；另有快捷入口 `getMonitor2Module(id)` / `getMonitor2CellModule(x,y)`
+- ✅ **monitor_2 命中检测对齐 Monitor 独立命中**：`Monitor2HitDetector` 不依赖原版 `mc.hitResult`（monitor_2 屏幕在桌面碰撞体上方，准星瞄准屏幕时原版可能 MISS），遍历 `ControlDeskClientRegistry`（客户端已加载控制台坐标注册表，`ControlDeskBlockEntity.onLoad/setRemoved/onChunkUnloaded` 维护）枚举候选，用玩家视线射线 + monitor_2 屏幕面实时变换（facing逆 → shift逆 → case 22.5° 逆，严格互逆于 `monitor2World`）做屏幕面板正面求交 + 背面剔除 + **落点屏幕面范围检查（`isOnScreen`，对齐 Monitor 的 `isOnPanel`）** + 遮挡检测（`ClipContext.COLLIDER`，**排除 controlDesk 自身方块**），取最近命中；Sable 子次元兼容（射线回投 plot 坐标）。**修复记录见文末「monitor_2 命中判定两处缺陷」**
 - 三个自由放置模块互斥已全部改为纯占地判定（monitor_2 / throttle 同占 (8,12) → 天然互斥；joystick_2 网格内也与两者重叠）
 - 网格线是纯显示层（Outliner），逻辑全部基于放置中心 + 占地矩形
 - 安装位置 = 服务端对**右键命中点**吸附（与客户端准星同射线）；多玩家极端场景如需精确可控，可改客户端发 payload（对齐 Monitor 的 PlaceModulePayload 模式）
@@ -154,3 +156,46 @@ shift = ( (placeX-8)/16, (8-0)/16, (placeZ-8)/16 )   // 模型坐桌面 y8（MOD
 - 吸附中心 = 盒子中心（居中吸附）；如需 monitor 式「角落吸附」（准星=模块左上角），改 `snappedBoxCenter` 的取整方式即可
 - 旋转只能 0°/180° 的模块（throttle）：放置中心必须让占地矩形在 0° 与 180° 下重合（中心对称矩形，如 14×6 中心在 (8,12)）——否则两个角度占地不同，占用判定需按旋转区分
 - monitor_2 模型需在 Blockbench 中同步改为 14×6 居中 (8,8)（当前模型 12×8 是过渡态；代码按 MODEL_CENTER=8 设计）
+
+---
+
+## ⚠️ monitor_2 屏幕坐标单位约定（移植类 bug 教训，改代码前必读）
+
+**monitor_2 的屏幕渲染代码（`ControlDeskRenderer.renderMonitor2Screens` / `Monitor2GridOverlay`）全部使用「北向基准模型空间 px」单位，其中 1 格 = 1px。** 这与正式 Monitor（`MonitorRenderer`，块单位）不同，**不要照抄 monitor 的换算**。
+
+### 单位速查表
+
+| 量 | monitor（块单位，勿直接照抄） | monitor_2（px 单位） |
+|---|---|---|
+| 屏幕起点 | `scrX = (SCREEN_X_MIN + GRID_INSET + minX) / 16` | `scrX = MONITOR_2_SCREEN_X_MIN + 1 + scr.minX()` |
+| 屏幕宽 | `scrW = width * cellSize`（= width/16 块） | `scrW = scr.width()`（**格 = px，直接相等**） |
+| 屏幕高 | `scrH = height * cellSize` | `scrH = scr.height()` |
+| 边框 | `borderSize = cellSize`（1/16 块） | `borderSize * 16f = 1px` |
+| 中央面板 scale | `scale(innerW / cellSize, ...)`（innerW 块） | `scale(innerW, innerH, 1)`（**模型 1px 宽 → scale = px 数**） |
+| 转块（渲染） | 已为块单位，直接用 | `translate(px/16, py/16, pz/16)` |
+
+> `GridState.ScreenRegion` 的 `width()/height() = maxX-minX+1`，单位是**格**。monitor_2 上 1 格 = 1px，**宽高直接当 px 用，绝不能 ×16f**（×16 会把整个 9 宫格放大 16 倍、四角飞出屏幕）。
+
+### 2026-08 实际踩坑记录（9 宫格布满天空事件）
+
+- **症状**：monitor_2 上放置 screen 模块后，9 宫格模型错乱、四角/边/中心散落到屏幕外很远（用户描述「碎片布满天空」）；模块（button/toggle/knob）位置正常。
+- **根因**：`renderMonitor2Screens` 里 `scrW = scr.width() * 16f`——移植 monitor 的块单位公式时只改了一半：`minX/minY` 已换成 px 单位，但 `width/height` 沿用了「× cellSize」的思路却错写成 `×16f`，宽高被放大 16 倍。中央面板 scale 同样残留 `/16f`。
+- **教训**：
+  1. **移植类 bug 的典型特征 = 只改一半**：同一个函数里 `minX/minY` 与 `width/height` 必须用同一套单位，逐行核对换算系数（/16、×16f、cellSize）。
+  2. **「右下角正常」是误导信号**：16 倍错位下个别部件（右下角）恰好落在可见区，会让人误判成「旋转/朝向问题」，实际是整体坐标错。
+  3. **第一时间加锚点可视化 debug**：`Monitor2GridOverlay.DEBUG_SCREEN_PATCH`（现为 false）可把 9 宫格各部件理论锚点画成彩色十字线（四角红/绿/蓝/黄、边青、中心品红），与实渲染对比即可区分「坐标错 vs 旋转错 vs 模型错」——比反复改数值快得多。
+  4. **memo 的 ✅ 只代表「代码已接入」，不代表「进游戏验证过」**：monitor_2 表面小 Monitor 标 ✅ 时 9 宫格渲染从未真正核对，导致排查初期默认「这块没问题」、优先级降低。
+
+### 2026-08 实际踩坑记录（monitor_2 命中判定两处缺陷：判定蔓延天空 + 面前被自遮挡）
+
+- **症状**：① 视角离开 monitor_2 屏幕（准星移开/看向天空）后，屏幕面网格/预览判定仍不消失，命中判定「向左上角蔓延、布满天空」；② 站在 monitor_2 面前的一小片范围内，命中判定被阻挡（点不中屏幕）。
+- **根因**：
+  1. **缺落点范围检查**：`Monitor2HitDetector.intersectScreen` 只与 z=2 的**无限屏幕平面**求交（d_z>0 即命中），返回落点 (sx, sy) 后**没有检查是否落在屏幕面 x2..14 / y1..11 内**。而正式 Monitor 在 `MonitorHitDetector` 里有 `MonitorBlock.isOnPanel(sx, sy)` 检查（`if (!isOnPanel(sx, sy)) continue;`）。monitor_2 移植时漏了这一步 → 视角移开后射线仍与平面相交于屏幕外很远处，hit 非空，overlay 继续显示。
+  2. **遮挡检测自遮挡**：`isOccluded` 用 `ClipContext.COLLIDER`，而 monitor_2 的屏幕是 controlDesk **桌体的一部分**（屏幕面 z2..6 与桌体碰撞体 z8..16 同处一个方块内）——玩家从正面看屏幕时射线会先穿过**桌体自身的碰撞体**，被判为「被遮挡」→ 面前小范围点不中。正式 Monitor 的屏幕是独立方块、底座碰撞体（y0..2px）远低于屏幕（y3..15px）所以不会自遮挡，monitor_2 不能照抄这个假设。
+- **修复**（`client/Monitor2HitDetector.java`）：
+  - 新增 `isOnScreen(sx, sy)`（屏幕面 x2..14 / y1..11 闭区间），`find` 里求交成功后先检查，落点在屏幕面外 → 不算命中（对齐 Monitor `isOnPanel`）。
+  - `isOccluded` 增加 `deskPos` 参数：`level.clip` 命中 `deskPos`（controlDesk 自身方块）→ 不算遮挡；其它方块（墙/箱子）仍正常遮挡。
+- **教训**：
+  1. **「射线与平面求交」≠「命中」**：平面求交只给落点，命中判定必须再检查落点是否在目标区域内（`isOnPanel`/`isOnScreen` 等价物）。漏掉 = 判定蔓延到无限远。
+  2. **自遮挡假设不能照抄**：Monitor 的「COLLIDER 不会自遮挡」成立是因为其底座碰撞体在屏幕下方；monitor_2 屏幕与桌体碰撞体重叠，必须**显式排除载体方块**。
+  3. 调试日志（`Monitor2HitDetector.DEBUG_TRACE` / `Monitor2GridOverlay.DEBUG_HIT`，现为 false）可分别看到「求交失败 / 落点屏幕面外 / 被遮挡」与命中点十字/屏幕边界框，排查命中类问题先开它们。

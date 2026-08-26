@@ -3,6 +3,8 @@ package com.zzy205.myfirstmod.block;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.monitor.ScreenText;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 
 import java.util.List;
 
@@ -10,12 +12,19 @@ import java.util.List;
  * 网格宿主抽象：Monitor 方块实体与 controlDesk 的 monitor_2 模块都拥有一个 {@link GridState}
  * （网格 + 模块 + 屏幕），并提供相同的服务端操作方法（放置/移除/按压/旋钮/屏幕文本等）。
  * <p>
- * Lua 模块实例（{@code compat/cc/ModuleHandle} 系列）只依赖本接口，因此同一套 handle
- * 可以同时服务 Monitor 与 monitor_2，无需复制。网络 payload 处理器也按本接口统一分发。
+ * Lua 模块实例（{@code compat/cc/ModuleHandle} 系列）与外设查询（{@code compat/cc/MonitorPeripheral}）
+ * 只依赖本接口，因此同一套 handle / 外设查询可以同时服务 Monitor 与 monitor_2，无需复制。
+ * 网络 payload 处理器也按本接口统一分发。
  */
 public interface MonitorGridHost {
 
     GridState getGridState();
+
+    /** 宿主方块实体的世界（供外设音效等按位置操作；两实现类均为 BlockEntity，天然实现）。 */
+    Level getLevel();
+
+    /** 宿主方块位置（供外设音效/equals 等按位置操作）。 */
+    BlockPos getBlockPos();
 
     // ── 模块 ──
 
