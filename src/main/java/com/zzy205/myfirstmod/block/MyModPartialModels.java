@@ -22,6 +22,8 @@ public class MyModPartialModels {
     public static final PartialModel CONTROL_DESK_THROTTLE_INDICATOR = block("control_desk_1/throttle/throttle_indicator");
     public static final PartialModel CONTROL_DESK_JOYSTICK_2_BASE = block("control_desk_1/joystick_2/joystick_2_base");
     public static final PartialModel CONTROL_DESK_JOYSTICK_2_HANDLE = block("control_desk_1/joystick_2/joystick_2_handle");
+    public static final PartialModel CONTROL_DESK_THROTTLE_2_BASE = block("control_desk_1/throttle_2/throttle_2_base");
+    public static final PartialModel CONTROL_DESK_THROTTLE_2_HANDLE = block("control_desk_1/throttle_2/throttle_2_handle");
     /** Monitor：偏航支架（bearing，随 facing+offset+yaw） */
     public static final PartialModel MONITOR_BEARING = block("monitor/my_monitor_bearing");
     /** Monitor：屏幕外壳（case，随 facing+offset+yaw+pitch；模型带 cutout 开孔） */

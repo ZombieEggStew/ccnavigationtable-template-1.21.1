@@ -76,6 +76,7 @@
   "item.ccpe.monitor_2": "监视器 2",
   "item.ccpe.throttle": "油门杆",
   "item.ccpe.joystick_2": "操纵杆 2",
+  "item.ccpe.throttle_2": "油门杆 2",
 
   "gui.ccpe.control_desk.already_installed": "该控件已安装",
   "gui.ccpe.control_desk.position_occupied": "该位置已被占用",
@@ -96,6 +97,12 @@
   "gui.ccpe.control_desk.pedal_free_speed_tip": "数值 = 踩下/抬起按住到满偏所需 tick 数（20 tick = 1 秒，越小越快）",
   "gui.ccpe.control_desk.throttle_ticks_per_gear": "档位切换节奏",
   "gui.ccpe.control_desk.throttle_ticks_per_gear_tip": "数值 = 按住前进/后退键切换一个档位所需 tick 数（20 tick = 1 秒，越小换挡越快）",
+  "gui.ccpe.control_desk.throttle_2_free_speed": "满偏时间",
+  "gui.ccpe.control_desk.throttle_2_free_speed_tip": "数值 = 按住上台/下拉键从最底端到满偏所需 tick 数（20 tick = 1 秒，越小越快）",
+  "gui.ccpe.control_desk.throttle_2_return": "回正",
+  "gui.ccpe.control_desk.throttle_2_return_tip": "开启后松开按键自动回到中位（15°）",
+  "gui.ccpe.control_desk.throttle_2_return_time": "回正时间",
+  "gui.ccpe.control_desk.throttle_2_return_time_tip": "松开按键后回到中位（15°）所需的时间（单位 tick，20 tick = 1 秒）（0 关闭回正）",
   "gui.ccpe.control_desk.channel_title": "控制台频道",
   "gui.ccpe.control_desk.no_modules": "未安装控件",
 

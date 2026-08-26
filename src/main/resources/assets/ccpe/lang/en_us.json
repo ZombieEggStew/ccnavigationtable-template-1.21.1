@@ -74,6 +74,7 @@
   "item.ccpe.monitor_2": "Monitor 2",
   "item.ccpe.throttle": "Throttle",
   "item.ccpe.joystick_2": "Joystick 2",
+  "item.ccpe.throttle_2": "Throttle 2",
 
   "gui.ccpe.control_desk.already_installed": "Control already installed",
   "gui.ccpe.control_desk.position_occupied": "Position occupied",
@@ -94,6 +95,12 @@
   "gui.ccpe.control_desk.pedal_free_speed_tip": "Ticks to reach full deflection while holding a pedal (20 ticks = 1 second, smaller = faster)",
   "gui.ccpe.control_desk.throttle_ticks_per_gear": "Gear Shift Rate",
   "gui.ccpe.control_desk.throttle_ticks_per_gear_tip": "Ticks of holding forward/back to shift one gear (20 ticks = 1 second, smaller = faster)",
+  "gui.ccpe.control_desk.throttle_2_free_speed": "Full-Deflection Time",
+  "gui.ccpe.control_desk.throttle_2_free_speed_tip": "Ticks of holding up/down to reach full deflection (20 ticks = 1 second, smaller = faster)",
+  "gui.ccpe.control_desk.throttle_2_return": "Return to Center",
+  "gui.ccpe.control_desk.throttle_2_return_tip": "When enabled, returns to the center (15°) after release",
+  "gui.ccpe.control_desk.throttle_2_return_time": "Return Time",
+  "gui.ccpe.control_desk.throttle_2_return_time_tip": "Time to return to the center (15°) after releasing the key (in ticks, 20 ticks = 1 second) (0 disables return)",
   "gui.ccpe.control_desk.channel_title": "Control Desk Channel",
   "gui.ccpe.control_desk.no_modules": "No controls installed",
 

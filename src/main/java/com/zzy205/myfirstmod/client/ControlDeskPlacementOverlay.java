@@ -75,7 +75,8 @@ public class ControlDeskPlacementOverlay {
                 // 手持三者时改显桌顶 6×14 棋盘网格（1px 格、内缩 1px；纯显示）
                 if (type == ControlDeskBlockEntity.ControlType.THROTTLE
                         || type == ControlDeskBlockEntity.ControlType.JOYSTICK_2
-                        || type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
+                        || type == ControlDeskBlockEntity.ControlType.MONITOR_2
+                        || type == ControlDeskBlockEntity.ControlType.THROTTLE_2) {
                     showTopGrid(mc, hit);
                 }
                 // joystick_2：额外显示 3D 放置预览盒（4×9×4，底在桌顶面，跟随准星吸附到 1px 网格）
@@ -85,6 +86,10 @@ public class ControlDeskPlacementOverlay {
                 // throttle：额外显示 3D 放置预览盒（14×6×6，唯一合法位 (8,12) 全占桌顶网格）
                 if (type == ControlDeskBlockEntity.ControlType.THROTTLE) {
                     showThrottleBox(mc, hit);
+                }
+                // throttle_2：额外显示 3D 放置预览盒（14×6×6，唯一合法位 (8,12) 全占桌顶网格）
+                if (type == ControlDeskBlockEntity.ControlType.THROTTLE_2) {
+                    showThrottle2Box(mc, hit);
                 }
                 // monitor_2：额外显示 3D 放置预览盒（14×6×12，唯一合法位 (8,12) 全占桌顶网格）
                 if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
@@ -143,6 +148,15 @@ public class ControlDeskPlacementOverlay {
                 AABB box = ControlDeskBlock.throttlePlaceBox(desk, facing, pos);
                 boolean hovered = ControlDeskBlock.hitBounds(List.of(box), click);
                 Outliner.getInstance().showAABB("control-desk/remove/" + pos.toShortString() + "/THROTTLE", box)
+                        .colored(hovered ? COLOR_INVALID : COLOR_VALID)
+                        .lineWidth(1 / 64f);
+                continue;
+            }
+            if (type == ControlDeskBlockEntity.ControlType.THROTTLE_2) {
+                // 油门2：显示放置位 14×6×6 盒子（与安装预览/服务端拆除判定共用 ControlDeskBlock.throttle2PlaceBox）
+                AABB box = ControlDeskBlock.throttle2PlaceBox(desk, facing, pos);
+                boolean hovered = ControlDeskBlock.hitBounds(List.of(box), click);
+                Outliner.getInstance().showAABB("control-desk/remove/" + pos.toShortString() + "/THROTTLE_2", box)
                         .colored(hovered ? COLOR_INVALID : COLOR_VALID)
                         .lineWidth(1 / 64f);
                 continue;
@@ -269,6 +283,32 @@ public class ControlDeskPlacementOverlay {
     }
 
     /**
+     * 手持 throttle_2：3D 放置预览盒（占地 14×6、高 6，底在桌顶面下方 1px = y7..13）。
+     * throttle_2 占地 14×6 必须完全处于桌顶网格（x1..15 / z9..15）内 → 唯一合法位置 (8,12)（全占），
+     * 盒子固定显示在该位置（绿=可装 / 红=已装或被占用，与服务端 install 判定一致）。
+     */
+    private static void showThrottle2Box(Minecraft mc, BlockHitResult hit) {
+        BlockPos pos = hit.getBlockPos();
+        BlockState state = mc.level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ControlDeskBlock)) return;
+        Direction facing = state.getValue(ControlDeskBlock.FACING);
+
+        int cx = ControlDeskBlockEntity.THROTTLE_2_PLACE_X;
+        int cz = ControlDeskBlockEntity.THROTTLE_2_PLACE_Z;
+        boolean blocked = isThrottle2PlacementBlocked(mc, pos, cx, cz);
+        Vec3 p0 = gridWorld(pos, cx - ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.THROTTLE_2_PLACE_Y_BOTTOM, cz - ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_Z, facing);
+        Vec3 p1 = gridWorld(pos, cx + ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.THROTTLE_2_PLACE_Y_TOP, cz + ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_Z, facing);
+        AABB box = new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+        Outliner.getInstance().showAABB("control-desk/box-throttle2/" + pos.toShortString(), box)
+                .colored(blocked ? COLOR_INVALID : COLOR_VALID)
+                .lineWidth(1 / 64f);
+    }
+
+    /**
      * 手持 monitor_2：3D 放置预览盒（占地 14×6、高 12，底在桌顶面下方 1px = y7..19）。
      * monitor_2 占地 14×6 必须完全处于桌顶网格（x1..15 / z9..15）内 → 唯一合法位置 (8,12)（全占），
      * 盒子固定显示在该位置（绿=可装 / 红=已装或被占用，与服务端 install 判定一致）。
@@ -353,6 +393,17 @@ public class ControlDeskPlacementOverlay {
     }
 
     /**
+     * throttle_2 候选放置（唯一合法位 (8,12)）是否被阻挡：同类型已装 /
+     * 与已装模块占地矩形重叠（{@link ControlDeskBlockEntity#blocksPlacement}，含 joystick_2 的 4×4 与 throttle / monitor_2 的 14×6）。
+     */
+    private static boolean isThrottle2PlacementBlocked(Minecraft mc, BlockPos pos, int cx, int cz) {
+        if (!(mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return false;
+        return desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)
+                || desk.blocksPlacement(cx, cz,
+                        ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_X, ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_Z);
+    }
+
+    /**
      * monitor_2 候选放置（唯一合法位 (8,12)）是否被阻挡：同类型已装 /
      * 与已装模块占地矩形重叠（{@link ControlDeskBlockEntity#blocksPlacement}，含 joystick_2 的 4×4 与 throttle 的 14×6）。
      */
@@ -370,6 +421,7 @@ public class ControlDeskPlacementOverlay {
         if (stack.is(MyModItems.CONTROL_MONITOR_2.get())) return ControlDeskBlockEntity.ControlType.MONITOR_2;
         if (stack.is(MyModItems.CONTROL_THROTTLE.get())) return ControlDeskBlockEntity.ControlType.THROTTLE;
         if (stack.is(MyModItems.CONTROL_JOYSTICK_2.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK_2;
+        if (stack.is(MyModItems.CONTROL_THROTTLE_2.get())) return ControlDeskBlockEntity.ControlType.THROTTLE_2;
         return null;
     }
 

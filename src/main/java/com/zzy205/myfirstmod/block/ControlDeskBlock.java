@@ -140,6 +140,10 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 placeX = ControlDeskBlockEntity.THROTTLE_PLACE_X;
                 placeZ = ControlDeskBlockEntity.THROTTLE_PLACE_Z;
                 toPlayer = directionFromDeskTo(player, pos);
+            } else if (type == ControlDeskBlockEntity.ControlType.THROTTLE_2) {
+                placeX = ControlDeskBlockEntity.THROTTLE_2_PLACE_X;
+                placeZ = ControlDeskBlockEntity.THROTTLE_2_PLACE_Z;
+                toPlayer = directionFromDeskTo(player, pos);
             } else if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
                 placeX = ControlDeskBlockEntity.MONITOR_2_PLACE_X;
                 placeZ = ControlDeskBlockEntity.MONITOR_2_PLACE_Z;
@@ -195,7 +199,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
-                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2);
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2);
             if (!anyInstalled) {
                 // 光桌：没有模块可拆，走默认拆方块
                 return IWrenchable.super.onSneakWrenched(state, context);
@@ -235,6 +240,10 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 && hitBounds(List.of(throttlePlaceBox(desk, facing, pos)), click)) {
             return ControlDeskBlockEntity.ControlType.THROTTLE;
         }
+        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)
+                && hitBounds(List.of(throttle2PlaceBox(desk, facing, pos)), click)) {
+            return ControlDeskBlockEntity.ControlType.THROTTLE_2;
+        }
         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
                 && hitBounds(List.of(monitor2PlaceBox(desk, facing, pos)), click)) {
             return ControlDeskBlockEntity.ControlType.MONITOR_2;
@@ -268,6 +277,22 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM, cz - ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z, facing);
         Vec3 p1 = modelToWorld(pos, cx + ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X,
                 ControlDeskBlockEntity.THROTTLE_PLACE_Y_TOP, cz + ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z, facing);
+        return new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+    }
+
+    /**
+     * throttle_2 放置盒的世界 AABB（北向基准 14×6×6，中心 = 放置中心 placeX/placeZ（唯一合法位 (8,12)），底 y7 =
+     * 预览盒下沉 1px 示意；随 FACING 旋转，与安装预览一致）。供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
+     */
+    public static AABB throttle2PlaceBox(ControlDeskBlockEntity desk, Direction facing, BlockPos pos) {
+        int cx = desk.getThrottle2PlaceX();
+        int cz = desk.getThrottle2PlaceZ();
+        Vec3 p0 = modelToWorld(pos, cx - ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.THROTTLE_2_PLACE_Y_BOTTOM, cz - ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_Z, facing);
+        Vec3 p1 = modelToWorld(pos, cx + ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_X,
+                ControlDeskBlockEntity.THROTTLE_2_PLACE_Y_TOP, cz + ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_Z, facing);
         return new AABB(
                 Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
                 Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
@@ -341,6 +366,9 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)) {
                 drops.add(new ItemStack(MyModItems.CONTROL_JOYSTICK_2.get()));
             }
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)) {
+                drops.add(new ItemStack(MyModItems.CONTROL_THROTTLE_2.get()));
+            }
         }
         return drops;
     }
@@ -353,6 +381,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             case MONITOR_2 -> MyModItems.CONTROL_MONITOR_2.get();
             case THROTTLE -> MyModItems.CONTROL_THROTTLE.get();
             case JOYSTICK_2 -> MyModItems.CONTROL_JOYSTICK_2.get();
+            case THROTTLE_2 -> MyModItems.CONTROL_THROTTLE_2.get();
         };
     }
 
@@ -362,6 +391,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         if (stack.is(MyModItems.CONTROL_MONITOR_2.get())) return ControlDeskBlockEntity.ControlType.MONITOR_2;
         if (stack.is(MyModItems.CONTROL_THROTTLE.get())) return ControlDeskBlockEntity.ControlType.THROTTLE;
         if (stack.is(MyModItems.CONTROL_JOYSTICK_2.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK_2;
+        if (stack.is(MyModItems.CONTROL_THROTTLE_2.get())) return ControlDeskBlockEntity.ControlType.THROTTLE_2;
         return null;
     }
 
@@ -412,7 +442,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 result.add(PEDAL_RIGHT_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
             }
             case JOYSTICK -> result.add(JOYSTICK_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
-            case MONITOR_2, THROTTLE, JOYSTICK_2 -> { /* 无安装位框（插槽已移除） */ }
+            case MONITOR_2, THROTTLE, JOYSTICK_2, THROTTLE_2 -> { /* 无安装位框（插槽已移除） */ }
         }
         return result;
     }

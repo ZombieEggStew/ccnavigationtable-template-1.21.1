@@ -42,7 +42,8 @@ public class SeatControlListener {
     private enum ControlDir {
         UP, DOWN, LEFT, RIGHT,
         PEDAL_LEFT_DOWN, PEDAL_LEFT_UP, PEDAL_RIGHT_DOWN, PEDAL_RIGHT_UP,
-        THROTTLE_FORWARD, THROTTLE_BACK
+        THROTTLE_FORWARD, THROTTLE_BACK,
+        THROTTLE_2_UP, THROTTLE_2_DOWN
     }
 
     /** 上一次 tick 处于按下状态的按键名（InputConstants.Key.getName() 格式） */
@@ -63,7 +64,7 @@ public class SeatControlListener {
         if (mc.screen != null) {
             // GUI 打开时不判定按键；向服务端发一次释放（自由模式回正 / 档位模式保持 / 踏板回正），避免控件卡在按住状态
             if (lastSeatPos != null) {
-                sendInput(lastSeatPos, false, false, false, false, false, false, false, false, false, false);
+                sendInput(lastSeatPos, false, false, false, false, false, false, false, false, false, false, false, false);
             }
             return;
         }
@@ -72,7 +73,7 @@ public class SeatControlListener {
         if (seatPos == null) {
             // 离开坐垫：发一次释放（服务端租约校验也会兜底清除）
             if (lastSeatPos != null) {
-                sendInput(lastSeatPos, false, false, false, false, false, false, false, false, false, false);
+                sendInput(lastSeatPos, false, false, false, false, false, false, false, false, false, false, false, false);
             }
             reset();
             return;
@@ -152,12 +153,15 @@ public class SeatControlListener {
                 .anyMatch(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL));
         boolean hasThrottle = desks.stream()
                 .anyMatch(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE));
+        boolean hasThrottle2 = desks.stream()
+                .anyMatch(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2));
 
-        // 各方向/踏板/油门键的按下态（方向槽位并集，任一联动控制台该方向绑定的键按下即生效）
+        // 各方向/踏板/油门/油门2 键的按下态（方向槽位并集，任一联动控制台该方向绑定的键按下即生效）
         boolean rawX = false, rawY = false;
         boolean up = false, down = false, left = false, right = false;
         boolean pedalLeftDown = false, pedalLeftUp = false, pedalRightDown = false, pedalRightUp = false;
         boolean throttleForward = false, throttleBack = false;
+        boolean throttle2Up = false, throttle2Down = false;
         for (Binding binding : bindings) {
             if (!nowDown.contains(binding.keyName())) continue;
             switch (binding.dir()) {
@@ -171,6 +175,8 @@ public class SeatControlListener {
                 case PEDAL_RIGHT_UP -> pedalRightUp = true;
                 case THROTTLE_FORWARD -> throttleForward = true;
                 case THROTTLE_BACK -> throttleBack = true;
+                case THROTTLE_2_UP -> throttle2Up = true;
+                case THROTTLE_2_DOWN -> throttle2Down = true;
                 case null -> {}
             }
         }
@@ -216,11 +222,11 @@ public class SeatControlListener {
         SeatControlState.setGearHold(gearModeX, gearModeY);
         SeatControlState.update(true, hasJoystick, axisX, axisY, rawX, rawY, Math.abs(axisX), Math.abs(axisY));
 
-        // 运行时输入上报服务端（服务端权威模拟 + getUpdatePacket 广播；装操纵杆/摇杆2/踏板/油门杆的联动台才需要）
-        if (hasJoystick || hasJoystick2 || hasPedal || hasThrottle) {
+        // 运行时输入上报服务端（服务端权威模拟 + getUpdatePacket 广播；装操纵杆/摇杆2/踏板/油门/油门2 的联动台才需要）
+        if (hasJoystick || hasJoystick2 || hasPedal || hasThrottle || hasThrottle2) {
             sendInput(seatPos, up, down, left, right,
                     pedalLeftDown, pedalLeftUp, pedalRightDown, pedalRightUp,
-                    throttleForward, throttleBack);
+                    throttleForward, throttleBack, throttle2Up, throttle2Down);
         }
 
         lastDown.clear();
@@ -239,10 +245,11 @@ public class SeatControlListener {
     private static void sendInput(BlockPos seatPos, boolean up, boolean down, boolean left, boolean right,
                                   boolean pedalLeftDown, boolean pedalLeftUp,
                                   boolean pedalRightDown, boolean pedalRightUp,
-                                  boolean throttleForward, boolean throttleBack) {
+                                  boolean throttleForward, boolean throttleBack,
+                                  boolean throttle2Up, boolean throttle2Down) {
         PacketDistributor.sendToServer(new SeatInputPayload(seatPos, up, down, left, right,
                 pedalLeftDown, pedalLeftUp, pedalRightDown, pedalRightUp,
-                throttleForward, throttleBack));
+                throttleForward, throttleBack, throttle2Up, throttle2Down));
     }
 
     private static void reset() {
@@ -284,6 +291,11 @@ public class SeatControlListener {
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
                 add(out, pos, desk.getThrottleKeyForward(), "油门杆 前进", ControlDir.THROTTLE_FORWARD);
                 add(out, pos, desk.getThrottleKeyBack(), "油门杆 后退", ControlDir.THROTTLE_BACK);
+            }
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)) {
+                // 油门2（总距杆）：按键读 BE 配置（默认 空格=上台 / 左Ctrl=下拉，可经 Throttle2ModuleScreen 改绑），见 Throttle2Motion
+                add(out, pos, desk.getThrottle2KeyUp(), "油门2 上台", ControlDir.THROTTLE_2_UP);
+                add(out, pos, desk.getThrottle2KeyDown(), "油门2 下拉", ControlDir.THROTTLE_2_DOWN);
             }
         }
         return out;

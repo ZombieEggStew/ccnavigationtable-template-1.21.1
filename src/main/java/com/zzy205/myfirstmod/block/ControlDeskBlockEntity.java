@@ -39,7 +39,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
 
     /** 可安装到控制台的控件类型 */
     public enum ControlType {
-        PEDAL, JOYSTICK, MONITOR_2, THROTTLE, JOYSTICK_2
+        PEDAL, JOYSTICK, MONITOR_2, THROTTLE, JOYSTICK_2, THROTTLE_2
     }
 
     /** 操纵杆回正时间（tick）默认值与范围（与 JoystickModuleScreen 滚轮条一致）。 */
@@ -103,15 +103,32 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public static final String DEFAULT_THROTTLE_KEY_FORWARD = "key.keyboard.space";
     public static final String DEFAULT_THROTTLE_KEY_BACK = "key.keyboard.left.control";
 
+    /** 油门2 上台/下拉按键默认值（InputConstants.Key.getName() 格式；空串 = 未绑定）：空格 = 上台（角度 +）/ 左Ctrl = 下拉（角度 -），见 {@link Throttle2Motion}。 */
+    public static final String DEFAULT_THROTTLE_2_KEY_UP = "key.keyboard.space";
+    public static final String DEFAULT_THROTTLE_2_KEY_DOWN = "key.keyboard.left.control";
+
+    /** 油门2 满偏时间（tick）默认值与范围（与 Throttle2ModuleScreen 滚轮条一致）：按住满 N tick 从最底端到满偏 +30°（速度 = 1/数值 每 tick）。 */
+    public static final int DEFAULT_THROTTLE_2_FREE_SPEED = Throttle2Motion.FREE_SPEED_TICKS;
+    public static final int MIN_THROTTLE_2_FREE_SPEED = 1;
+    public static final int MAX_THROTTLE_2_FREE_SPEED = 100;
+
+    /** 油门2 回正时间（tick）默认值与范围（与 Throttle2ModuleScreen 滚轮条一致）：回正开关开启时，松开按键按该时间线性回到中位 15°（0 = 关闭回正，与 joystick 回正时间同约定）。 */
+    public static final int DEFAULT_THROTTLE_2_RETURN_TIME = 2;
+    public static final int MIN_THROTTLE_2_RETURN_TIME = 0;
+    public static final int MAX_THROTTLE_2_RETURN_TIME = 100;
+
     private static final String TAG_PEDAL = "PedalInstalled";
     private static final String TAG_JOYSTICK = "JoystickInstalled";
     private static final String TAG_MONITOR_2 = "Monitor2Installed";
     private static final String TAG_THROTTLE = "ThrottleInstalled";
     private static final String TAG_JOYSTICK_2 = "Joystick2Installed";
+    private static final String TAG_THROTTLE_2 = "Throttle2Installed";
     private static final String TAG_JOYSTICK_2_PLACE_X = "Joystick2PlaceX";
     private static final String TAG_JOYSTICK_2_PLACE_Z = "Joystick2PlaceZ";
     private static final String TAG_THROTTLE_PLACE_X = "ThrottlePlaceX";
     private static final String TAG_THROTTLE_PLACE_Z = "ThrottlePlaceZ";
+    private static final String TAG_THROTTLE_2_PLACE_X = "Throttle2PlaceX";
+    private static final String TAG_THROTTLE_2_PLACE_Z = "Throttle2PlaceZ";
     private static final String TAG_MONITOR_2_PLACE_X = "Monitor2PlaceX";
     private static final String TAG_MONITOR_2_PLACE_Z = "Monitor2PlaceZ";
     private static final String TAG_BACK_SLOT_ROTATION = "BackSlotRotation";
@@ -128,6 +145,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_PEDAL_LEFT_AXIS = "PedalLeftAxis";   // 运行时踏板轴（不落盘，仅 getUpdateTag 同步）
     private static final String TAG_PEDAL_RIGHT_AXIS = "PedalRightAxis";
     private static final String TAG_THROTTLE_AXIS = "ThrottleAxis";      // 运行时油门轴（不落盘，仅 getUpdateTag 同步）
+    private static final String TAG_THROTTLE_2_ANGLE = "Throttle2Angle"; // 运行时油门2 角度（不落盘，仅 getUpdateTag 同步）
     private static final String TAG_JOYSTICK_KEY_UP = "JoystickKeyUp";
     private static final String TAG_JOYSTICK_KEY_DOWN = "JoystickKeyDown";
     private static final String TAG_JOYSTICK_KEY_LEFT = "JoystickKeyLeft";
@@ -155,6 +173,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_THROTTLE_KEY_FORWARD = "ThrottleKeyForward";
     private static final String TAG_THROTTLE_KEY_BACK = "ThrottleKeyBack";
     private static final String TAG_THROTTLE_TICKS_PER_GEAR = "ThrottleTicksPerGear";
+    private static final String TAG_THROTTLE_2_KEY_UP = "Throttle2KeyUp";
+    private static final String TAG_THROTTLE_2_KEY_DOWN = "Throttle2KeyDown";
+    private static final String TAG_THROTTLE_2_FREE_SPEED = "Throttle2FreeSpeed";
+    private static final String TAG_THROTTLE_2_RETURN_ENABLED = "Throttle2ReturnEnabled";
+    private static final String TAG_THROTTLE_2_RETURN_TIME = "Throttle2ReturnTime";
     private static final String TAG_CHANNEL = "Channel";
     private static final String TAG_OCCUPIED_CHANNELS = "OccupiedChannels";
     private static final String TAG_MONITOR_2_GRID = "Monitor2Grid";
@@ -164,6 +187,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private boolean monitor2Installed;   // monitor_2 / throttle / joystick_2 共用桌体后缘上方插槽，互斥安装
     private boolean throttleInstalled;
     private boolean joystick2Installed;
+    private boolean throttle2Installed;
     /** 后缘插槽模块（throttle / joystick_2）的安装朝向（度，0/90/180/270，北向基准；安装时按玩家朝向记录，默认 0 = 不额外旋转） */
     private int backSlotRotation;
     /** joystick_2 放置中心（北向模型空间 px，默认 8 = 模型中心）；安装时按预览盒位置（吸附 1px 网格）记录 */
@@ -172,6 +196,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** throttle 放置中心（北向模型空间 px，默认 (8,12) = 桌顶网格唯一合法位置，14×6 全占）；安装时记录 */
     private int throttlePlaceX = 8;
     private int throttlePlaceZ = 12;
+    /** throttle_2 放置中心（北向模型空间 px，默认 (8,12) = 桌顶网格唯一合法位置，14×6 全占）；安装时记录 */
+    private int throttle2PlaceX = 8;
+    private int throttle2PlaceZ = 12;
     /** monitor_2 放置中心（北向模型空间 px，默认 (8,12) = 桌顶网格唯一合法位置，14×6 全占）；安装时记录 */
     private int monitor2PlaceX = 8;
     private int monitor2PlaceZ = 12;
@@ -208,6 +235,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private float pedalRightAxis;  // 右踏板轴（-1..1，运行时）
     private int throttleGear;          // 油门档位（0..MAX_TRAVEL_PX，运行时）：0 = 最低档（底端，-x 端），1px = 1 档，锁存不回正
     private int throttleChargeTicks;   // 档位切换充电（0..throttleTicksPerGear，按住满 N tick 进/退一档，N 可配置）
+    /** 油门2 角度（0..Throttle2Motion.MAX_DEG，运行时）：0 = 最底端（放置默认），+MAX = 上台满偏（总距杆单边行程）；锁存不回正 */
+    private float throttle2Angle;
     // 输入租约：最近一次操作输入（玩家 + 坐垫 + 操纵杆四方向 + 踏板四键 + 油门两键按住态）；服务端每 tick 校验租约并模拟动力学
     private UUID inputPlayer;
     private BlockPos inputSeatPos;
@@ -218,6 +247,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private boolean prev2Up, prev2Down, prev2Left, prev2Right;
     private boolean inputPedalLeftDown, inputPedalLeftUp, inputPedalRightDown, inputPedalRightUp;
     private boolean inputThrottleForward, inputThrottleBack;
+    // 油门2 输入租约（与油门独立：写死 空格=上台 / 左Ctrl=下拉，见 Throttle2Motion；油门可配置键、油门2 写死键，两者可分别安装在不同控制台）
+    private boolean inputThrottle2Up, inputThrottle2Down;
     private String joystickKeyUp = DEFAULT_JOYSTICK_KEY_UP;
     private String joystickKeyDown = DEFAULT_JOYSTICK_KEY_DOWN;
     private String joystickKeyLeft = DEFAULT_JOYSTICK_KEY_LEFT;
@@ -231,6 +262,13 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private String throttleKeyForward = DEFAULT_THROTTLE_KEY_FORWARD; // 油门杆 前进键（模型空间 +x，空串 = 未绑定）
     private String throttleKeyBack = DEFAULT_THROTTLE_KEY_BACK;      // 油门杆 后退键（模型空间 -x，空串 = 未绑定）
     private int throttleTicksPerGear = DEFAULT_THROTTLE_TICKS_PER_GEAR; // 档位切换节奏（tick）：按住满 N tick 进/退一档
+    private String throttle2KeyUp = DEFAULT_THROTTLE_2_KEY_UP;       // 油门2 上台键（角度 +，空串 = 未绑定）
+    private String throttle2KeyDown = DEFAULT_THROTTLE_2_KEY_DOWN;   // 油门2 下拉键（角度 -，空串 = 未绑定）
+    private int throttle2FreeSpeed = DEFAULT_THROTTLE_2_FREE_SPEED;   // 油门2 满偏时间（tick）：按住满 N tick 从底端到满偏 +30°
+    /** 油门2 回正开关（默认关闭 = 锁存不回正）：开启后松开按键按回正时间线性回到中位 15°（见 {@link Throttle2Motion#NEUTRAL_DEG}） */
+    private boolean throttle2ReturnEnabled;
+    /** 油门2 回正时间（tick，默认 2）：回正开关开启时，松开按键后从中位偏离处线性回到中位所需 tick 数（0 = 关闭回正） */
+    private int throttle2ReturnTime = DEFAULT_THROTTLE_2_RETURN_TIME;
 
     // ── 全局频道（与传感器/显示器共享 GlobalChannelRegistry 命名空间，频道全局唯一） ──
     /** 全局频道号（-1 表示尚未注册，加载时自动分配） */
@@ -324,6 +362,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             case MONITOR_2 -> monitor2Installed;
             case THROTTLE -> throttleInstalled;
             case JOYSTICK_2 -> joystick2Installed;
+            case THROTTLE_2 -> throttle2Installed;
         };
     }
 
@@ -367,6 +406,16 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
                     backSlotRotation = rotationToFace2(getBlockState().getValue(ControlDeskBlock.FACING), toPlayer);
                 }
             }
+            case THROTTLE_2 -> {
+                if (blocksPlacement(placeX, placeZ, THROTTLE_2_FOOTPRINT_HALF_X, THROTTLE_2_FOOTPRINT_HALF_Z)) return false; // 14×6 与已装模块占用重叠
+                throttle2Installed = true;
+                throttle2PlaceX = placeX;
+                throttle2PlaceZ = placeZ;
+                // 只能 0°/180°：让模型 -Z 尽量面向安装时的玩家（90° 结果量化到最近 0/180，照抄 throttle）；toPlayer 为 null 时保持原值
+                if (toPlayer != null) {
+                    backSlotRotation = rotationToFace180(getBlockState().getValue(ControlDeskBlock.FACING), toPlayer);
+                }
+            }
         }
         notifyChange();
         return true;
@@ -395,6 +444,13 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             int hx = MONITOR_2_FOOTPRINT_HALF_X;
             int hz = MONITOR_2_FOOTPRINT_HALF_Z;
             if (Math.abs(cx - monitor2PlaceX) < halfX + hx && Math.abs(cz - monitor2PlaceZ) < halfZ + hz) {
+                return true;
+            }
+        }
+        if (throttle2Installed) {
+            int hx = THROTTLE_2_FOOTPRINT_HALF_X;
+            int hz = THROTTLE_2_FOOTPRINT_HALF_Z;
+            if (Math.abs(cx - throttle2PlaceX) < halfX + hx && Math.abs(cz - throttle2PlaceZ) < halfZ + hz) {
                 return true;
             }
         }
@@ -443,6 +499,14 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
                 joystick2AxisY = 0f;
                 clearInput();
             }
+            case THROTTLE_2 -> {
+                throttle2Installed = false;
+                // 卸下油门2：放置位复位到唯一合法位置 (8,12)，运行时角度清零（重新安装后从最底端开始）
+                throttle2PlaceX = THROTTLE_2_PLACE_X;
+                throttle2PlaceZ = THROTTLE_2_PLACE_Z;
+                throttle2Angle = 0f;
+                clearInput();
+            }
         }
         notifyChange();
         return true;
@@ -488,6 +552,16 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** monitor_2 放置中心 Z（北向模型空间 px，唯一合法位 12）。 */
     public int getMonitor2PlaceZ() {
         return monitor2PlaceZ;
+    }
+
+    /** throttle_2 放置中心 X（北向模型空间 px，唯一合法位 8）。 */
+    public int getThrottle2PlaceX() {
+        return throttle2PlaceX;
+    }
+
+    /** throttle_2 放置中心 Z（北向模型空间 px，唯一合法位 12）。 */
+    public int getThrottle2PlaceZ() {
+        return throttle2PlaceZ;
     }
 
     /**
@@ -972,6 +1046,18 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** monitor_2 唯一合法放置中心（14×6 占地完全处于桌顶网格 x1..15 / z9..15 → 仅 (8,12)，全占）。 */
     public static final int MONITOR_2_PLACE_X = 8;
     public static final int MONITOR_2_PLACE_Z = 12;
+    /** throttle_2 占地半宽（北向模型空间 px）：14×6 → x±7 / z±3；预览盒与占用阻挡共用（与 throttle 同尺寸）。 */
+    public static final int THROTTLE_2_FOOTPRINT_HALF_X = 7;
+    public static final int THROTTLE_2_FOOTPRINT_HALF_Z = 3;
+    /** throttle_2 预览盒底 y（北向模型空间 px，下沉 1px 嵌入桌面示意）～ 顶 y13（高 6，与 throttle 相同）。 */
+    public static final float THROTTLE_2_PLACE_Y_BOTTOM = 7f;
+    public static final float THROTTLE_2_PLACE_Y_TOP = 13f;
+    /** throttle_2 模型默认中心 x/z（Blockbench 旋转中心 (8,0,8) → 8）与底座底 y（0）：安装渲染时平移到放置位。 */
+    public static final float THROTTLE_2_MODEL_CENTER = 8f;
+    public static final float THROTTLE_2_MODEL_BOTTOM_Y = 0f;
+    /** throttle_2 唯一合法放置中心（14×6 占地完全处于桌顶网格 x1..15 / z9..15 → 仅 (8,12)，全占）。 */
+    public static final int THROTTLE_2_PLACE_X = 8;
+    public static final int THROTTLE_2_PLACE_Z = 12;
     /** monitor_2 屏幕表面（case 前脸，北向基准模型空间 px）：case 元素 x2..14 / y1..11 / z2..6 的 z=2 前脸。 */
     public static final float MONITOR_2_SCREEN_Z = 2f;
     /** monitor_2 表面模块锚点相对屏幕面的凸出量（北向模型空间 px，模块背面本地 z=1px → 锚点 = 屏幕面 − 1px 使背面贴屏幕面、整体向外凸 1px；屏幕 9 宫格/文字仍贴屏幕面）。 */
@@ -1119,17 +1205,42 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return inputThrottleBack;
     }
 
+    /** 油门2 角度（0..{@link Throttle2Motion#MAX_DEG}，运行时）：0 = 最底端（放置默认），+MAX = 上台满偏（总距杆单边行程，服务端权威）。 */
+    public float getThrottle2Angle() {
+        return throttle2Angle;
+    }
+
+    /** 设置油门2 角度（度），钳位到 [0, MAX_DEG]。服务端调用（Lua setThrottle2Angle 走这里，服务端权威 + 广播）。 */
+    public void setThrottle2Angle(float degrees) {
+        float clamped = Math.max(0f, Math.min(Throttle2Motion.MAX_DEG, degrees));
+        if (throttle2Angle == clamped) return;
+        throttle2Angle = clamped;
+        notifyChange();
+    }
+
+    /** 油门2 上台键（空格）是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isThrottle2UpActive() {
+        return inputThrottle2Up;
+    }
+
+    /** 油门2 下拉键（左Ctrl）是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isThrottle2DownActive() {
+        return inputThrottle2Down;
+    }
+
     /**
      * 写入坐垫操作输入（运行时，服务端调用；按玩家/坐垫租约记录，租约变化时重置边沿历史，
      * 避免换人/换坐垫后第一次按键不触发档位边沿）。
-     * 参数 = 操纵杆四方向按住态 + 踏板四键按住态（踩下/抬起）+ 油门两键按住态（前进/后退）；
+     * 参数 = 操纵杆四方向按住态 + 踏板四键按住态（踩下/抬起）+ 油门两键按住态（前进/后退）
+     * + 油门2 两键按住态（上台/下拉，写死键，独立于油门）；
      * 同一份方向输入同时写入摇杆2 租约（{@code input2*} / {@code prev2*}，两控件可同时安装、各自模拟）。
      */
     public void setSeatInput(UUID player, BlockPos seatPos,
                              boolean up, boolean down, boolean left, boolean right,
                              boolean pedalLeftDown, boolean pedalLeftUp,
                              boolean pedalRightDown, boolean pedalRightUp,
-                             boolean throttleForward, boolean throttleBack) {
+                             boolean throttleForward, boolean throttleBack,
+                             boolean throttle2Up, boolean throttle2Down) {
         boolean leaseChanged = !Objects.equals(inputPlayer, player) || !Objects.equals(inputSeatPos, seatPos);
         inputPlayer = player;
         inputSeatPos = seatPos;
@@ -1147,6 +1258,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         inputPedalRightUp = pedalRightUp;
         inputThrottleForward = throttleForward;
         inputThrottleBack = throttleBack;
+        inputThrottle2Up = throttle2Up;
+        inputThrottle2Down = throttle2Down;
         if (leaseChanged) {
             prevUp = prevDown = prevLeft = prevRight = false;
             prev2Up = prev2Down = prev2Left = prev2Right = false;
@@ -1163,6 +1276,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         prev2Up = prev2Down = prev2Left = prev2Right = false;
         inputPedalLeftDown = inputPedalLeftUp = inputPedalRightDown = inputPedalRightUp = false;
         inputThrottleForward = inputThrottleBack = false;
+        inputThrottle2Up = inputThrottle2Down = false;
     }
 
     /**
@@ -1180,7 +1294,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         boolean hasJoystick2 = be.joystick2Installed;
         boolean hasPedal = be.pedalInstalled;
         boolean hasThrottle = be.throttleInstalled;
-        if (!hasJoystick && !hasJoystick2 && !hasPedal && !hasThrottle) return;
+        boolean hasThrottle2 = be.throttle2Installed;
+        if (!hasJoystick && !hasJoystick2 && !hasPedal && !hasThrottle && !hasThrottle2) return;
         // 输入租约校验：操作者不再坐在输入坐垫上（离开/换坐垫/断线）→ 清除输入
         // （档位模式轴值保持、自由模式/踏板自然回正）
         if (be.inputPlayer != null) {
@@ -1204,6 +1319,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         }
         if (hasThrottle) {
             simulateThrottle(be);
+        }
+        if (hasThrottle2) {
+            simulateThrottle2(be);
         }
     }
 
@@ -1337,6 +1455,41 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (be.throttleGear >= 1 && be.getLevel() != null) {
             be.getLevel().playSound(null, be.getBlockPos(), SoundEvents.LEVER_CLICK,
                     SoundSource.BLOCKS, ThrottleMotion.SOUND_VOLUME, ThrottleMotion.pitchForGear(be.throttleGear));
+        }
+    }
+
+    /**
+     * 油门2（总距杆）角度推进（数值层，角度 0..{@link Throttle2Motion#MAX_DEG}）：
+     * <ul>
+     *   <li>上台键按住按满偏时间（{@link #getThrottle2FreeSpeed}，默认 20 tick，可经 Throttle2ModuleScreen 配置）线性累加到满偏 +30°；下拉键按住同样步进回到底端 0°；</li>
+     *   <li>无输入（或同时按）：<b>回正开关开启</b>（{@link #isThrottle2ReturnEnabled}）时按回正时间
+     *       （{@link #getThrottle2ReturnTime}，默认 2 tick，0 = 关闭回正）线性回到<b>中位 15°</b>
+     *       （{@link Throttle2Motion#NEUTRAL_DEG}，用户定稿）；回正开关关闭时<b>锁存</b>保持当前角度
+     *       （总距杆机械锁存，与 throttle 档位一致）。</li>
+     * </ul>
+     * 角度变化时广播。
+     */
+    private static void simulateThrottle2(ControlDeskBlockEntity be) {
+        boolean up = be.inputThrottle2Up;
+        boolean down = be.inputThrottle2Down;
+        float newAngle = be.throttle2Angle;
+        if (up != down) {
+            float step = Throttle2Motion.MAX_DEG / Math.max(1, be.throttle2FreeSpeed); // 每 tick 角度步进
+            newAngle = be.throttle2Angle + (up ? step : -step);
+            newAngle = Math.max(0f, Math.min(Throttle2Motion.MAX_DEG, newAngle));
+        } else if (be.throttle2ReturnEnabled && be.throttle2ReturnTime > 0) {
+            // 回正开启：无输入 → 按回正时间线性回到中位 15°（从中位偏离处计步进）
+            float step = Throttle2Motion.NEUTRAL_DEG / Math.max(1, be.throttle2ReturnTime);
+            if (be.throttle2Angle > Throttle2Motion.NEUTRAL_DEG) {
+                newAngle = Math.max(Throttle2Motion.NEUTRAL_DEG, be.throttle2Angle - step);
+            } else if (be.throttle2Angle < Throttle2Motion.NEUTRAL_DEG) {
+                newAngle = Math.min(Throttle2Motion.NEUTRAL_DEG, be.throttle2Angle + step);
+            }
+        }
+        // 回正关闭且无输入 → 锁存（newAngle 保持原值）
+        if (newAngle != be.throttle2Angle) {
+            be.throttle2Angle = newAngle;
+            be.notifyChange();
         }
     }
 
@@ -1591,6 +1744,58 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         notifyChange();
     }
 
+    public String getThrottle2KeyUp() {
+        return throttle2KeyUp;
+    }
+
+    public String getThrottle2KeyDown() {
+        return throttle2KeyDown;
+    }
+
+    /** 设置油门2 上台/下拉按键（InputConstants.Key.getName() 格式，空串 = 未绑定）。服务端调用。 */
+    public void setThrottle2Keys(String up, String down) {
+        String u = up == null ? "" : up;
+        String d = down == null ? "" : down;
+        if (Objects.equals(throttle2KeyUp, u) && Objects.equals(throttle2KeyDown, d)) {
+            return;
+        }
+        throttle2KeyUp = u;
+        throttle2KeyDown = d;
+        notifyChange();
+    }
+
+    /** 油门2 满偏时间（tick）：按住满该 tick 数从最底端到满偏 +30°（速度 = 1/数值 每 tick）。 */
+    public int getThrottle2FreeSpeed() {
+        return throttle2FreeSpeed;
+    }
+
+    /** 设置油门2 满偏时间（tick），钳位到 [MIN, MAX]。服务端调用。 */
+    public void setThrottle2FreeSpeed(int ticks) {
+        int clamped = Math.max(MIN_THROTTLE_2_FREE_SPEED, Math.min(MAX_THROTTLE_2_FREE_SPEED, ticks));
+        if (throttle2FreeSpeed == clamped) return;
+        throttle2FreeSpeed = clamped;
+        notifyChange();
+    }
+
+    /** 油门2 回正开关（默认关闭 = 锁存不回正；开启后松开按键回中位 15°）。 */
+    public boolean isThrottle2ReturnEnabled() {
+        return throttle2ReturnEnabled;
+    }
+
+    /** 油门2 回正时间（tick）：回正开关开启时，松开按键后线性回到中位 15° 所需 tick 数（0 = 关闭回正）。 */
+    public int getThrottle2ReturnTime() {
+        return throttle2ReturnTime;
+    }
+
+    /** 设置油门2 回正开关 + 回正时间（tick），回正时间钳位到 [MIN, MAX]。服务端调用。 */
+    public void setThrottle2Return(boolean enabled, int ticks) {
+        int clamped = Math.max(MIN_THROTTLE_2_RETURN_TIME, Math.min(MAX_THROTTLE_2_RETURN_TIME, ticks));
+        if (throttle2ReturnEnabled == enabled && throttle2ReturnTime == clamped) return;
+        throttle2ReturnEnabled = enabled;
+        throttle2ReturnTime = clamped;
+        notifyChange();
+    }
+
     // ════════════════════ NBT / 同步（Create 蓝图兼容） ════════════════════
 
     @Override
@@ -1601,10 +1806,13 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putBoolean(TAG_MONITOR_2, monitor2Installed);
         tag.putBoolean(TAG_THROTTLE, throttleInstalled);
         tag.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
+        tag.putBoolean(TAG_THROTTLE_2, throttle2Installed);
         tag.putInt(TAG_JOYSTICK_2_PLACE_X, joystick2PlaceX);
         tag.putInt(TAG_JOYSTICK_2_PLACE_Z, joystick2PlaceZ);
         tag.putInt(TAG_THROTTLE_PLACE_X, throttlePlaceX);
         tag.putInt(TAG_THROTTLE_PLACE_Z, throttlePlaceZ);
+        tag.putInt(TAG_THROTTLE_2_PLACE_X, throttle2PlaceX);
+        tag.putInt(TAG_THROTTLE_2_PLACE_Z, throttle2PlaceZ);
         tag.putInt(TAG_MONITOR_2_PLACE_X, monitor2PlaceX);
         tag.putInt(TAG_MONITOR_2_PLACE_Z, monitor2PlaceZ);
         tag.putInt(TAG_BACK_SLOT_ROTATION, backSlotRotation);
@@ -1641,6 +1849,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_THROTTLE_KEY_FORWARD, throttleKeyForward);
         tag.putString(TAG_THROTTLE_KEY_BACK, throttleKeyBack);
         tag.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
+        tag.putString(TAG_THROTTLE_2_KEY_UP, throttle2KeyUp);
+        tag.putString(TAG_THROTTLE_2_KEY_DOWN, throttle2KeyDown);
+        tag.putInt(TAG_THROTTLE_2_FREE_SPEED, throttle2FreeSpeed);
+        tag.putBoolean(TAG_THROTTLE_2_RETURN_ENABLED, throttle2ReturnEnabled);
+        tag.putInt(TAG_THROTTLE_2_RETURN_TIME, throttle2ReturnTime);
         tag.putInt(TAG_CHANNEL, channel);
         tag.putIntArray(TAG_OCCUPIED_CHANNELS, occupiedChannels);
         // monitor_2 表面网格（仅安装 MONITOR_2 时保存；蓝图/存档可携带表面模块）
@@ -1657,6 +1870,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         monitor2Installed = tag.getBoolean(TAG_MONITOR_2);
         throttleInstalled = tag.getBoolean(TAG_THROTTLE);
         joystick2Installed = tag.getBoolean(TAG_JOYSTICK_2);
+        throttle2Installed = tag.getBoolean(TAG_THROTTLE_2);
         if (tag.contains(TAG_JOYSTICK_2_PLACE_X)) {
             joystick2PlaceX = tag.getInt(TAG_JOYSTICK_2_PLACE_X);
         }
@@ -1668,6 +1882,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         }
         if (tag.contains(TAG_THROTTLE_PLACE_Z)) {
             throttlePlaceZ = tag.getInt(TAG_THROTTLE_PLACE_Z);
+        }
+        if (tag.contains(TAG_THROTTLE_2_PLACE_X)) {
+            throttle2PlaceX = tag.getInt(TAG_THROTTLE_2_PLACE_X);
+        }
+        if (tag.contains(TAG_THROTTLE_2_PLACE_Z)) {
+            throttle2PlaceZ = tag.getInt(TAG_THROTTLE_2_PLACE_Z);
         }
         if (tag.contains(TAG_MONITOR_2_PLACE_X)) {
             monitor2PlaceX = tag.getInt(TAG_MONITOR_2_PLACE_X);
@@ -1725,6 +1945,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_THROTTLE_AXIS)) {
             throttleGear = Math.max(0, Math.min(ThrottleMotion.MAX_TRAVEL_PX,
                     Math.round(tag.getFloat(TAG_THROTTLE_AXIS) * ThrottleMotion.MAX_TRAVEL_PX)));
+        }
+        if (tag.contains(TAG_THROTTLE_2_ANGLE)) {
+            throttle2Angle = Math.max(0f, Math.min(Throttle2Motion.MAX_DEG, tag.getFloat(TAG_THROTTLE_2_ANGLE)));
         }
         if (tag.contains(TAG_JOYSTICK_KEY_UP)) {
             joystickKeyUp = tag.getString(TAG_JOYSTICK_KEY_UP);
@@ -1803,6 +2026,23 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             throttleTicksPerGear = Math.max(MIN_THROTTLE_TICKS_PER_GEAR,
                     Math.min(MAX_THROTTLE_TICKS_PER_GEAR, tag.getInt(TAG_THROTTLE_TICKS_PER_GEAR)));
         }
+        if (tag.contains(TAG_THROTTLE_2_KEY_UP)) {
+            throttle2KeyUp = tag.getString(TAG_THROTTLE_2_KEY_UP);
+        }
+        if (tag.contains(TAG_THROTTLE_2_KEY_DOWN)) {
+            throttle2KeyDown = tag.getString(TAG_THROTTLE_2_KEY_DOWN);
+        }
+        if (tag.contains(TAG_THROTTLE_2_FREE_SPEED)) {
+            throttle2FreeSpeed = Math.max(MIN_THROTTLE_2_FREE_SPEED,
+                    Math.min(MAX_THROTTLE_2_FREE_SPEED, tag.getInt(TAG_THROTTLE_2_FREE_SPEED)));
+        }
+        if (tag.contains(TAG_THROTTLE_2_RETURN_ENABLED)) {
+            throttle2ReturnEnabled = tag.getBoolean(TAG_THROTTLE_2_RETURN_ENABLED);
+        }
+        if (tag.contains(TAG_THROTTLE_2_RETURN_TIME)) {
+            throttle2ReturnTime = Math.max(MIN_THROTTLE_2_RETURN_TIME,
+                    Math.min(MAX_THROTTLE_2_RETURN_TIME, tag.getInt(TAG_THROTTLE_2_RETURN_TIME)));
+        }
         if (tag.contains(TAG_CHANNEL)) {
             channel = tag.getInt(TAG_CHANNEL);
         }
@@ -1822,8 +2062,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putBoolean(TAG_MONITOR_2, monitor2Installed);
         compound.putBoolean(TAG_THROTTLE, throttleInstalled);
         compound.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
+        compound.putBoolean(TAG_THROTTLE_2, throttle2Installed);
         compound.putInt(TAG_JOYSTICK_2_PLACE_X, joystick2PlaceX);
         compound.putInt(TAG_JOYSTICK_2_PLACE_Z, joystick2PlaceZ);
+        compound.putInt(TAG_THROTTLE_2_PLACE_X, throttle2PlaceX);
+        compound.putInt(TAG_THROTTLE_2_PLACE_Z, throttle2PlaceZ);
         compound.putInt(TAG_THROTTLE_PLACE_X, throttlePlaceX);
         compound.putInt(TAG_THROTTLE_PLACE_Z, throttlePlaceZ);
         compound.putInt(TAG_MONITOR_2_PLACE_X, monitor2PlaceX);
@@ -1862,6 +2105,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putString(TAG_THROTTLE_KEY_FORWARD, throttleKeyForward);
         compound.putString(TAG_THROTTLE_KEY_BACK, throttleKeyBack);
         compound.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
+        compound.putString(TAG_THROTTLE_2_KEY_UP, throttle2KeyUp);
+        compound.putString(TAG_THROTTLE_2_KEY_DOWN, throttle2KeyDown);
+        compound.putInt(TAG_THROTTLE_2_FREE_SPEED, throttle2FreeSpeed);
+        compound.putBoolean(TAG_THROTTLE_2_RETURN_ENABLED, throttle2ReturnEnabled);
+        compound.putInt(TAG_THROTTLE_2_RETURN_TIME, throttle2ReturnTime);
         // 频道是配置（蓝图可分享）；OccupiedChannels 是运行时快照，不写 Safe NBT
         compound.putInt(TAG_CHANNEL, channel);
         // monitor_2 表面网格：蓝图可携带表面模块（对齐 Monitor 的 GridState 走 saveAdditional）
@@ -1878,10 +2126,13 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putBoolean(TAG_MONITOR_2, monitor2Installed);
         tag.putBoolean(TAG_THROTTLE, throttleInstalled);
         tag.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
+        tag.putBoolean(TAG_THROTTLE_2, throttle2Installed);
         tag.putInt(TAG_JOYSTICK_2_PLACE_X, joystick2PlaceX);
         tag.putInt(TAG_JOYSTICK_2_PLACE_Z, joystick2PlaceZ);
         tag.putInt(TAG_THROTTLE_PLACE_X, throttlePlaceX);
         tag.putInt(TAG_THROTTLE_PLACE_Z, throttlePlaceZ);
+        tag.putInt(TAG_THROTTLE_2_PLACE_X, throttle2PlaceX);
+        tag.putInt(TAG_THROTTLE_2_PLACE_Z, throttle2PlaceZ);
         tag.putInt(TAG_MONITOR_2_PLACE_X, monitor2PlaceX);
         tag.putInt(TAG_MONITOR_2_PLACE_Z, monitor2PlaceZ);
         tag.putInt(TAG_BACK_SLOT_ROTATION, backSlotRotation);
@@ -1903,6 +2154,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putFloat(TAG_PEDAL_RIGHT_AXIS, pedalRightAxis);
         // 运行时油门轴（服务端权威）：同上（档位 / MAX_TRAVEL_PX，客户端 loadAdditional 换算回档位）
         tag.putFloat(TAG_THROTTLE_AXIS, getThrottleAxis());
+        // 运行时油门2 角度（服务端权威）：同上（0..MAX_DEG，客户端 loadAdditional contains 守卫读）
+        tag.putFloat(TAG_THROTTLE_2_ANGLE, throttle2Angle);
         tag.putString(TAG_JOYSTICK_KEY_UP, joystickKeyUp);
         tag.putString(TAG_JOYSTICK_KEY_DOWN, joystickKeyDown);
         tag.putString(TAG_JOYSTICK_KEY_LEFT, joystickKeyLeft);
@@ -1928,6 +2181,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_THROTTLE_KEY_FORWARD, throttleKeyForward);
         tag.putString(TAG_THROTTLE_KEY_BACK, throttleKeyBack);
         tag.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
+        tag.putString(TAG_THROTTLE_2_KEY_UP, throttle2KeyUp);
+        tag.putString(TAG_THROTTLE_2_KEY_DOWN, throttle2KeyDown);
+        tag.putInt(TAG_THROTTLE_2_FREE_SPEED, throttle2FreeSpeed);
+        tag.putBoolean(TAG_THROTTLE_2_RETURN_ENABLED, throttle2ReturnEnabled);
+        tag.putInt(TAG_THROTTLE_2_RETURN_TIME, throttle2ReturnTime);
         tag.putInt(TAG_CHANNEL, channel);
         tag.putIntArray(TAG_OCCUPIED_CHANNELS, occupiedChannels);
         // monitor_2 表面网格：随 BE 更新包同步（客户端读取后即可渲染表面模块）

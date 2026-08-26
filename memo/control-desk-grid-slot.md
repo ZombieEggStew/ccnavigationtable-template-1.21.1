@@ -2,7 +2,7 @@
 
 > 记录 controlDesk 桌顶「棋盘网格」自由放置系统的**设计与实现**，作为后续添加新模块（throttle / monitor_2 / 新控件）的参考。
 > **背景**：monitor_2 / throttle / joystick_2 原本共用桌体后缘上方插槽（`BACK_SLOT`，整宽一条、互斥安装）——该插槽已**整体移除**，改为在桌顶显示 6×14 的 1px 棋盘网格，模块自由放置（先做显示，放置逻辑逐步落地）。
-> 本文描述的状态：**joystick_2 已完整接入**（预览 → 放置 → 存储 → 渲染 → 拆除 → 占用阻挡；**输入检测 + 倾斜动画已接入**，照抄 joystick 模块、配置/轴值独立，见 `memo/control-desk-seat.md`）；**throttle 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，只能 0°/180° 旋转）；**monitor_2 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，预览框高 12，**不面向玩家**只随桌体 FACING 旋转）。三者互斥已全部改为纯占地判定。
+> 本文描述的状态：**joystick_2 已完整接入**（预览 → 放置 → 存储 → 渲染 → 拆除 → 占用阻挡；**输入检测 + 倾斜动画已接入**，照抄 joystick 模块、配置/轴值独立，见 `memo/control-desk-seat.md`）；**throttle 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，只能 0°/180° 旋转）；**monitor_2 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，预览框高 12，**不面向玩家**只随桌体 FACING 旋转）；**throttle_2 已接入放置/拆卸/静态渲染**（占地 14×6 → 唯一合法位 (8,12)，预览框高 6，安装朝向照抄 throttle 只能 0°/180°，模型旋转中心 (8,0,8)；输入检测/档位动画/配置 GUI/Lua 后续接入）。四者互斥已全部改为纯占地判定。
 
 ## 一句话
 
@@ -31,6 +31,11 @@
 | `THROTTLE_PLACE_Y_TOP` | 13f | throttle 预览盒顶 y（高 6） |
 | `THROTTLE_MODEL_CENTER` | 8f | throttle 模型默认中心 x/z（Blockbench 中模型 x0.99..15.01 / z4.99..11.01 → 8） |
 | `THROTTLE_PLACE_X / _Z` | 8 / 12 | throttle **唯一合法放置中心**（14×6 全占网格 x1..15 / z9..15） |
+| `THROTTLE_2_FOOTPRINT_HALF_X / _Z` | 7 / 3 | throttle_2 占地半宽（14×6 → x±7 / z±3，与 throttle 同尺寸）；预览盒与占用阻挡共用 |
+| `THROTTLE_2_PLACE_Y_BOTTOM` | 7f | throttle_2 **预览盒底 y**（下沉 1px 嵌入桌面示意） |
+| `THROTTLE_2_PLACE_Y_TOP` | 13f | throttle_2 预览盒顶 y（高 6，与 throttle 相同） |
+| `THROTTLE_2_MODEL_CENTER` | 8f | throttle_2 模型默认中心 x/z（Blockbench 旋转中心 (8,0,8) → 8） |
+| `THROTTLE_2_PLACE_X / _Z` | 8 / 12 | throttle_2 **唯一合法放置中心**（14×6 全占网格） |
 | `MONITOR_2_FOOTPRINT_HALF_X / _Z` | 7 / 3 | monitor_2 占地半宽（14×6 → x±7 / z±3）；预览盒与占用阻挡共用 |
 | `MONITOR_2_PLACE_Y_BOTTOM` | 7f | monitor_2 **预览盒底 y**（下沉 1px 嵌入桌面示意） |
 | `MONITOR_2_PLACE_Y_TOP` | 19f | monitor_2 预览盒顶 y（高 12） |
@@ -138,6 +143,8 @@ shift = ( (placeX-8)/16, (8-0)/16, (placeZ-8)/16 )   // 模型坐桌面 y8（MOD
 
 - ✅ joystick_2 完整接入：桌顶网格 + 4×9×4 预览盒 + 半透明实物 + 位置存储/渲染 + 4×4 占用阻挡 + 扳手拆除 + **输入检测/倾斜动画**（照抄 joystick，配置/轴值独立，枢轴 (8,1,8)，见 `memo/control-desk-seat.md`）
 - ✅ throttle 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×6 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + 只能 0°/180° 旋转 + 14×6 占用阻挡 + 扳手拆除
+- 🔶 throttle_2 已接入放置/拆卸/静态渲染：占地 14×6 → 唯一合法位 (8,12) + 14×6×6 预览盒（固定位置）+ 半透明实物 + 位置存储/静态渲染（底座+手柄，安装朝向照抄 throttle 只能 0°/180°）+ 14×6 占用阻挡 + 扳手拆除；模型旋转中心 (8,0,8)（Blockbench 单位）；**输入检测 / 档位动画 / 配置 GUI / Lua 后续接入**
+- 🔶 throttle_2 输入 + 总距杆动画已接入（见 `memo/control-desk-seat.md`）：写死键 空格=上台 / 左Ctrl=下拉（与 throttle 默认键相同但输入字段独立 `inputThrottle2Up/Down`，`SeatInputPayload` 扩到 13 字段）；数值 = BE `throttle2Angle`（0..+30°，服务端权威，`simulateThrottle2` 每 tick 线性累加 15°/tick、锁存不回正，`getUpdatePacket` 同步）；动画 = 手柄绕枢轴 (4,2,8) 旋转（`Throttle2Motion` 单一实现，Flywheel/BER 指数逼近）
 - ✅ monitor_2 完整接入（已进游戏验证）：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×12 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + **不面向玩家**（仅随桌体 FACING）+ 14×6 占用阻挡 + 扳手拆除
 - ✅ **monitor_2 表面小 Monitor（完整接入：网格 + 放置 + 交互 + 渲染 + Lua；Lua 全链路已进游戏验证通过）**：
   - **网格**：10×8 格（屏幕面 12×10 内缩 1px，`MONITOR_2_GRID_WIDTH/HEIGHT`），**GridState 已参数化**（构造器传宽高，Monitor 保持 12×10 / monitor_2 用 10×8，`getWidth/getHeight`）
@@ -149,7 +156,7 @@ shift = ( (placeX-8)/16, (8-0)/16, (placeZ-8)/16 )   // 模型坐桌面 y8（MOD
   - **9 宫格/模块表面装饰走共享类**：`ControlDeskRenderer` 与 `MonitorRenderer` 共用 `Screen9GridRenderer`（`ScreenPlane` 接口提供屏幕面起点/z，统一块单位——monitor_2 不再有 px 换算，防「只改一半」类 bug）与 `ModuleSurfaceRenderer`（`KnobDisplaySource.MONITOR_2` 包 `Monitor2GridOverlay.getActiveKnobAngle`/`getHoveredKnobModuleId`）
   - **Lua**：`ControlDeskPeripheral.getModule("monitor")` → `MonitorPeripheral`（type = `"ccpe:monitor_2"`，宿主参数化为 `MonitorGridHost`，方法与 Monitor 外设完全同款）→ `getCellModule(x,y)` / `getModule(id)` 返回模块/屏幕 handle（复用 `ModuleHandleRegistry`；`ModuleHandle` 系列绑定 `MonitorGridHost` 接口，Monitor 与 monitor_2 共用同一套 handle）；另有快捷入口 `getMonitor2Module(id)` / `getMonitor2CellModule(x,y)`
 - ✅ **monitor_2 命中检测对齐 Monitor 独立命中**：`Monitor2HitDetector` 不依赖原版 `mc.hitResult`（monitor_2 屏幕在桌面碰撞体上方，准星瞄准屏幕时原版可能 MISS），遍历 `ControlDeskClientRegistry`（客户端已加载控制台坐标注册表，`ControlDeskBlockEntity.onLoad/setRemoved/onChunkUnloaded` 维护）枚举候选，用玩家视线射线 + monitor_2 屏幕面实时变换（facing逆 → shift逆 → case 22.5° 逆，严格互逆于 `monitor2World`）做屏幕面板正面求交 + 背面剔除 + **落点屏幕面范围检查（`isOnScreen`，对齐 Monitor 的 `isOnPanel`）** + 遮挡检测（`ClipContext.COLLIDER`，**排除 controlDesk 自身方块**），取最近命中；Sable 子次元兼容（射线回投 plot 坐标）。**修复记录见文末「monitor_2 命中判定两处缺陷」**
-- 三个自由放置模块互斥已全部改为纯占地判定（monitor_2 / throttle 同占 (8,12) → 天然互斥；joystick_2 网格内也与两者重叠）
+- 三个自由放置模块互斥已全部改为纯占地判定（monitor_2 / throttle 同占 (8,12) → 天然互斥；joystick_2 网格内也与两者重叠）——throttle_2 与 throttle / monitor_2 同为 14×6 全占 (8,12)，天然互斥
 - 网格线是纯显示层（Outliner），逻辑全部基于放置中心 + 占地矩形
 - 安装位置 = 服务端对**右键命中点**吸附（与客户端准星同射线）；多玩家极端场景如需精确可控，可改客户端发 payload（对齐 Monitor 的 PlaceModulePayload 模式）
 - **预览盒下沉 1px、模型坐桌面**：预览盒/拆除盒底 y7（嵌入桌面示意），**模型实装与 ghost 底 y8（坐于桌面不下沉，`MODEL_PLACE_Y`）**；网格线在桌顶面（y8，+0.06 防 z-fight），不下沉

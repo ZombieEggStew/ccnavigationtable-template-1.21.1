@@ -13,6 +13,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  *   <li>{@link Joystick2ConfigPayload} — 客户端→服务端：保存摇杆2 配置（字段与操纵杆相同，独立于 joystick）</li>
  *   <li>{@link PedalConfigPayload} — 客户端→服务端：保存脚踏板配置（回正时间 + 四向按键）</li>
  *   <li>{@link ThrottleConfigPayload} — 客户端→服务端：保存油门杆配置（前进/后退按键）</li>
+ *   <li>{@link Throttle2ConfigPayload} — 客户端→服务端：保存油门2（总距杆）配置（上台/下拉按键 + 满偏时间）</li>
  *   <li>{@link SeatInputPayload} — 客户端→服务端（运行时每 tick）：坐垫操作输入，服务端校验后驱动 BE 轴状态</li>
  * </ul>
  */
@@ -94,6 +95,20 @@ public final class ControlDeskPacketHandlers {
                 }
         );
 
+        // 客户端→服务端：保存 controlDesk 油门2（总距杆）配置（上台/下拉按键 + 满偏时间 + 回正开关/时间；服务端权威 + 落盘 + 蓝图兼容）
+        registrar.playToServer(
+                Throttle2ConfigPayload.TYPE,
+                Throttle2ConfigPayload.STREAM_CODEC,
+                (payload, ctx) -> {
+                    var be = PacketHelper.findBE(ctx.player().level(), payload.pos(), ControlDeskBlockEntity.class);
+                    if (be != null) {
+                        be.setThrottle2Keys(payload.up(), payload.down());
+                        be.setThrottle2FreeSpeed(payload.freeSpeed());
+                        be.setThrottle2Return(payload.returnEnabled(), payload.returnTime());
+                    }
+                }
+        );
+
         // 客户端→服务端（运行时每 tick）：坐垫操作输入 → 服务端权威驱动操纵杆轴状态 / 踏板压下值
         // 校验：玩家确实骑乘在该坐垫上（防作弊/异常）；联动控制台由坐垫四邻现查（判定①）
         registrar.playToServer(
@@ -109,12 +124,14 @@ public final class ControlDeskPacketHandlers {
                         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
                                 || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
                                 || desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
-                                || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
+                                || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
+                                || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)) {
                             desk.setSeatInput(player.getUUID(), payload.seatPos(),
                                     payload.up(), payload.down(), payload.left(), payload.right(),
                                     payload.pedalLeftDown(), payload.pedalLeftUp(),
                                     payload.pedalRightDown(), payload.pedalRightUp(),
-                                    payload.throttleForward(), payload.throttleBack());
+                                    payload.throttleForward(), payload.throttleBack(),
+                                    payload.throttle2Up(), payload.throttle2Down());
                         }
                     }
                 }

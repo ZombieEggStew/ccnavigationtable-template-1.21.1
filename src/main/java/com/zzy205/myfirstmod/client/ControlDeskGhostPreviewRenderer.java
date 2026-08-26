@@ -77,6 +77,11 @@ public class ControlDeskGhostPreviewRenderer {
             modelCenter = ControlDeskBlockEntity.THROTTLE_MODEL_CENTER;
             halfX = ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X;
             halfZ = ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z;
+        } else if (type == ControlDeskBlockEntity.ControlType.THROTTLE_2) {
+            box = new int[]{ControlDeskBlockEntity.THROTTLE_2_PLACE_X, ControlDeskBlockEntity.THROTTLE_2_PLACE_Z};
+            modelCenter = ControlDeskBlockEntity.THROTTLE_2_MODEL_CENTER;
+            halfX = ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_X;
+            halfZ = ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_Z;
         } else if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
             box = new int[]{ControlDeskBlockEntity.MONITOR_2_PLACE_X, ControlDeskBlockEntity.MONITOR_2_PLACE_Z};
             modelCenter = ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER;
@@ -103,7 +108,8 @@ public class ControlDeskGhostPreviewRenderer {
         int previewRot = switch (type) {
             // joystick_2 在「-Z 面向玩家」基础上加固定 +90° 偏移（模型默认朝向差 90°，见 rotationToFace2）
             case JOYSTICK_2 -> ControlDeskBlockEntity.rotationToFace2(facing, toPlayer);
-            case THROTTLE -> ControlDeskBlockEntity.rotationToFace180(facing, toPlayer);
+            // throttle / throttle_2 只能 0°/180°（照抄 throttle）
+            case THROTTLE, THROTTLE_2 -> ControlDeskBlockEntity.rotationToFace180(facing, toPlayer);
             default -> 0;
         };
         float boxX = box != null ? box[0] / 16f : 0f;
@@ -150,6 +156,9 @@ public class ControlDeskGhostPreviewRenderer {
                     MyModPartialModels.CONTROL_DESK_THROTTLE_BASE,
                     MyModPartialModels.CONTROL_DESK_THROTTLE_HANDLE,
                     MyModPartialModels.CONTROL_DESK_THROTTLE_INDICATOR};
+            case THROTTLE_2 -> new PartialModel[]{
+                    MyModPartialModels.CONTROL_DESK_THROTTLE_2_BASE,
+                    MyModPartialModels.CONTROL_DESK_THROTTLE_2_HANDLE};
             case JOYSTICK_2 -> new PartialModel[]{
                     MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE,
                     MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE};
