@@ -213,7 +213,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
                 });
 
         // throttle_2：底座静态 + 手柄绕枢轴 (4,2,8) 旋转（总距杆类型，见 Throttle2Motion）；
-        // 数值 = 服务端权威角度（0..+30°，空格上台 / 左Ctrl 下拉，锁存不回正），动画层指数逼近
+        // 数值 = 服务端权威角度（0..+30°，空格上抬 / 左Ctrl 下拉，锁存不回正），动画层指数逼近
         this.throttle2Base = syncInstance(this.throttle2Base, throttle2Wanted, MyModPartialModels.CONTROL_DESK_THROTTLE_2_BASE, facing,
                 inst -> applyThrottle2Placement(inst, be));
         float throttle2Target = Throttle2Motion.targetDeg(be);

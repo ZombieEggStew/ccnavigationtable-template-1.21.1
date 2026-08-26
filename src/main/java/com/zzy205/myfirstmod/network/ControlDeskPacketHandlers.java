@@ -13,7 +13,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  *   <li>{@link Joystick2ConfigPayload} — 客户端→服务端：保存摇杆2 配置（字段与操纵杆相同，独立于 joystick）</li>
  *   <li>{@link PedalConfigPayload} — 客户端→服务端：保存脚踏板配置（回正时间 + 四向按键）</li>
  *   <li>{@link ThrottleConfigPayload} — 客户端→服务端：保存油门杆配置（前进/后退按键）</li>
- *   <li>{@link Throttle2ConfigPayload} — 客户端→服务端：保存油门2（总距杆）配置（上台/下拉按键 + 满偏时间）</li>
+ *   <li>{@link Throttle2ConfigPayload} — 客户端→服务端：保存油门2（总距杆）配置（上抬/下拉按键 + 满偏时间）</li>
  *   <li>{@link SeatInputPayload} — 客户端→服务端（运行时每 tick）：坐垫操作输入，服务端校验后驱动 BE 轴状态</li>
  * </ul>
  */
@@ -95,7 +95,7 @@ public final class ControlDeskPacketHandlers {
                 }
         );
 
-        // 客户端→服务端：保存 controlDesk 油门2（总距杆）配置（上台/下拉按键 + 满偏时间 + 回正开关/时间；服务端权威 + 落盘 + 蓝图兼容）
+        // 客户端→服务端：保存 controlDesk 油门2（总距杆）配置（上抬/下拉按键 + 满偏时间 + 回正开关/时间；服务端权威 + 落盘 + 蓝图兼容）
         registrar.playToServer(
                 Throttle2ConfigPayload.TYPE,
                 Throttle2ConfigPayload.STREAM_CODEC,

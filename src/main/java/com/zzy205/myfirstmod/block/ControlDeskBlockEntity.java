@@ -103,7 +103,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     public static final String DEFAULT_THROTTLE_KEY_FORWARD = "key.keyboard.space";
     public static final String DEFAULT_THROTTLE_KEY_BACK = "key.keyboard.left.control";
 
-    /** 油门2 上台/下拉按键默认值（InputConstants.Key.getName() 格式；空串 = 未绑定）：空格 = 上台（角度 +）/ 左Ctrl = 下拉（角度 -），见 {@link Throttle2Motion}。 */
+    /** 油门2 上抬/下拉按键默认值（InputConstants.Key.getName() 格式；空串 = 未绑定）：空格 = 上抬（角度 +）/ 左Ctrl = 下拉（角度 -），见 {@link Throttle2Motion}。 */
     public static final String DEFAULT_THROTTLE_2_KEY_UP = "key.keyboard.space";
     public static final String DEFAULT_THROTTLE_2_KEY_DOWN = "key.keyboard.left.control";
 
@@ -235,7 +235,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private float pedalRightAxis;  // 右踏板轴（-1..1，运行时）
     private int throttleGear;          // 油门档位（0..MAX_TRAVEL_PX，运行时）：0 = 最低档（底端，-x 端），1px = 1 档，锁存不回正
     private int throttleChargeTicks;   // 档位切换充电（0..throttleTicksPerGear，按住满 N tick 进/退一档，N 可配置）
-    /** 油门2 角度（0..Throttle2Motion.MAX_DEG，运行时）：0 = 最底端（放置默认），+MAX = 上台满偏（总距杆单边行程）；锁存不回正 */
+    /** 油门2 角度（0..Throttle2Motion.MAX_DEG，运行时）：0 = 最底端（放置默认），+MAX = 上抬满偏（总距杆单边行程）；锁存不回正 */
     private float throttle2Angle;
     // 输入租约：最近一次操作输入（玩家 + 坐垫 + 操纵杆四方向 + 踏板四键 + 油门两键按住态）；服务端每 tick 校验租约并模拟动力学
     private UUID inputPlayer;
@@ -247,7 +247,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private boolean prev2Up, prev2Down, prev2Left, prev2Right;
     private boolean inputPedalLeftDown, inputPedalLeftUp, inputPedalRightDown, inputPedalRightUp;
     private boolean inputThrottleForward, inputThrottleBack;
-    // 油门2 输入租约（与油门独立：写死 空格=上台 / 左Ctrl=下拉，见 Throttle2Motion；油门可配置键、油门2 写死键，两者可分别安装在不同控制台）
+    // 油门2 输入租约（与油门独立：写死 空格=上抬 / 左Ctrl=下拉，见 Throttle2Motion；油门可配置键、油门2 写死键，两者可分别安装在不同控制台）
     private boolean inputThrottle2Up, inputThrottle2Down;
     private String joystickKeyUp = DEFAULT_JOYSTICK_KEY_UP;
     private String joystickKeyDown = DEFAULT_JOYSTICK_KEY_DOWN;
@@ -262,7 +262,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private String throttleKeyForward = DEFAULT_THROTTLE_KEY_FORWARD; // 油门杆 前进键（模型空间 +x，空串 = 未绑定）
     private String throttleKeyBack = DEFAULT_THROTTLE_KEY_BACK;      // 油门杆 后退键（模型空间 -x，空串 = 未绑定）
     private int throttleTicksPerGear = DEFAULT_THROTTLE_TICKS_PER_GEAR; // 档位切换节奏（tick）：按住满 N tick 进/退一档
-    private String throttle2KeyUp = DEFAULT_THROTTLE_2_KEY_UP;       // 油门2 上台键（角度 +，空串 = 未绑定）
+    private String throttle2KeyUp = DEFAULT_THROTTLE_2_KEY_UP;       // 油门2 上抬键（角度 +，空串 = 未绑定）
     private String throttle2KeyDown = DEFAULT_THROTTLE_2_KEY_DOWN;   // 油门2 下拉键（角度 -，空串 = 未绑定）
     private int throttle2FreeSpeed = DEFAULT_THROTTLE_2_FREE_SPEED;   // 油门2 满偏时间（tick）：按住满 N tick 从底端到满偏 +30°
     /** 油门2 回正开关（默认关闭 = 锁存不回正）：开启后松开按键按回正时间线性回到中位 15°（见 {@link Throttle2Motion#NEUTRAL_DEG}） */
@@ -1205,12 +1205,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return inputThrottleBack;
     }
 
-    /** 油门2 角度（0..{@link Throttle2Motion#MAX_DEG}，运行时）：0 = 最底端（放置默认），+MAX = 上台满偏（总距杆单边行程，服务端权威）。 */
+    /** 油门2 角度（0..{@link Throttle2Motion#MAX_DEG}，运行时）：0 = 最底端（放置默认），+MAX = 上抬满偏（总距杆单边行程，服务端权威）。 */
     public float getThrottle2Angle() {
         return throttle2Angle;
     }
 
-    /** 设置油门2 角度（度），钳位到 [0, MAX_DEG]。服务端调用（Lua setThrottle2Angle 走这里，服务端权威 + 广播）。 */
+    /** 设置油门2 角度（度），钳位到 [0, MAX_DEG]。服务端调用（Lua setAngle 走这里，服务端权威 + 广播）。 */
     public void setThrottle2Angle(float degrees) {
         float clamped = Math.max(0f, Math.min(Throttle2Motion.MAX_DEG, degrees));
         if (throttle2Angle == clamped) return;
@@ -1218,7 +1218,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         notifyChange();
     }
 
-    /** 油门2 上台键（空格）是否有按键动作（原始值，服务端输入租约）。 */
+    /** 油门2 上抬键（空格）是否有按键动作（原始值，服务端输入租约）。 */
     public boolean isThrottle2UpActive() {
         return inputThrottle2Up;
     }
@@ -1232,7 +1232,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
      * 写入坐垫操作输入（运行时，服务端调用；按玩家/坐垫租约记录，租约变化时重置边沿历史，
      * 避免换人/换坐垫后第一次按键不触发档位边沿）。
      * 参数 = 操纵杆四方向按住态 + 踏板四键按住态（踩下/抬起）+ 油门两键按住态（前进/后退）
-     * + 油门2 两键按住态（上台/下拉，写死键，独立于油门）；
+     * + 油门2 两键按住态（上抬/下拉，写死键，独立于油门）；
      * 同一份方向输入同时写入摇杆2 租约（{@code input2*} / {@code prev2*}，两控件可同时安装、各自模拟）。
      */
     public void setSeatInput(UUID player, BlockPos seatPos,
@@ -1461,7 +1461,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /**
      * 油门2（总距杆）角度推进（数值层，角度 0..{@link Throttle2Motion#MAX_DEG}）：
      * <ul>
-     *   <li>上台键按住按满偏时间（{@link #getThrottle2FreeSpeed}，默认 20 tick，可经 Throttle2ModuleScreen 配置）线性累加到满偏 +30°；下拉键按住同样步进回到底端 0°；</li>
+     *   <li>上抬键按住按满偏时间（{@link #getThrottle2FreeSpeed}，默认 20 tick，可经 Throttle2ModuleScreen 配置）线性累加到满偏 +30°；下拉键按住同样步进回到底端 0°；</li>
      *   <li>无输入（或同时按）：<b>回正开关开启</b>（{@link #isThrottle2ReturnEnabled}）时按回正时间
      *       （{@link #getThrottle2ReturnTime}，默认 2 tick，0 = 关闭回正）线性回到<b>中位 15°</b>
      *       （{@link Throttle2Motion#NEUTRAL_DEG}，用户定稿）；回正开关关闭时<b>锁存</b>保持当前角度
@@ -1752,7 +1752,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return throttle2KeyDown;
     }
 
-    /** 设置油门2 上台/下拉按键（InputConstants.Key.getName() 格式，空串 = 未绑定）。服务端调用。 */
+    /** 设置油门2 上抬/下拉按键（InputConstants.Key.getName() 格式，空串 = 未绑定）。服务端调用。 */
     public void setThrottle2Keys(String up, String down) {
         String u = up == null ? "" : up;
         String d = down == null ? "" : down;

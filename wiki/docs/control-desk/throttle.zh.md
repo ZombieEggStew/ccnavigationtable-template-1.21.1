@@ -30,7 +30,7 @@ local desk = pe.getPeripheral(4)
 local th = desk.getModule("throttle")   -- 未安装油门杆返回 nil
 ```
 
-### th.isThrottleForwardActive() / th.isThrottleBackActive()
+### th.isForwardActive() / th.isBackActive()
 
 前进 / 后退键按住时返回 `true`（原始输入，读服务端输入租约）。
 
@@ -42,12 +42,12 @@ local th = desk.getModule("throttle")   -- 未安装油门杆返回 nil
 print(th.getThrottleGear())   -- 0..11
 ```
 
-### th.getThrottleAxis()
+### th.getAxis()
 
 返回归一化的油门位置（数值，**0..1**）= 档位 / 最大行程：`0` = 最低档，`1` = 满前进。
 
 ```lua
-print(th.getThrottleAxis())   -- 0..1
+print(th.getAxis())   -- 0..1
 ```
 
 所有方法都是 `mainThread = false`（跑在 CC worker 线程），可以高频轮询。
@@ -61,7 +61,7 @@ local th = desk.getModule("throttle")
 
 while true do
     local gear = th.getThrottleGear()        -- 0..11
-    local throttle = th.getThrottleAxis()    -- 0..1
+    local throttle = th.getAxis()    -- 0..1
     print(("gear %d  throttle %.2f"):format(gear, throttle))
     os.sleep(0.05)
 end

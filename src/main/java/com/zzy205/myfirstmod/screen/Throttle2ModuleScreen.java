@@ -23,11 +23,11 @@ import org.jetbrains.annotations.Nullable;
  * 打开方式：控制台配置菜单点击已安装的油门2 行（由 {@link ControlDeskConfigScreen} 打开）。
  * 布局（自上而下）：
  * <ol>
- *   <li>上台/下拉按键绑定条（{@link DoubleInputBar}，上台 = 角度 + / 下拉 = 角度 -）</li>
+ *   <li>上抬/下拉按键绑定条（{@link DoubleInputBar}，上抬 = 角度 + / 下拉 = 角度 -）</li>
  *   <li>满偏时间条（{@link ScrollValueBar}，按住满 N tick 从最底端到满偏 +30°，默认 20）</li>
  *   <li>回正开关 + 回正时间条（{@link ToggleButton} + {@link ScrollValueBar}）：开启后松开按键按回正时间线性回到中位 15°（默认关闭 = 锁存不回正，回正时间默认 2 tick）</li>
  * </ol>
- * 上台/下拉按键 + 满偏时间 + 回正开关/时间均已持久化（BE NBT 四路径 + getUpdatePacket 同步；
+ * 上抬/下拉按键 + 满偏时间 + 回正开关/时间均已持久化（BE NBT 四路径 + getUpdatePacket 同步；
  * SeatControlListener 操作模式下读 BE 配置驱动油门2 角度）。
  */
 public class Throttle2ModuleScreen extends AbstractMonitorScreen {
@@ -44,7 +44,7 @@ public class Throttle2ModuleScreen extends AbstractMonitorScreen {
 
     // ── 横条布局（自上而下） ──
     private static final int BAR_TEX_H = 28;
-    private static final int KEY_BAR_Y = 18;                            // 1. 上台/下拉按键绑定条
+    private static final int KEY_BAR_Y = 18;                            // 1. 上抬/下拉按键绑定条
     private static final int FREE_SPEED_BAR_Y = KEY_BAR_Y + BAR_TEX_H;  // 2. 满偏时间条（按住满 N tick 到满偏）
     private static final int RETURN_BAR_Y = FREE_SPEED_BAR_Y + BAR_TEX_H; // 3. 回正开关 + 回正时间条
 
@@ -54,7 +54,7 @@ public class Throttle2ModuleScreen extends AbstractMonitorScreen {
     @Nullable
     private Screen returnScreen;
 
-    private DoubleInputBar inputBar;      // 1. 上台/下拉按键绑定条
+    private DoubleInputBar inputBar;      // 1. 上抬/下拉按键绑定条
     private ScrollValueBar freeSpeedBar;  // 2. 满偏时间条
     private ToggleButton returnToggle;    // 3. 回正开关（开启后松开按键回中位 15°）
     private ScrollValueBar returnBar;     // 3. 回正时间条
@@ -90,7 +90,7 @@ public class Throttle2ModuleScreen extends AbstractMonitorScreen {
             returnTime = desk.getThrottle2ReturnTime();
         }
 
-        // 1. 上台/下拉按键绑定条（上台 = 角度 + / 下拉 = 角度 -）
+        // 1. 上抬/下拉按键绑定条（上抬 = 角度 + / 下拉 = 角度 -）
         this.inputBar = new DoubleInputBar(
                 winLeft, winTop + KEY_BAR_Y, WIN_W, BAR_TEX_H, MyIcons.UP, MyIcons.DOWN)
                 .setLeftKey(keyUp).setRightKey(keyDown)
@@ -140,7 +140,7 @@ public class Throttle2ModuleScreen extends AbstractMonitorScreen {
 
     @Override
     public void onClose() {
-        // 上台/下拉按键 + 满偏时间 + 回正开关/时间写回服务端 BE（服务端权威：saveAdditional 落盘 + getUpdatePacket 同步 + 蓝图兼容）
+        // 上抬/下拉按键 + 满偏时间 + 回正开关/时间写回服务端 BE（服务端权威：saveAdditional 落盘 + getUpdatePacket 同步 + 蓝图兼容）
         PacketDistributor.sendToServer(new Throttle2ConfigPayload(deskPos,
                 inputBar.getLeftKey(), inputBar.getRightKey(),
                 freeSpeedBar.getValue(),

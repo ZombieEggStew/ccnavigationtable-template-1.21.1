@@ -9,7 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * 客户端→服务端：保存 controlDesk 的油门2（总距杆）配置。
- * 含上台/下拉按键绑定（InputConstants.Key.getName() 格式，空串 = 未绑定）+ 满偏时间
+ * 含上抬/下拉按键绑定（InputConstants.Key.getName() 格式，空串 = 未绑定）+ 满偏时间
  * （tick，按住满该 tick 数从最底端到满偏 +30°）+ 回正开关（开启后松开按键回中位 15°）
  * + 回正时间（tick，0 = 关闭回正）。
  * 与油门配置（{@link ThrottleConfigPayload}）分开，避免两模块屏幕互相覆盖对方的配置。

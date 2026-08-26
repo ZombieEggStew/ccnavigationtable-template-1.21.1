@@ -98,7 +98,7 @@
   "gui.ccpe.control_desk.throttle_ticks_per_gear": "档位切换节奏",
   "gui.ccpe.control_desk.throttle_ticks_per_gear_tip": "数值 = 按住前进/后退键切换一个档位所需 tick 数（20 tick = 1 秒，越小换挡越快）",
   "gui.ccpe.control_desk.throttle_2_free_speed": "满偏时间",
-  "gui.ccpe.control_desk.throttle_2_free_speed_tip": "数值 = 按住上台/下拉键从最底端到满偏所需 tick 数（20 tick = 1 秒，越小越快）",
+  "gui.ccpe.control_desk.throttle_2_free_speed_tip": "数值 = 按住上抬/下拉键从最底端到满偏所需 tick 数（20 tick = 1 秒，越小越快）",
   "gui.ccpe.control_desk.throttle_2_return": "回正",
   "gui.ccpe.control_desk.throttle_2_return_tip": "开启后松开按键自动回到中位（15°）",
   "gui.ccpe.control_desk.throttle_2_return_time": "回正时间",

@@ -24,11 +24,11 @@ public class Joystick2ModuleHandle {
      *
      * <pre>{@code
      * local joy2 = desk.getModule("joystick_2")
-     * print(joy2.isJoystick2XActive(), joy2.getJoystick2XSigned())
+     * print(joy2.isAxisXActive(), joy2.getAxisXSigned())
      * }</pre>
      */
     @LuaFunction
-    public final boolean isJoystick2XActive() {
+    public final boolean isAxisXActive() {
         return be.isJoystick2XActive();
     }
 
@@ -36,25 +36,25 @@ public class Joystick2ModuleHandle {
      * Y 轴（W/S）是否有按键动作：前/后方向键任一按住即 true。
      */
     @LuaFunction
-    public final boolean isJoystick2YActive() {
+    public final boolean isAxisYActive() {
         return be.isJoystick2YActive();
     }
 
     /**
      * X 轴模拟量幅度（0..1，=|轴值|）：+1 = 右摆满偏 / -1 = 左摆满偏，符号见
-     * {@link #getJoystick2XSigned}。
+     * {@link #getAxisXSigned}。
      */
     @LuaFunction
-    public final double getJoystick2X() {
+    public final double getAxisX() {
         return Math.abs(be.getJoystick2AxisX());
     }
 
     /**
      * Y 轴模拟量幅度（0..1，=|轴值|）：+1 = 前推满偏 / -1 = 后拉满偏，符号见
-     * {@link #getJoystick2YSigned}。
+     * {@link #getAxisYSigned}。
      */
     @LuaFunction
-    public final double getJoystick2Y() {
+    public final double getAxisY() {
         return Math.abs(be.getJoystick2AxisY());
     }
 
@@ -62,7 +62,7 @@ public class Joystick2ModuleHandle {
      * X 轴带符号轴值（-1..1）：+1 = 右摆(D) / -1 = 左摆(A)。
      */
     @LuaFunction
-    public final double getJoystick2XSigned() {
+    public final double getAxisXSigned() {
         return be.getJoystick2AxisX();
     }
 
@@ -70,7 +70,7 @@ public class Joystick2ModuleHandle {
      * Y 轴带符号轴值（-1..1）：+1 = 前推(W) / -1 = 后拉(S)。
      */
     @LuaFunction
-    public final double getJoystick2YSigned() {
+    public final double getAxisYSigned() {
         return be.getJoystick2AxisY();
     }
 }

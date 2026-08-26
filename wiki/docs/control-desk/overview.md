@@ -78,15 +78,17 @@ local joy   = desk.getModule("joystick")  -- nil if no joystick installed
 local th    = desk.getModule("throttle")  -- nil if no throttle installed
 ```
 
-`desk.getModule(name)` accepts `"pedal"` / `"joystick"` / `"throttle"` (case-insensitive) and returns `nil` when the control is not installed. The returned handles read the **server-authoritative control state** directly:
+`desk.getModule(name)` accepts `"pedal"` / `"joystick"` / `"joystick_2"` / `"throttle"` / `"throttle_2"` (case-insensitive) and returns `nil` when the control is not installed. The returned handles read the **server-authoritative control state** directly:
 
 | Handle | Methods |
 |---|---|
 | `pedal` | `getLeftPedal()`, `getRightPedal()`, `getPedalDifference()`, `isLeftPedalDown()`, `isRightPedalDown()`, `isLeftPedalUp()`, `isRightPedalUp()` |
-| `joystick` | `isJoystickXActive()`, `isJoystickYActive()`, `getJoystickX()`, `getJoystickY()`, `getJoystickXSigned()`, `getJoystickYSigned()` |
-| `throttle` | `isThrottleForwardActive()`, `isThrottleBackActive()`, `getThrottleGear()`, `getThrottleAxis()` |
+| `joystick` | `isAxisXActive()`, `isAxisYActive()`, `getAxisX()`, `getAxisY()`, `getAxisXSigned()`, `getAxisYSigned()` |
+| `joystick_2` | `isAxisXActive()`, `isAxisYActive()`, `getAxisX()`, `getAxisY()`, `getAxisXSigned()`, `getAxisYSigned()` |
+| `throttle` | `isForwardActive()`, `isBackActive()`, `getThrottleGear()`, `getAxis()` |
+| `throttle_2` | `getAxis()`, `getCenterAxis()`, `setAngle(degrees)` |
 
-See [Foot Pedal](pedal.md), [Joystick](joystick.md) and [Throttle](throttle.md) for the full API of each handle. All state-reading methods run on the CC worker thread (`mainThread = false`) and are safe to poll at high frequency.
+See [Foot Pedal](pedal.md), [Joystick](joystick.md), [Joystick 2](joystick_2.md), [Throttle](throttle.md) and [Throttle 2](throttle_2.md) for the full API of each handle. All state-reading methods run on the CC worker thread (`mainThread = false`) and are safe to poll at high frequency.
 
 ## Virtual Joystick HUD (optional)
 

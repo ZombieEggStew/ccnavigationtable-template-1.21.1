@@ -28,24 +28,24 @@ local desk = pe.getPeripheral(4)
 local joy = desk.getModule("joystick")   -- 未安装操纵杆返回 nil
 ```
 
-### joy.isJoystickXActive() / joy.isJoystickYActive()
+### joy.isAxisXActive() / joy.isAxisYActive()
 
 该轴任意方向键按住时返回 `true`（X = 左右，Y = 前后）。
 
-### joy.getJoystickX() / joy.getJoystickY()
+### joy.getAxisX() / joy.getAxisY()
 
 返回该轴的**幅度**（数值，**0..1**）—— 操纵杆在该轴上的偏转程度，不含方向。
 
 ```lua
-print(joy.getJoystickX(), joy.getJoystickY())   -- 0..1
+print(joy.getAxisX(), joy.getAxisY())   -- 0..1
 ```
 
-### joy.getJoystickXSigned() / joy.getJoystickYSigned()
+### joy.getAxisXSigned() / joy.getAxisYSigned()
 
 返回**带符号**的轴值（数值，**-1..1**）：`+1` = 右摆（`D`）/ 前推（`W`），`-1` = 左摆（`A`）/ 后拉（`S`）。
 
 ```lua
-print(joy.getJoystickXSigned(), joy.getJoystickYSigned())
+print(joy.getAxisXSigned(), joy.getAxisYSigned())
 ```
 
 所有方法都是 `mainThread = false`（跑在 CC worker 线程），可以高频轮询。
@@ -58,8 +58,8 @@ local desk = pe.getPeripheral(4)
 local joy = desk.getModule("joystick")
 
 while true do
-    local forward = joy.getJoystickYSigned()  -- -1..1，推力
-    local steer   = joy.getJoystickXSigned()  -- -1..1，转向
+    local forward = joy.getAxisYSigned()  -- -1..1，推力
+    local steer   = joy.getAxisXSigned()  -- -1..1，转向
     print(("forward %.2f  steer %.2f"):format(forward, steer))
     os.sleep(0.05)
 end

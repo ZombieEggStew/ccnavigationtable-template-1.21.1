@@ -23,11 +23,11 @@ public class ThrottleModuleHandle {
      *
      * <pre>{@code
      * local th = desk.getModule("throttle")
-     * print(th.isThrottleForwardActive(), th.getThrottleGear())
+     * print(th.isForwardActive(), th.getThrottleGear())
      * }</pre>
      */
     @LuaFunction
-    public final boolean isThrottleForwardActive() {
+    public final boolean isForwardActive() {
         return be.isThrottleForwardActive();
     }
 
@@ -35,7 +35,7 @@ public class ThrottleModuleHandle {
      * 后退键是否按住（原始输入，读服务端输入租约）。
      */
     @LuaFunction
-    public final boolean isThrottleBackActive() {
+    public final boolean isBackActive() {
         return be.isThrottleBackActive();
     }
 
@@ -55,7 +55,7 @@ public class ThrottleModuleHandle {
      * 油门轴值（0..1）= 档位 / 最大行程：0 = 最低档 / 1 = 满前进。
      */
     @LuaFunction
-    public final double getThrottleAxis() {
+    public final double getAxis() {
         return be.getThrottleAxis();
     }
 }

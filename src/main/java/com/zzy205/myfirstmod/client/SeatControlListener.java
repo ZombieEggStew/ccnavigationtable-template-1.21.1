@@ -293,8 +293,8 @@ public class SeatControlListener {
                 add(out, pos, desk.getThrottleKeyBack(), "油门杆 后退", ControlDir.THROTTLE_BACK);
             }
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)) {
-                // 油门2（总距杆）：按键读 BE 配置（默认 空格=上台 / 左Ctrl=下拉，可经 Throttle2ModuleScreen 改绑），见 Throttle2Motion
-                add(out, pos, desk.getThrottle2KeyUp(), "油门2 上台", ControlDir.THROTTLE_2_UP);
+                // 油门2（总距杆）：按键读 BE 配置（默认 空格=上抬 / 左Ctrl=下拉，可经 Throttle2ModuleScreen 改绑），见 Throttle2Motion
+                add(out, pos, desk.getThrottle2KeyUp(), "油门2 上抬", ControlDir.THROTTLE_2_UP);
                 add(out, pos, desk.getThrottle2KeyDown(), "油门2 下拉", ControlDir.THROTTLE_2_DOWN);
             }
         }

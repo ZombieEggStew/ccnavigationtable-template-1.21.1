@@ -30,7 +30,7 @@ local desk = pe.getPeripheral(4)
 local th = desk.getModule("throttle")   -- nil if no throttle installed
 ```
 
-### th.isThrottleForwardActive() / th.isThrottleBackActive()
+### th.isForwardActive() / th.isBackActive()
 
 Returns `true` while the forward / back key is held (raw input, reads the server input lease).
 
@@ -42,12 +42,12 @@ Returns the current gear as an integer (**0..11**): `0` = lowest (bottom, −X e
 print(th.getThrottleGear())   -- 0..11
 ```
 
-### th.getThrottleAxis()
+### th.getAxis()
 
 Returns the normalized throttle position (number, **0..1**) = gear / max travel: `0` = lowest gear, `1` = full forward.
 
 ```lua
-print(th.getThrottleAxis())   -- 0..1
+print(th.getAxis())   -- 0..1
 ```
 
 All methods are `mainThread = false` — safe to poll at high frequency.
@@ -61,7 +61,7 @@ local th = desk.getModule("throttle")
 
 while true do
     local gear = th.getThrottleGear()        -- 0..11
-    local throttle = th.getThrottleAxis()    -- 0..1
+    local throttle = th.getAxis()    -- 0..1
     print(("gear %d  throttle %.2f"):format(gear, throttle))
     os.sleep(0.05)
 end

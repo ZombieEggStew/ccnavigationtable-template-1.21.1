@@ -28,24 +28,24 @@ local desk = pe.getPeripheral(4)
 local joy = desk.getModule("joystick")   -- nil if no joystick installed
 ```
 
-### joy.isJoystickXActive() / joy.isJoystickYActive()
+### joy.isAxisXActive() / joy.isAxisYActive()
 
 Returns `true` while any key of that axis is pressed (X = left/right, Y = forward/back).
 
-### joy.getJoystickX() / joy.getJoystickY()
+### joy.getAxisX() / joy.getAxisY()
 
 Returns the axis **magnitude** (number, **0..1**) — how far the stick is deflected on that axis, regardless of direction.
 
 ```lua
-print(joy.getJoystickX(), joy.getJoystickY())   -- 0..1
+print(joy.getAxisX(), joy.getAxisY())   -- 0..1
 ```
 
-### joy.getJoystickXSigned() / joy.getJoystickYSigned()
+### joy.getAxisXSigned() / joy.getAxisYSigned()
 
 Returns the **signed** axis value (number, **-1..1**): `+1` = right (`D`) / forward (`W`), `-1` = left (`A`) / backward (`S`).
 
 ```lua
-print(joy.getJoystickXSigned(), joy.getJoystickYSigned())
+print(joy.getAxisXSigned(), joy.getAxisYSigned())
 ```
 
 All methods are `mainThread = false` — safe to poll at high frequency.
@@ -58,8 +58,8 @@ local desk = pe.getPeripheral(4)
 local joy = desk.getModule("joystick")
 
 while true do
-    local forward = joy.getJoystickYSigned()  -- -1..1, thrust amount
-    local steer   = joy.getJoystickXSigned()  -- -1..1, turning amount
+    local forward = joy.getAxisYSigned()  -- -1..1, thrust amount
+    local steer   = joy.getAxisXSigned()  -- -1..1, turning amount
     print(("forward %.2f  steer %.2f"):format(forward, steer))
     os.sleep(0.05)
 end

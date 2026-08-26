@@ -78,15 +78,17 @@ local joy   = desk.getModule("joystick")  -- 未安装操纵杆返回 nil
 local th    = desk.getModule("throttle")  -- 未安装油门杆返回 nil
 ```
 
-`desk.getModule(name)` 接受 `"pedal"` / `"joystick"` / `"throttle"`（大小写不敏感），控件未安装时返回 `nil`。返回的模块实例直接读取**服务端权威的控件状态**：
+`desk.getModule(name)` 接受 `"pedal"` / `"joystick"` / `"joystick_2"` / `"throttle"` / `"throttle_2"`（大小写不敏感），控件未安装时返回 `nil`。返回的模块实例直接读取**服务端权威的控件状态**：
 
 | 实例 | 方法 |
 |---|---|
 | `pedal` | `getLeftPedal()`、`getRightPedal()`、`getPedalDifference()`、`isLeftPedalDown()`、`isRightPedalDown()`、`isLeftPedalUp()`、`isRightPedalUp()` |
-| `joystick` | `isJoystickXActive()`、`isJoystickYActive()`、`getJoystickX()`、`getJoystickY()`、`getJoystickXSigned()`、`getJoystickYSigned()` |
-| `throttle` | `isThrottleForwardActive()`、`isThrottleBackActive()`、`getThrottleGear()`、`getThrottleAxis()` |
+| `joystick` | `isAxisXActive()`、`isAxisYActive()`、`getAxisX()`、`getAxisY()`、`getAxisXSigned()`、`getAxisYSigned()` |
+| `joystick_2` | `isAxisXActive()`、`isAxisYActive()`、`getAxisX()`、`getAxisY()`、`getAxisXSigned()`、`getAxisYSigned()` |
+| `throttle` | `isForwardActive()`、`isBackActive()`、`getThrottleGear()`、`getAxis()` |
+| `throttle_2` | `getAxis()`、`getCenterAxis()`、`setAngle(degrees)` |
 
-完整的各实例 API 见[脚踏板](pedal.zh.md)、[操纵杆](joystick.zh.md)与[油门杆](throttle.zh.md)。所有状态读取方法都是 `mainThread = false`（跑在 CC worker 线程），可以高频轮询。
+完整的各实例 API 见[脚踏板](pedal.zh.md)、[操纵杆](joystick.zh.md)、[操纵杆 2](joystick_2.zh.md)、[油门杆](throttle.zh.md)与[油门杆 2](throttle_2.zh.md)。所有状态读取方法都是 `mainThread = false`（跑在 CC worker 线程），可以高频轮询。
 
 ## 虚拟摇杆 HUD（可选）
 

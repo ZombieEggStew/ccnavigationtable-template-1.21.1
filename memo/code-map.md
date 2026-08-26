@@ -129,7 +129,7 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `screen/AbstractMonitorScreen.java` | 中间层 Screen 基类：统一在控件之上渲染子控件 tooltip（`TooltipWidget` 与 Catnip `AbstractSimiWidget`），禁用原版渐变背景，非暂停界面 |
 | `screen/MonitorModuleScreen.java` | Monitor 模块/屏幕通用配置界面（继承 `AbstractMonitorScreen`）；ID 滚轮 + 悬浮文本输入条 + 类型专属配置区，汇总后发送 `ModuleConfigPayload` |
 | `screen/ControlDeskConfigScreen.java` | controlDesk 配置菜单（继承 `AbstractMonitorScreen`）：背景复用 JoystickModuleScreen（`MyUIElements.BACKGROUND` 192×169）；当前含**频道滚轮条**（第一条配置，对齐 MonitorMenuScreen：跳过已占用频道，关闭时经 `ControlDeskChannelPayload` 保存），其余控件后续接入（模块设置区块、按键绑定等） |
-| `screen/JoystickModuleScreen.java` / `screen/Joystick2ModuleScreen.java` / `screen/PedalModuleScreen.java` / `screen/ThrottleModuleScreen.java` / `screen/Throttle2ModuleScreen.java` | controlDesk 控件（模块）设置菜单（继承 `AbstractMonitorScreen`）：背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169）；操纵杆/摇杆2 双按键绑定条 + 双滚轮条（摇杆2 配置独立，经 `Joystick2ConfigPayload` 持久化）、脚踏板按键绑定条 + 回正时间条、油门杆前进/后退按键绑定条（`DoubleInputBar`）+ 档位切换节奏条（`ScrollValueBar`）、油门2 上台/下拉按键绑定条（`DoubleInputBar`）+ 满偏时间条（`ScrollValueBar`）+ 回正开关/回正时间条（`ToggleButton`+`ScrollValueBar`，开启后松开按键回中位 15°）。**入口 = 控制台配置菜单中点击已安装控件行**（`InstalledModulesList` 点击回调按控件类型分发）；`withReturnTo(Screen)` 设置关闭后返回的上级菜单（配置菜单传入自身，模块菜单关闭后回到配置菜单） |
+| `screen/JoystickModuleScreen.java` / `screen/Joystick2ModuleScreen.java` / `screen/PedalModuleScreen.java` / `screen/ThrottleModuleScreen.java` / `screen/Throttle2ModuleScreen.java` | controlDesk 控件（模块）设置菜单（继承 `AbstractMonitorScreen`）：背景复用 MonitorModuleScreen（`MyUIElements.BACKGROUND` 192×169）；操纵杆/摇杆2 双按键绑定条 + 双滚轮条（摇杆2 配置独立，经 `Joystick2ConfigPayload` 持久化）、脚踏板按键绑定条 + 回正时间条、油门杆前进/后退按键绑定条（`DoubleInputBar`）+ 档位切换节奏条（`ScrollValueBar`）、油门2 上抬/下拉按键绑定条（`DoubleInputBar`）+ 满偏时间条（`ScrollValueBar`）+ 回正开关/回正时间条（`ToggleButton`+`ScrollValueBar`，开启后松开按键回中位 15°）。**入口 = 控制台配置菜单中点击已安装控件行**（`InstalledModulesList` 点击回调按控件类型分发）；`withReturnTo(Screen)` 设置关闭后返回的上级菜单（配置菜单传入自身，模块菜单关闭后回到配置菜单） |
 | `screen/MonitorMenuScreen.java` | Monitor 自身菜单（蹲下+右键空白处/扳手右键打开，继承 `AbstractMonitorScreen`）；频道、背景、俯仰/偏航/偏移共五条滚轮，关闭时发送 `MonitorChannelPayload`/`MonitorBackgroundPayload`/`MonitorTransformPayload` |
 | `screen/ModuleConfigSection.java` | 模块专属配置区接口及空实现 |
 | `screen/ModuleConfigSections.java` | 按模块名称创建配置区的工厂（目前仅 KNOB → `KnobConfigSection`，其余走 Empty）；每次必须创建新实例 |
@@ -167,7 +167,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `network/Joystick2ConfigPayload.java` | 客户端 → 服务端 | 保存 controlDesk 摇杆2 配置（字段与操纵杆相同，独立于 joystick） |
 | `network/PedalConfigPayload.java` | 客户端 → 服务端 | 保存 controlDesk 脚踏板配置（回正时间 + 满偏时间 + 四向按键） |
 | `network/ThrottleConfigPayload.java` | 客户端 → 服务端 | 保存 controlDesk 油门杆配置（前进/后退按键 + 档位切换节奏） |
-| `network/Throttle2ConfigPayload.java` | 客户端 → 服务端 | 保存 controlDesk 油门2 配置（上台/下拉按键 + 满偏时间 + 回正开关/回正时间） |
+| `network/Throttle2ConfigPayload.java` | 客户端 → 服务端 | 保存 controlDesk 油门2 配置（上抬/下拉按键 + 满偏时间 + 回正开关/回正时间） |
 | `network/MonitorBackgroundPayload.java` | 客户端 → 服务端 | 保存 Monitor 背景选项 |
 | `network/MonitorTransformPayload.java` | 客户端 → 服务端 | 保存 Monitor 俯仰/偏航角度与前后偏移（`setAngles`） |
 | `network/PlayOrderEffectPayload.java` | 服务端 → 客户端 | 广播下单 WiFi 粒子播放位置；客户端本地 `addParticle`（`WiFiParticle.Data` 无法走网络编码） |
@@ -196,10 +196,10 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/ControlDeskRegistry.java` | 控制台频道登记表（委托全局注册表，`get(channel)` 供 `pe.getPeripheral` 查找） |
 | `compat/cc/ControlDeskPeripheral.java` | 控制台的 `IPeripheral` 实现（`getType()` = `"ccpe:control_desk"`；`getModule("pedal"/"joystick"/"joystick_2"/"throttle"/"throttle_2")` 返回控件模块实例，未安装返回 nil；**`getModule("monitor")` → `MonitorPeripheral`（type = "ccpe:monitor_2"）——monitor_2 表面小 Monitor 的模块/屏幕查询入口，方法同 Monitor 外设**；**`getMonitor2Module(id)` / `getMonitor2CellModule(x,y)` 查询 monitor_2 表面模块/屏幕，复用 Monitor 的 `ModuleHandle` 体系**） |
 | `compat/cc/PedalModuleHandle.java` | 脚踏板模块实例（全部 mainThread=false）：模拟量 `getLeftPedal()/getRightPedal()`（-1..1）+ 差值 `getPedalDifference()`（左−右）+ 方向判断 `isLeftPedalDown/isRightPedalDown`（轴值>0）与 `isLeftPedalUp/isRightPedalUp`（轴值<0） |
-| `compat/cc/JoystickModuleHandle.java` | 操纵杆模块实例：原始值 `isJoystickXActive/YActive` + 轴值 `getJoystickX/Y`（0..1）+ 带符号 `getJoystickXSigned/YSigned`（-1..1，全部 mainThread=false） |
-| `compat/cc/Joystick2ModuleHandle.java` | 摇杆2 模块实例（照抄 JoystickModuleHandle，方法名带 2 后缀）：`isJoystick2XActive/YActive` + `getJoystick2X/Y`（0..1）+ `getJoystick2XSigned/YSigned`（-1..1，全部 mainThread=false），读 joystick2 独立轴值 |
-| `compat/cc/ThrottleModuleHandle.java` | 油门杆模块实例（全部 mainThread=false）：前进/后退按住态 `isThrottleForwardActive/isThrottleBackActive`（读服务端输入租约）+ 档位 `getThrottleGear()`（0..11 整数，锁存不回正）+ 轴值 `getThrottleAxis()`（0..1 = 档位/MAX） |
-| `compat/cc/Throttle2ModuleHandle.java` | 油门2 总距杆模块实例：轴值 `getThrottle2Axis()`（0..1 = 角度/30°）+ 回正模式轴值 `getThrottle2CenterAxis()`（-1..1 = (角度−15°)/15°，0 = 中位）+ 角度控制 `setThrottle2Angle(degrees)`（0..30°，mainThread=true 服务端权威写 BE 并广播） |
+| `compat/cc/JoystickModuleHandle.java` | 操纵杆模块实例：原始值 `isAxisXActive/isAxisYActive` + 轴值 `getAxisX/getAxisY`（0..1）+ 带符号 `getAxisXSigned/getAxisYSigned`（-1..1，全部 mainThread=false） |
+| `compat/cc/Joystick2ModuleHandle.java` | 摇杆2 模块实例（照抄 JoystickModuleHandle，方法名对齐 joystick、无 2 前缀）：`isAxisXActive/isAxisYActive` + `getAxisX/getAxisY`（0..1）+ `getAxisXSigned/getAxisYSigned`（-1..1，全部 mainThread=false），读 joystick2 独立轴值 |
+| `compat/cc/ThrottleModuleHandle.java` | 油门杆模块实例（全部 mainThread=false）：前进/后退按住态 `isForwardActive/isBackActive`（读服务端输入租约）+ 档位 `getThrottleGear()`（0..11 整数，锁存不回正）+ 轴值 `getAxis()`（0..1 = 档位/MAX） |
+| `compat/cc/Throttle2ModuleHandle.java` | 油门2 总距杆模块实例（方法名对齐油门杆，无 Throttle2 前缀）：轴值 `getAxis()`（0..1 = 角度/30°）+ 回正模式轴值 `getCenterAxis()`（-1..1 = (角度−15°)/15°，0 = 中位）+ 角度控制 `setAngle(degrees)`（0..30°，mainThread=true 服务端权威写 BE 并广播） |
 | `compat/cc/MonitorPeripheral.java` | Monitor 的 `IPeripheral` 实现（模块/屏幕查询入口）；**宿主参数化为 `MonitorGridHost`（type 构造器传入）：Monitor 用 `"ccpe:monitor"`，monitor_2 经 `ControlDeskPeripheral.getModule("monitor")` 复用同一类（type = `"ccpe:monitor_2"`），`getCellModule(x,y)` / `getModule(id)` / 音效方法完全同款，作用在各自网格上** |
 | `compat/cc/ModuleHandle.java` | 模块/屏幕 Lua 实例的抽象基类（通用 get/set/tooltip；**宿主为 `MonitorGridHost` 接口，Monitor 与 monitor_2 共用同一套 handle**） |
 | `compat/cc/ModuleHandleRegistry.java` | 按模块类型把 Java 记录包装成对应的 Lua handle |

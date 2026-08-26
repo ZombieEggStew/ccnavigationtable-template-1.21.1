@@ -21,9 +21,9 @@ import org.jetbrains.annotations.Nullable;
  * local pedal = d.getModule("pedal")        -- 未安装返回 nil
  * print(pedal.isLeftPedalDown())
  * local joy = d.getModule("joystick")
- * print(joy.getJoystickXSigned())
+ * print(joy.getAxisXSigned())
  * local joy2 = d.getModule("joystick_2")    -- 摇杆2（独立轴值，照抄 joystick）
- * print(joy2.getJoystick2XSigned())
+ * print(joy2.getAxisXSigned())
  * local th = d.getModule("throttle")
  * print(th.getThrottleGear())
  * }</pre>
