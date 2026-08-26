@@ -1,5 +1,7 @@
 # Control Desk
 
+![control-desk](../img/my_control_desk_base.png)
+
 The Control Desk is a seat-driven control console. By default it has **no controls installed** — you install [Foot Pedals](pedal.md), a [Joystick](joystick.md) and/or a [Throttle](throttle.md) onto it yourself. Sit on a Create seat next to the desk and you automatically enter **operation mode**: your keyboard drives the installed controls of every linked desk, and the control states are exposed to CC:T via a Lua API.
 
 ## Installing / Removing Controls

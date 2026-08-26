@@ -1,5 +1,7 @@
 # Throttle
 
+![throttle](../img/throttle.png)
+
 The Throttle installs onto a [Control Desk](overview.md) and shifts through **12 discrete gears (0..11)**. The handle slides along the **model-space X axis**: gear 0 is at the bottom (−X end), gear 11 is full forward (+X end), 1 px per gear. Hold the **forward** key (default `Space`) to shift up, hold the **back** key (default `Left Ctrl`) to shift down.
 
 > The Throttle shares the rear-top slot of the desk with **Monitor 2** — the two are mutually exclusive.

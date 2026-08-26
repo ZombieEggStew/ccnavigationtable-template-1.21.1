@@ -1,5 +1,7 @@
 # Joystick
 
+![joystick](../img/jotstick.png)
+
 The Joystick installs onto a [Control Desk](overview.md) and tilts up to **15°** in any direction: push **forward** (default `W`), pull **back** (`S`), tilt **left** (`A`) or **right** (`D`). Release the keys and it returns to the center.
 
 ## Deflection Modes

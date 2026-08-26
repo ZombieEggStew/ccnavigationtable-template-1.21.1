@@ -1,5 +1,7 @@
 # Foot Pedal
 
+![pedal](../img/pedal.png)
+
 The Foot Pedal installs a **pair of pedals** (left and right) onto a [Control Desk](overview.md). While you sit on a linked seat in operation mode, holding a pedal's press key pushes the pedal down (it translates forward, **+z**), holding the lift key raises it (**-z**), and releasing both returns it to the middle.
 
 Pedal travel is **analog** — pressing is a smooth ramp to full deflection, not a step.
