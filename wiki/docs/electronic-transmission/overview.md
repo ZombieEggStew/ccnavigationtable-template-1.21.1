@@ -7,6 +7,9 @@
 > When using Create's rotation speed controller as a peripheral and calling `getTargetSpeed()`, it triggers `RotationPropagator.handleRemoved()` which cascades and clears the source of the entire downstream sub-network, leading to unexpected results (e.g. using aeroworks' stepper_servo downstream of the speed controller — changing the speed while activating the stepper motor makes the motor spin erratically).
 > Meanwhile, simulated's analog_transmission is hard to fine-tune.
 
+!!! info "Note"
+    This block also has a [**Servo Mode**](servo-mode.md): the output shaft can be positioned at an absolute angle (±180°, shortest path) via Lua.
+
 The **Electronic Transmission** is a Create kinetic transmission controlled purely by the CC:T peripheral. **It does not accept redstone signals** and can only be controlled via Lua. It can be placed in the middle of a stress network to adjust the downstream speed in real time.
 
 | Method | Description |
@@ -15,9 +18,6 @@ The **Electronic Transmission** is a Create kinetic transmission controlled pure
 | `getRatio()` | Get the current gear ratio |
 | `setTargetSpeed(speed)` | Directly set the downstream speed (0~256.00) `mainThread=true` |
 | `getTargetSpeed()` | Get the target speed |
-
-> This block also has a **servo mode**: the output shaft can be positioned at an
-> absolute angle (±180°, shortest path) via Lua. See [Servo Mode](servo-mode.md).
 
 ```lua
 local t = peripheral.find("ccpe:transmission_peripheral")
