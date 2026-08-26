@@ -87,8 +87,9 @@ local th    = desk.getModule("throttle")  -- 未安装油门杆返回 nil
 | `joystick_2` | `isAxisXActive()`、`isAxisYActive()`、`getAxisX()`、`getAxisY()`、`getAxisXSigned()`、`getAxisYSigned()` |
 | `throttle` | `isForwardActive()`、`isBackActive()`、`getThrottleGear()`、`getAxis()` |
 | `throttle_2` | `getAxis()`、`getCenterAxis()`、`setAngle(degrees)` |
+| `monitor_2` | 经 `getModule("monitor")` —— 方法与[监视器](../monitor/overview.zh.md)相同 |
 
-完整的各实例 API 见[脚踏板](pedal.zh.md)、[操纵杆](joystick.zh.md)、[操纵杆 2](joystick_2.zh.md)、[油门杆](throttle.zh.md)与[油门杆 2](throttle_2.zh.md)。所有状态读取方法都是 `mainThread = false`（跑在 CC worker 线程），可以高频轮询。
+完整的各实例 API 见[脚踏板](pedal.zh.md)、[操纵杆](joystick.zh.md)、[操纵杆 2](joystick_2.zh.md)、[油门杆](throttle.zh.md)、[油门杆 2](throttle_2.zh.md)与[监视器 2](monitor_2.zh.md)。所有状态读取方法都是 `mainThread = false`（跑在 CC worker 线程），可以高频轮询。
 
 ## 虚拟摇杆 HUD（可选）
 

@@ -60,6 +60,7 @@ plugins:
             Joystick 2: 操纵杆 2
             Throttle: 油门
             Throttle 2: 油门 2
+            Monitor 2: 监视器 2
             Examples & Tutorials: 示例与教程
             Simple Monitoring System: 简单监控系统
             Channel Setup: 频道设置
@@ -114,6 +115,7 @@ nav:
     - Joystick 2: control-desk/joystick_2.md
     - Throttle: control-desk/throttle.md
     - Throttle 2: control-desk/throttle_2.md
+    - Monitor 2: control-desk/monitor_2.md
   - Examples & Tutorials:
     - Simple Monitoring System: peripheral-extender/example.md
   - FAQ: faq.md

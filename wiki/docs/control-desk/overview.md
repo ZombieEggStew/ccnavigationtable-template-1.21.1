@@ -87,8 +87,9 @@ local th    = desk.getModule("throttle")  -- nil if no throttle installed
 | `joystick_2` | `isAxisXActive()`, `isAxisYActive()`, `getAxisX()`, `getAxisY()`, `getAxisXSigned()`, `getAxisYSigned()` |
 | `throttle` | `isForwardActive()`, `isBackActive()`, `getThrottleGear()`, `getAxis()` |
 | `throttle_2` | `getAxis()`, `getCenterAxis()`, `setAngle(degrees)` |
+| `monitor_2` | via `getModule("monitor")` — same methods as the [Monitor](../monitor/overview.md) |
 
-See [Foot Pedal](pedal.md), [Joystick](joystick.md), [Joystick 2](joystick_2.md), [Throttle](throttle.md) and [Throttle 2](throttle_2.md) for the full API of each handle. All state-reading methods run on the CC worker thread (`mainThread = false`) and are safe to poll at high frequency.
+See [Foot Pedal](pedal.md), [Joystick](joystick.md), [Joystick 2](joystick_2.md), [Throttle](throttle.md), [Throttle 2](throttle_2.md) and [Monitor 2](monitor_2.md) for the full API of each handle. All state-reading methods run on the CC worker thread (`mainThread = false`) and are safe to poll at high frequency.
 
 ## Virtual Joystick HUD (optional)
 
