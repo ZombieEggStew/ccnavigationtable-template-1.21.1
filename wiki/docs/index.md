@@ -24,7 +24,11 @@ A versatile remote terminal that supports:
 A 12×10 grid of module slots, freely controllable from Lua, satisfying interaction and information display needs in various scenarios.
 
 ### [🪑 Control Desk](control-desk/overview.md)
-A seat-driven control console: install foot pedals, a joystick and a throttle, sit on a Create seat to drive them with your keyboard, and read the states from Lua.
+A seat-driven modular control console that supports:
+
+- **Sit & drive** — sit on a Create seat to enter control mode and drive all linked consoles with your keyboard
+- **Modular controls** — install [foot pedals](control-desk/pedal.md), a [joystick](control-desk/joystick.md) and a [throttle](control-desk/throttle.md), with analog travel and gear modes
+- **Lua access** — read control states in real time via the CC:T Lua API (`ccpe:control_desk`)
 
 ### [📻 Redstone Transceiver](redstone-transceiver/overview.md)
 Directly read and send Create Redstone Link signals without stacking redstone link blocks next to your computer.
