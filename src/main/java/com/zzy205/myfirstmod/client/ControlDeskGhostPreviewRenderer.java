@@ -4,7 +4,10 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.zzy205.myfirstmod.block.ControlDeskBlock;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.MyModPartialModels;
+import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
+import dev.ryanhcode.sable.companion.math.Pose3dc;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBuffer;
 import net.minecraft.client.Minecraft;
@@ -21,6 +24,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import org.joml.Quaternionf;
 
 /**
  * 控件安装<b>半透明模型预览</b>（参考 aeroworks {@code SocketPlacementClient#onRenderLevelStage}）：
@@ -116,7 +120,21 @@ public class ControlDeskGhostPreviewRenderer {
         RenderType renderType = RenderType.translucentMovingBlock();
 
         ms.pushPose();
-        ms.translate(pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z);
+        // Sable 子次元（物理体）兼容：pos 是 plot 坐标（可达 2×10^7，直接把 pos−camera 当世界偏移会把模型
+        // 渲染到远离物理体的停车区而不可见）。参考 aeroworks SubLevelPoseClient.translateTo：
+        // 用 renderPose 把 plot 坐标投影到世界（transformPosition），平移到 world−camera 后再施加子次元朝向旋转。
+        float partialTick = (float) event.getPartialTick().getGameTimeDeltaPartialTick(true);
+        SubLevel subLevel = SableCompat.getContainingSubLevel(mc.level, pos);
+        if (subLevel != null) {
+            Pose3dc pose = SableCompat.getPose(subLevel, partialTick);
+            Vec3 world = pose != null
+                    ? pose.transformPosition(new Vec3(pos.getX(), pos.getY(), pos.getZ()))
+                    : new Vec3(pos.getX(), pos.getY(), pos.getZ());
+            ms.translate(world.x - camera.x, world.y - camera.y, world.z - camera.z);
+            if (pose != null) ms.mulPose(new Quaternionf(pose.orientation()));
+        } else {
+            ms.translate(pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z);
+        }
         // 实物预览：模型平移到盒位（模型默认中心 x/z=8、底座底 y=0 → 放置位底 y=7，见 ControlDeskBlockEntity 常量）；
         // 安装朝向旋转绕盒子中心进行（模型已到盒位，绕盒心转才不甩开）。
         // 安装朝向旋转预览：与实装同公式（桌体 FACING + 桌→玩家水平方向；joystick_2 90° 间隔、throttle 只能 0°/180°、

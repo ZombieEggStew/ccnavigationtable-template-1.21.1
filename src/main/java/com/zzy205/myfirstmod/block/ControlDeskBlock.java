@@ -435,14 +435,16 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
 
     /** 北向基准模型坐标（px）→ 世界坐标：绕方块中心 Y 旋转到 FACING（与渲染 rotateCenteredDegrees 同约定）。 */
     private static Vec3 modelToWorld(BlockPos pos, float x, float y, float z, Direction facing) {
-        float bx = x / 16f;
-        float by = y / 16f;
-        float bz = z / 16f;
+        // 必须用 double 运算：Sable 子次元的 plot 坐标可达 2×10^7，float 在此时 ULP=2，
+        // int+float 会把 px/16 的偏移全部舍入掉 → 放置盒塌缩成一条线（sable 兼容问题）
+        double bx = x / 16.0;
+        double by = y / 16.0;
+        double bz = z / 16.0;
         return switch (facing) {
             case NORTH -> new Vec3(pos.getX() + bx, pos.getY() + by, pos.getZ() + bz);
-            case SOUTH -> new Vec3(pos.getX() + (1f - bx), pos.getY() + by, pos.getZ() + (1f - bz));
-            case WEST  -> new Vec3(pos.getX() + bz, pos.getY() + by, pos.getZ() + (1f - bx));
-            case EAST  -> new Vec3(pos.getX() + (1f - bz), pos.getY() + by, pos.getZ() + bx);
+            case SOUTH -> new Vec3(pos.getX() + (1.0 - bx), pos.getY() + by, pos.getZ() + (1.0 - bz));
+            case WEST  -> new Vec3(pos.getX() + bz, pos.getY() + by, pos.getZ() + (1.0 - bx));
+            case EAST  -> new Vec3(pos.getX() + (1.0 - bz), pos.getY() + by, pos.getZ() + bx);
             default    -> new Vec3(pos.getX() + bx, pos.getY() + by, pos.getZ() + bz);
         };
     }

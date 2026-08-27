@@ -206,3 +206,20 @@ shift = ( (placeX-8)/16, (8-0)/16, (placeZ-8)/16 )   // 模型坐桌面 y8（MOD
   1. **「射线与平面求交」≠「命中」**：平面求交只给落点，命中判定必须再检查落点是否在目标区域内（`isOnPanel`/`isOnScreen` 等价物）。漏掉 = 判定蔓延到无限远。
   2. **自遮挡假设不能照抄**：Monitor 的「COLLIDER 不会自遮挡」成立是因为其底座碰撞体在屏幕下方；monitor_2 屏幕与桌体碰撞体重叠，必须**显式排除载体方块**。
   3. 调试日志（`Monitor2HitDetector.DEBUG_TRACE` / `Monitor2GridOverlay.DEBUG_HIT`，现为 false）可分别看到「求交失败 / 落点屏幕面外 / 被遮挡」与命中点十字/屏幕边界框，排查命中类问题先开它们。
+
+### 2026-08 实际踩坑记录（Sable 物理体兼容两处：预览线框塌缩 + ghost 实物不可见）
+
+> 背景：控制台放在 Sable 物理体（子次元）上时，① 油门/油门2/监视器2/摇杆2 的绿色预览框「挤成一团/塌缩在角落」；② 线框修复后，半透明 ghost 实物预览仍不可见。PEDAL/JOYSTICK 线框一直正常。monitor / monitor_2 已做过 Sable 线框兼容（全部用 `showLine` 传 plot 坐标，靠 Sable `LineOutlineMixin` 绘制时刻自动变换），是排查的参照。
+
+- **症状① 根因：float 精度在 Sable plot 坐标下塌缩**。`gridWorld`（`ControlDeskPlacementOverlay`）/ `modelToWorld`（`ControlDeskBlock`）用 `float bx = x / 16f` 后 `pos.getX() + bx`（**int + float = float 运算**）。Sable 子次元的 plot 坐标可达 ~2×10⁷（日志实测 `20481032, 129, 20495368`），float 在此量级 ULP = 2 → `20481032 + 0.4375` 与 `20481032 + 0.875` 都舍入成 `20481032.0f` → 预览盒 **X/Z 宽度为 0**，12 条棱全挤在同一位置。普通世界 plot 坐标 = 小数值、float 精度足够，所以只会在物理体上出现（「一直存在」的假象）。
+  - **为什么 PEDAL/JOYSTICK 正常**：走 `installBounds`（VoxelShaper，AABB 内部 double）。
+  - **为什么 monitor / monitor_2 正常**：`world()` 是 `pos.getX() + r.x`（r.x 为 double → int+double = double）。
+  - **修复**：`gridWorld` / `modelToWorld` 全部改 **double 运算**（`x / 16.0`、`pos.getX() + bx` 中 bx 为 double）。一个修复同时覆盖：四个网格模块预览盒、桌顶棋盘网格线、拓展坞/挡板预览框、扳手拆除预览框、服务端拆除命中判定（`hitControlType` 也走 `modelToWorld`）。
+- **症状② 根因：ghost 直接拿 plot 坐标当世界偏移**。`ControlDeskGhostPreviewRenderer` 用 `ms.translate(pos.getX() - camera.x, …)`（pos 为 plot 坐标 ~2×10⁷）→ 模型渲染到 2000 万格外的停车区，不可见。桌面方块本身正常是因为 Sable 的 BE 渲染管线自动施加子次元姿态；手动 PoseStack 渲染（ghost）不走那条路。
+  - **修复（参考 aeroworks `SubLevelPoseClient.translateTo`）**：子次元内用 `SableCompat.getPose(sub, partialTick)` 的 `pose.transformPosition(plotPos)` 投影到世界 → `ms.translate(world − camera)` → `ms.mulPose(子次元朝向四元数)`；非子次元保持原 `pos − camera` 逻辑。用与方块实体渲染**同一插值姿态**（`renderPose(partialTick)`），移动物理体零滞后。
+- **排查工具（本次用过的有效手段）**：① 给预览盒**额外用品红色线条重画一遍**（`showLine` + plot 坐标，走 Sable 已验证的 LineOutlineMixin 路径），与绿色 AABB 框对比位置——两者重叠 ⇒ 变换没问题、是坐标本身错；② 每秒打一次日志：子次元 `pose.pos / rotPoint / orient / scale` + 预览盒 `min..max` 范围（观察 X/Z 是否塌缩成 0）+ `worldCenter(transformPosition)` 对比。
+- **教训（重要）**：
+  1. **给 BlockPos 加 px/16 偏移必须用 double 运算**。float 只在「偏移量本身」小（先与 pos 分离计算再相加）时才安全；`int + float` 在坐标量大时静默丢失亚块精度，且只在大坐标环境（Sable plot）暴露。
+  2. **手动 PoseStack 渲染子次元方块时，plot 坐标必须先投影到世界**（`renderPose().transformPosition` + 子次元朝向），不能直接当世界坐标用；参照 aeroworks `SubLevelPoseClient` 或 Sable `SublevelRenderOffsetHelper.posePlotToProjected` 模式。
+  3. **Sable 对 Catnip Outliner 是自动兼容的**：`showLine`/`showCluster`/`showAABB`（实际创建 `ChasingAABBOutline`）都有 mixin 把 plot 坐标在绘制时刻变换到世界（`LineOutlineMixin` / `ChasingAABBOutlineMixin` 无条件，`AABBOutlineMixin` 需 `sable$shouldTransform(true)` 或调用方自转）。所以 Outliner 传 plot 坐标即可，出问题时先怀疑**坐标计算本身**（精度/单位/朝向），再怀疑 Sable。
+  4. 排查时先开最小调试（线条重画 + 日志），对比「正常路径」（PEDAL / monitor 线条）与「异常路径」的坐标，能在 1 轮日志内定位，不要反复盲改数值。
