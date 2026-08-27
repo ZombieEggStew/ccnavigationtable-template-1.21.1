@@ -390,6 +390,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             }
             case MONITOR_2 -> {
                 if (blocksPlacement(placeX, placeZ, MONITOR_2_FOOTPRINT_HALF_X, MONITOR_2_FOOTPRINT_HALF_Z)) return false; // 14×6 与已装模块占用重叠
+                // 14×6 占位必须完全位于桌顶网格内（普通 x1..15/z9..15；docked x1..15/z1..15）
+                if (!ControlDeskBlock.placementInGrid(
+                        getBlockState().getValue(ControlDeskBlock.DOCKED), placeX, placeZ,
+                        MONITOR_2_FOOTPRINT_HALF_X, MONITOR_2_FOOTPRINT_HALF_Z)) {
+                    return false;
+                }
                 monitor2Installed = true;
                 monitor2PlaceX = placeX;
                 monitor2PlaceZ = placeZ;
@@ -397,6 +403,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             }
             case THROTTLE -> {
                 if (blocksPlacement(placeX, placeZ, THROTTLE_FOOTPRINT_HALF_X, THROTTLE_FOOTPRINT_HALF_Z)) return false; // 14×6 与已装模块占用重叠
+                // 14×6 占位必须完全位于桌顶网格内（普通 x1..15/z9..15；docked x1..15/z1..15）
+                if (!ControlDeskBlock.placementInGrid(
+                        getBlockState().getValue(ControlDeskBlock.DOCKED), placeX, placeZ,
+                        THROTTLE_FOOTPRINT_HALF_X, THROTTLE_FOOTPRINT_HALF_Z)) {
+                    return false;
+                }
                 throttleInstalled = true;
                 throttlePlaceX = placeX;
                 throttlePlaceZ = placeZ;
@@ -422,6 +434,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             }
             case THROTTLE_2 -> {
                 if (blocksPlacement(placeX, placeZ, THROTTLE_2_FOOTPRINT_HALF_X, THROTTLE_2_FOOTPRINT_HALF_Z)) return false; // 14×6 与已装模块占用重叠
+                // 14×6 占位必须完全位于桌顶网格内（普通 x1..15/z9..15；docked x1..15/z1..15）
+                if (!ControlDeskBlock.placementInGrid(
+                        getBlockState().getValue(ControlDeskBlock.DOCKED), placeX, placeZ,
+                        THROTTLE_2_FOOTPRINT_HALF_X, THROTTLE_2_FOOTPRINT_HALF_Z)) {
+                    return false;
+                }
                 throttle2Installed = true;
                 throttle2PlaceX = placeX;
                 throttle2PlaceZ = placeZ;

@@ -410,7 +410,12 @@ public class Monitor2GridOverlay {
 
     /** 屏幕局部坐标 [sx, sy]（px）→ 世界（北向基准 → 放置平移 → case 22.5° 旋转 → FACING → 方块偏移）。 */
     private static Vec3 world(BlockPos pos, float sx, float sy, float z, Direction facing) {
-        return ControlDeskPlacementOverlay.monitor2World(pos, sx, sy, z, facing);
+        // monitor_2 网格自由放置后放置中心跟随 BE（勿用固定常量）；BE 缺失时回退唯一合法位 (8,12)
+        ControlDeskBlockEntity desk = Minecraft.getInstance().level != null
+                && Minecraft.getInstance().level.getBlockEntity(pos) instanceof ControlDeskBlockEntity d ? d : null;
+        int px = desk != null ? desk.getMonitor2PlaceX() : ControlDeskBlockEntity.MONITOR_2_PLACE_X;
+        int pz = desk != null ? desk.getMonitor2PlaceZ() : ControlDeskBlockEntity.MONITOR_2_PLACE_Z;
+        return ControlDeskPlacementOverlay.monitor2World(pos, sx, sy, z, facing, px, pz);
     }
 
     private static void drawGridLines(Outliner o, BlockPos pos, Direction facing, String keyPrefix) {

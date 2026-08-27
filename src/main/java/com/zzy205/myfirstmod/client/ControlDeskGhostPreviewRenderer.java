@@ -69,37 +69,40 @@ public class ControlDeskGhostPreviewRenderer {
         }
 
         Direction facing = state.getValue(ControlDeskBlock.FACING);
-        // 预览盒中心与放置常量：joystick_2 跟随准星吸附到 1px 网格；throttle / monitor_2 为唯一合法位 (8,12)（14×6 全占网格）；
+        // 预览盒中心：throttle / throttle_2 / monitor_2 / joystick_2 均吸附后钳制到「占地完全位于网格内」的
+        // 合法范围（与服务端放置共用 snappedBoxCenterClamped），预览只能在可放置区域内移动；
         // PEDAL / JOYSTICK 无放置盒（固定安装位）→ box 保持 null（不平移、不绕盒心旋转）
+        boolean docked = state.getValue(ControlDeskBlock.DOCKED);
         int[] box = null;
         float modelCenter = 0f;
         int halfX = 0, halfZ = 0;
         if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
-            box = ControlDeskBlock.snappedBoxCenter(pos, facing, hit.getLocation());
+            box = ControlDeskBlock.snappedBoxCenterClamped(pos, facing, hit.getLocation(), docked,
+                    ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF, ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF);
             modelCenter = ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER;
             halfX = halfZ = ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF;
         } else if (type == ControlDeskBlockEntity.ControlType.THROTTLE) {
-            box = new int[]{ControlDeskBlockEntity.THROTTLE_PLACE_X, ControlDeskBlockEntity.THROTTLE_PLACE_Z};
+            box = ControlDeskBlock.snappedBoxCenterClamped(pos, facing, hit.getLocation(), docked,
+                    ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X, ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z);
             modelCenter = ControlDeskBlockEntity.THROTTLE_MODEL_CENTER;
             halfX = ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X;
             halfZ = ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z;
         } else if (type == ControlDeskBlockEntity.ControlType.THROTTLE_2) {
-            box = new int[]{ControlDeskBlockEntity.THROTTLE_2_PLACE_X, ControlDeskBlockEntity.THROTTLE_2_PLACE_Z};
+            box = ControlDeskBlock.snappedBoxCenterClamped(pos, facing, hit.getLocation(), docked,
+                    ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_X, ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_Z);
             modelCenter = ControlDeskBlockEntity.THROTTLE_2_MODEL_CENTER;
             halfX = ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_X;
             halfZ = ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_Z;
         } else if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
-            box = new int[]{ControlDeskBlockEntity.MONITOR_2_PLACE_X, ControlDeskBlockEntity.MONITOR_2_PLACE_Z};
+            box = ControlDeskBlock.snappedBoxCenterClamped(pos, facing, hit.getLocation(), docked,
+                    ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X, ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z);
             modelCenter = ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER;
             halfX = ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X;
             halfZ = ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z;
         }
         // 候选位置被占地矩形占用重叠 → 不显示实物（盒子在 overlay 中变红）；
-        // joystick_2 另需 4×4 占位完全位于桌顶网格内（与服务端 install / overlay 变红判定一致），超出网格也不显示
-        if (box != null && (desk.blocksPlacement(box[0], box[1], halfX, halfZ)
-                || (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2
-                && !ControlDeskBlock.joystick2PlacementInGrid(
-                        state.getValue(ControlDeskBlock.DOCKED), box[0], box[1])))) {
+        // （占位是否在网格内已由钳制吸附保证，无需再判越界）
+        if (box != null && desk.blocksPlacement(box[0], box[1], halfX, halfZ)) {
             return;
         }
 

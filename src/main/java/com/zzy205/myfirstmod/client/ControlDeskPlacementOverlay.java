@@ -252,22 +252,22 @@ public class ControlDeskPlacementOverlay {
     /**
      * 手持 joystick_2：3D 放置预览盒（占地 4×4、高 9，底在桌顶面下方 1px = y7..16）。
      * 参考 monitor 的 2D 模块预览（跟随准星、吸附网格）：这里用 {@link Outliner#showAABB} 画 3D 盒子（12 棱边）。
-     * 盒子中心 = 命中点吸附到 1px 网格的整数 px（与服务端放置共用 {@link ControlDeskBlock#snappedBoxCenter}）；
-     * 位置被阻挡（互斥模块已装 / 4×4 占用重叠）时盒子变红。
+     * 盒子中心 = 命中点吸附后<b>钳制</b>到「4×4 占位完全位于桌顶网格内」的合法范围
+     * （与服务端放置共用 {@link ControlDeskBlock#snappedBoxCenterClamped}），预览只能在可放置区域内移动；
+     * 与已装模块占用重叠时盒子变红。
      */
     private static void showJoystick2Box(Minecraft mc, BlockHitResult hit) {
         BlockPos pos = hit.getBlockPos();
         BlockState state = mc.level.getBlockState(pos);
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
         Direction facing = state.getValue(ControlDeskBlock.FACING);
+        boolean docked = state.getValue(ControlDeskBlock.DOCKED);
 
-        int[] c = ControlDeskBlock.snappedBoxCenter(pos, facing, hit.getLocation());
+        int[] c = ControlDeskBlock.snappedBoxCenterClamped(pos, facing, hit.getLocation(), docked,
+                ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF, ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF);
         int cx = c[0];
         int cz = c[1];
-        boolean docked = state.getValue(ControlDeskBlock.DOCKED);
-        // 4×4 占位必须完全位于桌顶网格内（与服务端 install 判定一致），超出网格也变红
-        boolean blocked = isJoystick2PlacementBlocked(mc, pos, cx, cz)
-                || !ControlDeskBlock.joystick2PlacementInGrid(docked, cx, cz);
+        boolean blocked = isJoystick2PlacementBlocked(mc, pos, cx, cz);
         int half = ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF;
         Vec3 p0 = gridWorld(pos, cx - half, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM, cz - half, facing);
         Vec3 p1 = gridWorld(pos, cx + half, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_TOP, cz + half, facing);
@@ -281,17 +281,21 @@ public class ControlDeskPlacementOverlay {
 
     /**
      * 手持 throttle：3D 放置预览盒（占地 14×6、高 6，底在桌顶面下方 1px = y7..13）。
-     * throttle 占地 14×6 必须完全处于桌顶网格（x1..15 / z9..15）内 → 唯一合法位置 (8,12)（全占），
-     * 盒子固定显示在该位置（绿=可装 / 红=已装或被占用，与服务端 install 判定一致）。
+     * 盒子中心 = 命中点吸附后<b>钳制</b>到「14×6 占位完全位于桌顶网格内」的合法范围
+     * （与服务端放置共用 {@link ControlDeskBlock#snappedBoxCenterClamped}），预览只能在可放置区域内移动；
+     * 与已装模块占用重叠时变红。
      */
     private static void showThrottleBox(Minecraft mc, BlockHitResult hit) {
         BlockPos pos = hit.getBlockPos();
         BlockState state = mc.level.getBlockState(pos);
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
         Direction facing = state.getValue(ControlDeskBlock.FACING);
+        boolean docked = state.getValue(ControlDeskBlock.DOCKED);
 
-        int cx = ControlDeskBlockEntity.THROTTLE_PLACE_X;
-        int cz = ControlDeskBlockEntity.THROTTLE_PLACE_Z;
+        int[] c = ControlDeskBlock.snappedBoxCenterClamped(pos, facing, hit.getLocation(), docked,
+                ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X, ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z);
+        int cx = c[0];
+        int cz = c[1];
         boolean blocked = isThrottlePlacementBlocked(mc, pos, cx, cz);
         Vec3 p0 = gridWorld(pos, cx - ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X,
                 ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM, cz - ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z, facing);
@@ -307,17 +311,21 @@ public class ControlDeskPlacementOverlay {
 
     /**
      * 手持 throttle_2：3D 放置预览盒（占地 14×6、高 6，底在桌顶面下方 1px = y7..13）。
-     * throttle_2 占地 14×6 必须完全处于桌顶网格（x1..15 / z9..15）内 → 唯一合法位置 (8,12)（全占），
-     * 盒子固定显示在该位置（绿=可装 / 红=已装或被占用，与服务端 install 判定一致）。
+     * 盒子中心 = 命中点吸附后<b>钳制</b>到「14×6 占位完全位于桌顶网格内」的合法范围
+     * （与服务端放置共用 {@link ControlDeskBlock#snappedBoxCenterClamped}），预览只能在可放置区域内移动；
+     * 与已装模块占用重叠时变红。
      */
     private static void showThrottle2Box(Minecraft mc, BlockHitResult hit) {
         BlockPos pos = hit.getBlockPos();
         BlockState state = mc.level.getBlockState(pos);
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
         Direction facing = state.getValue(ControlDeskBlock.FACING);
+        boolean docked = state.getValue(ControlDeskBlock.DOCKED);
 
-        int cx = ControlDeskBlockEntity.THROTTLE_2_PLACE_X;
-        int cz = ControlDeskBlockEntity.THROTTLE_2_PLACE_Z;
+        int[] c = ControlDeskBlock.snappedBoxCenterClamped(pos, facing, hit.getLocation(), docked,
+                ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_X, ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_Z);
+        int cx = c[0];
+        int cz = c[1];
         boolean blocked = isThrottle2PlacementBlocked(mc, pos, cx, cz);
         Vec3 p0 = gridWorld(pos, cx - ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_X,
                 ControlDeskBlockEntity.THROTTLE_2_PLACE_Y_BOTTOM, cz - ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_Z, facing);
@@ -333,17 +341,21 @@ public class ControlDeskPlacementOverlay {
 
     /**
      * 手持 monitor_2：3D 放置预览盒（占地 14×6、高 12，底在桌顶面下方 1px = y7..19）。
-     * monitor_2 占地 14×6 必须完全处于桌顶网格（x1..15 / z9..15）内 → 唯一合法位置 (8,12)（全占），
-     * 盒子固定显示在该位置（绿=可装 / 红=已装或被占用，与服务端 install 判定一致）。
+     * 盒子中心 = 命中点吸附后<b>钳制</b>到「14×6 占位完全位于桌顶网格内」的合法范围
+     * （与服务端放置共用 {@link ControlDeskBlock#snappedBoxCenterClamped}），预览只能在可放置区域内移动；
+     * 与已装模块占用重叠时变红。
      */
     private static void showMonitor2Box(Minecraft mc, BlockHitResult hit) {
         BlockPos pos = hit.getBlockPos();
         BlockState state = mc.level.getBlockState(pos);
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
         Direction facing = state.getValue(ControlDeskBlock.FACING);
+        boolean docked = state.getValue(ControlDeskBlock.DOCKED);
 
-        int cx = ControlDeskBlockEntity.MONITOR_2_PLACE_X;
-        int cz = ControlDeskBlockEntity.MONITOR_2_PLACE_Z;
+        int[] c = ControlDeskBlock.snappedBoxCenterClamped(pos, facing, hit.getLocation(), docked,
+                ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X, ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z);
+        int cx = c[0];
+        int cz = c[1];
         boolean blocked = isMonitor2PlacementBlocked(mc, pos, cx, cz);
         Vec3 p0 = gridWorld(pos, cx - ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X,
                 ControlDeskBlockEntity.MONITOR_2_PLACE_Y_BOTTOM, cz - ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z, facing);
@@ -385,8 +397,9 @@ public class ControlDeskPlacementOverlay {
      * → 桌体 FACING 旋转（绕方块中心 Y，gridWorld 同约定）→ +方块坐标。
      * 网格线画在屏幕面本身（无内凹偏移，用户定稿 0px）。
      * <p>供 {@link Monitor2GridOverlay} 复用（monitor_2 表面网格/模块框绘制）。
+     * {@code placeX/placeZ} 为 monitor_2 实际放置中心（BE 存储，网格自由放置后跟随吸附位置，勿用固定常量）。
      */
-    static Vec3 monitor2World(BlockPos pos, float x, float y, float z, Direction facing) {
+    static Vec3 monitor2World(BlockPos pos, float x, float y, float z, Direction facing, int placeX, int placeZ) {
         // 网格线画在屏幕面本身（无内凹偏移，用户定稿 0px）
         z += 0.0f;
 
@@ -400,9 +413,9 @@ public class ControlDeskPlacementOverlay {
         double rz = oz + dy * sin + dz * cos;
 
         // px → 块 + 放置平移
-        double bx = x / 16.0 + (ControlDeskBlockEntity.MONITOR_2_PLACE_X - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16.0;
+        double bx = x / 16.0 + (placeX - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16.0;
         double by = ry / 16.0 + (ControlDeskBlockEntity.MODEL_PLACE_Y - ControlDeskBlockEntity.MONITOR_2_MODEL_BOTTOM_Y) / 16.0;
-        double bz = rz / 16.0 + (ControlDeskBlockEntity.MONITOR_2_PLACE_Z - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16.0;
+        double bz = rz / 16.0 + (placeZ - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16.0;
 
         // 桌体 FACING 旋转（绕方块中心 Y）+ 方块偏移
         return switch (facing) {

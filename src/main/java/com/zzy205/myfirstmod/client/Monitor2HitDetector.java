@@ -77,7 +77,8 @@ public final class Monitor2HitDetector {
             Vec3 o = sub != null ? SableCompat.toLocalPosition(sub, partialTick, eye) : eye;
             Vec3 d = sub != null ? SableCompat.toLocalDirection(sub, partialTick, view) : view;
 
-            double[] hit = intersectScreen(pos, facing, o, d, reach);
+            double[] hit = intersectScreen(pos, facing, o, d, reach,
+                    desk.getMonitor2PlaceX(), desk.getMonitor2PlaceZ());
             if (hit == null) {
                 if (trace) {
                     CCPeripheralExtender.LOGGER.info("[Monitor2Trace] {} 求交失败（背面/平行/超距）", pos.toShortString());
@@ -167,9 +168,12 @@ public final class Monitor2HitDetector {
      * 逆变换顺序与渲染正向相反：facing逆 → shift逆 → case 22.5° 逆，旋转取负、平移取反，
      * 然后在北向基准模型空间与 z={@code MONITOR_2_SCREEN_Z} 平面求交（背面剔除：屏幕法线 -Z，
      * 视线 z 分量必须为正才能从正面命中）。
+     *
+     * @param placeX/placeZ monitor_2 实际放置中心（BE 存储，网格自由放置后跟随吸附位置，勿用固定常量）
      */
     @Nullable
-    private static double[] intersectScreen(BlockPos pos, Direction facing, Vec3 origin, Vec3 dir, double maxDistance) {
+    private static double[] intersectScreen(BlockPos pos, Direction facing, Vec3 origin, Vec3 dir,
+                                            double maxDistance, int placeX, int placeZ) {
         Vec3 block = Vec3.atLowerCornerOf(pos);
         double[] o = { origin.x - block.x, origin.y - block.y, origin.z - block.z };
         double[] d = { dir.x, dir.y, dir.z };
@@ -178,9 +182,9 @@ public final class Monitor2HitDetector {
         inverseFacing(o, d, facing);
 
         // 2. shift 逆（放置平移取反）
-        o[0] -= (ControlDeskBlockEntity.MONITOR_2_PLACE_X - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16.0;
+        o[0] -= (placeX - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16.0;
         o[1] -= (ControlDeskBlockEntity.MODEL_PLACE_Y - ControlDeskBlockEntity.MONITOR_2_MODEL_BOTTOM_Y) / 16.0;
-        o[2] -= (ControlDeskBlockEntity.MONITOR_2_PLACE_Z - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16.0;
+        o[2] -= (placeZ - ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER) / 16.0;
 
         // 3. case 22.5° x 旋转逆（绕 origin [14,4,3]，角度取负）
         inverseCaseTilt(o, d);

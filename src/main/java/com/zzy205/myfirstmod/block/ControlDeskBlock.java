@@ -147,25 +147,37 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             }
             // 安装成功：throttle / joystick_2 按「桌体→玩家的水平方向」记录旋转（throttle 只能 0°/180°、
             // joystick_2 90° 间隔，均让模型 -Z 面向玩家）；monitor_2 不面向玩家（不记录旋转，只随桌体 FACING）。
-            // 放置中心：throttle / monitor_2 恒为唯一合法位 (8,12)；joystick_2 按右键命中点吸附到 1px 网格，与客户端预览一致
+            // 放置中心：四个自由放置模块均吸附后钳制到「占地完全位于网格内」的合法中心范围
+            // （预览只能在可放置区域内移动；throttle / throttle_2 / monitor_2 为 14×6，joystick_2 为 4×4）
             int placeX = 8, placeZ = 8;
             Direction toPlayer = null;
             if (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2) {
-                int[] c = snappedBoxCenter(pos, state.getValue(FACING), hitResult.getLocation());
+                int[] c = snappedBoxCenterClamped(pos, state.getValue(FACING), hitResult.getLocation(),
+                        state.getValue(DOCKED),
+                        ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF, ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF);
                 placeX = c[0];
                 placeZ = c[1];
                 toPlayer = directionFromDeskTo(player, pos);
             } else if (type == ControlDeskBlockEntity.ControlType.THROTTLE) {
-                placeX = ControlDeskBlockEntity.THROTTLE_PLACE_X;
-                placeZ = ControlDeskBlockEntity.THROTTLE_PLACE_Z;
+                int[] c = snappedBoxCenterClamped(pos, state.getValue(FACING), hitResult.getLocation(),
+                        state.getValue(DOCKED),
+                        ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_X, ControlDeskBlockEntity.THROTTLE_FOOTPRINT_HALF_Z);
+                placeX = c[0];
+                placeZ = c[1];
                 toPlayer = directionFromDeskTo(player, pos);
             } else if (type == ControlDeskBlockEntity.ControlType.THROTTLE_2) {
-                placeX = ControlDeskBlockEntity.THROTTLE_2_PLACE_X;
-                placeZ = ControlDeskBlockEntity.THROTTLE_2_PLACE_Z;
+                int[] c = snappedBoxCenterClamped(pos, state.getValue(FACING), hitResult.getLocation(),
+                        state.getValue(DOCKED),
+                        ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_X, ControlDeskBlockEntity.THROTTLE_2_FOOTPRINT_HALF_Z);
+                placeX = c[0];
+                placeZ = c[1];
                 toPlayer = directionFromDeskTo(player, pos);
             } else if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
-                placeX = ControlDeskBlockEntity.MONITOR_2_PLACE_X;
-                placeZ = ControlDeskBlockEntity.MONITOR_2_PLACE_Z;
+                int[] c = snappedBoxCenterClamped(pos, state.getValue(FACING), hitResult.getLocation(),
+                        state.getValue(DOCKED),
+                        ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X, ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z);
+                placeX = c[0];
+                placeZ = c[1];
                 // toPlayer 保持 null：monitor_2 不做面向玩家的旋转
             }
             if (!desk.install(type, placeX, placeZ, toPlayer)) {
@@ -467,16 +479,40 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * joystick_2 放置中心 (cx,cz) 的 4×4 占位（半宽 {@link ControlDeskBlockEntity#JOYSTICK_2_FOOTPRINT_HALF}=2）
-     * 是否<b>完全</b>位于桌顶网格内（普通 6×14：x1..15 / z9..15；docked 14×14：x1..15 / z1..15）。
+     * throttle / throttle_2 / monitor_2 专用的「吸附 + 钳制」放置中心：命中点 → 北向模型坐标 →
+     * 吸附整数 px → <b>钳制到「占地矩形（半宽 halfX×halfZ）完全位于桌顶网格内」的合法中心范围</b>
+     * （cx ∈ [1+halfX, 15-halfX]，cz ∈ [zMin+halfZ, 15-halfZ]，zMin = docked ? 1 : 9）。
+     * 预览盒只能在可放置区域内移动（准星移出网格时盒子停在边界上，不显示越界红框）；
+     * 与服务端放置共用，钳制后必满足 {@link #placementInGrid}。
+     */
+    public static int[] snappedBoxCenterClamped(BlockPos pos, Direction facing, Vec3 click,
+                                                boolean docked, int halfX, int halfZ) {
+        int[] c = snappedBoxCenter(pos, facing, click);
+        int zMin = docked ? 1 : 9;
+        return new int[]{
+                Math.max(1 + halfX, Math.min(15 - halfX, c[0])),
+                Math.max(zMin + halfZ, Math.min(15 - halfZ, c[1]))
+        };
+    }
+
+    /**
+     * 放置中心 (cx,cz) 的占地矩形（半宽 halfX×halfZ）是否<b>完全</b>位于桌顶网格内
+     * （普通 6×14：x1..15 / z9..15；docked 14×14：x1..15 / z1..15）。
      * 客户端预览（{@code ControlDeskPlacementOverlay} 变红 / ghost 隐藏）与服务端放置（{@link #useItemOn} 拒绝）共用，
      * 防止「占位只差一格在网格外也能放」。docked 由 blockstate 读 {@link #DOCKED} 传入。
      */
-    public static boolean joystick2PlacementInGrid(boolean docked, int cx, int cz) {
-        int half = ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF;
+    public static boolean placementInGrid(boolean docked, int cx, int cz, int halfX, int halfZ) {
         int zMin = docked ? 1 : 9;
-        return cx - half >= 1 && cx + half <= 15
-                && cz - half >= zMin && cz + half <= 15;
+        return cx - halfX >= 1 && cx + halfX <= 15
+                && cz - halfZ >= zMin && cz + halfZ <= 15;
+    }
+
+    /**
+     * joystick_2（4×4 占地，半宽 2）专用：占位是否完全位于桌顶网格内，委托 {@link #placementInGrid}。
+     */
+    public static boolean joystick2PlacementInGrid(boolean docked, int cx, int cz) {
+        return placementInGrid(docked, cx, cz,
+                ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF, ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF);
     }
 
     /**
