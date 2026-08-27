@@ -26,6 +26,8 @@ import java.util.List;
  * controlDesk 交互预览与菜单打开：
  * <ul>
  *   <li>手持踏板/操纵杆 → 准星指向 controlDesk 时在安装位显示预览框（绿=可装 / 红=已装）</li>
+ *   <li>手持控制台拓展坞（dock）→ 准星指向 controlDesk 时显示拓展坞安装预览框
+ *       （北向基准 0,0,0,16,8,8 = 桌体北侧整块空区，随 FACING 旋转；仅预览框，无 ghost 实物、无放置逻辑）</li>
  *   <li>手持扳手 → 准星指向 controlDesk 时显示已安装控件的安装位（默认绿）；视角命中安装位变红，蹲下右键拆对应模块</li>
  *   <li>扳手普通右键（不蹲下）或 空手蹲下右键，准星指向 controlDesk（任意位置）→ 打开控制台配置菜单 {@link ControlDeskConfigScreen}（右键边沿防连发）；扳手蹲下右键 → 不拦截，交给服务端 {@code onSneakWrenched} 拆除模块</li>
  * </ul>
@@ -95,6 +97,11 @@ public class ControlDeskPlacementOverlay {
                 if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
                     showMonitor2Box(mc, hit);
                 }
+                return;
+            }
+            // 手持控制台拓展坞：显示拓展坞安装预览框（仅预览，无 ghost 实物、无放置逻辑）
+            if (isDock(held)) {
+                showDockBox(mc, hit);
                 return;
             }
             if (isWrench(held)) {
@@ -335,6 +342,26 @@ public class ControlDeskPlacementOverlay {
     }
 
     /**
+     * 手持控制台拓展坞（dock）：显示拓展坞安装预览框（北向基准 0,0,0,16,8,8 = 桌体北侧整块空区，随 FACING 旋转）。
+     * 仅显示预览框 —— 无半透明 ghost 实物、无放置逻辑（拓展坞本体后续接入）。
+     */
+    private static void showDockBox(Minecraft mc, BlockHitResult hit) {
+        BlockPos pos = hit.getBlockPos();
+        BlockState state = mc.level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ControlDeskBlock)) return;
+        Direction facing = state.getValue(ControlDeskBlock.FACING);
+
+        Vec3 p0 = gridWorld(pos, 0, 0, 0, facing);
+        Vec3 p1 = gridWorld(pos, 16, 8, 8, facing);
+        AABB box = new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+        Outliner.getInstance().showAABB("control-desk/box-dock/" + pos.toShortString(), box)
+                .colored(COLOR_VALID)
+                .lineWidth(1 / 16f);
+    }
+
+    /**
      * monitor_2 屏幕面点（北向基准模型空间 px）→ 世界坐标。
      * 变换链与渲染一致：case 22.5° x 旋转（Blockbench 元素 rotation，绕 origin [14,4,3]）→ px/16 →
      * 放置平移 shift = ((placeX-modelCenter)/16, (MODEL_PLACE_Y-modelBottomY)/16, (placeZ-modelCenter)/16)
@@ -423,6 +450,11 @@ public class ControlDeskPlacementOverlay {
         if (stack.is(MyModItems.CONTROL_JOYSTICK_2.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK_2;
         if (stack.is(MyModItems.CONTROL_THROTTLE_2.get())) return ControlDeskBlockEntity.ControlType.THROTTLE_2;
         return null;
+    }
+
+    /** 手持控制台拓展坞（dock，拓展坞预览触发物品）。 */
+    private static boolean isDock(ItemStack stack) {
+        return stack.is(MyModItems.CONTROL_DOCK.get());
     }
 
     private static boolean isWrench(ItemStack stack) {

@@ -77,6 +77,7 @@
   "item.ccpe.throttle": "油门杆",
   "item.ccpe.joystick_2": "操纵杆 2",
   "item.ccpe.throttle_2": "油门杆 2",
+  "item.ccpe.dock": "控制台拓展坞",
 
   "gui.ccpe.control_desk.already_installed": "该控件已安装",
   "gui.ccpe.control_desk.position_occupied": "该位置已被占用",

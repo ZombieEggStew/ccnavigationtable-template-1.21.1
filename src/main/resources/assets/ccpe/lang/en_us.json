@@ -75,6 +75,7 @@
   "item.ccpe.throttle": "Throttle",
   "item.ccpe.joystick_2": "Joystick 2",
   "item.ccpe.throttle_2": "Throttle 2",
+  "item.ccpe.dock": "Control Desk Dock",
 
   "gui.ccpe.control_desk.already_installed": "Control already installed",
   "gui.ccpe.control_desk.position_occupied": "Position occupied",
