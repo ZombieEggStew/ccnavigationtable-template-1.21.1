@@ -88,6 +88,9 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
             }
         }
 
+        // 桌顶小模块（monitor 模块 button/knob/toggle）：BER 常驻渲染（Flywheel 不实例化它们）
+        renderDeskTopModules(be, state, facing, ms, bufferSource, light, overlay);
+
         if (shellInstanced) return;
 
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)) {
@@ -430,9 +433,44 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         }
     }
 
+    /**
+     * 桌顶小模块（monitor 模块 button/knob/toggle_switch）渲染：BER 常驻（Flywheel 可用时也不实例化它们）。
+     * 变换链：桌体 FACING 旋转 → 平移到桌顶格位（格 (gx,gy) ↔ 北向 px (1+gx, 9+gy)，模型坐桌面 y8）→
+     * 朝向校正：button 底座原生为竖在 XY 面的贴片（前脸 +Z）→ 绕 X -90° 平躺朝上；toggle/knob 底座原生
+     * 平躺（前脸 +Y）→ 直接放桌顶。暂为静态渲染（按钮弹起/开关关/旋钮 0°），交互动画后续接入。
+     */
+    private void renderDeskTopModules(ControlDeskBlockEntity be, BlockState state, Direction facing,
+                                      PoseStack ms, MultiBufferSource bufferSource, int light, int overlay) {
+        var grid = be.getDeskTopGrid();
+        if (grid.getAllModules().isEmpty()) return;
+
+        for (var mod : grid.getAllModules().values()) {
+            var bhv = ModuleRenderBehavior.of(mod.type());
+            BakedModel model = MonitorPreloadedModels.getModel(mod.type());
+            if (model == null) continue;
+
+            ms.pushPose();
+            // 桌体 FACING 旋转（PoseStack 已平移到方块位置；与 applyMonitor2ModuleTransform 同链）
+            ms.translate(0.5f, 0.5f, 0.5f);
+            ms.mulPose(com.mojang.math.Axis.YP.rotationDegrees(-facing.getOpposite().toYRot()));
+            ms.translate(-0.5f, -0.5f, -0.5f);
+            // 桌顶格位（px → 块，模型坐桌面 y8）；X/Z 微调对齐 monitor_2 锚点公式（offsetX/Z 为块单位）
+            float px = (1 + mod.gridX() + bhv.offsetX() * 16f) / 16f;
+            float pz = (9 + mod.gridY() + bhv.offsetZ() * 16f) / 16f;
+            ms.translate(px, ControlDeskBlockEntity.MODEL_PLACE_Y / 16f, pz);
+            // 朝向校正：button 贴片竖放 → 平躺；toggle/knob 底座已平躺
+            if (mod.type() == ModuleType.BUTTON_1X1) {
+                ms.mulPose(com.mojang.math.Axis.XP.rotationDegrees(-90));
+            }
+            // 底座 + 额外部件（静态）
+            Screen9GridRenderer.renderModel(ms, bufferSource.getBuffer(Sheets.solidBlockSheet()), model, light, overlay);
+            bhv.renderExtra(ms, bufferSource, 0f, 0f, light, overlay);
+            ms.popPose();
+        }
+    }
+
     /** monitor_2 模块屏幕面锚点（北向基准模型空间 px，内缩 1px 网格 + 模块微调 + 凸出 1px）。 */
-    private static float[] monitor2ModuleAnchor(MonitorModule mod, ModuleRenderBehavior bhv) {
-        return new float[]{
+    private static float[] monitor2ModuleAnchor(MonitorModule mod, ModuleRenderBehavior bhv) {        return new float[]{
                 ControlDeskBlockEntity.MONITOR_2_SCREEN_X_MIN + 1 + mod.gridX() + bhv.offsetX() * 16f,
                 ControlDeskBlockEntity.MONITOR_2_SCREEN_Y_MIN + 1 + mod.gridY() + bhv.offsetY() * 16f,
                 ControlDeskBlockEntity.MONITOR_2_SCREEN_Z - ControlDeskBlockEntity.MONITOR_2_MODULE_PROTRUDE_PX

@@ -275,7 +275,7 @@ public class ControlDeskPlacementOverlay {
     }
 
     /** 北向基准模型坐标（px）→ 世界坐标：绕方块中心 Y 旋转到 FACING（与底座模型 rotateCenteredDegrees 同约定）；y 略抬离桌面防 z-fight。 */
-    private static Vec3 gridWorld(BlockPos pos, float x, float y, float z, Direction facing) {
+    static Vec3 gridWorld(BlockPos pos, float x, float y, float z, Direction facing) {
         // 必须用 double 运算：Sable 子次元的 plot 坐标可达 2×10^7，float 在此时 ULP=2，
         // int+float 会把 px/16 的偏移全部舍入掉 → 预览盒/网格塌缩成一条线（sable 兼容问题）
         double bx = x / 16.0;

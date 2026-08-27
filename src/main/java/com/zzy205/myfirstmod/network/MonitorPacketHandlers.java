@@ -44,12 +44,18 @@ public final class MonitorPacketHandlers {
     }
 
     public static void register(PayloadRegistrar registrar) {
-        // 服务端→客户端：同步 Monitor / monitor_2 棋盘网格状态
+        // 服务端→客户端：同步 Monitor / monitor_2 棋盘网格状态（或 controlDesk 桌顶网格）
         registrar.playToClient(
                 SyncGridPayload.TYPE,
                 SyncGridPayload.STREAM_CODEC,
                 (payload, ctx) -> {
                     var level = ctx.player().level();
+                    if (payload.target() == GridTarget.DESK_TOP) {
+                        if (level.getBlockEntity(payload.pos()) instanceof ControlDeskBlockEntity desk) {
+                            desk.getDeskTopGrid().load(level.registryAccess(), payload.gridTag());
+                        }
+                        return;
+                    }
                     MonitorGridHost host = findHost(level, payload.pos());
                     if (host != null) {
                         host.getGridState().load(level.registryAccess(), payload.gridTag());
@@ -93,12 +99,26 @@ public final class MonitorPacketHandlers {
                 }
         );
 
-        // 客户端→服务端：Monitor / monitor_2 放置模块
+        // 客户端→服务端：Monitor / monitor_2 放置模块（或 controlDesk 桌顶小模块）
         registrar.playToServer(
                 PlaceModulePayload.TYPE,
                 PlaceModulePayload.STREAM_CODEC,
                 (payload, ctx) -> {
                     var level = ctx.player().level();
+                    if (payload.target() == GridTarget.DESK_TOP) {
+                        // 功能临时关闭（总开关见 ControlDeskBlockEntity.DESK_TOP_MODULES_ENABLED），服务端也拦截
+                        if (!ControlDeskBlockEntity.DESK_TOP_MODULES_ENABLED) return;
+                        if (level.getBlockEntity(payload.pos()) instanceof ControlDeskBlockEntity desk) {
+                            var type = ModuleType.byName(payload.moduleTypeName());
+                            if (type != null) {
+                                int id = desk.tryPlaceDeskTopModule(payload.gridX(), payload.gridY(), type);
+                                if (id >= 0 && !ctx.player().isCreative()) {
+                                    ctx.player().getMainHandItem().shrink(1);
+                                }
+                            }
+                        }
+                        return;
+                    }
                     MonitorGridHost host = findHost(level, payload.pos());
                     if (host != null) {
                         var type = ModuleType.byName(payload.moduleTypeName());
@@ -112,12 +132,26 @@ public final class MonitorPacketHandlers {
                 }
         );
 
-        // 客户端→服务端：Monitor / monitor_2 移除模块
+        // 客户端→服务端：Monitor / monitor_2 移除模块（或 controlDesk 桌顶小模块）
         registrar.playToServer(
                 RemoveModulePayload.TYPE,
                 RemoveModulePayload.STREAM_CODEC,
                 (payload, ctx) -> {
                     var level = ctx.player().level();
+                    if (payload.target() == GridTarget.DESK_TOP) {
+                        // 功能临时关闭（总开关见 ControlDeskBlockEntity.DESK_TOP_MODULES_ENABLED），服务端也拦截
+                        if (!ControlDeskBlockEntity.DESK_TOP_MODULES_ENABLED) return;
+                        if (level.getBlockEntity(payload.pos()) instanceof ControlDeskBlockEntity desk) {
+                            String removedType = desk.tryRemoveDeskTopModule(payload.moduleId());
+                            if (removedType != null && !ctx.player().isCreative()) {
+                                ItemStack stack = MyModItems.monitorModuleStack(ModuleType.byName(removedType));
+                                if (!stack.isEmpty() && !ctx.player().getInventory().add(stack)) {
+                                    Block.popResource(level, payload.pos(), stack);
+                                }
+                            }
+                        }
+                        return;
+                    }
                     MonitorGridHost host = findHost(level, payload.pos());
                     if (host != null) {
                         String removedType = host.tryRemoveModule(payload.moduleId());

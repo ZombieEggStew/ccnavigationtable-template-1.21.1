@@ -9,6 +9,7 @@ import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
 import com.zzy205.myfirstmod.monitor.ScreenText;
+import com.zzy205.myfirstmod.network.GridTarget;
 import com.zzy205.myfirstmod.network.SyncGridPayload;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import net.minecraft.core.BlockPos;
@@ -183,6 +184,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_CHANNEL = "Channel";
     private static final String TAG_OCCUPIED_CHANNELS = "OccupiedChannels";
     private static final String TAG_MONITOR_2_GRID = "Monitor2Grid";
+    private static final String TAG_DESK_TOP_GRID = "DeskTopGrid";
 
     private boolean pedalInstalled;
     private boolean joystickInstalled;
@@ -209,6 +211,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** monitor_2 表面小 Monitor 的网格状态（10×8，懒加载；仅安装 MONITOR_2 时有效，见 {@link #getMonitor2Grid()}） */
     @Nullable
     private GridState monitor2Grid;
+    /** 桌顶棋盘网格（14×6，格 = 1px：x1..15 / z9..15）——monitor 模块（button/knob/toggle_switch）自由放置用，懒加载（见 {@link #getDeskTopGrid()}） */
+    @Nullable
+    private GridState deskTopGrid;
     private int joystickReturnTime = DEFAULT_JOYSTICK_RETURN_TIME;      // 前后轴回正时间
     private int joystickReturnTimeYaw = DEFAULT_JOYSTICK_RETURN_TIME;   // 左右轴回正时间
     private boolean gearModePitch;                                      // 前后轴档位模式开关
@@ -499,6 +504,13 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
                 return true;
             }
         }
+        // 桌顶小模块（monitor 模块 button/knob/toggle 等）占地矩形（北向 px：x1..15 / z9..15，格 (gx,gy) ↔ px (1+gx, 9+gy)）
+        for (var mod : getDeskTopGrid().getAllModules().values()) {
+            if (rectsOverlap(cx - halfX, cz - halfZ, halfX * 2, halfZ * 2,
+                    1 + mod.gridX(), 9 + mod.gridY(), mod.getWidth(), mod.getHeight())) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -651,6 +663,90 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             monitor2Grid = new GridState(MONITOR_2_GRID_WIDTH, MONITOR_2_GRID_HEIGHT);
         }
         return monitor2Grid;
+    }
+
+    /**
+     * 桌顶棋盘网格（14×6，格 = 1px：x1..15 / z9..15，北向基准）——monitor 模块
+     * （button 1×1 / toggle_switch 1×1 / knob 2×2）自由放置用，懒加载。
+     * 格 (gx, gy) ↔ 北向 px (1+gx, 9+gy)；与桌顶大模块（joystick_2 / throttle / throttle_2 / monitor_2）的
+     * 互占检查见 {@link #deskTopOverlapsBigModule} / {@link #blocksPlacement}。
+     */
+    public GridState getDeskTopGrid() {
+        if (deskTopGrid == null) {
+            deskTopGrid = new GridState(DESK_TOP_GRID_WIDTH, DESK_TOP_GRID_HEIGHT);
+        }
+        return deskTopGrid;
+    }
+
+    /** 桌顶小模块放置（服务端调用）：与大模块占地重叠或格子被占返回 -1。成功返回 moduleId。 */
+    public int tryPlaceDeskTopModule(int gx, int gy, ModuleType type) {
+        if (deskTopOverlapsBigModule(1 + gx, 9 + gy, type.width, type.height)) return -1;
+        int id = getDeskTopGrid().tryPlace(gx, gy, type);
+        if (id >= 0) {
+            deskTopChanged();
+        }
+        return id;
+    }
+
+    /** 桌顶小模块移除（服务端调用）：成功返回被移除的模块类型名，失败返回 null。 */
+    public String tryRemoveDeskTopModule(int moduleId) {
+        var mod = getDeskTopGrid().tryRemove(moduleId);
+        if (mod != null) {
+            deskTopChanged();
+            return mod.type().name;
+        }
+        return null;
+    }
+
+    /**
+     * 桌顶小模块占地（北向 px，左上角 (px,pz) + 尺寸 w×h）是否与已装大模块
+     * （joystick_2 4×4 / throttle·throttle_2·monitor_2 各 14×6）的占地矩形重叠。
+     * 客户端放置预览与服务端放置共用。
+     */
+    public boolean deskTopOverlapsBigModule(int px, int pz, int w, int h) {
+        if (joystick2Installed && rectsOverlap(px, pz, w, h,
+                joystick2PlaceX - JOYSTICK_2_FOOTPRINT_HALF, joystick2PlaceZ - JOYSTICK_2_FOOTPRINT_HALF,
+                JOYSTICK_2_FOOTPRINT_HALF * 2, JOYSTICK_2_FOOTPRINT_HALF * 2)) {
+            return true;
+        }
+        if (throttleInstalled && rectsOverlap(px, pz, w, h,
+                THROTTLE_PLACE_X - THROTTLE_FOOTPRINT_HALF_X, THROTTLE_PLACE_Z - THROTTLE_FOOTPRINT_HALF_Z,
+                THROTTLE_FOOTPRINT_HALF_X * 2, THROTTLE_FOOTPRINT_HALF_Z * 2)) {
+            return true;
+        }
+        if (throttle2Installed && rectsOverlap(px, pz, w, h,
+                THROTTLE_2_PLACE_X - THROTTLE_2_FOOTPRINT_HALF_X, THROTTLE_2_PLACE_Z - THROTTLE_2_FOOTPRINT_HALF_Z,
+                THROTTLE_2_FOOTPRINT_HALF_X * 2, THROTTLE_2_FOOTPRINT_HALF_Z * 2)) {
+            return true;
+        }
+        if (monitor2Installed && rectsOverlap(px, pz, w, h,
+                MONITOR_2_PLACE_X - MONITOR_2_FOOTPRINT_HALF_X, MONITOR_2_PLACE_Z - MONITOR_2_FOOTPRINT_HALF_Z,
+                MONITOR_2_FOOTPRINT_HALF_X * 2, MONITOR_2_FOOTPRINT_HALF_Z * 2)) {
+            return true;
+        }
+        return false;
+    }
+
+    /** 矩形重叠判定（北向 px，半开区间 [x1, x1+w1) × [z1, z1+h1)）。 */
+    private static boolean rectsOverlap(int x1, int z1, int w1, int h1, int x2, int z2, int w2, int h2) {
+        return x1 < x2 + w2 && x2 < x1 + w1 && z1 < z2 + h2 && z2 < z1 + h1;
+    }
+
+    /** 同步桌顶网格状态到所有追踪此区块的客户端（对齐 monitor_2 的 {@code syncMonitor2GridToClients}）。 */
+    private void syncDeskTopGridToClients() {
+        if (level instanceof ServerLevel serverLevel) {
+            var payload = new SyncGridPayload(worldPosition, getDeskTopGrid().save(level.registryAccess()), GridTarget.DESK_TOP);
+            PacketDistributor.sendToPlayersTrackingChunk(serverLevel, new ChunkPos(worldPosition), payload);
+        }
+    }
+
+    /** 桌顶网格变更：本地标记 + 服务端推送 BE 更新与 grid 数据。 */
+    private void deskTopChanged() {
+        this.setChanged();
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+            syncDeskTopGridToClients();
+        }
     }
 
     // ═══════════════ monitor_2 表面小 Monitor（MonitorGridHost 实现） ═══════════════
@@ -1147,6 +1243,17 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** monitor_2 屏幕棋盘网格（格）：屏幕面 12×10 → 四周各内缩 1px → 10×8 格（用户定稿）。 */
     public static final int MONITOR_2_GRID_WIDTH = 10;
     public static final int MONITOR_2_GRID_HEIGHT = 8;
+    /** 桌顶棋盘网格（格，1px/格）：桌顶面 16px 宽、8px 深 → 四周各内缩 1px → 14×6 格（x1..15 / z9..15，北向基准）。
+     *  桌顶 monitor 模块（button 1×1 / toggle_switch 1×1 / knob 2×2）按格放置。 */
+    public static final int DESK_TOP_GRID_WIDTH = 14;
+    public static final int DESK_TOP_GRID_HEIGHT = 6;
+
+    /**
+     * 桌顶小模块（monitor 模块 button/knob/toggle 放到桌顶棋盘网格）功能总开关。
+     * 当前为<b>临时关闭</b>（客户端 overlay 与服务端 payload 均拦截，见 {@code DeskTopGridOverlay}
+     * / {@code MonitorPacketHandlers}）；重新启用改为 {@code true} 即可，其余代码已就位。
+     */
+    public static final boolean DESK_TOP_MODULES_ENABLED = false;
     /** monitor_2 case 前脸绕 x 轴旋转（Blockbench 模型内烘焙，monitor_2.json case 元素 rotation，px）：
      *  angle 22.5°、origin [14,4,3]（屏幕后仰 22.5°；方向符号待进游戏验证，反了翻转角度符号）。 */
     public static final float MONITOR_2_SCREEN_TILT_DEG = 22.5f;
@@ -1950,6 +2057,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (monitor2Grid != null) {
             tag.put(TAG_MONITOR_2_GRID, monitor2Grid.save(registries));
         }
+        // 桌顶小模块网格（monitor 模块 button/knob/toggle 自由放置；蓝图/存档可携带）
+        if (deskTopGrid != null) {
+            tag.put(TAG_DESK_TOP_GRID, deskTopGrid.save(registries));
+        }
     }
 
     @Override
@@ -2144,6 +2255,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_MONITOR_2_GRID)) {
             getMonitor2Grid().load(registries, tag.getCompound(TAG_MONITOR_2_GRID));
         }
+        if (tag.contains(TAG_DESK_TOP_GRID)) {
+            getDeskTopGrid().load(registries, tag.getCompound(TAG_DESK_TOP_GRID));
+        }
     }
 
     /** Create 原理图 / 装置搬运时的「安全 NBT」（Schematicannon 打印保留控件配置）。 */
@@ -2209,6 +2323,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         // monitor_2 表面网格：蓝图可携带表面模块（对齐 Monitor 的 GridState 走 saveAdditional）
         if (monitor2Grid != null) {
             compound.put(TAG_MONITOR_2_GRID, monitor2Grid.save(registries));
+        }
+        // 桌顶小模块网格：蓝图可携带（对齐 monitor_2 表面网格）
+        if (deskTopGrid != null) {
+            compound.put(TAG_DESK_TOP_GRID, deskTopGrid.save(registries));
         }
     }
 
@@ -2287,6 +2405,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         // monitor_2 表面网格：随 BE 更新包同步（客户端读取后即可渲染表面模块）
         if (monitor2Grid != null) {
             tag.put(TAG_MONITOR_2_GRID, monitor2Grid.save(registries));
+        }
+        // 桌顶小模块网格：随 BE 更新包同步（客户端读取后即可渲染桌顶小模块）
+        if (deskTopGrid != null) {
+            tag.put(TAG_DESK_TOP_GRID, deskTopGrid.save(registries));
         }
         return tag;
     }

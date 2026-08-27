@@ -14,6 +14,7 @@ import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
 import com.zzy205.myfirstmod.client.MonitorBackgrounds;
 import com.zzy205.myfirstmod.client.MonitorOutlineRenderer;
 import com.zzy205.myfirstmod.client.ControlDeskPlacementOverlay;
+import com.zzy205.myfirstmod.client.DeskTopGridOverlay;
 import com.zzy205.myfirstmod.client.ControlDeskGhostPreviewRenderer;
 import com.zzy205.myfirstmod.client.JoystickOverlay;
 import com.zzy205.myfirstmod.client.SeatControlListener;
@@ -47,6 +48,7 @@ public class CCPeripheralExtenderClient {
         MonitorGridOverlay.register();
         Monitor2GridOverlay.register();
         ControlDeskPlacementOverlay.register();
+        DeskTopGridOverlay.register();
         ControlDeskGhostPreviewRenderer.register();
         SeatControlListener.register();
         NeoForge.EVENT_BUS.addListener(MonitorOutlineRenderer::onRenderHighlight);

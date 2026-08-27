@@ -272,7 +272,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK)
-                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.BAFFLE);
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.BAFFLE)
+                    || !desk.getDeskTopGrid().isEmpty(); // 桌顶小模块（monitor 模块）也算已装模块
             if (!anyInstalled) {
                 // 光桌：没有模块可拆，走默认拆方块
                 return IWrenchable.super.onSneakWrenched(state, context);
@@ -317,8 +318,11 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                     }
                 }
             } else {
-                // 点击位置没命中任何模块 = 玩家试图直接拆控制台：装有模块时禁止拆方块，提示先拆模块
-                if (context.getPlayer() != null) {
+                // 点击位置没命中任何控件模块：若也没命中桌顶小模块（monitor 模块，拆除由客户端
+                // DeskTopGridOverlay 经 payload 处理），说明玩家试图直接拆控制台 → 提示先拆模块
+                int[] cell = deskTopCellAt(pos, state.getValue(FACING), context.getClickLocation());
+                boolean onDeskModule = cell != null && desk.getDeskTopGrid().getCell(cell[0], cell[1]) >= 0;
+                if (context.getPlayer() != null && !onDeskModule) {
                     context.getPlayer().displayClientMessage(
                             Component.translatable("gui.ccpe.control_desk.desk_remove_blocked"), true);
                 }
@@ -570,6 +574,22 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             default    -> { mx = bx * 16f; mz = bz * 16f; }
         }
         return new int[]{Math.round(mx), Math.round(mz)};
+    }
+
+    /**
+     * 点击位置 → 桌顶小模块网格单元 {gx, gy}（北向基准：格 (gx, gy) ↔ px (1+gx, 9+gy)，网格 14×6 = x1..15/z9..15）。
+     * 点击位置不在桌顶网格范围内返回 null。客户端放置预览（{@code DeskTopGridOverlay}）与服务端拆除判定共用。
+     */
+    @Nullable
+    public static int[] deskTopCellAt(BlockPos pos, Direction facing, Vec3 click) {
+        int[] c = snappedBoxCenter(pos, facing, click);
+        int gx = c[0] - 1;
+        int gy = c[1] - 9;
+        if (gx < 0 || gx >= ControlDeskBlockEntity.DESK_TOP_GRID_WIDTH
+                || gy < 0 || gy >= ControlDeskBlockEntity.DESK_TOP_GRID_HEIGHT) {
+            return null;
+        }
+        return new int[]{gx, gy};
     }
 
     /**
