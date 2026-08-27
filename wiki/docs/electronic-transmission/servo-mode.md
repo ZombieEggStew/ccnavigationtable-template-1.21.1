@@ -45,10 +45,7 @@ Simulated's tilt adapter), which is flicker-safe:
 
 ## Why 96 RPM?
 
-In positioning, the speed only affects how long the move takes — the total
-rotation is fixed by the `SequenceContext`. Above 96 RPM a 180° move would
-finish in ~2 ticks, giving no visible benefit while stressing the rotation
-network, so the effective speed is capped at **96 RPM**:
+Above 96 RPM a 180° move would finish in ~2 ticks, which is visually indistinguishable and would trigger certain features that require extra handling, so the effective speed is capped at **96 RPM**.
 
 - `setServoSpeed(128)` → clamped to 96.
 - If the input power exceeds 96 RPM, the effective speed is also capped to 96.

@@ -3,6 +3,8 @@
 !!! info "Welcome"
     CCPE (CC Peripheral Extender) is a mod for Minecraft NeoForge, built for Create: Aeronautics and ComputerCraft: Tweaked users, providing powerful wireless peripheral control.
 
+    **No Mixin** — This mod does not use Mixin, so it is unlikely to cause compatibility issues with other mods.
+
 ![img](img/overview.png)
 
 ## ✨ Core Features
