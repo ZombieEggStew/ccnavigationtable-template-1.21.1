@@ -28,6 +28,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
@@ -51,10 +52,17 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
 
     public static final MapCodec<ControlDeskBlock> CODEC = simpleCodec(ControlDeskBlock::new);
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
+    /** 拓展坞已装：模型切换为 slab（16×8×16 整块桌面）、选择框同步、桌顶网格变 14×14、禁装 PEDAL/JOYSTICK */
+    public static final BooleanProperty DOCKED = BooleanProperty.create("docked");
 
     /** 北向基准形状（对应模型元素 from/to）：仅桌体一块；选择框/碰撞箱均使用，安装控件不改变形状 */
     private static final VoxelShaper SHAPE = VoxelShaper.forHorizontal(
             Block.box(0, 0, 8, 16, 8, 16),
+            Direction.NORTH
+    );
+    /** 拓展坞（slab）形态形状：16×8×16 整块桌面（北侧空区 z0..8 也被桌面覆盖） */
+    private static final VoxelShaper DOCKED_SHAPE = VoxelShaper.forHorizontal(
+            Block.box(0, 0, 0, 16, 8, 16),
             Direction.NORTH
     );
 
@@ -79,12 +87,13 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING);
+        builder.add(FACING, DOCKED);
     }
 
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        return this.defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+        return this.defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite())
+                .setValue(DOCKED, false);
     }
 
     @Override
@@ -94,7 +103,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext ctx) {
-        return SHAPE.get(state.getValue(FACING));
+        return (state.getValue(DOCKED) ? DOCKED_SHAPE : SHAPE).get(state.getValue(FACING));
     }
 
     @Nullable
@@ -120,6 +129,16 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         ControlDeskBlockEntity.ControlType type = controlTypeOf(stack);
         if (type != null) {
             if (level.isClientSide) {
+                return ItemInteractionResult.SUCCESS;
+            }
+            // 拓展坞已装：禁止再装 PEDAL / JOYSTICK（北侧空区已被桌面覆盖）
+            if (state.getValue(DOCKED)
+                    && (type == ControlDeskBlockEntity.ControlType.PEDAL
+                    || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
+                if (player != null) {
+                    player.displayClientMessage(
+                            Component.translatable("gui.ccpe.control_desk.cannot_install_on_dock"), true);
+                }
                 return ItemInteractionResult.SUCCESS;
             }
             BlockEntity be = level.getBlockEntity(pos);
@@ -150,7 +169,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 // toPlayer 保持 null：monitor_2 不做面向玩家的旋转
             }
             if (!desk.install(type, placeX, placeZ, toPlayer)) {
-                // 已安装 / 位置被占用：不消耗物品，提示玩家
+                // 已安装 / 位置被占用 / 与 PEDAL·JOYSTICK 互斥（DOCK）：不消耗物品，提示玩家
                 if (player != null) {
                     player.displayClientMessage(
                             Component.translatable(desk.isInstalled(type)
@@ -158,6 +177,11 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                                     : "gui.ccpe.control_desk.position_occupied"), true);
                 }
                 return ItemInteractionResult.SUCCESS;
+            }
+            // 拓展坞安装成功：切换 blockstate DOCKED（模型/选择框/桌顶网格同步换 slab 形态；同 block 换 property，BE 保留）
+            if (type == ControlDeskBlockEntity.ControlType.DOCK) {
+                level.setBlock(pos, state.setValue(DOCKED, true), 3);
+                desk.setChanged();
             }
             // 安装成功：非创造模式消耗 1 个物品
             if (player != null && !player.isCreative()) {
@@ -200,7 +224,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
-                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2);
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK);
             if (!anyInstalled) {
                 // 光桌：没有模块可拆，走默认拆方块
                 return IWrenchable.super.onSneakWrenched(state, context);
@@ -211,6 +236,11 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             if (hit != null && desk.remove(hit)) {
                 Block.popResource(level, pos, new ItemStack(controlItem(hit)));
                 IWrenchable.playRemoveSound(level, pos);
+                // 拆除拓展坞：blockstate DOCKED 复位（模型/选择框/桌顶网格回到 base 形态）
+                if (hit == ControlDeskBlockEntity.ControlType.DOCK && state.getValue(DOCKED)) {
+                    level.setBlock(pos, state.setValue(DOCKED, false), 3);
+                    desk.setChanged();
+                }
             }
             // 无论是否命中安装位都消费交互，避免误拆方块
             return InteractionResult.SUCCESS;
@@ -247,6 +277,10 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
                 && hitBounds(List.of(monitor2PlaceBox(desk, facing, pos)), click)) {
             return ControlDeskBlockEntity.ControlType.MONITOR_2;
+        }
+        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK)
+                && hitBounds(List.of(dockPlaceBox(facing, pos)), click)) {
+            return ControlDeskBlockEntity.ControlType.DOCK;
         }
         return null;
     }
@@ -314,6 +348,18 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
     }
 
+    /**
+     * 拓展坞放置盒的世界 AABB（北向基准 0,0,0,16,8,8 = 桌体北侧整块空区，随 FACING 旋转；与安装预览一致）。
+     * 供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
+     */
+    public static AABB dockPlaceBox(Direction facing, BlockPos pos) {
+        Vec3 p0 = modelToWorld(pos, 0, 0, 0, facing);
+        Vec3 p1 = modelToWorld(pos, 16, 8, 8, facing);
+        return new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+    }
+
     /** 北向基准模型坐标（px）→ 世界坐标：绕方块中心 Y 旋转到 FACING（与渲染 rotateCenteredDegrees 同约定）。 */
     private static Vec3 modelToWorld(BlockPos pos, float x, float y, float z, Direction facing) {
         float bx = x / 16f;
@@ -369,6 +415,9 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)) {
                 drops.add(new ItemStack(MyModItems.CONTROL_THROTTLE_2.get()));
             }
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK)) {
+                drops.add(new ItemStack(MyModBlocks.my_control_desk.get().asItem()));
+            }
         }
         return drops;
     }
@@ -382,6 +431,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             case THROTTLE -> MyModItems.CONTROL_THROTTLE.get();
             case JOYSTICK_2 -> MyModItems.CONTROL_JOYSTICK_2.get();
             case THROTTLE_2 -> MyModItems.CONTROL_THROTTLE_2.get();
+            // 拓展坞 = 另一台控制台方块物品（手持控制台右键已放置的控制台 → 安装为 slab 形态）
+            case DOCK -> MyModBlocks.my_control_desk.get().asItem();
         };
     }
 
@@ -392,6 +443,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         if (stack.is(MyModItems.CONTROL_THROTTLE.get())) return ControlDeskBlockEntity.ControlType.THROTTLE;
         if (stack.is(MyModItems.CONTROL_JOYSTICK_2.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK_2;
         if (stack.is(MyModItems.CONTROL_THROTTLE_2.get())) return ControlDeskBlockEntity.ControlType.THROTTLE_2;
+        // 拓展坞 = 手持控制台方块物品右键已放置的控制台 → 安装为 slab 形态（不放置新方块）
+        if (stack.is(MyModBlocks.my_control_desk.get().asItem())) return ControlDeskBlockEntity.ControlType.DOCK;
         return null;
     }
 
@@ -411,6 +464,19 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             default    -> { mx = bx * 16f; mz = bz * 16f; }
         }
         return new int[]{Math.round(mx), Math.round(mz)};
+    }
+
+    /**
+     * joystick_2 放置中心 (cx,cz) 的 4×4 占位（半宽 {@link ControlDeskBlockEntity#JOYSTICK_2_FOOTPRINT_HALF}=2）
+     * 是否<b>完全</b>位于桌顶网格内（普通 6×14：x1..15 / z9..15；docked 14×14：x1..15 / z1..15）。
+     * 客户端预览（{@code ControlDeskPlacementOverlay} 变红 / ghost 隐藏）与服务端放置（{@link #useItemOn} 拒绝）共用，
+     * 防止「占位只差一格在网格外也能放」。docked 由 blockstate 读 {@link #DOCKED} 传入。
+     */
+    public static boolean joystick2PlacementInGrid(boolean docked, int cx, int cz) {
+        int half = ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF;
+        int zMin = docked ? 1 : 9;
+        return cx - half >= 1 && cx + half <= 15
+                && cz - half >= zMin && cz + half <= 15;
     }
 
     /**
@@ -443,6 +509,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             }
             case JOYSTICK -> result.add(JOYSTICK_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
             case MONITOR_2, THROTTLE, JOYSTICK_2, THROTTLE_2 -> { /* 无安装位框（插槽已移除） */ }
+            case DOCK -> result.add(dockPlaceBox(facing, pos));
         }
         return result;
     }

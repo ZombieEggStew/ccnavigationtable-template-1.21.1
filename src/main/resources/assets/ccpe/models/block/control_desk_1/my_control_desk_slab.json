@@ -2,7 +2,8 @@
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
 	"textures": {
-		"0": "ccpe:block/control_desk/control_desk"
+		"0": "ccpe:block/control_desk/control_desk",
+		"particle": "ccpe:block/control_desk/control_desk"
 	},
 	"elements": [
 		{

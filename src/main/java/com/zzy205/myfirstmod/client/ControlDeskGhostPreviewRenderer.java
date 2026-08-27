@@ -61,6 +61,12 @@ public class ControlDeskGhostPreviewRenderer {
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
         if (!(mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return;
         if (desk.isInstalled(type)) return; // 已装该控件：不显示半透明模型（红色线框由 overlay 负责）
+        // 装拓展坞后禁装 PEDAL / JOYSTICK：不显示半透明模型预览（与 overlay 的线框抑制一致）
+        if (state.getValue(ControlDeskBlock.DOCKED)
+                && (type == ControlDeskBlockEntity.ControlType.PEDAL
+                || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
+            return;
+        }
 
         Direction facing = state.getValue(ControlDeskBlock.FACING);
         // 预览盒中心与放置常量：joystick_2 跟随准星吸附到 1px 网格；throttle / monitor_2 为唯一合法位 (8,12)（14×6 全占网格）；
@@ -88,8 +94,12 @@ public class ControlDeskGhostPreviewRenderer {
             halfX = ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_X;
             halfZ = ControlDeskBlockEntity.MONITOR_2_FOOTPRINT_HALF_Z;
         }
-        // 候选位置被占地矩形占用重叠 → 不显示实物（盒子在 overlay 中变红）
-        if (box != null && desk.blocksPlacement(box[0], box[1], halfX, halfZ)) {
+        // 候选位置被占地矩形占用重叠 → 不显示实物（盒子在 overlay 中变红）；
+        // joystick_2 另需 4×4 占位完全位于桌顶网格内（与服务端 install / overlay 变红判定一致），超出网格也不显示
+        if (box != null && (desk.blocksPlacement(box[0], box[1], halfX, halfZ)
+                || (type == ControlDeskBlockEntity.ControlType.JOYSTICK_2
+                && !ControlDeskBlock.joystick2PlacementInGrid(
+                        state.getValue(ControlDeskBlock.DOCKED), box[0], box[1])))) {
             return;
         }
 
@@ -162,6 +172,7 @@ public class ControlDeskGhostPreviewRenderer {
             case JOYSTICK_2 -> new PartialModel[]{
                     MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE,
                     MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE};
+            case DOCK -> new PartialModel[0]; // 拓展坞不做半透明实物预览（仅线框，见 ControlDeskPlacementOverlay.showDockBox）
         };
     }
 }

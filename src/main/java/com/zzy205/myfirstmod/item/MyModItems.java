@@ -40,9 +40,6 @@ public class MyModItems {
             "joystick_2", () -> new Item(new Item.Properties()));
     public static final DeferredItem<Item> CONTROL_THROTTLE_2 = ITEMS.register(
             "throttle_2", () -> new Item(new Item.Properties()));
-    // 控制台拓展坞（触发物品；模型复用控制台底座；放置逻辑待接入）
-    public static final DeferredItem<Item> CONTROL_DOCK = ITEMS.register(
-            "dock", () -> new Item(new Item.Properties()));
 
     /** 创建指定普通 Monitor 模块的物品栈；未知类型返回空栈。 */
     public static ItemStack monitorModuleStack(ModuleType type) {

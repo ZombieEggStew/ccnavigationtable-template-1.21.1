@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.client;
 import com.simibubi.create.AllItems;
 import com.zzy205.myfirstmod.block.ControlDeskBlock;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
+import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.screen.ControlDeskConfigScreen;
 import net.createmod.catnip.outliner.Outliner;
@@ -26,8 +27,9 @@ import java.util.List;
  * controlDesk 交互预览与菜单打开：
  * <ul>
  *   <li>手持踏板/操纵杆 → 准星指向 controlDesk 时在安装位显示预览框（绿=可装 / 红=已装）</li>
- *   <li>手持控制台拓展坞（dock）→ 准星指向 controlDesk 时显示拓展坞安装预览框
- *       （北向基准 0,0,0,16,8,8 = 桌体北侧整块空区，随 FACING 旋转；仅预览框，无 ghost 实物、无放置逻辑）</li>
+ *   <li>手持控制台方块物品 → 准星指向 controlDesk 时显示拓展坞安装预览框
+ *       （北向基准 0,0,0,16,8,8 = 桌体北侧整块空区，随 FACING 旋转；仅预览框，无 ghost 实物）；
+ *       右键安装后控制台转为 slab 形态（DOCKED，见 {@link ControlDeskBlock}）</li>
  *   <li>手持扳手 → 准星指向 controlDesk 时显示已安装控件的安装位（默认绿）；视角命中安装位变红，蹲下右键拆对应模块</li>
  *   <li>扳手普通右键（不蹲下）或 空手蹲下右键，准星指向 controlDesk（任意位置）→ 打开控制台配置菜单 {@link ControlDeskConfigScreen}（右键边沿防连发）；扳手蹲下右键 → 不拦截，交给服务端 {@code onSneakWrenched} 拆除模块</li>
  * </ul>
@@ -99,7 +101,7 @@ public class ControlDeskPlacementOverlay {
                 }
                 return;
             }
-            // 手持控制台拓展坞：显示拓展坞安装预览框（仅预览，无 ghost 实物、无放置逻辑）
+            // 手持控制台方块物品：显示拓展坞安装预览框（右键安装后转为 slab 形态；无 ghost 实物）
             if (isDock(held)) {
                 showDockBox(mc, hit);
                 return;
@@ -120,6 +122,13 @@ public class ControlDeskPlacementOverlay {
         BlockPos pos = hit.getBlockPos();
         BlockState state = mc.level.getBlockState(pos);
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
+
+        // 装拓展坞后禁装 PEDAL / JOYSTICK（北侧空区被桌面覆盖）：不显示安装预览
+        if (state.getValue(ControlDeskBlock.DOCKED)
+                && (type == ControlDeskBlockEntity.ControlType.PEDAL
+                || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
+            return;
+        }
 
         BlockEntity be = mc.level.getBlockEntity(pos);
         boolean installed = be instanceof ControlDeskBlockEntity desk && desk.isInstalled(type);
@@ -197,8 +206,9 @@ public class ControlDeskPlacementOverlay {
     }
 
     /**
-     * 桌顶 6×14 棋盘网格（1px 格、四周内缩 1px；北向基准 x1..15 / z9..15 / y8，随 FACING 旋转）。
+     * 桌顶棋盘网格（1px 格、四周内缩 1px；北向基准 x1..15 / y8，随 FACING 旋转）。
      * 手持 throttle / joystick_2 时显示（对齐 monitor 的白色 1px 网格线）；纯显示，放置逻辑待做。
+     * 普通形态 6×14 格（z9..15）；装拓展坞（DOCKED）后桌面扩展为整块，网格变 14×14 格（z1..15）。
      */
     private static void showTopGrid(Minecraft mc, BlockHitResult hit) {
         BlockPos pos = hit.getBlockPos();
@@ -206,18 +216,21 @@ public class ControlDeskPlacementOverlay {
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
 
         Direction facing = state.getValue(ControlDeskBlock.FACING);
+        boolean docked = state.getValue(ControlDeskBlock.DOCKED);
+        int zMin = docked ? 1 : 9;
         Outliner outliner = Outliner.getInstance();
         String prefix = "control-desk/grid/" + pos.toShortString();
         float lw = 1 / 128f;
-        // 15 条竖线（x=1..15）+ 7 条横线（z=9..15），y=8（桌顶面，gridWorld 内抬高防 z-fight）
+        // 15 条竖线（x=1..15，跨 z1..15 / z9..15）+ 横线（普通 7 条 z=9..15 / docked 15 条 z=1..15），
+        // y=8（桌顶面，gridWorld 内抬高防 z-fight）
         for (int i = 0; i <= 14; i++) {
-            Vec3 from = gridWorld(pos, i + 1f, 7.1f, 9f, facing);
+            Vec3 from = gridWorld(pos, i + 1f, 7.1f, zMin, facing);
             Vec3 to = gridWorld(pos, i + 1f, 7.1f, 15f, facing);
             outliner.showLine(prefix + "/v" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
-        for (int i = 0; i <= 6; i++) {
-            Vec3 from = gridWorld(pos, 1f, 7.1f, 9f + i, facing);
-            Vec3 to = gridWorld(pos, 15f, 7.1f, 9f + i, facing);
+        for (int i = 0; i <= 15 - zMin; i++) {
+            Vec3 from = gridWorld(pos, 1f, 7.1f, zMin + i, facing);
+            Vec3 to = gridWorld(pos, 15f, 7.1f, zMin + i, facing);
             outliner.showLine(prefix + "/h" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
     }
@@ -251,7 +264,10 @@ public class ControlDeskPlacementOverlay {
         int[] c = ControlDeskBlock.snappedBoxCenter(pos, facing, hit.getLocation());
         int cx = c[0];
         int cz = c[1];
-        boolean blocked = isJoystick2PlacementBlocked(mc, pos, cx, cz);
+        boolean docked = state.getValue(ControlDeskBlock.DOCKED);
+        // 4×4 占位必须完全位于桌顶网格内（与服务端 install 判定一致），超出网格也变红
+        boolean blocked = isJoystick2PlacementBlocked(mc, pos, cx, cz)
+                || !ControlDeskBlock.joystick2PlacementInGrid(docked, cx, cz);
         int half = ControlDeskBlockEntity.JOYSTICK_2_FOOTPRINT_HALF;
         Vec3 p0 = gridWorld(pos, cx - half, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_BOTTOM, cz - half, facing);
         Vec3 p1 = gridWorld(pos, cx + half, ControlDeskBlockEntity.JOYSTICK_2_PLACE_Y_TOP, cz + half, facing);
@@ -342,14 +358,15 @@ public class ControlDeskPlacementOverlay {
     }
 
     /**
-     * 手持控制台拓展坞（dock）：显示拓展坞安装预览框（北向基准 0,0,0,16,8,8 = 桌体北侧整块空区，随 FACING 旋转）。
-     * 仅显示预览框 —— 无半透明 ghost 实物、无放置逻辑（拓展坞本体后续接入）。
+     * 手持控制台方块物品：显示拓展坞安装预览框（北向基准 0,0,0,16,8,8 = 桌体北侧整块空区，随 FACING 旋转）。
+     * 仅显示预览框 —— 无半透明 ghost 实物；已装拓展坞变红（不可重复安装）。
      */
     private static void showDockBox(Minecraft mc, BlockHitResult hit) {
         BlockPos pos = hit.getBlockPos();
         BlockState state = mc.level.getBlockState(pos);
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
         Direction facing = state.getValue(ControlDeskBlock.FACING);
+        boolean installed = state.getValue(ControlDeskBlock.DOCKED);
 
         Vec3 p0 = gridWorld(pos, 0, 0, 0, facing);
         Vec3 p1 = gridWorld(pos, 16, 8, 8, facing);
@@ -357,7 +374,7 @@ public class ControlDeskPlacementOverlay {
                 Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
                 Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
         Outliner.getInstance().showAABB("control-desk/box-dock/" + pos.toShortString(), box)
-                .colored(COLOR_VALID)
+                .colored(installed ? COLOR_INVALID : COLOR_VALID)
                 .lineWidth(1 / 16f);
     }
 
@@ -452,9 +469,9 @@ public class ControlDeskPlacementOverlay {
         return null;
     }
 
-    /** 手持控制台拓展坞（dock，拓展坞预览触发物品）。 */
+    /** 手持控制台方块物品（拓展坞 = 手持控制台右键另一台已放置的控制台 → 安装为 slab 形态）。 */
     private static boolean isDock(ItemStack stack) {
-        return stack.is(MyModItems.CONTROL_DOCK.get());
+        return stack.is(MyModBlocks.my_control_desk.get().asItem());
     }
 
     private static boolean isWrench(ItemStack stack) {
