@@ -489,6 +489,21 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return false;
     }
 
+    /**
+     * 是否存在桌顶模块占位与「拓展坞多出来的区域」重叠（北向基准：普通 6×14 网格 z9..15，
+     * 装 dock 后网格扩展为 14×14（z1..15），多出来的区域 = 北侧 z1..8）。
+     * 判定口径：模块占地北缘 {@code placeZ - halfZ < 9} ⟺ 该模块占用了多余区域，
+     * 拆除拓展坞前必须先把这些模块全部拆掉（否则拆 dock 后模块位置悬空/超出网格）。
+     * 供服务端 {@code onSneakWrenched} 拦截拆 dock 与客户端拆除预览变红共用。
+     */
+    public boolean hasModuleOnDockExtension() {
+        if (joystick2Installed && joystick2PlaceZ - JOYSTICK_2_FOOTPRINT_HALF < 9) return true;
+        if (throttleInstalled && throttlePlaceZ - THROTTLE_FOOTPRINT_HALF_Z < 9) return true;
+        if (throttle2Installed && throttle2PlaceZ - THROTTLE_2_FOOTPRINT_HALF_Z < 9) return true;
+        if (monitor2Installed && monitor2PlaceZ - MONITOR_2_FOOTPRINT_HALF_Z < 9) return true;
+        return false;
+    }
+
     /** 卸载控件；未安装返回 false。服务端调用。 */
     public boolean remove(ControlType type) {
         if (!isInstalled(type)) return false;

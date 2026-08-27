@@ -186,6 +186,16 @@ public class ControlDeskPlacementOverlay {
                         .lineWidth(1 / 64f);
                 continue;
             }
+            if (type == ControlDeskBlockEntity.ControlType.DOCK) {
+                // 拓展坞：显示北侧空区放置盒；多余区域（装 dock 后新增的北侧桌面）上还有桌顶模块时不可拆（变红，与服务端拦截一致）
+                AABB box = ControlDeskBlock.dockPlaceBox(facing, pos);
+                boolean hovered = ControlDeskBlock.hitBounds(List.of(box), click);
+                boolean blocked = desk.hasModuleOnDockExtension();
+                Outliner.getInstance().showAABB("control-desk/remove/" + pos.toShortString() + "/DOCK", box)
+                        .colored(hovered || blocked ? COLOR_INVALID : COLOR_VALID)
+                        .lineWidth(1 / 64f);
+                continue;
+            }
             List<AABB> bounds = ControlDeskBlock.installBounds(type, facing, pos);
             // 命中判断与服务端拆除判定共用 ControlDeskBlock.hitBounds（闭区间+容差）
             boolean hovered = ControlDeskBlock.hitBounds(bounds, click);

@@ -245,13 +245,23 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             // 对准模块：按点击位置命中安装位，只拆对应的那个
             Direction facing = state.getValue(FACING);
             ControlDeskBlockEntity.ControlType hit = hitControlType(desk, facing, pos, context.getClickLocation());
-            if (hit != null && desk.remove(hit)) {
-                Block.popResource(level, pos, new ItemStack(controlItem(hit)));
-                IWrenchable.playRemoveSound(level, pos);
-                // 拆除拓展坞：blockstate DOCKED 复位（模型/选择框/桌顶网格回到 base 形态）
-                if (hit == ControlDeskBlockEntity.ControlType.DOCK && state.getValue(DOCKED)) {
-                    level.setBlock(pos, state.setValue(DOCKED, false), 3);
-                    desk.setChanged();
+            if (hit != null) {
+                // 拆除拓展坞前必须先把「多余区域」（装 dock 后新增的北侧桌面）上的桌顶模块全部拆掉
+                if (hit == ControlDeskBlockEntity.ControlType.DOCK && desk.hasModuleOnDockExtension()) {
+                    if (context.getPlayer() != null) {
+                        context.getPlayer().displayClientMessage(
+                                Component.translatable("gui.ccpe.control_desk.dock_remove_blocked"), true);
+                    }
+                    return InteractionResult.SUCCESS;
+                }
+                if (desk.remove(hit)) {
+                    Block.popResource(level, pos, new ItemStack(controlItem(hit)));
+                    IWrenchable.playRemoveSound(level, pos);
+                    // 拆除拓展坞：blockstate DOCKED 复位（模型/选择框/桌顶网格回到 base 形态）
+                    if (hit == ControlDeskBlockEntity.ControlType.DOCK && state.getValue(DOCKED)) {
+                        level.setBlock(pos, state.setValue(DOCKED, false), 3);
+                        desk.setChanged();
+                    }
                 }
             }
             // 无论是否命中安装位都消费交互，避免误拆方块

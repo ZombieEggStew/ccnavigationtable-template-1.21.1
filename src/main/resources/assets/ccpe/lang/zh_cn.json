@@ -81,6 +81,7 @@
   "gui.ccpe.control_desk.already_installed": "该控件已安装",
   "gui.ccpe.control_desk.position_occupied": "该位置已被占用",
   "gui.ccpe.control_desk.cannot_install_on_dock": "已安装拓展坞，无法安装该控件",
+  "gui.ccpe.control_desk.dock_remove_blocked": "请先拆除拓展坞上方的模块",
   "gui.ccpe.control_desk.bind_unbound": "未绑定",
   "gui.ccpe.control_desk.bind_tip": "左键绑定 右键清除",
   "gui.ccpe.control_desk.joystick_return_time": "回正时间",
