@@ -1,7 +1,5 @@
 # Control Desk
 
-**Coming Soon**
-
 ![control-desk](../img/control_desk_2.png)
 
 **Designed to optimize space usage and maintain a clear field of view.**
@@ -12,6 +10,7 @@ The Control Desk is a seat-driven control console. By default it has **no contro
 
 - **Install**: hold a control item (Foot Pedal / Joystick / Throttle) and right-click the desk. The control mounts at a fixed position on the desk's front edge. While aiming at a desk with a control item in hand, a preview box shows the mount position — **green** = can install, **red** = already installed. Installing consumes one item (not in Creative).
 - **Remove**: hold a Create wrench and **sneak + right-click** the mounted control — only the control you clicked is removed and dropped as an item.
+- **Form conversions**: the desk can be reshaped into a full-width slab ([Dock](dock.md)) or a 3/4 stair with a front wall ([Baffle](baffle.md)) — both mutually exclusive with the front-mounted controls.
 - **Breaking the desk** drops any installed controls together with the desk.
 - A desk with no controls installed can be removed normally with a wrench (sneak + right-click).
 

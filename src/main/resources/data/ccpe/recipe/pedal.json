@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:brass_sheet"
+    },
+    "X": {
+      "item": "create:andesite_alloy"
+    }
+  },
+  "pattern": [
+    " X ",
+    " X ",
+    "# #"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:pedal"
+  }
+}

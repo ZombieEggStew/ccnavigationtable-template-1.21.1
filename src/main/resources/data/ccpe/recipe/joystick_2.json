@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:andesite_alloy"
+    },
+    "X": {
+      "item": "create:shaft"
+    },
+    "Z": {
+        "item": "create:electron_tube"
+    }
+  },
+  "pattern": [
+    " Z ",
+    " X ",
+    "# #"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:joystick_2"
+  }
+}

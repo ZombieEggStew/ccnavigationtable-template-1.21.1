@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:electron_tube"
+    },
+    "X": {
+      "item": "create:precision_mechanism"
+    },
+    "Y": {
+      "item": "create:brass_casing"
+    },
+    "Z": {
+        "item": "create:transmitter"
+    }
+  },
+  "pattern": [
+    " Z ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 2,
+    "id": "ccpe:my_control_desk"
+  }
+}

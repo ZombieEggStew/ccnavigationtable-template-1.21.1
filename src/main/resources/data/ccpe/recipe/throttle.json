@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:gantry_shaft"
+    },
+    "X": {
+      "item": "create:gantry_carriage"
+    },
+    "Y": {
+      "item": "simulated:copper_handle"
+    }
+  },
+  "pattern": [
+    " Y ",
+    " X ",
+    "###"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:throttle"
+  }
+}

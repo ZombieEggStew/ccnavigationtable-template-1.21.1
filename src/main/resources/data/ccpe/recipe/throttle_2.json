@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:crafter_slot_cover"
+    },
+    "X": {
+      "item": "create:shaft"
+    },
+    "Y": {
+      "item": "create:andesite_alloy"
+    },
+    "Z": {
+      "item": "create:mechanical_bearing"
+    }
+  },
+  "pattern": [
+    "  #",
+    "YXZ",
+    "  #"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:throttle_2"
+  }
+}
