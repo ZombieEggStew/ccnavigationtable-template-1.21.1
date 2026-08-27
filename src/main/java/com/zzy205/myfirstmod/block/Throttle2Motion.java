@@ -32,10 +32,22 @@ public final class Throttle2Motion {
     /** 中位角度（度）：回正开关开启时，松开按键后自动回正到的位置 = 满偏的一半 15°（用户定稿） */
     public static final float NEUTRAL_DEG = MAX_DEG / 2f;
 
+    /** 音效步进（度）：角度每转过 5° 播放一次 LEVER_CLICK（参考 throttle 档位音效；角度越大音调越高，见 {@link #pitchForAngle}） */
+    public static final float SOUND_STEP_DEG = 5f;
+
     private Throttle2Motion() {}
 
     /** 目标角度（度）：读服务端权威角度（0..MAX_DEG，经 getUpdatePacket 同步，所有客户端一致）。 */
     public static float targetDeg(ControlDeskBlockEntity be) {
         return be.getThrottle2Angle();
+    }
+
+    /**
+     * 音调（角度越大越高）：0° → {@link ThrottleMotion#PITCH_LOW}，{@link #MAX_DEG} → {@link ThrottleMotion#PITCH_HIGH}，
+     * 线性过渡（与 throttle 档位音效同一音调范围，见 {@link ThrottleMotion#pitchForGear}）。
+     */
+    public static float pitchForAngle(float angle) {
+        float t = Math.max(0f, Math.min(1f, angle / MAX_DEG));
+        return ThrottleMotion.PITCH_LOW + (ThrottleMotion.PITCH_HIGH - ThrottleMotion.PITCH_LOW) * t;
     }
 }

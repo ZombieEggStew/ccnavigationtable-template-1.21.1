@@ -41,11 +41,12 @@ public final class ThrottleMotion {
     public static final float TENSION_PX = TENSION_FRACTION / 16f;
 
     /** 音效音调范围（档位 1 最低，档位 MAX 最高；前进从低到高、后退从高到低） */
-    public static final float PITCH_HIGH = 1.5f;
+    public static final float PITCH_HIGH = 1.0f;
     public static final float PITCH_LOW = 0.75f;
 
     /** 音效音量（服务端 playSound，方块音源） */
-    public static final float SOUND_VOLUME = 0.3f;
+    public static final float SOUND_VOLUME = 0.2f;
+    public static final float SOUND_VOLUME2 = 0.1f;
 
     private ThrottleMotion() {}
 

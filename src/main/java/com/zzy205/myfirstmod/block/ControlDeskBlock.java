@@ -298,7 +298,12 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                     return InteractionResult.SUCCESS;
                 }
                 if (desk.remove(hit)) {
-                    Block.popResource(level, pos, new ItemStack(controlItem(hit)));
+                    // 拆除的模块优先放入玩家背包；背包放不下时再在控制台位置生成掉落物
+                    ItemStack moduleStack = new ItemStack(controlItem(hit));
+                    Player player = context.getPlayer();
+                    if (player == null || !player.addItem(moduleStack)) {
+                        Block.popResource(level, pos, moduleStack);
+                    }
                     IWrenchable.playRemoveSound(level, pos);
                     // 拆除拓展坞：blockstate DOCKED 复位（模型/选择框/桌顶网格回到 base 形态）
                     if (hit == ControlDeskBlockEntity.ControlType.DOCK && state.getValue(DOCKED)) {
@@ -310,6 +315,12 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                         level.setBlock(pos, state.setValue(BAFFLED, false), 3);
                         desk.setChanged();
                     }
+                }
+            } else {
+                // 点击位置没命中任何模块 = 玩家试图直接拆控制台：装有模块时禁止拆方块，提示先拆模块
+                if (context.getPlayer() != null) {
+                    context.getPlayer().displayClientMessage(
+                            Component.translatable("gui.ccpe.control_desk.desk_remove_blocked"), true);
                 }
             }
             // 无论是否命中安装位都消费交互，避免误拆方块

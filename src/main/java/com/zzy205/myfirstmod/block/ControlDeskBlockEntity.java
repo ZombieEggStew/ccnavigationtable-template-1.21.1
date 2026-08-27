@@ -1550,24 +1550,34 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static void simulateThrottle2(ControlDeskBlockEntity be) {
         boolean up = be.inputThrottle2Up;
         boolean down = be.inputThrottle2Down;
-        float newAngle = be.throttle2Angle;
+        float oldAngle = be.throttle2Angle;
+        float newAngle = oldAngle;
         if (up != down) {
             float step = Throttle2Motion.MAX_DEG / Math.max(1, be.throttle2FreeSpeed); // 每 tick 角度步进
-            newAngle = be.throttle2Angle + (up ? step : -step);
+            newAngle = oldAngle + (up ? step : -step);
             newAngle = Math.max(0f, Math.min(Throttle2Motion.MAX_DEG, newAngle));
         } else if (be.throttle2ReturnEnabled && be.throttle2ReturnTime > 0) {
             // 回正开启：无输入 → 按回正时间线性回到中位 15°（从中位偏离处计步进）
             float step = Throttle2Motion.NEUTRAL_DEG / Math.max(1, be.throttle2ReturnTime);
-            if (be.throttle2Angle > Throttle2Motion.NEUTRAL_DEG) {
-                newAngle = Math.max(Throttle2Motion.NEUTRAL_DEG, be.throttle2Angle - step);
-            } else if (be.throttle2Angle < Throttle2Motion.NEUTRAL_DEG) {
-                newAngle = Math.min(Throttle2Motion.NEUTRAL_DEG, be.throttle2Angle + step);
+            if (oldAngle > Throttle2Motion.NEUTRAL_DEG) {
+                newAngle = Math.max(Throttle2Motion.NEUTRAL_DEG, oldAngle - step);
+            } else if (oldAngle < Throttle2Motion.NEUTRAL_DEG) {
+                newAngle = Math.min(Throttle2Motion.NEUTRAL_DEG, oldAngle + step);
             }
         }
         // 回正关闭且无输入 → 锁存（newAngle 保持原值）
-        if (newAngle != be.throttle2Angle) {
+        if (newAngle != oldAngle) {
+            // 角度每转过 5°（SOUND_STEP_DEG）播放一次 LEVER_CLICK——音调随当前角度上升
+            // （参考 throttle 档位音效：前进/回正/下拉任一方向转过边界均触发，角度越大音调越高）
+            int oldStep = (int) (oldAngle / Throttle2Motion.SOUND_STEP_DEG);
+            int newStep = (int) (newAngle / Throttle2Motion.SOUND_STEP_DEG);
             be.throttle2Angle = newAngle;
             be.notifyChange();
+            if (oldStep != newStep && be.getLevel() != null) {
+                be.getLevel().playSound(null, be.getBlockPos(), SoundEvents.LEVER_CLICK,
+                        SoundSource.BLOCKS, ThrottleMotion.SOUND_VOLUME2,
+                        Throttle2Motion.pitchForAngle(newAngle));
+            }
         }
     }
 
