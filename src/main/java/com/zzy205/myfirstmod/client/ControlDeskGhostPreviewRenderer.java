@@ -71,8 +71,11 @@ public class ControlDeskGhostPreviewRenderer {
                 || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
             return;
         }
-        // 装挡板后禁装所有控件：不显示半透明模型预览（与 overlay 的线框抑制一致）
-        if (state.getValue(ControlDeskBlock.BAFFLED)) {
+        // 装挡板后禁装北侧控件 PEDAL / JOYSTICK：不显示它们的半透明模型预览（与 overlay 的线框抑制一致）；
+        // 桌顶棋盘网格模块（joystick_2 / throttle / throttle_2 / monitor_2）不受影响，正常显示实物预览
+        if (state.getValue(ControlDeskBlock.BAFFLED)
+                && (type == ControlDeskBlockEntity.ControlType.PEDAL
+                || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
             return;
         }
 

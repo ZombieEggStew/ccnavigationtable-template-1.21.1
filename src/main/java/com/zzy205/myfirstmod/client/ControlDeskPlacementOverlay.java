@@ -33,7 +33,7 @@ import java.util.List;
  *       右键安装后控制台转为 slab 形态（DOCKED，见 {@link ControlDeskBlock}）</li>
  *   <li>手持 create:brass_casing → 准星指向 controlDesk 时显示挡板安装预览框
  *       （北向基准 0,0,0,16,16,8 = 桌体北侧整块全高区域，随 FACING 旋转；仅预览框，无 ghost 实物；
- *       与拓展坞互斥，已装拓展坞（DOCKED）变红）</li>
+ *       与 PEDAL/JOYSTICK/DOCK 互斥，已装它们或挡板时变红；桌顶棋盘网格模块不受影响）</li>
  *   <li>手持扳手 → 准星指向 controlDesk 时显示已安装控件的安装位（默认绿）；视角命中安装位变红，蹲下右键拆对应模块</li>
  *   <li>扳手普通右键（不蹲下）或 空手蹲下右键，准星指向 controlDesk（任意位置）→ 打开控制台配置菜单 {@link ControlDeskConfigScreen}（右键边沿防连发）；扳手蹲下右键 → 不拦截，交给服务端 {@code onSneakWrenched} 拆除模块</li>
  * </ul>
@@ -78,10 +78,13 @@ public class ControlDeskPlacementOverlay {
 
             ControlDeskBlockEntity.ControlType type = controlTypeOf(held);
             if (type != null) {
-                // 挡板形态（BAFFLED）：禁装所有控件（PEDAL/JOYSTICK/桌顶模块），不显示任何安装预览/网格
+                // 挡板形态（BAFFLED）：禁装北侧控件 PEDAL / JOYSTICK，不显示它们的安装预览；
+                // 桌顶棋盘网格模块（joystick_2 / throttle / throttle_2 / monitor_2）不受影响，正常显示网格/预览盒
                 BlockState hitState = mc.level.getBlockState(hit.getBlockPos());
                 if (hitState.getBlock() instanceof ControlDeskBlock
-                        && hitState.getValue(ControlDeskBlock.BAFFLED)) {
+                        && hitState.getValue(ControlDeskBlock.BAFFLED)
+                        && (type == ControlDeskBlockEntity.ControlType.PEDAL
+                        || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
                     return;
                 }
                 showInstallPreview(mc, hit, type);
@@ -437,15 +440,13 @@ public class ControlDeskPlacementOverlay {
         Direction facing = state.getValue(ControlDeskBlock.FACING);
         boolean docked = state.getValue(ControlDeskBlock.DOCKED);
         boolean baffled = state.getValue(ControlDeskBlock.BAFFLED);
-        // 与服务端 install(BAFFLE) 一致：已有任何已装控件（含拓展坞/挡板）时不可安装 → 变红
-        boolean anyModule = false;
+        // 与服务端 install(BAFFLE) 一致：北侧控件 PEDAL / JOYSTICK 或同为形态安装的 DOCK 已装时不可安装 → 变红；
+        // 桌顶棋盘网格模块（joystick_2 / throttle / throttle_2 / monitor_2）已装不影响挡板安装
+        boolean frontBlocked = false;
         if (mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk) {
-            for (ControlDeskBlockEntity.ControlType t : ControlDeskBlockEntity.ControlType.values()) {
-                if (desk.isInstalled(t)) {
-                    anyModule = true;
-                    break;
-                }
-            }
+            frontBlocked = desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK);
         }
 
         Vec3 p0 = gridWorld(pos, 0, 0, 0, facing);
@@ -454,7 +455,7 @@ public class ControlDeskPlacementOverlay {
                 Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
                 Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
         Outliner.getInstance().showAABB("control-desk/box-baffle/" + pos.toShortString(), box)
-                .colored(docked || baffled || anyModule ? COLOR_INVALID : COLOR_VALID)
+                .colored(docked || baffled || frontBlocked ? COLOR_INVALID : COLOR_VALID)
                 .lineWidth(1 / 16f);
     }
 

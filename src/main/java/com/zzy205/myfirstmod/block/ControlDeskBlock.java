@@ -3,8 +3,10 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
+import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.monitor.ModuleType;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.createmod.catnip.math.VoxelShaper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -56,7 +58,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
     /** 拓展坞已装：模型切换为 slab（16×8×16 整块桌面）、选择框同步、桌顶网格变 14×14、禁装 PEDAL/JOYSTICK */
     public static final BooleanProperty DOCKED = BooleanProperty.create("docked");
-    /** 挡板已装：模型切换为 3/4 楼梯（北侧 z0..8 全高立墙 + 南侧下半桌面）、选择框同步、禁装所有控件（与 DOCKED 互斥） */
+    /** 挡板已装：模型切换为 3/4 楼梯（北侧 z0..8 全高立墙 + 南侧下半桌面）、选择框同步、禁装 PEDAL/JOYSTICK（与 DOCKED 互斥）；桌顶棋盘网格模块不受影响 */
     public static final BooleanProperty BAFFLED = BooleanProperty.create("baffled");
 
     /** 北向基准形状（对应模型元素 from/to）：仅桌体一块；选择框/碰撞箱均使用，安装控件不改变形状 */
@@ -155,8 +157,11 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 }
                 return ItemInteractionResult.SUCCESS;
             }
-            // 挡板已装：禁止再装任何控件（挡板为最终形态，需先拆挡板）
-            if (baffled && type != ControlDeskBlockEntity.ControlType.BAFFLE) {
+            // 挡板已装：禁止再装北侧控件 PEDAL / JOYSTICK 与同为形态安装的 DOCK（北侧区域已被立墙占据 / 形态互斥）；
+            // 桌顶棋盘网格模块（joystick_2 / throttle / throttle_2 / monitor_2）不受影响，可与挡板共存
+            if (baffled && (type == ControlDeskBlockEntity.ControlType.PEDAL
+                    || type == ControlDeskBlockEntity.ControlType.JOYSTICK
+                    || type == ControlDeskBlockEntity.ControlType.DOCK)) {
                 if (player != null) {
                     player.displayClientMessage(
                             Component.translatable("gui.ccpe.control_desk.cannot_install_on_baffle"), true);
@@ -203,7 +208,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 // toPlayer 保持 null：monitor_2 不做面向玩家的旋转
             }
             if (!desk.install(type, placeX, placeZ, toPlayer)) {
-                // 已安装 / 位置被占用 / 与 PEDAL·JOYSTICK 互斥（DOCK）/ 挡板需先拆全部控件：不消耗物品，提示玩家
+                // 已安装 / 位置被占用 / 与 PEDAL·JOYSTICK 互斥（DOCK）/ 挡板需先拆北侧控件（PEDAL·JOYSTICK·DOCK）：不消耗物品，提示玩家
                 if (player != null) {
                     Component msg = desk.isInstalled(type)
                             ? Component.translatable("gui.ccpe.control_desk.already_installed")
@@ -589,12 +594,24 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
      * 桌体中心 → 玩家的最近水平方向（90° 间隔，北/南/西/东）：joystick_2 安装旋转
      * （{@link ControlDeskBlockEntity#rotationToFace}）与客户端 ghost 预览共用同一实现，防预览与实装不一致。
      * 玩家为 null 或恰在桌体中心（getNearest 返回非水平方向）时返回 null。
+     * <p>Sable 物理体兼容：pos 是子次元 plot 坐标（可达 2×10⁷），而玩家在世界空间 ——
+     * 必须先经 {@link SableCompat#toLocalPosition} 把玩家位置投影回 plot 空间再算方向，
+     * 否则坐标差被巨大的 plot 偏移淹没（恒返回 NORTH），「面向玩家」安装旋转失效。
      */
     @Nullable
     public static Direction directionFromDeskTo(@Nullable Player player, BlockPos pos) {
         if (player == null) return null;
+        double px = player.getX();
+        double pz = player.getZ();
+        SubLevel sub = SableCompat.getContainingSubLevel(player.level(), pos);
+        if (sub != null) {
+            // 世界 → plot（partialTick 1.0 = 逻辑姿态：服务端即 logicalPose，客户端 renderPose(1.0) 亦为逻辑姿态）
+            Vec3 local = SableCompat.toLocalPosition(sub, 1.0f, new Vec3(px, player.getY(), pz));
+            px = local.x;
+            pz = local.z;
+        }
         Direction dir = Direction.getNearest(
-                player.getX() - (pos.getX() + 0.5), 0, player.getZ() - (pos.getZ() + 0.5));
+                px - (pos.getX() + 0.5), 0, pz - (pos.getZ() + 0.5));
         return dir.getAxis().isHorizontal() ? dir : null;
     }
 

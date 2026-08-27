@@ -191,7 +191,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private boolean joystick2Installed;
     private boolean throttle2Installed;
     private boolean dockInstalled;       // 拓展坞：装上后模型切换为 slab、禁装 PEDAL/JOYSTICK、桌顶网格变 14×14（blockstate DOCKED 同步）
-    private boolean baffleInstalled;     // 挡板：装上后模型切换为 3/4 楼梯（北侧立墙）、禁装所有控件（blockstate BAFFLED 同步）
+    private boolean baffleInstalled;     // 挡板：装上后模型切换为 3/4 楼梯（北侧立墙）、与 PEDAL/JOYSTICK/DOCK 互斥（blockstate BAFFLED 同步）
     /** 后缘插槽模块（throttle / joystick_2）的安装朝向（度，0/90/180/270，北向基准；安装时按玩家朝向记录，默认 0 = 不额外旋转） */
     private int backSlotRotation;
     /** joystick_2 放置中心（北向模型空间 px，默认 8 = 模型中心）；安装时按预览盒位置（吸附 1px 网格）记录 */
@@ -392,11 +392,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
                 dockInstalled = true;
             }
             case BAFFLE -> {
-                // 挡板占据桌体北侧全高区域（z0..8）且为最终形态：与所有已装控件互斥（含拓展坞），
-                // 装挡板前需先拆掉全部控件（用户定稿：挡板形态禁装所有控件）；
+                // 挡板占据桌体北侧全高区域（z0..8）：只与北侧控件 PEDAL / JOYSTICK 及同为形态安装的 DOCK 互斥
+                // （装挡板前需先拆掉它们）；桌顶棋盘网格模块（joystick_2 / throttle / throttle_2 / monitor_2，
+                // 均位于桌顶 z9..15）不受影响，可与挡板共存；
                 // blockstate BAFFLED 由 ControlDeskBlock.useItemOn 同步切换（模型/3/4 楼梯形态）
-                if (pedalInstalled || joystickInstalled || monitor2Installed || throttleInstalled
-                        || joystick2Installed || throttle2Installed || dockInstalled) {
+                if (pedalInstalled || joystickInstalled || dockInstalled) {
                     return false;
                 }
                 baffleInstalled = true;
