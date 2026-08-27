@@ -67,6 +67,10 @@ public class ControlDeskGhostPreviewRenderer {
                 || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
             return;
         }
+        // 装挡板后禁装所有控件：不显示半透明模型预览（与 overlay 的线框抑制一致）
+        if (state.getValue(ControlDeskBlock.BAFFLED)) {
+            return;
+        }
 
         Direction facing = state.getValue(ControlDeskBlock.FACING);
         // 预览盒中心：throttle / throttle_2 / monitor_2 / joystick_2 均吸附后钳制到「占地完全位于网格内」的
@@ -176,6 +180,7 @@ public class ControlDeskGhostPreviewRenderer {
                     MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE,
                     MyModPartialModels.CONTROL_DESK_JOYSTICK_2_HANDLE};
             case DOCK -> new PartialModel[0]; // 拓展坞不做半透明实物预览（仅线框，见 ControlDeskPlacementOverlay.showDockBox）
+            case BAFFLE -> new PartialModel[0]; // 挡板不做半透明实物预览（仅线框，见 ControlDeskPlacementOverlay.showBaffleBox）
         };
     }
 }

@@ -39,7 +39,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
 
     /** 可安装到控制台的控件类型 */
     public enum ControlType {
-        PEDAL, JOYSTICK, MONITOR_2, THROTTLE, JOYSTICK_2, THROTTLE_2, DOCK
+        PEDAL, JOYSTICK, MONITOR_2, THROTTLE, JOYSTICK_2, THROTTLE_2, DOCK, BAFFLE
     }
 
     /** 操纵杆回正时间（tick）默认值与范围（与 JoystickModuleScreen 滚轮条一致）。 */
@@ -124,6 +124,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_JOYSTICK_2 = "Joystick2Installed";
     private static final String TAG_THROTTLE_2 = "Throttle2Installed";
     private static final String TAG_DOCK = "DockInstalled";
+    private static final String TAG_BAFFLE = "BaffleInstalled";
     private static final String TAG_JOYSTICK_2_PLACE_X = "Joystick2PlaceX";
     private static final String TAG_JOYSTICK_2_PLACE_Z = "Joystick2PlaceZ";
     private static final String TAG_THROTTLE_PLACE_X = "ThrottlePlaceX";
@@ -190,6 +191,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private boolean joystick2Installed;
     private boolean throttle2Installed;
     private boolean dockInstalled;       // 拓展坞：装上后模型切换为 slab、禁装 PEDAL/JOYSTICK、桌顶网格变 14×14（blockstate DOCKED 同步）
+    private boolean baffleInstalled;     // 挡板：装上后模型切换为 3/4 楼梯（北侧立墙）、禁装所有控件（blockstate BAFFLED 同步）
     /** 后缘插槽模块（throttle / joystick_2）的安装朝向（度，0/90/180/270，北向基准；安装时按玩家朝向记录，默认 0 = 不额外旋转） */
     private int backSlotRotation;
     /** joystick_2 放置中心（北向模型空间 px，默认 8 = 模型中心）；安装时按预览盒位置（吸附 1px 网格）记录 */
@@ -366,6 +368,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             case JOYSTICK_2 -> joystick2Installed;
             case THROTTLE_2 -> throttle2Installed;
             case DOCK -> dockInstalled;
+            case BAFFLE -> baffleInstalled;
         };
     }
 
@@ -387,6 +390,16 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
                 // blockstate DOCKED 由 ControlDeskBlock.useItemOn 同步切换（模型/slab 形态）
                 if (pedalInstalled || joystickInstalled) return false;
                 dockInstalled = true;
+            }
+            case BAFFLE -> {
+                // 挡板占据桌体北侧全高区域（z0..8）且为最终形态：与所有已装控件互斥（含拓展坞），
+                // 装挡板前需先拆掉全部控件（用户定稿：挡板形态禁装所有控件）；
+                // blockstate BAFFLED 由 ControlDeskBlock.useItemOn 同步切换（模型/3/4 楼梯形态）
+                if (pedalInstalled || joystickInstalled || monitor2Installed || throttleInstalled
+                        || joystick2Installed || throttle2Installed || dockInstalled) {
+                    return false;
+                }
+                baffleInstalled = true;
             }
             case MONITOR_2 -> {
                 if (blocksPlacement(placeX, placeZ, MONITOR_2_FOOTPRINT_HALF_X, MONITOR_2_FOOTPRINT_HALF_Z)) return false; // 14×6 与已装模块占用重叠
@@ -557,6 +570,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             case DOCK -> {
                 dockInstalled = false;
                 // blockstate DOCKED 由 ControlDeskBlock.onSneakWrenched 同步复位（模型回到 base 形态）
+            }
+            case BAFFLE -> {
+                baffleInstalled = false;
+                // blockstate BAFFLED 由 ControlDeskBlock.onSneakWrenched 同步复位（模型回到 base 形态）
             }
         }
         notifyChange();
@@ -1859,6 +1876,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
         tag.putBoolean(TAG_THROTTLE_2, throttle2Installed);
         tag.putBoolean(TAG_DOCK, dockInstalled);
+        tag.putBoolean(TAG_BAFFLE, baffleInstalled);
         tag.putInt(TAG_JOYSTICK_2_PLACE_X, joystick2PlaceX);
         tag.putInt(TAG_JOYSTICK_2_PLACE_Z, joystick2PlaceZ);
         tag.putInt(TAG_THROTTLE_PLACE_X, throttlePlaceX);
@@ -1924,6 +1942,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         joystick2Installed = tag.getBoolean(TAG_JOYSTICK_2);
         throttle2Installed = tag.getBoolean(TAG_THROTTLE_2);
         dockInstalled = tag.getBoolean(TAG_DOCK);
+        baffleInstalled = tag.getBoolean(TAG_BAFFLE);
         if (tag.contains(TAG_JOYSTICK_2_PLACE_X)) {
             joystick2PlaceX = tag.getInt(TAG_JOYSTICK_2_PLACE_X);
         }
@@ -2117,6 +2136,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
         compound.putBoolean(TAG_THROTTLE_2, throttle2Installed);
         compound.putBoolean(TAG_DOCK, dockInstalled);
+        compound.putBoolean(TAG_BAFFLE, baffleInstalled);
         compound.putInt(TAG_JOYSTICK_2_PLACE_X, joystick2PlaceX);
         compound.putInt(TAG_JOYSTICK_2_PLACE_Z, joystick2PlaceZ);
         compound.putInt(TAG_THROTTLE_2_PLACE_X, throttle2PlaceX);
@@ -2182,6 +2202,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putBoolean(TAG_JOYSTICK_2, joystick2Installed);
         tag.putBoolean(TAG_THROTTLE_2, throttle2Installed);
         tag.putBoolean(TAG_DOCK, dockInstalled);
+        tag.putBoolean(TAG_BAFFLE, baffleInstalled);
         tag.putInt(TAG_JOYSTICK_2_PLACE_X, joystick2PlaceX);
         tag.putInt(TAG_JOYSTICK_2_PLACE_Z, joystick2PlaceZ);
         tag.putInt(TAG_THROTTLE_PLACE_X, throttlePlaceX);

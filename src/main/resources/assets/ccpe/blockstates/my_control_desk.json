@@ -1,12 +1,16 @@
 {
   "variants": {
-    "facing=north,docked=false": { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 0 },
-    "facing=east,docked=false":  { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 90 },
-    "facing=south,docked=false": { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 180 },
-    "facing=west,docked=false":  { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 270 },
-    "facing=north,docked=true":  { "model": "ccpe:block/control_desk_1/my_control_desk_slab", "y": 0 },
-    "facing=east,docked=true":   { "model": "ccpe:block/control_desk_1/my_control_desk_slab", "y": 90 },
-    "facing=south,docked=true":  { "model": "ccpe:block/control_desk_1/my_control_desk_slab", "y": 180 },
-    "facing=west,docked=true":   { "model": "ccpe:block/control_desk_1/my_control_desk_slab", "y": 270 }
+    "facing=north,docked=false,baffled=false": { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 0 },
+    "facing=east,docked=false,baffled=false":  { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 90 },
+    "facing=south,docked=false,baffled=false": { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 180 },
+    "facing=west,docked=false,baffled=false":  { "model": "ccpe:block/control_desk_1/my_control_desk_base", "y": 270 },
+    "facing=north,docked=true,baffled=false":  { "model": "ccpe:block/control_desk_1/my_control_desk_slab", "y": 0 },
+    "facing=east,docked=true,baffled=false":   { "model": "ccpe:block/control_desk_1/my_control_desk_slab", "y": 90 },
+    "facing=south,docked=true,baffled=false":  { "model": "ccpe:block/control_desk_1/my_control_desk_slab", "y": 180 },
+    "facing=west,docked=true,baffled=false":   { "model": "ccpe:block/control_desk_1/my_control_desk_slab", "y": 270 },
+    "facing=north,docked=false,baffled=true":  { "model": "ccpe:block/control_desk_1/my_control_desk_stair", "y": 0 },
+    "facing=east,docked=false,baffled=true":   { "model": "ccpe:block/control_desk_1/my_control_desk_stair", "y": 90 },
+    "facing=south,docked=false,baffled=true":  { "model": "ccpe:block/control_desk_1/my_control_desk_stair", "y": 180 },
+    "facing=west,docked=false,baffled=true":   { "model": "ccpe:block/control_desk_1/my_control_desk_stair", "y": 270 }
   }
 }

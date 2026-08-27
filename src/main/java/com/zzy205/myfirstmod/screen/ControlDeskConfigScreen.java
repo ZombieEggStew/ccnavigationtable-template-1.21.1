@@ -127,6 +127,7 @@ public class ControlDeskConfigScreen extends AbstractMonitorScreen {
             case THROTTLE_2 -> this.minecraft.setScreen(new Throttle2ModuleScreen(deskPos).withReturnTo(this));
             case MONITOR_2 -> {}
             case DOCK -> {} // 拓展坞无模块配置菜单（仅切换模型形态，见 ControlDeskBlock.DOCKED）
+            case BAFFLE -> {} // 挡板无模块配置菜单（仅切换模型形态，见 ControlDeskBlock.BAFFLED）
         }
     }
 

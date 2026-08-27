@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
+import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.monitor.ModuleType;
@@ -36,6 +37,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
@@ -54,6 +56,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
     /** 拓展坞已装：模型切换为 slab（16×8×16 整块桌面）、选择框同步、桌顶网格变 14×14、禁装 PEDAL/JOYSTICK */
     public static final BooleanProperty DOCKED = BooleanProperty.create("docked");
+    /** 挡板已装：模型切换为 3/4 楼梯（北侧 z0..8 全高立墙 + 南侧下半桌面）、选择框同步、禁装所有控件（与 DOCKED 互斥） */
+    public static final BooleanProperty BAFFLED = BooleanProperty.create("baffled");
 
     /** 北向基准形状（对应模型元素 from/to）：仅桌体一块；选择框/碰撞箱均使用，安装控件不改变形状 */
     private static final VoxelShaper SHAPE = VoxelShaper.forHorizontal(
@@ -63,6 +67,11 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     /** 拓展坞（slab）形态形状：16×8×16 整块桌面（北侧空区 z0..8 也被桌面覆盖） */
     private static final VoxelShaper DOCKED_SHAPE = VoxelShaper.forHorizontal(
             Block.box(0, 0, 0, 16, 8, 16),
+            Direction.NORTH
+    );
+    /** 挡板（3/4 楼梯）形态形状：北侧 z0..8 全高立墙 + 南侧 z8..16 下半桌面（3/4 块体积，与 stair 模型经 blockstate y+180 渲染一致） */
+    private static final VoxelShaper BAFFLED_SHAPE = VoxelShaper.forHorizontal(
+            Shapes.or(Block.box(0, 0, 0, 16, 16, 8), Block.box(0, 0, 8, 16, 8, 16)),
             Direction.NORTH
     );
 
@@ -87,13 +96,14 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING, DOCKED);
+        builder.add(FACING, DOCKED, BAFFLED);
     }
 
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         return this.defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite())
-                .setValue(DOCKED, false);
+                .setValue(DOCKED, false)
+                .setValue(BAFFLED, false);
     }
 
     @Override
@@ -103,7 +113,9 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext ctx) {
-        return (state.getValue(DOCKED) ? DOCKED_SHAPE : SHAPE).get(state.getValue(FACING));
+        VoxelShaper shape = state.getValue(BAFFLED) ? BAFFLED_SHAPE
+                : (state.getValue(DOCKED) ? DOCKED_SHAPE : SHAPE);
+        return shape.get(state.getValue(FACING));
     }
 
     @Nullable
@@ -131,13 +143,23 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             if (level.isClientSide) {
                 return ItemInteractionResult.SUCCESS;
             }
-            // 拓展坞已装：禁止再装 PEDAL / JOYSTICK（北侧空区已被桌面覆盖）
-            if (state.getValue(DOCKED)
-                    && (type == ControlDeskBlockEntity.ControlType.PEDAL
-                    || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
+            boolean docked = state.getValue(DOCKED);
+            boolean baffled = state.getValue(BAFFLED);
+            // 拓展坞已装：禁止再装 PEDAL / JOYSTICK / 挡板（北侧空区已被桌面覆盖 / 形态互斥）
+            if (docked && (type == ControlDeskBlockEntity.ControlType.PEDAL
+                    || type == ControlDeskBlockEntity.ControlType.JOYSTICK
+                    || type == ControlDeskBlockEntity.ControlType.BAFFLE)) {
                 if (player != null) {
                     player.displayClientMessage(
                             Component.translatable("gui.ccpe.control_desk.cannot_install_on_dock"), true);
+                }
+                return ItemInteractionResult.SUCCESS;
+            }
+            // 挡板已装：禁止再装任何控件（挡板为最终形态，需先拆挡板）
+            if (baffled && type != ControlDeskBlockEntity.ControlType.BAFFLE) {
+                if (player != null) {
+                    player.displayClientMessage(
+                            Component.translatable("gui.ccpe.control_desk.cannot_install_on_baffle"), true);
                 }
                 return ItemInteractionResult.SUCCESS;
             }
@@ -181,18 +203,25 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 // toPlayer 保持 null：monitor_2 不做面向玩家的旋转
             }
             if (!desk.install(type, placeX, placeZ, toPlayer)) {
-                // 已安装 / 位置被占用 / 与 PEDAL·JOYSTICK 互斥（DOCK）：不消耗物品，提示玩家
+                // 已安装 / 位置被占用 / 与 PEDAL·JOYSTICK 互斥（DOCK）/ 挡板需先拆全部控件：不消耗物品，提示玩家
                 if (player != null) {
-                    player.displayClientMessage(
-                            Component.translatable(desk.isInstalled(type)
-                                    ? "gui.ccpe.control_desk.already_installed"
-                                    : "gui.ccpe.control_desk.position_occupied"), true);
+                    Component msg = desk.isInstalled(type)
+                            ? Component.translatable("gui.ccpe.control_desk.already_installed")
+                            : (type == ControlDeskBlockEntity.ControlType.BAFFLE
+                                    ? Component.translatable("gui.ccpe.control_desk.baffle_remove_modules_first")
+                                    : Component.translatable("gui.ccpe.control_desk.position_occupied"));
+                    player.displayClientMessage(msg, true);
                 }
                 return ItemInteractionResult.SUCCESS;
             }
             // 拓展坞安装成功：切换 blockstate DOCKED（模型/选择框/桌顶网格同步换 slab 形态；同 block 换 property，BE 保留）
             if (type == ControlDeskBlockEntity.ControlType.DOCK) {
                 level.setBlock(pos, state.setValue(DOCKED, true), 3);
+                desk.setChanged();
+            }
+            // 挡板安装成功：切换 blockstate BAFFLED（模型/选择框同步换 3/4 楼梯形态；同 block 换 property，BE 保留）
+            if (type == ControlDeskBlockEntity.ControlType.BAFFLE) {
+                level.setBlock(pos, state.setValue(BAFFLED, true), 3);
                 desk.setChanged();
             }
             // 安装成功：非创造模式消耗 1 个物品
@@ -237,7 +266,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)
-                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK);
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.BAFFLE);
             if (!anyInstalled) {
                 // 光桌：没有模块可拆，走默认拆方块
                 return IWrenchable.super.onSneakWrenched(state, context);
@@ -260,6 +290,11 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                     // 拆除拓展坞：blockstate DOCKED 复位（模型/选择框/桌顶网格回到 base 形态）
                     if (hit == ControlDeskBlockEntity.ControlType.DOCK && state.getValue(DOCKED)) {
                         level.setBlock(pos, state.setValue(DOCKED, false), 3);
+                        desk.setChanged();
+                    }
+                    // 拆除挡板：blockstate BAFFLED 复位（模型/选择框回到 base 形态）
+                    if (hit == ControlDeskBlockEntity.ControlType.BAFFLE && state.getValue(BAFFLED)) {
+                        level.setBlock(pos, state.setValue(BAFFLED, false), 3);
                         desk.setChanged();
                     }
                 }
@@ -303,6 +338,10 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK)
                 && hitBounds(List.of(dockPlaceBox(facing, pos)), click)) {
             return ControlDeskBlockEntity.ControlType.DOCK;
+        }
+        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.BAFFLE)
+                && hitBounds(List.of(bafflePlaceBox(facing, pos)), click)) {
+            return ControlDeskBlockEntity.ControlType.BAFFLE;
         }
         return null;
     }
@@ -382,6 +421,18 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
     }
 
+    /**
+     * 挡板放置盒的世界 AABB（北向基准 0,0,0,16,16,8 = 桌体北侧整块全高区域，随 FACING 旋转；与安装预览一致）。
+     * 供扳手拆除命中判定（{@link #hitControlType}）与客户端扳手拆除预览共用。
+     */
+    public static AABB bafflePlaceBox(Direction facing, BlockPos pos) {
+        Vec3 p0 = modelToWorld(pos, 0, 0, 0, facing);
+        Vec3 p1 = modelToWorld(pos, 16, 16, 8, facing);
+        return new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+    }
+
     /** 北向基准模型坐标（px）→ 世界坐标：绕方块中心 Y 旋转到 FACING（与渲染 rotateCenteredDegrees 同约定）。 */
     private static Vec3 modelToWorld(BlockPos pos, float x, float y, float z, Direction facing) {
         float bx = x / 16f;
@@ -440,6 +491,9 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK)) {
                 drops.add(new ItemStack(MyModBlocks.my_control_desk.get().asItem()));
             }
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.BAFFLE)) {
+                drops.add(new ItemStack(AllBlocks.BRASS_CASING.get().asItem()));
+            }
         }
         return drops;
     }
@@ -455,6 +509,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             case THROTTLE_2 -> MyModItems.CONTROL_THROTTLE_2.get();
             // 拓展坞 = 另一台控制台方块物品（手持控制台右键已放置的控制台 → 安装为 slab 形态）
             case DOCK -> MyModBlocks.my_control_desk.get().asItem();
+            // 挡板 = create:brass_casing（手持右键已放置的控制台 → 安装为 3/4 楼梯形态）
+            case BAFFLE -> AllBlocks.BRASS_CASING.get().asItem();
         };
     }
 
@@ -467,6 +523,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         if (stack.is(MyModItems.CONTROL_THROTTLE_2.get())) return ControlDeskBlockEntity.ControlType.THROTTLE_2;
         // 拓展坞 = 手持控制台方块物品右键已放置的控制台 → 安装为 slab 形态（不放置新方块）
         if (stack.is(MyModBlocks.my_control_desk.get().asItem())) return ControlDeskBlockEntity.ControlType.DOCK;
+        // 挡板 = 手持 create:brass_casing 右键已放置的控制台 → 安装为 3/4 楼梯形态（不放置 casing 方块）
+        if (stack.is(AllBlocks.BRASS_CASING.get().asItem())) return ControlDeskBlockEntity.ControlType.BAFFLE;
         return null;
     }
 
@@ -556,6 +614,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             case JOYSTICK -> result.add(JOYSTICK_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
             case MONITOR_2, THROTTLE, JOYSTICK_2, THROTTLE_2 -> { /* 无安装位框（插槽已移除） */ }
             case DOCK -> result.add(dockPlaceBox(facing, pos));
+            case BAFFLE -> result.add(bafflePlaceBox(facing, pos));
         }
         return result;
     }

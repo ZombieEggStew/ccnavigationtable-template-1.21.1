@@ -80,6 +80,8 @@
   "gui.ccpe.control_desk.position_occupied": "Position occupied",
   "gui.ccpe.control_desk.cannot_install_on_dock": "Dock installed, cannot install this control",
   "gui.ccpe.control_desk.dock_remove_blocked": "Remove modules on the dock extension first",
+  "gui.ccpe.control_desk.cannot_install_on_baffle": "Baffle installed, cannot install this control",
+  "gui.ccpe.control_desk.baffle_remove_modules_first": "Remove installed controls first",
   "gui.ccpe.control_desk.bind_unbound": "Unbound",
   "gui.ccpe.control_desk.bind_tip": "Left click to bind, right click to clear",
   "gui.ccpe.control_desk.joystick_return_time": "Return-to-Center Time",

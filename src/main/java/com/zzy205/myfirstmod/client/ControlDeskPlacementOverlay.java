@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.client;
 
+import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
 import com.zzy205.myfirstmod.block.ControlDeskBlock;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
@@ -30,6 +31,9 @@ import java.util.List;
  *   <li>手持控制台方块物品 → 准星指向 controlDesk 时显示拓展坞安装预览框
  *       （北向基准 0,0,0,16,8,8 = 桌体北侧整块空区，随 FACING 旋转；仅预览框，无 ghost 实物）；
  *       右键安装后控制台转为 slab 形态（DOCKED，见 {@link ControlDeskBlock}）</li>
+ *   <li>手持 create:brass_casing → 准星指向 controlDesk 时显示挡板安装预览框
+ *       （北向基准 0,0,0,16,16,8 = 桌体北侧整块全高区域，随 FACING 旋转；仅预览框，无 ghost 实物；
+ *       与拓展坞互斥，已装拓展坞（DOCKED）变红）</li>
  *   <li>手持扳手 → 准星指向 controlDesk 时显示已安装控件的安装位（默认绿）；视角命中安装位变红，蹲下右键拆对应模块</li>
  *   <li>扳手普通右键（不蹲下）或 空手蹲下右键，准星指向 controlDesk（任意位置）→ 打开控制台配置菜单 {@link ControlDeskConfigScreen}（右键边沿防连发）；扳手蹲下右键 → 不拦截，交给服务端 {@code onSneakWrenched} 拆除模块</li>
  * </ul>
@@ -74,6 +78,12 @@ public class ControlDeskPlacementOverlay {
 
             ControlDeskBlockEntity.ControlType type = controlTypeOf(held);
             if (type != null) {
+                // 挡板形态（BAFFLED）：禁装所有控件（PEDAL/JOYSTICK/桌顶模块），不显示任何安装预览/网格
+                BlockState hitState = mc.level.getBlockState(hit.getBlockPos());
+                if (hitState.getBlock() instanceof ControlDeskBlock
+                        && hitState.getValue(ControlDeskBlock.BAFFLED)) {
+                    return;
+                }
                 showInstallPreview(mc, hit, type);
                 // monitor_2 / throttle / joystick_2 的原后缘插槽已移除（installBounds 为空 → 无 AABB 安装预览框）；
                 // 手持三者时改显桌顶 6×14 棋盘网格（1px 格、内缩 1px；纯显示）
@@ -104,6 +114,11 @@ public class ControlDeskPlacementOverlay {
             // 手持控制台方块物品：显示拓展坞安装预览框（右键安装后转为 slab 形态；无 ghost 实物）
             if (isDock(held)) {
                 showDockBox(mc, hit);
+                return;
+            }
+            // 手持 create:brass_casing：显示挡板安装预览框（右键安装后转为 3/4 楼梯形态；仅预览框，无 ghost 实物）
+            if (isBaffle(held)) {
+                showBaffleBox(mc, hit);
                 return;
             }
             if (isWrench(held)) {
@@ -193,6 +208,15 @@ public class ControlDeskPlacementOverlay {
                 boolean blocked = desk.hasModuleOnDockExtension();
                 Outliner.getInstance().showAABB("control-desk/remove/" + pos.toShortString() + "/DOCK", box)
                         .colored(hovered || blocked ? COLOR_INVALID : COLOR_VALID)
+                        .lineWidth(1 / 64f);
+                continue;
+            }
+            if (type == ControlDeskBlockEntity.ControlType.BAFFLE) {
+                // 挡板：显示北侧全高放置盒（与安装预览/服务端拆除判定共用 ControlDeskBlock.bafflePlaceBox）
+                AABB box = ControlDeskBlock.bafflePlaceBox(facing, pos);
+                boolean hovered = ControlDeskBlock.hitBounds(List.of(box), click);
+                Outliner.getInstance().showAABB("control-desk/remove/" + pos.toShortString() + "/BAFFLE", box)
+                        .colored(hovered ? COLOR_INVALID : COLOR_VALID)
                         .lineWidth(1 / 64f);
                 continue;
             }
@@ -388,7 +412,7 @@ public class ControlDeskPlacementOverlay {
         BlockState state = mc.level.getBlockState(pos);
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
         Direction facing = state.getValue(ControlDeskBlock.FACING);
-        boolean installed = state.getValue(ControlDeskBlock.DOCKED);
+        boolean installed = state.getValue(ControlDeskBlock.DOCKED) || state.getValue(ControlDeskBlock.BAFFLED);
 
         Vec3 p0 = gridWorld(pos, 0, 0, 0, facing);
         Vec3 p1 = gridWorld(pos, 16, 8, 8, facing);
@@ -397,6 +421,38 @@ public class ControlDeskPlacementOverlay {
                 Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
         Outliner.getInstance().showAABB("control-desk/box-dock/" + pos.toShortString(), box)
                 .colored(installed ? COLOR_INVALID : COLOR_VALID)
+                .lineWidth(1 / 16f);
+    }
+
+    /**
+     * 手持 create:brass_casing：显示挡板安装预览框（北向基准 0,0,0,16,16,8 = 桌体北侧整块全高区域，随 FACING 旋转）。
+     * 仅显示预览框 —— 无半透明 ghost 实物；与拓展坞互斥 + 已装挡板：变红（不可安装）。
+     */
+    private static void showBaffleBox(Minecraft mc, BlockHitResult hit) {
+        BlockPos pos = hit.getBlockPos();
+        BlockState state = mc.level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ControlDeskBlock)) return;
+        Direction facing = state.getValue(ControlDeskBlock.FACING);
+        boolean docked = state.getValue(ControlDeskBlock.DOCKED);
+        boolean baffled = state.getValue(ControlDeskBlock.BAFFLED);
+        // 与服务端 install(BAFFLE) 一致：已有任何已装控件（含拓展坞/挡板）时不可安装 → 变红
+        boolean anyModule = false;
+        if (mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk) {
+            for (ControlDeskBlockEntity.ControlType t : ControlDeskBlockEntity.ControlType.values()) {
+                if (desk.isInstalled(t)) {
+                    anyModule = true;
+                    break;
+                }
+            }
+        }
+
+        Vec3 p0 = gridWorld(pos, 0, 0, 0, facing);
+        Vec3 p1 = gridWorld(pos, 16, 16, 8, facing);
+        AABB box = new AABB(
+                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
+                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+        Outliner.getInstance().showAABB("control-desk/box-baffle/" + pos.toShortString(), box)
+                .colored(docked || baffled || anyModule ? COLOR_INVALID : COLOR_VALID)
                 .lineWidth(1 / 16f);
     }
 
@@ -495,6 +551,11 @@ public class ControlDeskPlacementOverlay {
     /** 手持控制台方块物品（拓展坞 = 手持控制台右键另一台已放置的控制台 → 安装为 slab 形态）。 */
     private static boolean isDock(ItemStack stack) {
         return stack.is(MyModBlocks.my_control_desk.get().asItem());
+    }
+
+    /** 手持 create:brass_casing（挡板安装耗材 → 右键安装后控制台转为 3/4 楼梯形态）。 */
+    private static boolean isBaffle(ItemStack stack) {
+        return stack.is(AllBlocks.BRASS_CASING.get().asItem());
     }
 
     private static boolean isWrench(ItemStack stack) {
