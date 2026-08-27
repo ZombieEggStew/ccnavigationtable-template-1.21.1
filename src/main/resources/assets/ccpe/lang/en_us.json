@@ -80,6 +80,7 @@
   "gui.ccpe.control_desk.position_occupied": "Position occupied",
   "gui.ccpe.control_desk.cannot_install_on_dock": "Dock installed, cannot install this control",
   "gui.ccpe.control_desk.dock_remove_blocked": "Remove modules on the dock extension first",
+  "gui.ccpe.control_desk.monitor2_remove_blocked": "Remove all modules from the monitor 2 surface first",
   "gui.ccpe.control_desk.cannot_install_on_baffle": "Baffle installed, cannot install this control",
   "gui.ccpe.control_desk.baffle_remove_modules_first": "Remove installed controls first",
   "gui.ccpe.control_desk.bind_unbound": "Unbound",

@@ -82,6 +82,7 @@
   "gui.ccpe.control_desk.position_occupied": "该位置已被占用",
   "gui.ccpe.control_desk.cannot_install_on_dock": "已安装拓展坞，无法安装该控件",
   "gui.ccpe.control_desk.dock_remove_blocked": "请先拆除拓展坞上方的模块",
+  "gui.ccpe.control_desk.monitor2_remove_blocked": "请先拆除监视器 2 表面的全部模块",
   "gui.ccpe.control_desk.cannot_install_on_baffle": "已安装挡板，无法安装该控件",
   "gui.ccpe.control_desk.baffle_remove_modules_first": "请先拆除已安装的控件",
   "gui.ccpe.control_desk.bind_unbound": "未绑定",

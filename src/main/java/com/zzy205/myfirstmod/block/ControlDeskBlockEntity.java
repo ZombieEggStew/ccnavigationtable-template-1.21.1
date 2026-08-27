@@ -517,6 +517,16 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return false;
     }
 
+    /**
+     * monitor_2 表面是否还有模块或屏幕（10×8 网格非空）：拆除 monitor_2 前必须先拆完表面附着物
+     * （对齐拆 dock 的拦截 {@link #hasModuleOnDockExtension()}）。
+     * 供服务端 {@code onSneakWrenched} 拦截拆 monitor_2 与客户端拆除预览变红共用。
+     */
+    public boolean hasMonitor2Modules() {
+        return monitor2Installed
+                && (!getMonitor2Grid().isEmpty() || getMonitor2Grid().hasScreen());
+    }
+
     /** 卸载控件；未安装返回 false。服务端调用。 */
     public boolean remove(ControlType type) {
         if (!isInstalled(type)) return false;

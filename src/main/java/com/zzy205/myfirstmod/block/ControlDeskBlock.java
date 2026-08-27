@@ -289,6 +289,14 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                     }
                     return InteractionResult.SUCCESS;
                 }
+                // 拆除 monitor_2 前必须先把其表面的模块/屏幕全部拆掉
+                if (hit == ControlDeskBlockEntity.ControlType.MONITOR_2 && desk.hasMonitor2Modules()) {
+                    if (context.getPlayer() != null) {
+                        context.getPlayer().displayClientMessage(
+                                Component.translatable("gui.ccpe.control_desk.monitor2_remove_blocked"), true);
+                    }
+                    return InteractionResult.SUCCESS;
+                }
                 if (desk.remove(hit)) {
                     Block.popResource(level, pos, new ItemStack(controlItem(hit)));
                     IWrenchable.playRemoveSound(level, pos);

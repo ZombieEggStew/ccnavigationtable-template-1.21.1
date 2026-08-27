@@ -88,10 +88,15 @@ public class ControlDeskConfigScreen extends AbstractMonitorScreen {
         this.addRenderableWidget(this.channelBar);
 
         // 2. 已安装控件列表（物品栏图标 + 控件名称；按 ControlType 顺序列出已安装的控件，点击行打开对应模块配置菜单）
+        //    拓展坞（DOCK）/ 挡板（BAFFLE）仅切换模型形态、无可配置项，不加入列表
         this.moduleTypes.clear();
         List<InstalledModulesList.Entry> modules = new ArrayList<>();
         if (desk != null) {
             for (ControlDeskBlockEntity.ControlType type : ControlDeskBlockEntity.ControlType.values()) {
+                if (type == ControlDeskBlockEntity.ControlType.DOCK
+                        || type == ControlDeskBlockEntity.ControlType.BAFFLE) {
+                    continue;
+                }
                 if (desk.isInstalled(type)) {
                     ItemStack icon = new ItemStack(ControlDeskBlock.controlItem(type));
                     modules.add(new InstalledModulesList.Entry(icon, icon.getHoverName()));

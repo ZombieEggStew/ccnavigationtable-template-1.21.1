@@ -196,11 +196,13 @@ public class ControlDeskPlacementOverlay {
                 continue;
             }
             if (type == ControlDeskBlockEntity.ControlType.MONITOR_2) {
-                // 监视器2：显示放置位 14×6×12 盒子（与安装预览/服务端拆除判定共用 ControlDeskBlock.monitor2PlaceBox）
+                // 监视器2：显示放置位 14×6×12 盒子（与安装预览/服务端拆除判定共用 ControlDeskBlock.monitor2PlaceBox）；
+                // 表面还有模块/屏幕时不可拆（变红，与服务端拦截一致）
                 AABB box = ControlDeskBlock.monitor2PlaceBox(desk, facing, pos);
                 boolean hovered = ControlDeskBlock.hitBounds(List.of(box), click);
+                boolean blocked = desk.hasMonitor2Modules();
                 Outliner.getInstance().showAABB("control-desk/remove/" + pos.toShortString() + "/MONITOR_2", box)
-                        .colored(hovered ? COLOR_INVALID : COLOR_VALID)
+                        .colored(hovered || blocked ? COLOR_INVALID : COLOR_VALID)
                         .lineWidth(1 / 64f);
                 continue;
             }
