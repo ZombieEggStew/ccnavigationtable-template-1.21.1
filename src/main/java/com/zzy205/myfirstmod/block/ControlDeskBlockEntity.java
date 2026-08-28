@@ -1360,6 +1360,26 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return inputUp || inputDown;
     }
 
+    /** X 轴正方向（右摆 D）是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isJoystickXPositive() {
+        return inputRight;
+    }
+
+    /** X 轴负方向（左摆 A）是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isJoystickXNegative() {
+        return inputLeft;
+    }
+
+    /** Y 轴正方向（前推 W）是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isJoystickYPositive() {
+        return inputUp;
+    }
+
+    /** Y 轴负方向（后拉 S）是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isJoystickYNegative() {
+        return inputDown;
+    }
+
     /** 左踏板轴（-1..1，运行时）：+1 = 踩下（动画 +z 1px）/ -1 = 抬起（动画 -z 1px），见 {@link PedalMotion}。 */
     public float getPedalLeftAxis() {
         return pedalLeftAxis;
@@ -1741,6 +1761,26 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** 摇杆2 Y 轴是否有按键动作（原始值，服务端输入租约）：前/后方向键任一按住。 */
     public boolean isJoystick2YActive() {
         return input2Up || input2Down;
+    }
+
+    /** 摇杆2 X 轴正方向（右摆）是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isJoystick2XPositive() {
+        return input2Right;
+    }
+
+    /** 摇杆2 X 轴负方向（左摆）是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isJoystick2XNegative() {
+        return input2Left;
+    }
+
+    /** 摇杆2 Y 轴正方向（前推）是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isJoystick2YPositive() {
+        return input2Up;
+    }
+
+    /** 摇杆2 Y 轴负方向（后拉）是否有按键动作（原始值，服务端输入租约）。 */
+    public boolean isJoystick2YNegative() {
+        return input2Down;
     }
 
     public int getJoystick2ReturnTime() {

@@ -142,8 +142,8 @@ flowchart LR
   - **`getModule("monitor")` → `MonitorPeripheral`（type = `"ccpe:monitor_2"`）**：monitor_2 表面小 Monitor 的模块/屏幕查询入口，方法与 Monitor 外设完全同款（`getCellModule(x,y)` / `getModule(id)` / 音效），作用在 10×8 网格；monitor_2 未安装返回 nil（`MonitorPeripheral` 宿主参数化为 `MonitorGridHost`，Monitor 与 monitor_2 共用同一类）
   - **模块实例上的状态读取方法全部 `mainThread=false`**（Lua 侧高频轮询直接跑 CC worker 线程，不占主线程）：
     - `PedalModuleHandle`：模拟量 `getLeftPedal()/getRightPedal()`（-1..1：+1 踩下 / -1 抬起）+ 差值 `getPedalDifference()`（右 − 左，-2..2）+ 方向判断 `isLeftPedalDown()/isRightPedalDown()`（轴值 > 0）与 `isLeftPedalUp()/isRightPedalUp()`（轴值 < 0，均含回正余量）
-    - `JoystickModuleHandle`：原始值 `isAxisXActive()/isAxisYActive()`（boolean：该轴有无按键动作，读服务端输入租约）+ 轴值 `getAxisX()/getAxisY()`（0..1 幅度 = |轴值|）+ 带符号 `getAxisXSigned()/getAxisYSigned()`（-1..1）
-    - `Joystick2ModuleHandle`：与操纵杆同构（方法名对齐 joystick、无 2 前缀）：`isAxisXActive()/isAxisYActive()` + `getAxisX()/getAxisY()`（0..1）+ `getAxisXSigned()/getAxisYSigned()`（-1..1），读 joystick2 独立轴值/租约
+    - `JoystickModuleHandle`：原始值 `isAxisXActive()/isAxisYActive()`（boolean：该轴有无按键动作，读服务端输入租约）+ **方向判断 `isAxisXPositive()/isAxisXNegative()/isAxisYPositive()/isAxisYNegative()`（boolean：X/Y 轴正负方向原始按键按住态，右摆(D)/左摆(A)/前推(W)/后拉(S)，读服务端输入租约）** + 轴值 `getAxisX()/getAxisY()`（0..1 幅度 = |轴值|）+ 带符号 `getAxisXSigned()/getAxisYSigned()`（-1..1）
+    - `Joystick2ModuleHandle`：与操纵杆同构（方法名对齐 joystick、无 2 前缀）：`isAxisXActive()/isAxisYActive()` + **方向判断 `isAxisXPositive()/isAxisXNegative()/isAxisYPositive()/isAxisYNegative()`（同操纵杆，读 joystick2 独立租约）** + `getAxisX()/getAxisY()`（0..1）+ `getAxisXSigned()/getAxisYSigned()`（-1..1），读 joystick2 独立轴值/租约
     - `ThrottleModuleHandle`：原始值 `isForwardActive()/isBackActive()`（boolean：前进/后退键按住态，读服务端输入租约）+ 档位 `getThrottleGear()`（0..11 整数，锁存不回正）+ 轴值 `getAxis()`（0..1 = 档位/MAX，满前进 = 1）
     - `Throttle2ModuleHandle`：**油门2 总距杆 Lua API（已接入，方法名对齐油门杆、无 Throttle2 前缀）**——轴值 `getAxis()`（0..1 = 角度/30°，0 = 底端 / 1 = 满偏上抬）、回正模式专用轴值 `getCenterAxis()`（-1..1 = (角度−15°)/15°，-1 = 底端 / 0 = 中位 / +1 = 满偏）、角度控制 `setAngle(degrees)`（0..30°，越界钳位，mainThread=true 服务端权威写 BE 角度并广播；玩家联动输入有效时每 tick 模拟会覆盖，无输入（回正关 = 锁存）时保持）；读取全部 mainThread=false
   - 定稿写的 0/1 按项目惯例实现为 boolean（Lua 中 0 为真值，boolean 语义更正确）

@@ -40,6 +40,44 @@ public class JoystickModuleHandle {
     }
 
     /**
+     * X 轴正方向（右摆 D）是否有按键动作（原始值，服务端输入租约）。
+     *
+     * <pre>{@code
+     * local joy = desk.getModule("joystick")
+     * print(joy.isAxisXPositive(), joy.isAxisXNegative(),
+     *       joy.isAxisYPositive(), joy.isAxisYNegative())
+     * }</pre>
+     */
+    @LuaFunction
+    public final boolean isAxisXPositive() {
+        return be.isJoystickXPositive();
+    }
+
+    /**
+     * X 轴负方向（左摆 A）是否有按键动作（原始值，服务端输入租约）。
+     */
+    @LuaFunction
+    public final boolean isAxisXNegative() {
+        return be.isJoystickXNegative();
+    }
+
+    /**
+     * Y 轴正方向（前推 W）是否有按键动作（原始值，服务端输入租约）。
+     */
+    @LuaFunction
+    public final boolean isAxisYPositive() {
+        return be.isJoystickYPositive();
+    }
+
+    /**
+     * Y 轴负方向（后拉 S）是否有按键动作（原始值，服务端输入租约）。
+     */
+    @LuaFunction
+    public final boolean isAxisYNegative() {
+        return be.isJoystickYNegative();
+    }
+
+    /**
      * X 轴模拟量幅度（0..1，=|轴值|）：+1 = 右摆满偏 / -1 = 左摆满偏，符号见
      * {@link #getAxisXSigned}。
      */
