@@ -1,11 +1,25 @@
 ---
 name: minecraft-research
-description: 'Minecraft 相关调研：当需要确认 Minecraft 本体、依赖 mod（Create、CC:Tweaked、Sable、JEI 等）或参考案例 mod 的源码、API 与实现方式时使用。API/接口查询用 api/（干净源码），案例参考用 references/（完整项目），个人调研源码放 .research/；用于确认 API 方法签名、追踪调用链、调试兼容性问题或理解注册与渲染机制。'
+description: 'Minecraft 相关调研：当需要确认 Minecraft 本体、依赖 mod（Create、CC:Tweaked、Sable、JEI 等）或参考案例 mod 的源码、API 与实现方式时使用。API/接口查询用 api/（干净源码，包级地图见 memo/api-code-map.md；Sable Companion、Flywheel、Catnip 是项目根基最常用），案例参考用 references/（完整项目），个人调研源码放 .research/；用于确认 API 方法签名、追踪调用链、调试兼容性问题或理解注册与渲染机制。'
 ---
 
 # Minecraft 相关调研
 
 > 调研 Minecraft 本体与 mod 源码：定位 API、参考案例实现、追踪跨 mod 调用链。
+
+> **api/ 的详细包级代码地图见 `memo/api-code-map.md`**（含核心三件套重点说明、import 前缀→路径对照表、项目内使用文件清单）；需要精确的包路径或类位置时先查它，本技能只给目录级索引。
+
+## ⭐ 核心三件套（项目根基，最常用）
+
+**Sable Companion、Flywheel、Catnip 是本 mod 最常用的外部源码，几乎是项目根基**：渲染链（Flywheel Visual + Catnip Outliner/SuperByteBuffer）、物理驱动（Sable RotaryConstraint）、GUI 控件（Catnip AbstractSimiWidget）、命中检测（Sable plot 坐标回投）全部建立在它们之上。涉及渲染 / 物理 / 子次元 / 预览 / 控件问题，**最先查这三处**：
+
+| 库 | 包前缀 | api/ 位置 | 一句话职责 |
+|---|---|---|---|
+| Sable Companion | `dev.ryanhcode.sable` | `api/sable/sable-companion-common-1.21.1-1.6.0/`（接口/数学）+ `api/sable/sable-neoforge-1.21.1-2.0.3/`（实现/物理） | 子次元 + 物理（RotaryConstraint、plot 坐标）；本 mod 的 my_bearing、命中回投、传感器都靠它 |
+| Flywheel | `dev.engine_room.flywheel` | `api/create/flywheel-neoforge-api-1.21.1-1.0.6/` | Create 实例化渲染引擎；所有动态方块（Monitor/controlDesk/传动外设/my_bearing）的 Visual 基于它 |
+| Catnip | `net.createmod.catnip` | `api/create/ponder-neoforge-1.0.82+mc1.21.1/net/createmod/catnip/` | Create 工具库：Outliner、SuperByteBuffer、VoxelShaper、GUI 控件、Color；**注意在 ponder jar 内，不在 create slim 里** |
+
+> Catnip 版本注意：项目编译用的是 **ponder jar 内嵌的 shaded 副本**（包结构与 Create API 匹配）；`references/Catnip-NeoForge-1.21.1-0.8.54-sources/` 是独立新版（0.8.54，`net.createmod.catnip.utility.*` 子包结构），查实现时注意包路径不同。
 
 ## 何时使用
 
@@ -34,9 +48,9 @@ description: 'Minecraft 相关调研：当需要确认 Minecraft 本体、依赖
 | 目录 | 内容 |
 |------|------|
 | `api/cc/` | CC:Tweaked 1.118.0：`common-api` / `core-api` / `forge-api`（`dan200.computercraft.*`） |
-| `api/create/` | Create 6.0.10 `slim`（`com.simibubi.create.*`、`net.createmod.catnip.*`）、Flywheel `neoforge-api`、Ponder、Registrate |
+| `api/create/` | Create 6.0.10 `slim`（`com.simibubi.create.*`，**不含 catnip**）、Flywheel `neoforge-api`、Ponder（**内含 catnip：`net.createmod.catnip.*`**）、Registrate |
 | `api/jei/` | JEI 19.42.0.379：`common-api` / `neoforge-api`（`mezz.jei.*`） |
-| `api/sable/` | Sable：`sable-companion-common`（接口定义，`dev.ryanhcode.sable.*`）与 `sable-neoforge`（实现） |
+| `api/sable/` | Sable：`sable-companion-common`（接口/数学，`dev.ryanhcode.sable.companion.*`）与 `sable-neoforge`（实现/物理，`dev.ryanhcode.sable.*`） |
 
 > 想确认「这个 API 怎么用 / 接口长什么样」→ 查 `api/`；想参考「某个功能整体是怎么实现的」→ 才进 `references/`。
 
@@ -45,6 +59,7 @@ description: 'Minecraft 相关调研：当需要确认 Minecraft 本体、依赖
 | 目录 | 是什么 | 可参考点 |
 |------|--------|----------|
 | `references/Create-mc1.21.1-dev/` | 机械动力（Create）完整源码 | 本 mod 的基础；GUI、Outliner、渲染、网络、旋转等大量机制 |
+| `references/Catnip-NeoForge-1.21.1-0.8.54-sources/` | Catnip 独立完整源码（0.8.54） | Catnip 实现细节（Outliner/VoxelShaper/SuperByteBuffer 等）；**注意 0.8.54 为 `net.createmod.catnip.utility.*` 子包结构，与 ponder 内嵌版顶层包不同** |
 | `references/control-panels-master/` | 控制台 mod | 可拆卸模块架构、自研 3D 命中检测设计 |
 | `references/aeroworks-decompiled/` | 反编译源码（航空学相关） | 控制台、可拆卸模块架构、多层 UI 设计、完全贴合模型的选择框设计 |
 | `references/CC-Tweaked-mc-1.21.x/` | 电脑模组 CC:Tweaked 完整源码 | 外设 / Lua API 的实际实现（接口定义见 `api/cc/`） |
@@ -63,7 +78,7 @@ description: 'Minecraft 相关调研：当需要确认 Minecraft 本体、依赖
 
 ### 1. 确认目标
 
-根据用户问题或当前代码中的 import 语句确定要看哪份源码。先按意图分档：
+根据用户问题或当前代码中的 import 语句确定要看哪份源码。**不确定包路径或想知道某个 api 包里有啥 → 先查 `memo/api-code-map.md`**。然后按意图分档：
 
 - **查 API / 接口**（方法签名、接口定义、返回类型）→ 优先 `api/` 对应目录
 - **参考案例实现**（某功能整体怎么做、设计模式、行为细节）→ 进 `references/` 对应项目
@@ -73,11 +88,14 @@ description: 'Minecraft 相关调研：当需要确认 Minecraft 本体、依赖
 
 | Import 前缀 | API / 接口查询（`api/`） | 案例参考（`references/`） |
 |-------------|--------------------------|---------------------------|
-| `com.simibubi.create` / `net.createmod.catnip` | `api/create/create-1.21.1-6.0.10-280-slim/` | `references/Create-mc1.21.1-dev/` |
+| `com.simibubi.create` | `api/create/create-1.21.1-6.0.10-280-slim/` | `references/Create-mc1.21.1-dev/` |
+| `net.createmod.catnip` | `api/create/ponder-neoforge-1.0.82+mc1.21.1/net/createmod/catnip/`（**不在 create slim 里**） | `references/Catnip-NeoForge-1.21.1-0.8.54-sources/`（注意 0.8.54 为 `utility.*` 包结构） |
+| `net.createmod.ponder` | `api/create/ponder-neoforge-1.0.82+mc1.21.1/`（含内嵌 catnip） | — |
 | `dan200.computercraft` | `api/cc/cc-tweaked-1.21.1-common-api-1.118.0/`（core/forge-api 并列） | `references/CC-Tweaked-mc-1.21.x/` |
-| `dev.engine_room.flywheel` | `api/create/flywheel-neoforge-api-1.21.1-1.0.6/` | Create 完整源码内；找不到再查 `.research/` |
+| `dev.engine_room.flywheel` | `api/create/flywheel-neoforge-api-1.21.1-1.0.6/`（`api.*` 接口 + `lib.*` 现成实现） | Create 完整源码内；找不到再查 `.research/` |
 | `mezz.jei` | `api/jei/jei-1.21.1-common-api-19.42.0.379/`（neoforge-api 并列） | — |
-| `dev.ryanhcode.sable` | `api/sable/sable-companion-common-1.21.1-1.6.0/`（接口）；实现见同目录 `sable-neoforge` | `references/sable-main/` |
+| `dev.ryanhcode.sable.companion` | `api/sable/sable-companion-common-1.21.1-1.6.0/`（接口/数学） | `references/sable-main/` |
+| `dev.ryanhcode.sable`（其余） | `api/sable/sable-neoforge-1.21.1-2.0.3/`（实现/物理） | `references/sable-main/` |
 | `net.minecraft.*`（Minecraft 本体） | — | `.research/mc-src/` |
 | Create 历史版本实现 | — | `.research/create-src/<版本>/` |
 | 控制台类参考（可拆卸模块/命中检测） | — | `references/control-panels-master/`、`references/aeroworks-decompiled/` |
@@ -136,5 +154,6 @@ references/<mod>-<version>/
 - `api/` 只含 API 表面，行为细节、边界情况要看 `references/` 中的完整实现。
 - `references/` 中的源码可能是反编译产物（如 `aeroworks-decompiled`），可能不包含完整注释。
 - CC:Tweaked 的 API 已按 `common-api` / `core-api` / `forge-api` 拆分在 `api/cc/`；对应完整实现见 `references/CC-Tweaked-mc-1.21.x/`。
-- Sable 的接口定义（`sable-companion-common`）与实现（`sable-neoforge`）都在 `api/sable/` 下；`references/sable-main/` 是完整项目源码。
+- Sable 拆两半：接口/数学在 `sable-companion-common`（编译依赖，`dev.ryanhcode.sable.companion.*`），实现/物理在 `sable-neoforge`（**必装运行时依赖**，`dev.ryanhcode.sable.*`）；运行时 companion 被 sable-neoforge jarJar 内嵌。`references/sable-main/` 是完整项目源码。
+- Catnip 不在 create slim 里：API 源码在 `api/create/ponder-neoforge-1.0.82+mc1.21.1/net/createmod/catnip/`（ponder 内嵌 shaded 副本，与 Create API 包结构匹配）；`references/Catnip-NeoForge-1.21.1-0.8.54-sources/` 是独立新版（`net.createmod.catnip.utility.*` 包结构），两者类名相同但包路径不同。
 - 参考其他 mod 源码解决问题时，按 AGENTS.md 要求记录参考来源。

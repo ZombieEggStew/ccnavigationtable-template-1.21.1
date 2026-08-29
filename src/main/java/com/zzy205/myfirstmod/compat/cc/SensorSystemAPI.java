@@ -58,8 +58,8 @@ public class SensorSystemAPI implements ILuaAPI {
     private volatile @Nullable String bodyId = null;
     private volatile List<SensorSnapshot> sensors = List.of();
 
-    /** 单个传感器的同一 tick 快照（plot 坐标 + 读数；非压力类读数为 null） */
-    private record SensorSnapshot(SensorType type, BlockPos pos,
+    /** 单个传感器的同一 tick 快照（相对物理体原点的局部坐标 + 读数；非压力类读数为 null） */
+    private record SensorSnapshot(SensorType type, double relX, double relY, double relZ,
                                   @Nullable Double altitude, @Nullable Double pressure) {}
 
     public SensorSystemAPI(IComputerSystem computer) {
@@ -103,7 +103,11 @@ public class SensorSystemAPI implements ILuaAPI {
                     press = computePressure(sub.getLevel(), worldPos);
                 }
             }
-            list.add(new SensorSnapshot(e.type(), e.pos(), alt, press));
+            Vec3 rel = SableCompat.toRelativePos(sub, e.pos());
+            double rx = rel != null ? rel.x : e.pos().getX();
+            double ry = rel != null ? rel.y : e.pos().getY();
+            double rz = rel != null ? rel.z : e.pos().getZ();
+            list.add(new SensorSnapshot(e.type(), rx, ry, rz, alt, press));
         }
         sensors = list;
     }
@@ -124,7 +128,10 @@ public class SensorSystemAPI implements ILuaAPI {
 
     /**
      * 所在物理体（含约束链）的全部传感器快照（同一 tick 一致）。
-     * 每项：{@code {type, pos={x,y,z}, altitude, pressure}}，pos 为 plot 坐标（稳定标识）；
+     * 每项：{@code {type, pos={x,y,z}, altitude, pressure}}。
+     * <b>pos 为相对物理体原点的局部坐标</b>（plot 帧：{@code plot − rotationPoint}，
+     * rotationPoint = 物理体原点/质心枢轴在 plot 空间的坐标），可能为小数，
+     * 物理体移动/旋转时保持不变，用于稳定标识不同位置的传感器；
      * 压力类（static_port）带 altitude/pressure 读数，其余类型读数为 nil。
      * 不在物理体上或物理体无传感器 → 空数组。
      */
@@ -134,9 +141,9 @@ public class SensorSystemAPI implements ILuaAPI {
         for (SensorSnapshot s : sensors) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("type", typeName(s.type()));
-            m.put("pos", Map.of("x", (double) s.pos().getX(),
-                                "y", (double) s.pos().getY(),
-                                "z", (double) s.pos().getZ()));
+            m.put("pos", Map.of("x", s.relX(),
+                                "y", s.relY(),
+                                "z", s.relZ()));
             m.put("altitude", s.altitude());
             m.put("pressure", s.pressure());
             out.add(m);

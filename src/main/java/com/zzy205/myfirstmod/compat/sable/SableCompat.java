@@ -394,6 +394,25 @@ public final class SableCompat {
     }
 
     /**
+     * 将 SubLevel 内的 plot 坐标转换为相对物理体原点（质心枢轴）的局部坐标。
+     * <p>
+     * 依据 companion Pose3d 变换公式 {@code world = R·(scale⊙(v − rotationPoint)) + position}：
+     * rotationPoint 是物理体原点在 plot 空间的坐标（序列化时为 selfCenterOfMass），
+     * 因此 {@code plot − rotationPoint} 即相对原点的偏移；该值在物理体移动/旋转时保持不变。
+     *
+     * @return 相对坐标（plot 帧，可能为小数）；失败返回 null
+     */
+    public static Vec3 toRelativePos(SubLevel subLevel, BlockPos plotPos) {
+        if (subLevel == null || plotPos == null) return null;
+        try {
+            Vector3dc rp = subLevel.logicalPose().rotationPoint();
+            return new Vec3(plotPos.getX() - rp.x(), plotPos.getY() - rp.y(), plotPos.getZ() - rp.z());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * 将 body-frame 法线向量变换到世界空间。
      */
     public static Vec3 transformNormalToWorld(SubLevel subLevel, Vec3 bodyNormal) {

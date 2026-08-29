@@ -8,6 +8,7 @@
 - `memo/` 不会被 agent 自动全部读取；只有当前任务匹配 memo 说明，或明确要求查阅代码地图时，才应读取本文。
 - 修改 Monitor、GUI、网络、渲染或兼容层时，先查本文的对应模块和“按修改目标定位”。
 - 本文中的路径均相对于仓库根目录；`client/` 和 `screen/` 中具体的 `*Screen` 类只应由客户端代码加载，`*Menu` 类属于可被服务端加载的菜单逻辑。
+- **查外部依赖 API（Sable / Flywheel / Catnip / Create / CC:Tweaked / JEI）时，不要用本文**：先读 `memo/api-code-map.md`（api/ 依赖源码代码地图，核心三件套 Sable Companion / Flywheel / Catnip 是项目根基，重点强调），再进 `api/` 对应目录搜索。
 
 ## 总体结构
 

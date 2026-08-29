@@ -28,6 +28,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 ## 何时使用
 
 - 需要定位或修改 Java 源码 → 先读 `code-map.md`
+- 需要查外部依赖 API（Sable / Flywheel / Catnip / Create / CC:Tweaked / JEI）的包路径、类位置、方法签名 → 先读 `api-code-map.md`，再进 `api/` 目录搜索
 - 需要了解项目整体进度、已完成/待完成的功能
 - 需要查阅 OBJ 模型、旋转、渲染、Catnip 等技术参考文档
 - 添加新 Monitor 元件时需要参考标准流程
@@ -40,6 +41,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 | 文件 | 用途 | 何时查阅 |
 |------|------|---------|
 | `code-map.md` | Java 源码职责、核心数据流、修改入口和已知边界 | 需要定位或修改 Java 文件时（首要入口，先查它） |
+| `api-code-map.md` | **api/ 依赖源码代码地图**：Sable Companion / Flywheel / Catnip（核心三件套，项目根基）与 Create / CC:Tweaked / JEI / Registrate / Ponder 的包级地图、import 前缀→路径对照、项目内使用文件清单 | 需要查外部依赖 API 的包路径/类位置/签名（先查它，再进 api/ 搜索）；涉及渲染、物理、子次元、Outliner、GUI 控件时尤其有用 |
 | `.TO DO.md` | 项目整体进度清单 | 了解已完成/待完成功能、规划下一步工作 |
 | `record_screen_module.md` | 可变尺寸屏幕实现记录 | 修改屏幕数据、渲染、放置或拆卸行为时 |
 | `record_screen_text.md` | 屏幕字符/矩形渲染实现记录（位图字体、UV 环绕、镜像/深度坑） | 修改屏幕文本/图形渲染或 `ScreenTextRenderer` 时 |
@@ -58,7 +60,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 - 不要在每次任务开始时读取 `.TO DO.md` 或全部 memo。
 - 只读取与当前请求直接对应的一份 memo；仅当它引用了另一个必须的文档时再读取下一份。
 - 与项目进度或设计取舍没有直接关系时，不加载 memo。
-- 需要定位 Java 文件职责、模块边界或修改入口时，查阅 `code-map.md`；不要因此读取全部其他 memo。
+- 需要定位 Java 文件职责、模块边界或修改入口时，查阅 `code-map.md`；需要定位外部依赖 API 时查阅 `api-code-map.md`。不要因此读取全部其他 memo。
 
 ## 查阅步骤
 
@@ -67,6 +69,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 根据用户问题或当前任务确定需要查阅哪个 memo 文件。**定位 Java 文件时优先查 `code-map.md`**：
 
 - **定位/修改 Java 源码** → `code-map.md`（首要入口）
+- **查外部依赖 API（Sable/Flywheel/Catnip/Create/CC/JEI）** → `api-code-map.md`（首要入口）
 - **项目进度相关** → `.TO DO.md`
 - **添加新元件** → `add-monitor-module` skill
 - **3D 线框/高亮** → `catnip-outliner` skill
