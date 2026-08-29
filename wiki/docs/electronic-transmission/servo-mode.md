@@ -18,7 +18,7 @@ Lua-overridden speed), so without power the servo simply stays still.
 | `setServoSpeed(rpm)` | Output speed in RPM (0~96). `0` = use the input speed. Values above 96 are clamped to 96. |
 | `getServoSpeed()` | The configured output speed (`0` means "use input speed") |
 | `getServoReaim()` | Whether same-direction re-aim is enabled (default `false`) |
-| `setServoReaim(enabled)` | Enable / disable same-direction re-aim. It reacts faster to same-direction target changes but can mis-position under rapidly-changing inputs near the ±180° boundary (see warning below), so it is **off by default**. |
+| `(1.0.9) setServoReaim(enabled)` | Enable / disable same-direction re-aim. It reacts faster to same-direction target changes but can mis-position under rapidly-changing inputs near the ±180° boundary (see warning below), so it is **off by default**. |
 | `resetServo()` | **Re-home**: redefine the current position as 0° and set the target to 0° — **no rotation happens**. If not in servo mode it enters servo mode first. |
 
 While in servo mode, `setRatio` / `setTargetSpeed` are rejected and return
@@ -38,12 +38,11 @@ Simulated's tilt adapter), which is flicker-safe:
   120° mid-move), the current segment is extended/shortened to the new target
   on the same tick — no wait for the segment to finish, no flicker.
 
-  !!! warning "Re-aim can mis-position under rapidly-changing inputs"
-      With rapidly-changing targets near the ±180° boundary, re-aim can
+  !!! warning (1.0.9)"Re-aim can mis-position under rapidly-changing inputs"
+      With rapidly-changing targets near the ±0° boundary, re-aim can
       repeatedly rewrite the segment end and mis-position. Re-aim is **off by
-      default** for this reason; enable it with `setServoReaim(true)` only if
-      you need instant reaction to same-direction target changes and your
-      target updates are not near the ±180° boundary at high frequency.
+      default** for this reason.
+      
 - **Reversal still waits for the segment to end**: changing the target to the
   *opposite* direction mid-move is deferred to the next segment boundary (each
   segment is at most 179°) instead of reversing mid-move. At 96 RPM a segment
