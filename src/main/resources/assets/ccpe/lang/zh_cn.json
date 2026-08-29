@@ -16,6 +16,9 @@
   "tooltip.ccpe.transmission_peripheral.output_speed": "输出转速：",
   "tooltip.ccpe.transmission_peripheral.current_angle": "当前角度：",
   "tooltip.ccpe.transmission_peripheral.target_angle": "目标角度：",
+  "tooltip.ccpe.transmission_peripheral.servo_reaim": "段内重瞄：",
+  "tooltip.ccpe.transmission_peripheral.servo_reaim_on": "开",
+  "tooltip.ccpe.transmission_peripheral.servo_reaim_off": "关",
 
   "gui.ccpe.monitor.module_info": "%s 位于 (%s, %s) 尺寸 %s×%s",
   "gui.ccpe.monitor_menu.done": "完成",

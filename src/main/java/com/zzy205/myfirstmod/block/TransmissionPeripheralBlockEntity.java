@@ -45,6 +45,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>
  * 运动层为 TiltAdapter 段式状态机：段开始锁定终点、flicker 门控延迟 attach、
  * 单段 ≤179°、到位后 settle 2 tick 再 detach，规避 Create flicker 惩罚与 180° 插值二义性。
+ * 段内同向改目标会实时延长/缩短当前段终点（re-aim，零打断），反向仍等段结束。
  */
 public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
 
@@ -81,6 +82,9 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
     private ServoMotionState motion = new ServoMotionState();
     /** Lua 指定输出转速（RPM）；0 = 默认（输出转速 = 输入转速） */
     private float servoRpm = 0f;
+    /** 段内同向重瞄开关（默认关）。开时高频变化输入下目标在 ±180 边界来回摆动可能
+     *  错误定位；关时回退到「等段结束」语义，定位稳定 */
+    private boolean servoReaimEnabled = false;
     /** 段开始已排队，等待 flicker 分数降到阈值 */
     private boolean segmentStartQueued = false;
     /** flicker 门控自计数（同 FlickerAwareTicker.internalTally） */
@@ -236,6 +240,28 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
             return true;
         }
 
+        /** 段内同向重瞄当前开关状态（默认关） */
+        @LuaFunction
+        public final boolean getServoReaim() {
+            return servoReaimEnabled;
+        }
+
+        /**
+         * 开关段内同向重瞄（re-aim）。
+         * <p>
+         * 开：段中把目标改为同方向的更远/更近位置时，实时延长/缩短当前段终点，
+         * 响应快；但高频变化输入下目标在 ±180 边界来回摆动时可能错误定位。
+         * 关（默认）：回退到「等当前段结束再响应新目标」的原始段式语义，定位稳定但响应慢。
+         */
+        @LuaFunction(mainThread = true)
+        public final boolean setServoReaim(boolean enabled) {
+            if (servoReaimEnabled == enabled) return true;
+            servoReaimEnabled = enabled;
+            setChanged();
+            sendData();
+            return true;
+        }
+
         /** 重新归位：把当前输出位置重新定义为 0°，目标也置 0，不产生任何旋转 */
         @LuaFunction(mainThread = true)
         public final boolean resetServo() {
@@ -259,7 +285,6 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
             return true;
         }
     }
-
     // ═══════════════ 舵机模式：模式切换 ═══════════════
 
     private void enableServoMode() {
@@ -319,11 +344,19 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
                 if (segmentSettleTicks == 0) {
                     finishActiveSegment();
                 }
-            } else if (motion.advance(KineticBlockEntity.convertToAngular(driveSpeed))) {
-                segmentSettleTicks = SEGMENT_SETTLE_TICKS;
-                sendData();
             } else {
-                sendData();
+                // 段内同向重瞄（可开关）：Lua 在段中把目标改为同方向的更远/更近位置时，
+                // 实时延长/缩短本段终点，无需等当前段走完（反向仍等段结束）。
+                // 高频变化输入下可 setServoReaim(false) 关闭，回退到「等段结束」语义
+                if (servoReaimEnabled) {
+                    motion.reaimIfSameDirection();
+                }
+                if (motion.advance(KineticBlockEntity.convertToAngular(driveSpeed))) {
+                    segmentSettleTicks = SEGMENT_SETTLE_TICKS;
+                    sendData();
+                } else {
+                    sendData();
+                }
             }
         }
 
@@ -434,6 +467,12 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
                     ServoMotionState.wrap(motion.currentAngle())));
             tooltip.add(angleLine("tooltip.ccpe.transmission_peripheral.target_angle",
                     ServoMotionState.wrap(motion.requestedTarget())));
+            tooltip.add(Component.literal("     ")
+                    .append(Component.translatable("tooltip.ccpe.transmission_peripheral.servo_reaim")
+                            .withStyle(ChatFormatting.GRAY))
+                    .append(Component.translatable(servoReaimEnabled
+                                    ? "tooltip.ccpe.transmission_peripheral.servo_reaim_on"
+                                    : "tooltip.ccpe.transmission_peripheral.servo_reaim_off")));
         } else {
             tooltip.add(Component.literal("     ")
                     .append(Component.translatable("tooltip.ccpe.transmission_peripheral.mode")
@@ -586,6 +625,7 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
         tag.putDouble("TargetSpeed", targetSpeed);
         tag.putBoolean("ServoMode", servoMode);
         tag.putFloat("ServoRpm", servoRpm);
+        tag.putBoolean("ServoReaim", servoReaimEnabled);
         tag.putFloat("ServoRequestedTarget", motion.requestedTarget());
         tag.putFloat("ServoActiveTarget", motion.activeTarget());
         tag.putFloat("ServoCurrentAngle", motion.currentAngle());
@@ -601,6 +641,8 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
         targetSpeed = tag.getDouble("TargetSpeed");
         servoMode = tag.getBoolean("ServoMode");
         servoRpm = tag.getFloat("ServoRpm");
+        // 旧存档无该键时保持默认关闭，避免升级后行为突变
+        servoReaimEnabled = tag.contains("ServoReaim") ? tag.getBoolean("ServoReaim") : false;
         motion.restore(
                 tag.getFloat("ServoRequestedTarget"),
                 tag.getFloat("ServoActiveTarget"),

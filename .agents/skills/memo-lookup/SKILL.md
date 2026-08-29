@@ -48,6 +48,8 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 | `gui-infrastructure.md` | 已落地 GUI 基础设施 | 修改现有控件的实现细节时 |
 | `control-desk-grid-slot.md` | controlDesk 桌顶棋盘网格自由放置系统（joystick_2 完整接入；常量/数据流/变换链/添加新模块 checklist） | 修改或新增 controlDesk 自由放置模块（throttle / monitor_2 / 新控件）的预览、放置、占用、拆除时 |
 | `create-schematic-nbt.md` | Create 蓝图 NBT 经验记录（保存/部署中的配置丢失问题） | 排查 PeripheralExtender / RedstoneTransceiver 在 Create 蓝图中的行为时 |
+| `servo-mode.md` | 传动外设舵机模式实现记录（TiltAdapter 段式状态机 + 段内同向重瞄 re-aim + flicker 门控） | 修改舵机角度定位、段推进、flicker 门控或 Lua 舵机 API 时 |
+| `my_bearing.md` | 自研风帆轴承方案设计（轴向应力输入 + RotaryConstraint 物理驱动，不贯通应力） | 实现/修改 my_bearing 方块时，先读方案再动手 |
 | `neoforge-debugging.md` | 本项目 F5 启动事实 | 调试启动配置或 classpath 时 |
 
 ## 最小上下文原则

@@ -16,6 +16,9 @@
   "tooltip.ccpe.transmission_peripheral.output_speed": "Output Speed:",
   "tooltip.ccpe.transmission_peripheral.current_angle": "Current Angle:",
   "tooltip.ccpe.transmission_peripheral.target_angle": "Target Angle:",
+  "tooltip.ccpe.transmission_peripheral.servo_reaim": "Segment Re-aim:",
+  "tooltip.ccpe.transmission_peripheral.servo_reaim_on": "On",
+  "tooltip.ccpe.transmission_peripheral.servo_reaim_off": "Off",
 
   "gui.ccpe.monitor.module_info": "%s at (%s, %s) size %s×%s",
   "gui.ccpe.monitor_menu.done": "Done",

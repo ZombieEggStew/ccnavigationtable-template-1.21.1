@@ -10,6 +10,9 @@ package com.zzy205.myfirstmod.block;
  * 差异：本舵机为 ±180° 单圈最短路径，故 {@code requestedTarget} 存归一化角度，
  * 每次「段开始」时才按当前角计算最短带符号弧；{@code currentAngle}/{@code activeTarget}
  * 则保持「展开」值（可跨 ±180 累积），段内做纯线性推进。
+ * <p>
+ * 段内同向重瞄：{@link #reaimIfSameDirection()} 允许段进行中把终点实时延长/缩短
+ * 到同方向的更新目标（零打断、零 flicker），反向请求仍等段结束，保持 DIR-FLIP 保护。
  */
 final class ServoMotionState {
     static final float EPSILON = 0.001f;
@@ -81,6 +84,33 @@ final class ServoMotionState {
             : Math.abs(delta);
 
         activeDirection = (int) Math.signum(delta);
+        remainingAngle = segmentAngle;
+        activeTarget = currentAngle + activeDirection * segmentAngle;
+        return true;
+    }
+
+    /**
+     * 段内同向重瞄：若新请求目标位于当前前进方向（同号最短弧），
+     * 直接延长/缩短本段终点到新目标，不打断段、不触发 flicker。
+     * 反向请求保持段式保护（等段结束再开反向段，避免 DIR-FLIP）。
+     *
+     * @return 是否发生了重瞄
+     */
+    boolean reaimIfSameDirection() {
+        if (!isActive()) {
+            return false;
+        }
+
+        float arc = shortestArc(wrap(currentAngle), requestedTarget);
+        if (Math.abs(arc) <= EPSILON) {
+            return false;
+        }
+        if (Math.signum(arc) != activeDirection) {
+            return false;
+        }
+
+        // 与 startSegment 相同：单段仍受 MAX_SEGMENT_ANGLE 限制，超出的部分由下一段继续
+        float segmentAngle = Math.min(Math.abs(arc), MAX_SEGMENT_ANGLE);
         remainingAngle = segmentAngle;
         activeTarget = currentAngle + activeDirection * segmentAngle;
         return true;

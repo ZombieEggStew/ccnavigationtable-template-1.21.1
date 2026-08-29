@@ -79,7 +79,7 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `screen/RedstoneTransceiverMenu.java` | Redstone Transceiver 服务端菜单 |
 | `screen/RedstoneTransceiverScreen.java` | Redstone Transceiver 客户端 GUI和输入处理 |
 | `block/TransmissionPeripheralBlock.java` | Create 传动外设方块及其朝向/轴行为；`tick()` 在舵机输出 modifier 变化后重新接入动力网络 |
-| `block/TransmissionPeripheralBlockEntity.java` | 传动外设方块实体：变速器模式（ratio/targetSpeed）与舵机模式（服务器权威 ±180° 角度定位 + Lua 控制 + 每 tick 同步，类 TiltAdapter）及 CC 外设实例 |
+| `block/TransmissionPeripheralBlockEntity.java` | 传动外设方块实体：变速器模式（ratio/targetSpeed）与舵机模式（服务器权威 ±180° 角度定位 + Lua 控制 + 每 tick 同步，类 TiltAdapter 段式状态机：requested/active/current 分离 + **段内同向重瞄 re-aim** + flicker 门控，详见 `memo/servo-mode.md`）及 CC 外设实例 |
 | `block/TransmissionPeripheralRenderer.java` | 传动外设的 Create 动态方块实体渲染（舵机模式下输出端按权威角度渲染） |
 | `block/TransmissionPeripheralVisual.java` | 传动外设的 Create Flywheel Visual 实现（OrientedInstance，舵机模式输出端角度渲染） |
 | `block/ControlDeskBlock.java` | 控制台方块：底座由 blockstate 静态模型渲染；控件安装/卸载/菜单交互（手持控件物品右键安装、扳手蹲下右键按点击位置拆单个模块、`getDrops` 破坏掉落、`onWrenched`/`useItemOn`（空手蹲下）一律消费右键供配置菜单打开——扳手不再旋转方块）；**棋盘网格自由放置**（monitor_2/throttle/joystick_2 无安装位框；`snappedBoxCenter` 命中点→1px 网格吸附中心，客户端预览与服务端放置共用；`joystick2PlaceBox` 放置盒世界 AABB（扳手拆除命中用）；`modelToWorld` 北向基准→世界旋转）；选择框/碰撞箱 = 单块 `[0,0,8]~[16,8,16]`；`installBounds` 安装位 AABB（仅 PEDAL/JOYSTICK）+ `hitBounds` 闭区间容差命中（不能用 `AABB.contains`，点击位置在桌体面 z=8 = 框的 maxZ）；`FACING` 四向朝向 | 控制台朝向、碰撞、控件安装/卸载、菜单交互、放置位置计算、拆除命中 |

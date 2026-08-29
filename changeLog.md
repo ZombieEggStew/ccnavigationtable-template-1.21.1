@@ -54,3 +54,7 @@
 1.0.8
 - getRelativePercent,getAbsolutePercent return 0-100 -> 0-1
 - **!?NEWNEW?!** Added control desk system, including two joysticks, two throttles, one dual pedal, one screen, expansion dock and baffle.
+
+1.0.9
+- isAxisXPositive/isAxisXNegative/isAxisYPositive/isAxisYNegative
+- servo的reaim功能
