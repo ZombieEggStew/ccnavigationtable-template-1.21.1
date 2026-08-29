@@ -72,6 +72,8 @@ plugins:
             Wireless Redstone: 无线红石
             Aeronautics Sensor Integration: 航空学传感器集成
             Chunk & Physics Body Loading: 区块/物理结构加载
+            Sensor System: 传感器系统
+            Static Port: 静压孔
             Lua API Reference: Lua API 参考
             FAQ: 常见问题
             Changelog: 更新日志
@@ -107,6 +109,8 @@ nav:
     - Servo Mode: electronic-transmission/servo-mode.md
   - Aero Bearing:
     - Overview: aero-bearing/overview.md
+  - Sensor System:
+    - Static Port: sensor-system/static-port.md
   - Modular Monitor:
     - Overview: monitor/overview.md
     - Monitor: monitor/monitor.md

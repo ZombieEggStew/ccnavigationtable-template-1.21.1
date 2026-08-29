@@ -42,8 +42,8 @@ import java.util.Map;
  * local ss = require("ccpe.sensor_system")
  * print(ss.isOnBody())            -- boolean
  * print(ss.getBodyId())           -- 物理体 UUID
- * print(ss.getAltitude())         -- 第一个静压孔的高度（便捷方法）
- * print(ss.getPressure())         -- 第一个静压孔的气压（便捷方法）
+ * print(ss.getAltitude())         -- 最后放置的静压孔的高度（便捷方法）
+ * print(ss.getPressure())         -- 最后放置的静压孔的气压（便捷方法）
  * local sensors = ss.getSensors() -- 全部传感器快照
  * -- {{type="static_port", pos={x,y,z}, altitude=..., pressure=...}, ...}
  * }</pre>
@@ -151,26 +151,28 @@ public class SensorSystemAPI implements ILuaAPI {
         return out;
     }
 
-    /** 第一个静压孔的高度（世界 Y）；物理体上无静压孔返回 nil（便捷方法） */
+    /** 最后放置（最新注册）的静压孔的高度（世界 Y）；物理体上无静压孔返回 nil（便捷方法） */
     @LuaFunction
     public final @Nullable Double getAltitude() {
-        SensorSnapshot first = firstPressurePort();
-        return first != null ? first.altitude() : null;
+        SensorSnapshot last = lastPressurePort();
+        return last != null ? last.altitude() : null;
     }
 
-    /** 第一个静压孔的气压（大气压分数，海平面 = 1.0）；无静压孔返回 nil（便捷方法） */
+    /** 最后放置（最新注册）的静压孔的气压（大气压分数，海平面 = 1.0）；无静压孔返回 nil（便捷方法） */
     @LuaFunction
     public final @Nullable Double getPressure() {
-        SensorSnapshot first = firstPressurePort();
-        return first != null ? first.pressure() : null;
+        SensorSnapshot last = lastPressurePort();
+        return last != null ? last.pressure() : null;
     }
 
     // ═══════════════ 主线程辅助 ═══════════════
 
-    private @Nullable SensorSnapshot firstPressurePort() {
+    /** 最后注册的静压孔（注册顺序 = 放置顺序，LinkedHashSet 保序） */
+    private @Nullable SensorSnapshot lastPressurePort() {
+        SensorSnapshot last = null;
         for (SensorSnapshot s : sensors)
-            if (s.type() == SensorType.PRESSURE) return s;
-        return null;
+            if (s.type() == SensorType.PRESSURE) last = s;
+        return last;
     }
 
     private static String typeName(SensorType type) {
