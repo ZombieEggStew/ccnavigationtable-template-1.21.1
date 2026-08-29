@@ -7,6 +7,8 @@
   "block.ccpe.my_monitor": "Monitor",
   "block.ccpe.my_control_desk": "Control Desk",
   "block.ccpe.aero_bearing": "Aero Bearing",
+  "block.ccpe.static_port": "Static Port",
+  "block.ccpe.pitot_tube": "Pitot Tube",
 
   "tooltip.ccpe.transmission_peripheral.header": "Electronic Transmission",
   "tooltip.ccpe.transmission_peripheral.mode": "Mode:",

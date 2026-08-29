@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "bonus_rolls": 0.0,
+      "conditions": [
+        {
+          "condition": "minecraft:survives_explosion"
+        }
+      ],
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "ccpe:pitot_tube"
+        }
+      ],
+      "rolls": 1.0
+    }
+  ],
+  "random_sequence": "ccpe:blocks/pitot_tube"
+}

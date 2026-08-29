@@ -1,0 +1,29 @@
+{
+  "variants": {
+    "facing=up": {
+      "model": "ccpe:block/my_aero_sensor/static_port"
+    },
+    "facing=down": {
+      "model": "ccpe:block/my_aero_sensor/static_port",
+      "x": 180
+    },
+    "facing=north": {
+      "model": "ccpe:block/my_aero_sensor/static_port",
+      "x": 90
+    },
+    "facing=south": {
+      "model": "ccpe:block/my_aero_sensor/static_port",
+      "x": 270
+    },
+    "facing=east": {
+      "model": "ccpe:block/my_aero_sensor/static_port",
+      "x": 90,
+      "y": 90
+    },
+    "facing=west": {
+      "model": "ccpe:block/my_aero_sensor/static_port",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

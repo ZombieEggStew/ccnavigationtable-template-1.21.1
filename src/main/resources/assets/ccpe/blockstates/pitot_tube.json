@@ -1,0 +1,110 @@
+{
+  "variants": {
+    "facing=up,roll=0": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube"
+    },
+    "facing=up,roll=1": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "y": 270
+    },
+    "facing=up,roll=2": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "y": 180
+    },
+    "facing=up,roll=3": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "y": 90
+    },
+    "facing=down,roll=0": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 180
+    },
+    "facing=down,roll=1": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 180,
+      "y": 90
+    },
+    "facing=down,roll=2": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 180,
+      "y": 180
+    },
+    "facing=down,roll=3": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 180,
+      "y": 270
+    },
+    "facing=north,roll=0": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 90
+    },
+    "facing=north,roll=1": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube_z90",
+      "x": 180,
+      "y": 90
+    },
+    "facing=north,roll=2": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 270,
+      "y": 180
+    },
+    "facing=north,roll=3": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube_z90",
+      "y": 90
+    },
+    "facing=south,roll=0": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 90,
+      "y": 180
+    },
+    "facing=south,roll=1": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube_z90",
+      "x": 180,
+      "y": 270
+    },
+    "facing=south,roll=2": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 270
+    },
+    "facing=south,roll=3": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube_z90",
+      "y": 270
+    },
+    "facing=east,roll=0": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 90,
+      "y": 90
+    },
+    "facing=east,roll=1": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube_z90",
+      "x": 180,
+      "y": 180
+    },
+    "facing=east,roll=2": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 270,
+      "y": 270
+    },
+    "facing=east,roll=3": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube_z90",
+      "y": 180
+    },
+    "facing=west,roll=0": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 90,
+      "y": 270
+    },
+    "facing=west,roll=1": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube_z90",
+      "x": 180
+    },
+    "facing=west,roll=2": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube",
+      "x": 270,
+      "y": 90
+    },
+    "facing=west,roll=3": {
+      "model": "ccpe:block/my_aero_sensor/pitot_tube_z90"
+    }
+  }
+}

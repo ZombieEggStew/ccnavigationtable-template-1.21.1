@@ -7,6 +7,8 @@
   "block.ccpe.my_monitor": "监视器",
   "block.ccpe.my_control_desk": "控制台",
   "block.ccpe.aero_bearing": "航空轴承",
+  "block.ccpe.static_port": "静压孔",
+  "block.ccpe.pitot_tube": "皮托管",
 
   "tooltip.ccpe.transmission_peripheral.header": "电子变速箱",
   "tooltip.ccpe.transmission_peripheral.mode": "模式：",
