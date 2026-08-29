@@ -165,6 +165,64 @@ public class SensorSystemAPI implements ILuaAPI {
         return last != null ? last.pressure() : null;
     }
 
+    /** 全部静压孔高度的简单平均值；无静压孔返回 nil */
+    @LuaFunction
+    public final @Nullable Double getAverageAltitude() {
+        double sum = 0;
+        int count = 0;
+        for (SensorSnapshot s : sensors) {
+            if (s.type() != SensorType.PRESSURE || s.altitude() == null) continue;
+            sum += s.altitude();
+            count++;
+        }
+        return count > 0 ? sum / count : null;
+    }
+
+    /** 全部静压孔气压的简单平均值；无静压孔返回 nil */
+    @LuaFunction
+    public final @Nullable Double getAveragePressure() {
+        double sum = 0;
+        int count = 0;
+        for (SensorSnapshot s : sensors) {
+            if (s.type() != SensorType.PRESSURE || s.pressure() == null) continue;
+            sum += s.pressure();
+            count++;
+        }
+        return count > 0 ? sum / count : null;
+    }
+
+    /**
+     * 全部静压孔高度的距离加权平均值（权重 = 1/距物理体原点距离，反距离加权 IDW）。
+     * 静压孔恰在原点（距离 ≈ 0）时直接返回该孔的高度；无静压孔返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Double getWeightedAltitude() {
+        return weightedAverage(true);
+    }
+
+    /** 全部静压孔气压的距离加权平均值（权重 = 1/距物理体原点距离，反距离加权 IDW）；无静压孔返回 nil */
+    @LuaFunction
+    public final @Nullable Double getWeightedPressure() {
+        return weightedAverage(false);
+    }
+
+    /** 距离加权平均（IDW，权重 1/d，d = 距物理体原点，由快照相对坐标算出）；altitude=true 对高度加权，否则对气压加权 */
+    private @Nullable Double weightedAverage(boolean altitude) {
+        double num = 0;
+        double den = 0;
+        for (SensorSnapshot s : sensors) {
+            if (s.type() != SensorType.PRESSURE) continue;
+            Double v = altitude ? s.altitude() : s.pressure();
+            if (v == null) continue;
+            double d = Math.sqrt(s.relX() * s.relX() + s.relY() * s.relY() + s.relZ() * s.relZ());
+            if (d <= 1e-9) return v; // 恰在原点：该孔权重无穷大，直接返回该孔读数
+            double w = 1.0 / d;
+            num += w * v;
+            den += w;
+        }
+        return den > 0 ? num / den : null;
+    }
+
     // ═══════════════ 主线程辅助 ═══════════════
 
     /** 最后注册的静压孔（注册顺序 = 放置顺序，LinkedHashSet 保序） */

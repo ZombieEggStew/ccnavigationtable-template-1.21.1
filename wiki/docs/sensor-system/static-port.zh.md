@@ -22,9 +22,14 @@
 | `getSensors()` | table | 全部传感器快照（同一 tick）：`{type, pos={x,y,z}, altitude, pressure}`；`pos` 为**相对物理体原点**的局部坐标（跨重启稳定，用于区分不同静压孔） |
 | `getAltitude()` | number / nil | **最后放置的静压孔**的高度（世界 Y） |
 | `getPressure()` | number / nil | **最后放置的静压孔**的气压（大气压分数，海平面 = 1.0） |
+| `getAverageAltitude()` | number / nil | 全部静压孔高度的**简单平均值** |
+| `getAveragePressure()` | number / nil | 全部静压孔气压的**简单平均值** |
+| `getWeightedAltitude()` | number / nil | 全部静压孔高度的**距离加权平均值**（权重 = 1/距物理体原点距离，IDW） |
+| `getWeightedPressure()` | number / nil | 全部静压孔气压的**距离加权平均值**（权重 = 1/距物理体原点距离，IDW） |
 
-- 物理体上没有静压孔时，`getAltitude()/getPressure()` 返回 `nil`，`getSensors()` 返回空数组。
+- 物理体上没有静压孔时，`getAltitude()/getPressure()` 返回 `nil`，`getSensors()` 返回空数组；平均值/加权平均值同样返回 `nil`。
 - 读数每 tick 刷新（最多滞后 1 tick）；Lua 读取零主线程调度，高频调用开销可忽略。
+- 加权平均的边界情况：静压孔恰在物理体原点（距离 ≈ 0）时权重无穷大，直接返回该孔读数；只有一个静压孔时平均值/加权平均值等于该孔读数。
 
 ```lua
 local ss = require("ccpe.sensor_system")
@@ -39,6 +44,10 @@ end
 
 -- 便捷方法：最后放置的静压孔
 print("alt:", ss.getAltitude(), "press:", ss.getPressure())
+
+-- 平均值 / 距离加权平均（权重 = 1/距物理体原点距离）
+print("avg alt:", ss.getAverageAltitude(), "avg press:", ss.getAveragePressure())
+print("wavg alt:", ss.getWeightedAltitude(), "wavg press:", ss.getWeightedPressure())
 ```
 
 ## 多个静压孔

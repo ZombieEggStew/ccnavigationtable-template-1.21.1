@@ -22,9 +22,14 @@ A computer on the same physics body (including constraint chains) uses `require(
 | `getSensors()` | table | Snapshot of all sensors (same tick): `{type, pos={x,y,z}, altitude, pressure}`; `pos` is the position **relative to the physics body origin** (stable across restarts — use it to tell ports apart) |
 | `getAltitude()` | number / nil | Altitude (world Y) of the **most recently placed** static port |
 | `getPressure()` | number / nil | Pressure of the **most recently placed** static port (atmosphere fraction, sea level = 1.0) |
+| `getAverageAltitude()` | number / nil | **Simple average** altitude over all static ports |
+| `getAveragePressure()` | number / nil | **Simple average** pressure over all static ports |
+| `getWeightedAltitude()` | number / nil | **Distance-weighted average** altitude (weight = 1/distance from the body origin, IDW) |
+| `getWeightedPressure()` | number / nil | **Distance-weighted average** pressure (weight = 1/distance from the body origin, IDW) |
 
-- With no static port on the body, `getAltitude()/getPressure()` return `nil` and `getSensors()` returns an empty array.
+- With no static port on the body, `getAltitude()/getPressure()` return `nil` and `getSensors()` returns an empty array; the average / weighted-average methods also return `nil`.
 - Readings refresh once per tick (at most 1 tick stale); Lua reads perform zero main-thread scheduling, so high-frequency calls are effectively free.
+- Weighted-average edge cases: a port exactly at the body origin (distance ≈ 0) has infinite weight, so its reading is returned directly; with a single port, the average / weighted average equal that port's reading.
 
 ```lua
 local ss = require("ccpe.sensor_system")
@@ -39,6 +44,10 @@ end
 
 -- Convenience: most recently placed static port
 print("alt:", ss.getAltitude(), "press:", ss.getPressure())
+
+-- Averages / distance-weighted averages (weight = 1/distance from body origin)
+print("avg alt:", ss.getAverageAltitude(), "avg press:", ss.getAveragePressure())
+print("wavg alt:", ss.getWeightedAltitude(), "wavg press:", ss.getWeightedPressure())
 ```
 
 ## Multiple static ports
