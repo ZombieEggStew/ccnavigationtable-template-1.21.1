@@ -7,6 +7,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
@@ -40,8 +42,8 @@ public class PitotTubeBlock extends Block implements IWrenchable {
 
     /**
      * 24 个朝向的选择框 = AABB(基准盒绕方块中心按 (facing, roll) 旋转)，
-     * 基准盒 = 管口朝北、贴地（facing=up, roll=0 未旋转变体下的实测盒）(5,0,2)-(11,7,12)。
-     * roll=0 的 6 项与旧版 6 向选择框逐项一致（进游戏验证过）。
+     * 基准盒 = 管口朝北、贴地（facing=up, roll=0 未旋转变体下的实测盒）(5,0,2)-(11,6,11)。
+     * 24 项由 tools/pitot-24state-gen.js 从基准盒生成（脚本校验自洽，进游戏复核）。
      */
     private static final EnumMap<Direction, VoxelShape[]> SHAPES = buildShapes();
 
@@ -50,17 +52,17 @@ public class PitotTubeBlock extends Block implements IWrenchable {
         // 盒 = (minX, minY, minZ, maxX, maxY, maxZ)
         int[][][] boxes = {
             // up
-            { {5, 0, 2, 11, 7, 12}, {2, 0, 5, 12, 7, 11}, {5, 0, 4, 11, 7, 14}, {4, 0, 5, 14, 7, 11} },
+            { {5, 0, 2, 11, 6, 11}, {2, 0, 5, 11, 6, 11}, {5, 0, 5, 11, 6, 14}, {5, 0, 5, 14, 6, 11} },
             // down
-            { {5, 9, 4, 11, 16, 14}, {2, 9, 5, 12, 16, 11}, {5, 9, 2, 11, 16, 12}, {4, 9, 5, 14, 16, 11} },
+            { {5, 10, 5, 11, 16, 14}, {2, 10, 5, 11, 16, 11}, {5, 10, 2, 11, 16, 11}, {5, 10, 5, 14, 16, 11} },
             // north
-            { {5, 2, 9, 11, 12, 16}, {2, 5, 9, 12, 11, 16}, {5, 4, 9, 11, 14, 16}, {4, 5, 9, 14, 11, 16} },
+            { {5, 2, 10, 11, 11, 16}, {2, 5, 10, 11, 11, 16}, {5, 5, 10, 11, 14, 16}, {5, 5, 10, 14, 11, 16} },
             // south
-            { {5, 2, 0, 11, 12, 7}, {4, 5, 0, 14, 11, 7}, {5, 4, 0, 11, 14, 7}, {2, 5, 0, 12, 11, 7} },
+            { {5, 2, 0, 11, 11, 6}, {5, 5, 0, 14, 11, 6}, {5, 5, 0, 11, 14, 6}, {2, 5, 0, 11, 11, 6} },
             // east
-            { {0, 2, 5, 7, 12, 11}, {0, 5, 2, 7, 11, 12}, {0, 4, 5, 7, 14, 11}, {0, 5, 4, 7, 11, 14} },
+            { {0, 2, 5, 6, 11, 11}, {0, 5, 2, 6, 11, 11}, {0, 5, 5, 6, 14, 11}, {0, 5, 5, 6, 11, 14} },
             // west
-            { {9, 2, 5, 16, 12, 11}, {9, 5, 4, 16, 11, 14}, {9, 4, 5, 16, 14, 11}, {9, 5, 2, 16, 11, 12} },
+            { {10, 2, 5, 16, 11, 11}, {10, 5, 5, 16, 11, 14}, {10, 5, 5, 16, 14, 11}, {10, 5, 2, 16, 11, 11} },
         };
         Direction[] dirs = { Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST };
         EnumMap<Direction, VoxelShape[]> map = new EnumMap<>(Direction.class);
@@ -93,6 +95,24 @@ public class PitotTubeBlock extends Block implements IWrenchable {
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         // 管口朝点击面（点北墙 → facing=north），滚转角 0
         return defaultBlockState().setValue(FACING, context.getClickedFace()).setValue(ROLL, 0);
+    }
+
+    /**
+     * 贴附式传感器：FACING = 点击面（管口朝外），附着面在反方向。
+     * 支撑方块被破坏/移走后无法存活 → {@link #neighborChanged} 掉落。
+     * 与 {@link StaticPortBlock} / Peripheral Extender 同款。
+     */
+    @Override
+    protected boolean canSurvive(BlockState state, LevelReader level, BlockPos pos) {
+        BlockPos supportPos = pos.relative(state.getValue(FACING).getOpposite());
+        return !level.getBlockState(supportPos).isAir();
+    }
+
+    @Override
+    public void neighborChanged(BlockState state, Level level, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
+        if (!state.canSurvive(level, pos)) {
+            level.destroyBlock(pos, true);
+        }
     }
 
     /**

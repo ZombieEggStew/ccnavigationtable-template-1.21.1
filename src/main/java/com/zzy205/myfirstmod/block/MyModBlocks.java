@@ -57,18 +57,18 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
-    /** 降压孔（静压孔）：贴附式气压传感器（模型绕 Y 轴对称，不区分水平旋转） */
+    /** 降压孔（静压孔）：贴附式气压传感器（模型绕 Y 轴对称，不区分水平旋转）；音效对齐 simulated:iron_handle（SoundType.COPPER） */
     public static final DeferredBlock<StaticPortBlock> static_port =
             registerBlocks("static_port", () -> new StaticPortBlock(BlockBehaviour.Properties.of().
-                    sound(SoundType.METAL).
+                    sound(SoundType.COPPER).
                     strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
-    /** 皮托管：方向性速度传感器（管口朝向可绕 x/y/z 轴旋转） */
+    /** 皮托管：方向性速度传感器（管口朝向可绕 x/y/z 轴旋转）；音效对齐 simulated:iron_handle（SoundType.COPPER） */
     public static final DeferredBlock<PitotTubeBlock> pitot_tube =
             registerBlocks("pitot_tube", () -> new PitotTubeBlock(BlockBehaviour.Properties.of().
-                    sound(SoundType.METAL).
+                    sound(SoundType.COPPER).
                     strength(1.0f, 6.0f).
                     noOcclusion()
             ));

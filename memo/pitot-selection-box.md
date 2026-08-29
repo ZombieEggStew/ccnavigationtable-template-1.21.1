@@ -25,7 +25,8 @@
   都不支持 z 90°。
 - **选择框**：24 个盒 = `AABB(基准盒按 R(facing, roll) 绕方块中心旋转)`，直接硬编码在
   `PitotTubeBlock.buildShapes()`；roll=0 的 6 项与旧版 `SHAPES.get(facing)` 逐项一致
-  （脚本验证 + 旧版进游戏验证）。
+  （脚本验证 + 旧版进游戏验证）。生成脚本：`tools/pitot-24state-gen.js`
+  （`node tools/pitot-24state-gen.js`，输出 Java 表格 / blockstate 变体表 / 一致性校验）。
 
 ### 验证结果（进游戏）
 
