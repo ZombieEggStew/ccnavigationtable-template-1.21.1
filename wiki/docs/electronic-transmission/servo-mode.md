@@ -38,10 +38,8 @@ Simulated's tilt adapter), which is flicker-safe:
   120° mid-move), the current segment is extended/shortened to the new target
   on the same tick — no wait for the segment to finish, no flicker.
 
-  !!! warning "(1.0.9)Re-aim can mis-position under rapidly-changing inputs"
-      With rapidly-changing targets near the ±0° boundary, re-aim can
-      repeatedly rewrite the segment end and mis-position. Re-aim is **off by
-      default** for this reason.
+!!! warning "(1.0.9)Re-aim can mis-position under rapidly-changing inputs"
+    With rapidly-changing targets near the ±0° boundary, re-aim canrepeatedly rewrite the segment end and mis-position. Re-aim is **off by default** for this reason.
 
 - **Reversal still waits for the segment to end**: changing the target to the
   *opposite* direction mid-move is deferred to the next segment boundary (each
