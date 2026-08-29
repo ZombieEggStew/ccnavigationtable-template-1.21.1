@@ -10,7 +10,7 @@
 
 - 每个静压孔：plot 坐标投影到世界 → 该点高度（世界 Y）与气压（Sable `DimensionPhysicsData`，与 `simulated:altitude_sensor` 同源公式；海平面 = 1.0）。
 - 一个物理体可以放多个静压孔，每个静压孔都有自己独立的读数。
-
+ 
 ## Lua API
 
 电脑（需与静压孔在同一物理体，含约束链）通过 `require("ccpe.sensor_system")` 使用：
