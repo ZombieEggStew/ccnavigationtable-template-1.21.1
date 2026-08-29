@@ -41,7 +41,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 | 文件 | 用途 | 何时查阅 |
 |------|------|---------|
 | `code-map.md` | Java 源码职责、核心数据流、修改入口和已知边界 | 需要定位或修改 Java 文件时（首要入口，先查它） |
-| `api-code-map.md` | **api/ 依赖源码代码地图**：Sable Companion / Flywheel / Catnip（核心三件套，项目根基）与 Create / CC:Tweaked / JEI / Registrate / Ponder 的包级地图、import 前缀→路径对照、项目内使用文件清单 | 需要查外部依赖 API 的包路径/类位置/签名（先查它，再进 api/ 搜索）；涉及渲染、物理、子次元、Outliner、GUI 控件时尤其有用 |
+| `api-code-map.md` | **api/ 依赖源码代码地图**（全部为 Java 源码 `-sources`）：Sable Companion / Flywheel / Catnip（核心三件套，项目根基）与 Create / CC:Tweaked / Ponder 的包级地图、import 前缀→路径对照、项目内使用文件清单；JEI / Registrate 未提取（标注为不在 api/） | 需要查外部依赖 API 的包路径/类位置/签名（先查它，再进 api/ 搜索）；涉及渲染、物理、子次元、Outliner、GUI 控件时尤其有用 |
 | `.TO DO.md` | 项目整体进度清单 | 了解已完成/待完成功能、规划下一步工作 |
 | `record_screen_module.md` | 可变尺寸屏幕实现记录 | 修改屏幕数据、渲染、放置或拆卸行为时 |
 | `record_screen_text.md` | 屏幕字符/矩形渲染实现记录（位图字体、UV 环绕、镜像/深度坑） | 修改屏幕文本/图形渲染或 `ScreenTextRenderer` 时 |

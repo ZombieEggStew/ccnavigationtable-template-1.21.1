@@ -137,7 +137,7 @@ Iris / Sodium 兼容调研（FBO 门控依据，`references/Iris-1.21.1/`、`ref
 Create / Flywheel 证据（工作区）：
 - `references/Create-mc1.21.1-dev/.../redstone/nixieTube/NixieTubeRenderer.java`（vanilla font 画字符）
 - `references/Create-mc1.21.1-dev/.../foundation/blockEntity/renderer/SmartBlockEntityRenderer.java`（vanilla font 画标签）
-- `api/create/flywheel-neoforge-api-1.21.1-1.0.6/`（仅 .class，无源码）
+- `api/flywheel-neoforge-1.21.1-1.0.6-sources/`（Java 源码：`dev/engine_room/flywheel/`）
 
 ---
 

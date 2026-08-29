@@ -20,8 +20,8 @@ Outliner.getInstance().showAABB(key, bounds)
 
 ## Source locations
 
-- API class (compile layout): `api/create/ponder-neoforge-1.0.82+mc1.21.1/net/createmod/catnip/outliner/Outliner.class` — Catnip is bundled inside the ponder jar, **not** in the create slim jar.
-- Full implementation: `references/Catnip-NeoForge-1.21.1-0.8.54-sources/net/createmod/catnip/` — note 0.8.54 uses the `net.createmod.catnip.utility.outliner` package layout, which differs from the ponder-shaded compile layout above.
+- Compile-layout copy (packages match project imports): `api/ponder-neoforge-1.0.82+mc1.21.1-sources/net/createmod/catnip/outliner/Outliner.java` — Catnip is bundled inside the ponder sources; **not** in the create sources.
+- Standalone newer version (0.8.54, `utility.*` layout): `api/Catnip-NeoForge-1.21.1-0.8.54-sources/net/createmod/catnip/utility/outliner/Outliner.java` — same class, different package; also mirrored at `references/Catnip-NeoForge-1.21.1-0.8.54-sources/`.
 - More Catnip package mapping: `memo/api-code-map.md` (⭐ 核心三件套 section).
 
 ## Check
