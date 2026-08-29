@@ -3,6 +3,8 @@ package com.zzy205.myfirstmod;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
+import com.zzy205.myfirstmod.block.MyBearingRenderer;
+import com.zzy205.myfirstmod.block.MyBearingVisual;
 import com.zzy205.myfirstmod.block.ControlDeskVisual;
 import com.zzy205.myfirstmod.block.ControlDeskRenderer;
 import com.zzy205.myfirstmod.block.MonitorVisual;
@@ -67,6 +69,13 @@ public class CCPeripheralExtenderClient {
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
+        // 注册 Flywheel Visual（my_bearing 背面半个传动杆）。
+        // 轴承本体模型由 blockstate 渲染，半轴是唯一动态部分，Flywheel 可用时跳过 vanilla BE 渲染。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.my_bearing_entity.get())
+                .factory(MyBearingVisual::new)
+                .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
         // 注册 Flywheel Visual（控制台踏板/操纵杆叠加渲染）。
         // monitor_2 表面小 Monitor 的屏幕 9 宫格 + 文字无法用 Flywheel 表达，仍需 BER 绘制，
         // 故不跳过 vanilla 渲染（对齐 Monitor 模式）；ControlDeskRenderer 内部在 Flywheel
@@ -100,6 +109,9 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.transmission_peripheral_entity.get(),
                 TransmissionPeripheralRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.my_bearing_entity.get(),
+                MyBearingRenderer::new);
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.control_desk_entity.get(),
                 ControlDeskRenderer::new);

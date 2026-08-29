@@ -49,10 +49,10 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
-    /** 自研风帆轴承（轴向动力输入，无齿轮） */
+    /** 自研风帆轴承（轴向动力输入，无齿轮）；音效对齐 swivel_bearing（SharedProperties.netheriteMetal → SoundType.NETHERITE_BLOCK） */
     public static final DeferredBlock<MyBearingBlock> my_bearing =
             registerBlocks("my_bearing", () -> new MyBearingBlock(BlockBehaviour.Properties.of().
-                    sound(SoundType.METAL).
+                    sound(SoundType.NETHERITE_BLOCK).
                     strength(5.0f, 6.0f).
                     noOcclusion()
             ));
@@ -66,7 +66,7 @@ public class MyModBlocks {
      */
     public static final DeferredBlock<MyBearingPlateBlock> my_bearing_plate =
             BLOCKS.register("my_bearing_plate", () -> new MyBearingPlateBlock(BlockBehaviour.Properties.of().
-                    sound(SoundType.METAL).
+                    sound(SoundType.NETHERITE_BLOCK).
                     strength(5.0f, 6.0f).
                     noOcclusion()
             ));

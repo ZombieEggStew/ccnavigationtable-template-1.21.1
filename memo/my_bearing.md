@@ -1,6 +1,6 @@
 # My Bearing（自研风帆轴承）— 方案设计
 
-> 状态：**阶段 1-2 已实现（方块 + 注册 + BE 骨架 + 装配/拆卸），待进游戏验证**。
+> 状态：**阶段 1-6 已实现**（方块/注册/BE/装配/拆卸/驱动/渲染/CC 外设控制模式），已进游戏验证通过（旋转精准、半轴渲染、Lua 控制）。
 > 实现前先读参考源码（见文末「参考来源」）。
 
 ## 需求（与 simulated:swivel_bearing 的差异）
@@ -49,8 +49,18 @@
   - `hasShaftTowards` → 轴向（未装配时双面，装配后仅背面，同 swivel 第 93-96 行）
   - 空手右键 = 装配/拆卸（`assembleNextTick = true`，同 swivel 第 66-73 行）
   - `ASSEMBLED` blockstate 属性
+  - `ROTATION` blockstate 属性（0/1/2/3 = 0°/90°/180°/270°）：**扳手点击与 FACING 轴平行的面 → rotation +90°（FACING 不变）**；
+    因为 swivel 模型绕 y 轴对称、my_bearing 模型不对称，不能靠旋转 FACING 表达顶部朝向
+    （FACING 是旋转轴方向，旋转它会破坏装配）
+  - **放置朝向 = 被点击的面**（覆写 `getStateForPlacement` → `FACING = context.getClickedFace()`）：
+    点地板 → 竖直（默认模型）、点天花板 → 上下颠倒、点墙 → 躺倒；
+    不用 Create 默认「视线反方向」（俯仰判定不可控 + 相邻轴自动对齐干扰）
+  - **扳手旋转 = 绕被点击的面转 90°**（覆写 `getRotatedBlockState`）：
+    点击面轴与 FACING 轴**平行** → `cycle(ROTATION)`（绕自身轴，FACING 不变）；
+    点击面轴与 FACING 轴**垂直** → `FACING = FACING.getClockWise(点击面轴)`（绕点击面轴转，同 Create 标准）
 - 新建 `block/MyBearingPlateBlock.java`：plate（link block）方块，同 swivel `SwivelBearingPlateBlock`；
-  **不注册物品**（玩家无法直接放置，装配时自动生成），拾取/掉落给主轴承物品
+  **不注册物品**（玩家无法直接放置，装配时自动生成），拾取/掉落给主轴承物品；
+  **含 `ROTATION` 属性**（plate 模型绕 y 轴不对称，装配时从轴承 blockstate 继承顶部朝向）
 - 注册：`block/MyModBlocks.java` + `block/MyModBlockEntities.java`（沿用现有 `registerBlocks` 模式；
   plate 用 `BLOCKS.register` 直注册，不走 `registerBlockItems`）
 - 资源：`blockstates/my_bearing.json`（assembled × facing 变体，未装配用 `my_bearing_item` 模型、
@@ -80,36 +90,52 @@
 - `disassemble()`：移除约束 + 拆回世界（`SimAssemblyHelper.disassembleSubLevel`）
 - **待验证**：重载重连（`checkPersistence` → `reattachConstraint`）与 plate 装配流程需进游戏实测
 
-### 阶段 4：驱动（输入转速 → 物理旋转）（待实现）
+### 阶段 4：驱动（输入转速 → 物理旋转）（已实现，同 swivel 逻辑）
 
-每 tick（服务端，`tick()`）：
+每 tick（服务端，`tick()`）——**完全移植 swivel 218-259 行的驱动**：
 
-```java
-// 1. 从 Create 应力网络取输入转速
-float speed = Math.abs(getSpeed());  // RPM
-if (speed < 0.01f) return;           // 无动力不动（可选：无动力时锁定？）
+1. 从 Create 应力网络取输入转速 `getSpeed()`（RPM），钳制到 `maxSwivelBearingSpeed`（默认 96，同 swivel `limitCogSpeed`）
+2. 转速 → 目标角推进：`targetAngleDegrees += convertToAngular(speed)`；**FACING 指向负轴时转速取反**（同 swivel 236-239 行）
+3. **序列化角度输入**（sequenced gearshift / 曲柄等，TURN_ANGLE）：`onSpeedChanged` 把网络传播来的
+   `sequenceContext` 换算成 `sequencedAngleLimit`（剩余可转角度，`getEffectiveValue`，同 swivel cogwheel 895-899 行），
+   tick 里按剩余角度钳制每 tick 推进量、转完即停 → **精确到位**（同 swivel 224-226 行）；`SequencedAngleLimit` 入 NBT
+4. 非序列化且物理暂停（`SubLevelPhysicsSystem.getPaused()`）时不推进目标角（同 swivel 228-232 行）
+5. 有转速时 `pipeline.wakeUp` 两侧 sub-level（同 swivel 244-258 行）
 
-// 2. 转速 → 目标角推进（RPM → 度/tick，同 KineticBlockEntity.convertToAngular）
-targetAngleDegrees += convertToAngular(speed) * (正反转方向);
+PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 
-// 3. PD 伺服把从动物理体追到目标角（同 swivel updateServoCoefficients 第 363-401 行）
-handle.setMotor(RotaryConstraintHandle.DEFAULT_AXIS,
-    Math.toRadians(targetAngleDegrees), kP, kD, false, 0.0);
-```
+- `kP`/`kD` 用 `SimConfigService` 的 `swivelBearingStiffness`（1600）/ `swivelBearingDamping`（40），**按两侧 sub-level 惯性张量沿旋转轴的投影缩放**（`totalInertia`，下限 10）
+- 目标角用 `AngleHelper.angleLerp(partialPhysicsTick, last, target)` 在物理 tick 间插值（平滑）
+- my_bearing 无 POWERED 锁定开关（swivel 的红石锁定），恒走锁定分支（防风帆被吹动）
 
-- 关键：**目标角每 tick 推进 = 连续旋转**；PD（kP/kD）由物理引擎在子步级平滑执行 → 高转速也跟手（同 swivel 96 RPM 验证）
-- `kP`/`kD` 参照 `SimConfigService` 的 `swivelBearingStiffness` / `swivelBearingDamping`，按从动物理体惯性张量缩放（swivel 第 377-396 行）
-- **当前骨架状态**：`updateServoCoefficients()` 暂用常量 kP=6000/kD=1500 简单锁定当前角度；待阶段 4 替换为惯性缩放 + tick 推进
+**防晃动关键**：装配成功后调用 `setTargetAngleFromCurrentOrientation(plateState, subLevel)`（同 swivel 337-355 行），
+把目标角初始化为当前物理朝向——否则 PD 伺服把从动物理体强扭到 0° 会导致顶部持续晃动。
 
-### 阶段 5：渲染
+### 阶段 5：渲染（已实现）
 
-- 简单模型：轴承本体 + 轴（可参考现有 `TransmissionPeripheralRenderer` / `TransmissionPeripheralVisual` 的 OrientedInstance 手法）
-- 从动物理体由 Sable 自己渲染（sub-level），不需要额外渲染代码
+- 轴承本体用 blockstate 模型（`my_bearing_item` / `my_bearing_assembled`）
+- **背面半个传动杆**（`SHAFT_HALF`，轴向输入口）：
+  - Flywheel：`MyBearingVisual`（OrientedInstance，每帧按当前 FACING 动态定向 + 绕 FACING 轴以 `转速 × 时间` 旋转，同 TransmissionPeripheralVisual 手法）
+  - BER 回退：`MyBearingRenderer`（`CachedBuffers.partialFacing(SHAFT_HALF, state, facing.getOpposite())` + `kineticRotationTransform`）
+  - 从动物理体由 Sable 自己渲染（sub-level），不需要额外渲染代码
 
-### 阶段 6：可选增强
+### 阶段 6：CC 外设（Lua 控制模式）（已实现）
 
-- **CC 外设**（如果要 Lua 控制）：仿 `SwivelBearingPeripheral` 加 `getTargetAngle` / `setTargetAngle`（注意官方外设目前只有 getter，setter 需自加）
-- **角度传感器**：通过现有 `SableCompat.getAngularVelocity` 读从动物理体角速度
+- 外设类型 `ccpe:my_bearing`，注册见 `compat/cc/CCPeripheralCapabilities.java`
+- **控制模式**（`setControlMode(true)`，`setTargetAngle` 自动进入）：tick 不再按应力网络转速推进目标角
+  （应力网络仅保留应力消耗），旋转角度由 Lua 直接控制——**跳过「转速 × 时间 = 角度」的累计过程**；
+  进入/退出控制模式时用 `setTargetAngleFromCurrentOrientation` 保持当前朝向（不跳变）
+- Lua API：`setTargetAngle(deg)`（绝对定位，需先装配，未装配返回 false）、`getTargetAngle()`（度）、
+  `getTargetAngleRad()`（弧度，同 swivel 官方外设）、`isControlMode()`、`setControlMode(bool)`、
+  `isAssembled()`（是否已装配）、`assemble()`（装配 FACING 方向结构，返回是否成功）、
+  `disassemble()`（拆回世界，返回是否成功）
+- 角度服务端权威（`targetAngleDegrees` + `ControlMode` 入 NBT）；PD 伺服照常由 plate BE 每物理 tick 驱动；
+  `setTargetAngle` 后 `wakeUp` 两侧 sub-level
+- **待验证**：`setTargetAngle` 大角度（>360°）时物理走最短路径还是累计多圈
+- **Create 护目镜 tooltip**（`addToGoggleTooltip`，同 transmission_peripheral 结构）：显示模式
+  （Lua 控制 / 应力驱动）、当前角度（`getCurrentAngleDegrees()`，从从动物理体实时朝向计算，同
+  swivel 337-355 公式）、目标角度、应力统计；lang 键 `tooltip.ccpe.my_bearing.*`
+- **角度传感器**（可选）：通过现有 `SableCompat.getAngularVelocity` 读从动物理体角速度
 - **无动力锁定**：`speed==0` 时用 `setMotor(axis, target, kP_high, kD, false, 0)` 锁在当前角（可选）
 
 ## 已知风险与注意点
@@ -131,19 +157,22 @@ handle.setMotor(RotaryConstraintHandle.DEFAULT_AXIS,
 | `SubLevelAssemblyHelper` | `references/sable-main/common/.../api/` | 备选装配路径（`assembleBlocks`/`gatherConnectedBlocks`） |
 | `SableCompat` | `src/main/java/com/zzy205/myfirstmod/compat/sable/` | 项目现有 Sable 工具（坐标系/容器/角速度读取） |
 
-## 已实现文件清单（阶段 1-2）
+## 已实现文件清单（阶段 1-4）
 
 | 文件 | 说明 |
 |---|---|
-| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlock.java` | 轴承方块（轴向输入、ASSEMBLED、空手右键装配、扳手先拆卸、Sable 装配移动回调） |
-| `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlock.java` | plate 方块（同 swivel link block，无物品、拾取给主轴承） |
-| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlockEntity.java` | 轴承 BE：装配/拆卸/重连/约束/NBT（驱动待阶段 4） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlock.java` | 轴承方块（轴向输入、ASSEMBLED、空手右键装配、扳手先拆卸、放置朝向=点击面、扳手绕面旋转、装配后基座选择框 y 0-11.9、Sable 装配移动回调） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlock.java` | plate 方块（同 swivel link block，无物品、拾取给主轴承；ROTATION 属性；选中框 y 12.1-16 / 碰撞框 y 12-16 xz 3-13） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingShapes.java` | 基座/plate 选择框与碰撞框（数值对齐 SimBlockShapes：BEARING_ASSEMBLED / PLATE / PLATE_COLLISION） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlockEntity.java` | 轴承 BE：装配/拆卸/重连/约束/NBT + 驱动（swivel 式：转速→目标角推进、惯性缩放 PD 伺服、装配时当前朝向初始化防晃动；plate 继承 FACING+ROTATION）+ 应力消耗（impact 4.0，同 swivel 注册值）+ CC 外设（Lua 控制模式：setTargetAngle 直接控制角度，跳过应力网络角度累计）+ 护目镜 tooltip（模式/当前角度/目标角度） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingVisual.java` | Flywheel 渲染：背面半个传动杆（SHAFT_HALF，OrientedInstance） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingRenderer.java` | BER 回退渲染：背面半个传动杆（SHAFT_HALF，kineticRotationTransform） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlockEntity.java` | plate BE：parent 关联、被破坏连锁破坏父轴承 |
 | `src/main/java/com/zzy205/myfirstmod/block/MyModBlocks.java` | 注册 my_bearing + my_bearing_plate（plate 不注册物品） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyModBlockEntities.java` | 注册两个 BE 类型 |
 | `src/main/java/com/zzy205/myfirstmod/item/MyModCreativeModeTabs.java` | 物品栏加 my_bearing |
-| `src/main/resources/assets/ccpe/blockstates/my_bearing.json` | 未装配 `my_bearing_item` / 装配后 `my_bearing_assembled` × facing |
-| `src/main/resources/assets/ccpe/blockstates/my_bearing_plate.json` | plate 模型 × facing |
+| `src/main/resources/assets/ccpe/blockstates/my_bearing.json` | 未装配 `my_bearing_item` / 装配后 `my_bearing_assembled` × facing × rotation（48 变体，rotation 叠加 y 旋转） |
+| `src/main/resources/assets/ccpe/blockstates/my_bearing_plate.json` | plate 模型 × facing × rotation（24 变体；装配时 plate 继承轴承 FACING+ROTATION，顶部朝向一致） |
 | `src/main/resources/assets/ccpe/models/item/my_bearing.json` | 物品模型 → `block/my_bearing/my_bearing_item` |
 | `src/main/resources/data/ccpe/loot_table/blocks/my_bearing.json` | 掉自己 |
 | `src/main/resources/data/ccpe/loot_table/blocks/my_bearing_plate.json` | 掉主轴承（同 swivel dropOther） |
@@ -153,5 +182,5 @@ handle.setMotor(RotaryConstraintHandle.DEFAULT_AXIS,
 
 - [x] plate 方案：照 swivel 注册独立 plate 方块（装配时自动生成进 sub-level，不注册物品）— **已确认**
 - [ ] 风帆装配的**范围**：只装 facing 对面的单个结构（风帆骨架），还是 gatherConnectedBlocks 连成一片？（默认：SimAssemblyHelper.assembleFromSingleBlock 同 swivel，当前按此实现）
-- [ ] 无动力时从动物理体**锁定还是自由**？（默认：锁定在当前角度，防风帆被气流吹动；当前 updateServoCoefficients 简单锁定，阶段 4 完善）
+- [ ] 无动力时从动物理体**锁定还是自由**？（默认：锁定在当前角度，防风帆被气流吹动；已实现——装配时目标角=当前朝向 + 惯性缩放 PD 伺服恒锁定）
 - [ ] 是否要 **CC 外设**（Lua 控制）？（默认：先不做，后续按需加）

@@ -21,6 +21,13 @@
   "tooltip.ccpe.transmission_peripheral.servo_reaim_on": "On",
   "tooltip.ccpe.transmission_peripheral.servo_reaim_off": "Off",
 
+  "tooltip.ccpe.my_bearing.header": "Sail Bearing",
+  "tooltip.ccpe.my_bearing.mode": "Mode:",
+  "tooltip.ccpe.my_bearing.mode_control": "Lua Control",
+  "tooltip.ccpe.my_bearing.mode_stress": "Stress Driven",
+  "tooltip.ccpe.my_bearing.current_angle": "Current Angle:",
+  "tooltip.ccpe.my_bearing.target_angle": "Target Angle:",
+
   "gui.ccpe.monitor.module_info": "%s at (%s, %s) size %s×%s",
   "gui.ccpe.monitor_menu.done": "Done",
   "gui.ccpe.monitor_menu.id_title": "Monitor Channel",

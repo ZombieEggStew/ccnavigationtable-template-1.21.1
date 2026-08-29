@@ -13,6 +13,7 @@ import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -22,6 +23,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
@@ -44,14 +46,40 @@ public class MyBearingBlock extends DirectionalKineticBlock implements IBE<MyBea
 
     public static final BooleanProperty ASSEMBLED = BooleanProperty.create("assembled");
 
+    /**
+     * 顶部（head / plate）绕 y 轴的旋转档位：0/1/2/3 = 0°/90°/180°/270°。
+     * <p>
+     * swivel_bearing 的模型绕 y 轴对称，Create 标准 6 向 FACING 变体足够表达；
+     * 而 my_bearing 的模型不对称，扳手右键顶部时不能靠旋转 FACING（会改变旋转轴
+     * 方向、破坏装配），因此额外用该属性表达「顶部绕 y 轴转 90°」。
+     */
+    public static final IntegerProperty ROTATION = IntegerProperty.create("rotation", 0, 3);
+
     public MyBearingBlock(final Properties properties) {
         super(properties);
-        this.registerDefaultState(this.defaultBlockState().setValue(ASSEMBLED, false));
+        this.registerDefaultState(this.defaultBlockState().setValue(ASSEMBLED, false).setValue(ROTATION, 0));
     }
 
     @Override
     protected void createBlockStateDefinition(final StateDefinition.Builder<Block, BlockState> builder) {
-        super.createBlockStateDefinition(builder.add(ASSEMBLED));
+        super.createBlockStateDefinition(builder.add(ASSEMBLED).add(ROTATION));
+    }
+
+    // ═══════════════ 放置朝向 ═══════════════
+
+    /**
+     * 放置朝向 = 被点击的面（FACING 指向被点击的方块面）：
+     * <ul>
+     *   <li>点击<b>地板</b>（+Y 面）→ FACING=UP → 模型竖直（默认模型）；</li>
+     *   <li>点击<b>天花板</b>（-Y 面）→ FACING=DOWN → 模型上下颠倒；</li>
+     *   <li>点击<b>墙</b>（水平面）→ FACING 水平 → 模型躺倒。</li>
+     * </ul>
+     * 不用 Create 默认的「玩家视线反方向」（{@code getNearestLookingDirection}），
+     * 因为视线俯仰判定不可控，且会受相邻 Create 轴方块「自动对齐」（getPreferredFacing）干扰。
+     */
+    @Override
+    public BlockState getStateForPlacement(final BlockPlaceContext context) {
+        return this.defaultBlockState().setValue(FACING, context.getClickedFace());
     }
 
     // ═══════════════ 轴向动力输入（无齿轮） ═══════════════
@@ -118,6 +146,24 @@ public class MyBearingBlock extends DirectionalKineticBlock implements IBE<MyBea
         return InteractionResult.SUCCESS;
     }
 
+    /**
+     * 扳手旋转语义：<b>方块绕被点击的面旋转 90°</b>（Create 标准行为 + ROTATION 增强）。
+     * <ul>
+     *   <li>点击面与旋转轴（FACING 轴）<b>平行</b>：绕自身轴转 90°——FACING 不变，
+     *       {@link #ROTATION} +1（顶部朝向变化，同 swivel 无此属性时 Create 标准为「无反应」）；</li>
+     *   <li>点击面与旋转轴<b>垂直</b>：FACING 绕被点击面的轴转 90°（{@code getClockWise}，
+     *       同 Create {@code IWrenchable.getRotatedBlockState} 对 DirectionalKineticBlock 的行为）。</li>
+     * </ul>
+     */
+    @Override
+    public BlockState getRotatedBlockState(final BlockState originalState, final Direction targetedFace) {
+        final Direction stateFacing = originalState.getValue(FACING);
+        if (stateFacing.getAxis() == targetedFace.getAxis()) {
+            return originalState.cycle(ROTATION);
+        }
+        return originalState.setValue(FACING, stateFacing.getClockWise(targetedFace.getAxis()));
+    }
+
     // ═══════════════ BE 绑定 ═══════════════
 
     @Override
@@ -132,8 +178,10 @@ public class MyBearingBlock extends DirectionalKineticBlock implements IBE<MyBea
 
     @Override
     protected VoxelShape getShape(final BlockState blockState, final BlockGetter blockGetter, final BlockPos blockPos, final CollisionContext collisionContext) {
-        // 阶段 1-2：先全方块碰撞，后续可换装配后专属 shape（同 swivel SimBlockShapes）
-        return Shapes.block();
+        // 装配后基座用专属 shape（y 0-11.9，顶部让给 plate，两者分离可分别点选），同 swivel
+        return blockState.getValue(ASSEMBLED)
+                ? MyBearingShapes.BEARING_ASSEMBLED.get(blockState.getValue(FACING))
+                : Shapes.block();
     }
 
     // ═══════════════ Sable 装配移动回调 ═══════════════

@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.compat.cc;
 
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.block.MyBearingBlockEntity;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralBlockEntity;
@@ -42,6 +43,12 @@ public final class CCPeripheralCapabilities {
                 PeripheralCapability.get(),
                 MyModBlockEntities.control_desk_entity.get(),
                 (be, side) -> ((ControlDeskBlockEntity) be).getPeripheral()
+        );
+        // my_bearing 作为 CC:T 外设（Lua 控制模式：跳过应力网络角度累计，直接控制旋转角度）
+        event.registerBlockEntity(
+                PeripheralCapability.get(),
+                MyModBlockEntities.my_bearing_entity.get(),
+                (be, side) -> ((MyBearingBlockEntity) be).getPeripheral()
         );
     }
 }
