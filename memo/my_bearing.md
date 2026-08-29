@@ -1,7 +1,7 @@
 # My Bearing（自研风帆轴承）— 方案设计
 
-> 状态：**方案设计阶段，未开始实现**。本文是设计流程与决策记录，实现前先读
-> 参考源码（见文末「参考来源」）。
+> 状态：**阶段 1-2 已实现（方块 + 注册 + BE 骨架 + 装配/拆卸），待进游戏验证**。
+> 实现前先读参考源码（见文末「参考来源」）。
 
 ## 需求（与 simulated:swivel_bearing 的差异）
 
@@ -42,34 +42,45 @@
 - `build.gradle` 已有 `compileOnly files("libs/simulated-neoforge-1.21.1-1.3.0.jar")` → 可引用 `dev.simulated_team.simulated.util.SimAssemblyHelper`（swivel 的装配工具）
 - 已有 `compat/sable/SableCompat.java`（`getContainingSubLevel` / `getServerContainer` / 坐标系变换工具）
 
-### 阶段 1：方块与注册
+### 阶段 1：方块与注册（已实现）
 
 - 新建 `block/MyBearingBlock.java`：继承 `com.simibubi.create.content.kinetics.base.DirectionalKineticBlock`（同 `BearingBlock` 模式）
   - `getRotationAxis` → `FACING` 的轴
   - `hasShaftTowards` → 轴向（未装配时双面，装配后仅背面，同 swivel 第 93-96 行）
   - 空手右键 = 装配/拆卸（`assembleNextTick = true`，同 swivel 第 66-73 行）
   - `ASSEMBLED` blockstate 属性
-- 注册：`block/MyModBlocks.java` + `block/MyModBlockEntities.java`（沿用现有 `registerBlocks` 模式）
+- 新建 `block/MyBearingPlateBlock.java`：plate（link block）方块，同 swivel `SwivelBearingPlateBlock`；
+  **不注册物品**（玩家无法直接放置，装配时自动生成），拾取/掉落给主轴承物品
+- 注册：`block/MyModBlocks.java` + `block/MyModBlockEntities.java`（沿用现有 `registerBlocks` 模式；
+  plate 用 `BLOCKS.register` 直注册，不走 `registerBlockItems`）
+- 资源：`blockstates/my_bearing.json`（assembled × facing 变体，未装配用 `my_bearing_item` 模型、
+  装配后用 `my_bearing_assembled` 模型）、`blockstates/my_bearing_plate.json`、`models/item/my_bearing.json`
+  （parent → `block/my_bearing/my_bearing_item`）、loot table ×2、lang（en_us/zh_cn）、创造模式物品栏
 
-### 阶段 2：方块实体骨架
+### 阶段 2：方块实体骨架（已实现）
 
 - 新建 `block/MyBearingBlockEntity.java`：继承 `KineticBlockEntity`，实现 `BlockEntitySubLevelActor`（Sable 物理 tick 入口）
 - 字段：
   - `@Nullable UUID subLevelID`（从动物理体）
+  - `@Nullable BlockPos platePos`（plate 方块位置）
   - `@Nullable RotaryConstraintHandle handle`（约束句柄）
   - `double targetAngleDegrees`（目标角，每 tick 由转速推进）
-  - `boolean assembleNextTick` / `boolean assembled`
-- NBT 持久化：`subLevelID`、`targetAngleDegrees`（参照 swivel 第 598-665 行）
+  - `boolean assembleNextTick` / `boolean assembling` / `AssemblyException lastException`
+- NBT 持久化：`subLevelID`、`platePos`（键 `SwivelPlate`）、`targetAngleDegrees`（参照 swivel 第 598-665 行）
+- 装配/拆卸：`assemble()` / `disassemble()` / `reattachConstraint()` / `checkPersistence()`（重载重连）
+- 新建 `block/MyBearingPlateBlockEntity.java`：parent 关联 + 被破坏时连锁破坏父轴承（同 swivel plate BE）
 
-### 阶段 3：装配（风帆 → sub-level）
+### 阶段 3：装配（风帆 → sub-level）（已实现）
 
 - 空手右键 → `assemble()`：
   - 用 **SimAssemblyHelper.assembleFromSingleBlock(level, pos, facing 对面方块, false, false)**（swivel 第 415 行）把风帆结构组装成 sub-level；或 Sable 自带 `SubLevelAssemblyHelper.assembleBlocks` + `gatherConnectedBlocks`（`SubLevelAssemblyHelper.java` 第 69/191 行）——二选一，优先 Simulated 的（与 swivel 行为一致）
   - 记录 `subLevelID`
+  - 装配时在 sub-level plot 内自动放置 plate 方块（`my_bearing_plate`，模型 = `my_bearing_plate.json`，随从动物理体旋转）
   - 创建约束：`pipeline.addConstraint(containingSubLevel, plateSubLevel, new RotaryConstraintConfiguration(anchorPos, platePos, facingVec, plateFacingVec))`（参照 swivel `attachConstraints` 第 571-596 行）
 - `disassemble()`：移除约束 + 拆回世界（`SimAssemblyHelper.disassembleSubLevel`）
+- **待验证**：重载重连（`checkPersistence` → `reattachConstraint`）与 plate 装配流程需进游戏实测
 
-### 阶段 4：驱动（输入转速 → 物理旋转）
+### 阶段 4：驱动（输入转速 → 物理旋转）（待实现）
 
 每 tick（服务端，`tick()`）：
 
@@ -88,6 +99,7 @@ handle.setMotor(RotaryConstraintHandle.DEFAULT_AXIS,
 
 - 关键：**目标角每 tick 推进 = 连续旋转**；PD（kP/kD）由物理引擎在子步级平滑执行 → 高转速也跟手（同 swivel 96 RPM 验证）
 - `kP`/`kD` 参照 `SimConfigService` 的 `swivelBearingStiffness` / `swivelBearingDamping`，按从动物理体惯性张量缩放（swivel 第 377-396 行）
+- **当前骨架状态**：`updateServoCoefficients()` 暂用常量 kP=6000/kD=1500 简单锁定当前角度；待阶段 4 替换为惯性缩放 + tick 推进
 
 ### 阶段 5：渲染
 
@@ -119,8 +131,27 @@ handle.setMotor(RotaryConstraintHandle.DEFAULT_AXIS,
 | `SubLevelAssemblyHelper` | `references/sable-main/common/.../api/` | 备选装配路径（`assembleBlocks`/`gatherConnectedBlocks`） |
 | `SableCompat` | `src/main/java/com/zzy205/myfirstmod/compat/sable/` | 项目现有 Sable 工具（坐标系/容器/角速度读取） |
 
+## 已实现文件清单（阶段 1-2）
+
+| 文件 | 说明 |
+|---|---|
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlock.java` | 轴承方块（轴向输入、ASSEMBLED、空手右键装配、扳手先拆卸、Sable 装配移动回调） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlock.java` | plate 方块（同 swivel link block，无物品、拾取给主轴承） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlockEntity.java` | 轴承 BE：装配/拆卸/重连/约束/NBT（驱动待阶段 4） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlockEntity.java` | plate BE：parent 关联、被破坏连锁破坏父轴承 |
+| `src/main/java/com/zzy205/myfirstmod/block/MyModBlocks.java` | 注册 my_bearing + my_bearing_plate（plate 不注册物品） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyModBlockEntities.java` | 注册两个 BE 类型 |
+| `src/main/java/com/zzy205/myfirstmod/item/MyModCreativeModeTabs.java` | 物品栏加 my_bearing |
+| `src/main/resources/assets/ccpe/blockstates/my_bearing.json` | 未装配 `my_bearing_item` / 装配后 `my_bearing_assembled` × facing |
+| `src/main/resources/assets/ccpe/blockstates/my_bearing_plate.json` | plate 模型 × facing |
+| `src/main/resources/assets/ccpe/models/item/my_bearing.json` | 物品模型 → `block/my_bearing/my_bearing_item` |
+| `src/main/resources/data/ccpe/loot_table/blocks/my_bearing.json` | 掉自己 |
+| `src/main/resources/data/ccpe/loot_table/blocks/my_bearing_plate.json` | 掉主轴承（同 swivel dropOther） |
+| `src/main/resources/assets/ccpe/lang/en_us.json` / `zh_cn.json` | `block.ccpe.my_bearing` |
+
 ## 待确认问题
 
-- [ ] 风帆装配的**范围**：只装 facing 对面的单个结构（风帆骨架），还是 gatherConnectedBlocks 连成一片？（默认：SimAssemblyHelper.assembleFromSingleBlock 同 swivel）
-- [ ] 无动力时从动物理体**锁定还是自由**？（默认：锁定在当前角度，防风帆被气流吹动）
+- [x] plate 方案：照 swivel 注册独立 plate 方块（装配时自动生成进 sub-level，不注册物品）— **已确认**
+- [ ] 风帆装配的**范围**：只装 facing 对面的单个结构（风帆骨架），还是 gatherConnectedBlocks 连成一片？（默认：SimAssemblyHelper.assembleFromSingleBlock 同 swivel，当前按此实现）
+- [ ] 无动力时从动物理体**锁定还是自由**？（默认：锁定在当前角度，防风帆被气流吹动；当前 updateServoCoefficients 简单锁定，阶段 4 完善）
 - [ ] 是否要 **CC 外设**（Lua 控制）？（默认：先不做，后续按需加）

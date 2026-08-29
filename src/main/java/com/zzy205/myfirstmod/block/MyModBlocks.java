@@ -49,6 +49,28 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 自研风帆轴承（轴向动力输入，无齿轮） */
+    public static final DeferredBlock<MyBearingBlock> my_bearing =
+            registerBlocks("my_bearing", () -> new MyBearingBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.METAL).
+                    strength(5.0f, 6.0f).
+                    noOcclusion()
+            ));
+
+    /**
+     * 风帆轴承 plate（link block）。
+     * <p>
+     * 与 swivel 的 {@code swivel_bearing_link_block} 一致：<b>不注册物品</b>，
+     * 玩家无法直接放置；plate 在装配时由 {@code MyBearingBlockEntity.assemble()}
+     * 自动放置到 sub-level plot 内，作为轴承与从动物理体的连接点。
+     */
+    public static final DeferredBlock<MyBearingPlateBlock> my_bearing_plate =
+            BLOCKS.register("my_bearing_plate", () -> new MyBearingPlateBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.METAL).
+                    strength(5.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {
         DeferredBlock<T> blocks = BLOCKS.register(name , block);
         MyModItems.registerBlockItems(name , blocks);

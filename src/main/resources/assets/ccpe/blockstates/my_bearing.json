@@ -1,0 +1,56 @@
+{
+  "variants": {
+    "assembled=false,facing=down": {
+      "model": "ccpe:block/my_bearing/my_bearing_item",
+      "x": 180
+    },
+    "assembled=false,facing=east": {
+      "model": "ccpe:block/my_bearing/my_bearing_item",
+      "x": 90,
+      "y": 90
+    },
+    "assembled=false,facing=north": {
+      "model": "ccpe:block/my_bearing/my_bearing_item",
+      "x": 90
+    },
+    "assembled=false,facing=south": {
+      "model": "ccpe:block/my_bearing/my_bearing_item",
+      "x": 90,
+      "y": 180
+    },
+    "assembled=false,facing=up": {
+      "model": "ccpe:block/my_bearing/my_bearing_item"
+    },
+    "assembled=false,facing=west": {
+      "model": "ccpe:block/my_bearing/my_bearing_item",
+      "x": 90,
+      "y": 270
+    },
+    "assembled=true,facing=down": {
+      "model": "ccpe:block/my_bearing/my_bearing_assembled",
+      "x": 180
+    },
+    "assembled=true,facing=east": {
+      "model": "ccpe:block/my_bearing/my_bearing_assembled",
+      "x": 90,
+      "y": 90
+    },
+    "assembled=true,facing=north": {
+      "model": "ccpe:block/my_bearing/my_bearing_assembled",
+      "x": 90
+    },
+    "assembled=true,facing=south": {
+      "model": "ccpe:block/my_bearing/my_bearing_assembled",
+      "x": 90,
+      "y": 180
+    },
+    "assembled=true,facing=up": {
+      "model": "ccpe:block/my_bearing/my_bearing_assembled"
+    },
+    "assembled=true,facing=west": {
+      "model": "ccpe:block/my_bearing/my_bearing_assembled",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

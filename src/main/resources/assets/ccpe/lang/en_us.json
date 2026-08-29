@@ -6,6 +6,7 @@
   "block.ccpe.transmission_peripheral": "Electronic Transmission",
   "block.ccpe.my_monitor": "Monitor",
   "block.ccpe.my_control_desk": "Control Desk",
+  "block.ccpe.my_bearing": "Sail Bearing",
 
   "tooltip.ccpe.transmission_peripheral.header": "Electronic Transmission",
   "tooltip.ccpe.transmission_peripheral.mode": "Mode:",

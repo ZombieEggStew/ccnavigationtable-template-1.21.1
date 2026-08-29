@@ -15,6 +15,8 @@ public final class MyModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TransmissionPeripheralBlockEntity>> transmission_peripheral_entity = BLOCK_ENTITY_TYPES.register("transmission_peripheral", () -> BlockEntityType.Builder.of(TransmissionPeripheralBlockEntity::new, MyModBlocks.transmission_peripheral.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MonitorBlockEntity>> monitor_entity = BLOCK_ENTITY_TYPES.register("my_monitor", () -> BlockEntityType.Builder.of(MonitorBlockEntity::new, MyModBlocks.monitor.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ControlDeskBlockEntity>> control_desk_entity = BLOCK_ENTITY_TYPES.register("my_control_desk", () -> BlockEntityType.Builder.of(ControlDeskBlockEntity::new, MyModBlocks.my_control_desk.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MyBearingBlockEntity>> my_bearing_entity = BLOCK_ENTITY_TYPES.register("my_bearing", () -> BlockEntityType.Builder.of(MyBearingBlockEntity::new, MyModBlocks.my_bearing.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MyBearingPlateBlockEntity>> my_bearing_plate_entity = BLOCK_ENTITY_TYPES.register("my_bearing_plate", () -> BlockEntityType.Builder.of(MyBearingPlateBlockEntity::new, MyModBlocks.my_bearing_plate.get()).build(null));
 
     public static void register(IEventBus bus) {
         BLOCK_ENTITY_TYPES.register(bus);

@@ -6,6 +6,7 @@
   "block.ccpe.transmission_peripheral": "电子变速箱",
   "block.ccpe.my_monitor": "监视器",
   "block.ccpe.my_control_desk": "控制台",
+  "block.ccpe.my_bearing": "风帆轴承",
 
   "tooltip.ccpe.transmission_peripheral.header": "电子变速箱",
   "tooltip.ccpe.transmission_peripheral.mode": "模式：",

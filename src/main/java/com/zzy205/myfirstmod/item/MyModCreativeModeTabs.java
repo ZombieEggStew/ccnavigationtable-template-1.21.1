@@ -25,6 +25,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.transmission_peripheral);
                 output.accept(MyModBlocks.monitor);
                 output.accept(MyModBlocks.my_control_desk);
+                output.accept(MyModBlocks.my_bearing);
                 output.accept(MyModItems.CONTROL_PEDAL);
                 output.accept(MyModItems.CONTROL_JOYSTICK);
                 output.accept(MyModItems.CONTROL_MONITOR_2);
