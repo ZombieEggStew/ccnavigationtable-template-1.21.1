@@ -1,0 +1,50 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "ccpe:block/my_aero_sensor/static_port",
+		"particle": "ccpe:block/my_aero_sensor/static_port"
+	},
+	"elements": [
+		{
+			"from": [5, -1, 5],
+			"to": [11, 2, 11],
+			"rotation": {"angle": 0, "axis": "x", "origin": [8, 8, 8]},
+			"faces": {
+				"north": {"uv": [9, 6, 16, 9], "texture": "#0"},
+				"east": {"uv": [9, 6, 16, 9], "texture": "#0"},
+				"south": {"uv": [9, 6, 16, 9], "texture": "#0"},
+				"west": {"uv": [9, 6, 16, 9], "texture": "#0"},
+				"up": {"uv": [9, 0, 16, 7], "texture": "#0"},
+				"down": {"uv": [9, 0, 16, 7], "texture": "#0"}
+			}
+		}
+	],
+	"display": {
+		"thirdperson_righthand": {
+			"translation": [0, 7, 0],
+			"scale": [0.75, 0.75, 0.75]
+		},
+		"thirdperson_lefthand": {
+			"translation": [0, 7, 0],
+			"scale": [0.75, 0.75, 0.75]
+		},
+		"firstperson_righthand": {
+			"translation": [0, 7, 0],
+			"scale": [0.75, 0.75, 0.75]
+		},
+		"firstperson_lefthand": {
+			"translation": [0, 7, 0],
+			"scale": [0.75, 0.75, 0.75]
+		},
+		"ground": {
+			"translation": [0, 7, 0],
+			"scale": [0.75, 0.75, 0.75]
+		},
+		"gui": {
+			"rotation": [30, 45, 0],
+			"translation": [0, 5.75, 0],
+			"scale": [1.3, 1.3, 1.3]
+		}
+	}
+}

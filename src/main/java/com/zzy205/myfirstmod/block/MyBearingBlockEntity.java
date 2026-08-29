@@ -54,7 +54,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 自研风帆轴承（my_bearing）方块实体。
+ * 自研风帆轴承（aero_bearing）方块实体。
  * <p>
  * 阶段 1-2 骨架（对照 {@code SwivelBearingBlockEntity}，去掉 cogwheel / ExtraKinetics）：
  * <ul>
@@ -62,7 +62,7 @@ import java.util.UUID;
  *       {@code targetAngleDegrees}、{@code assembleNextTick}、{@code assembling}、{@code lastException}；</li>
  *   <li>NBT 持久化：{@code SubLevelID} / {@code SwivelPlate} / {@code TargetAngle}（同 swivel 598-665 行）；</li>
  *   <li>空手右键 → {@code assembleNextTick} → {@link #assemble()} / {@link #disassemble()}；
- *       plate 方块在装配时自动放置到 sub-level plot 内（{@code my_bearing_plate}）；</li>
+ *       plate 方块在装配时自动放置到 sub-level plot 内（{@code aero_bearing_plate}）；</li>
  *   <li>约束：{@code RotaryConstraintConfiguration}（pos1/pos2 各自 plot 内坐标，normal 归一化）；</li>
  *   <li>驱动（转速 → 目标角 → PD 伺服）留待阶段 4，当前 {@link #updateServoCoefficients()} 简单锁定。</li>
  * </ul>
@@ -120,7 +120,7 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     private boolean assembling;
 
     public MyBearingBlockEntity(final BlockPos pos, final BlockState state) {
-        super(MyModBlockEntities.my_bearing_entity.get(), pos, state);
+        super(MyModBlockEntities.aero_bearing_entity.get(), pos, state);
         this.assembleNextTick = false;
     }
 
@@ -219,10 +219,9 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
 
         final ServerSubLevel assembledSubLevel;
         final BlockPos assembleOffset;
-        // link（plate）继承轴承的 FACING 与 ROTATION：plate 顶部朝向与轴承顶部一致
-        final BlockState link = MyModBlocks.my_bearing_plate.get().defaultBlockState()
-                .setValue(MyBearingPlateBlock.FACING, this.getBlockState().getValue(MyBearingBlock.FACING))
-                .setValue(MyBearingPlateBlock.ROTATION, this.getBlockState().getValue(MyBearingBlock.ROTATION));
+        // link（plate）继承轴承的 FACING（plate 模型绕旋转轴对称，与 swivel 一致，无 ROTATION）
+        final BlockState link = MyModBlocks.aero_bearing_plate.get().defaultBlockState()
+                .setValue(MyBearingPlateBlock.FACING, this.getBlockState().getValue(MyBearingBlock.FACING));
 
         if (result != null) {
             assembledSubLevel = (ServerSubLevel) result.subLevel();
@@ -319,7 +318,7 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
 
     private void checkPersistence(final UUID id) {
         if (this.getPlatePos() != null && this.getLevel().isAreaLoaded(this.getPlatePos(), 1)) {
-            if (!this.getLevel().getBlockState(this.getPlatePos()).is(MyModBlocks.my_bearing_plate.get())) {
+            if (!this.getLevel().getBlockState(this.getPlatePos()).is(MyModBlocks.aero_bearing_plate.get())) {
                 return;
             }
         }
@@ -345,7 +344,7 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
             }
 
             final BlockState plateState = this.level.getBlockState(platePos);
-            if (!plateState.is(MyModBlocks.my_bearing_plate.get())) return;
+            if (!plateState.is(MyModBlocks.aero_bearing_plate.get())) return;
 
             final Direction plateFacing = plateState.getValue(MyBearingPlateBlock.FACING);
             this.attachConstraints(plateSubLevel, JOMLConversion.toJOML(platePos.relative(plateFacing).getCenter()));
@@ -354,7 +353,7 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
 
     public void associatePlateWithParent() {
         if (this.getPlatePos() != null) {
-            if (this.getLevel().getBlockState(this.getPlatePos()).is(MyModBlocks.my_bearing_plate.get())) {
+            if (this.getLevel().getBlockState(this.getPlatePos()).is(MyModBlocks.aero_bearing_plate.get())) {
                 final MyBearingPlateBlockEntity plate = (MyBearingPlateBlockEntity) this.getLevel().getBlockEntity(this.getPlatePos());
                 plate.setParent(this);
             }
@@ -367,7 +366,7 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
         if (platePos == null) return;
         final BlockState plateState = this.level.getBlockState(platePos);
 
-        if (!plateState.is(MyModBlocks.my_bearing_plate.get())) return;
+        if (!plateState.is(MyModBlocks.aero_bearing_plate.get())) return;
 
         final Vector3d anchorPos = JOMLConversion.toJOML(this.getBlockPos().relative(this.getBlockState().getValue(DirectionalKineticBlock.FACING)).getCenter());
         final Vec3 facingVec = Vec3.atLowerCornerOf(this.getBlockState().getValue(DirectionalKineticBlock.FACING).getNormal());
@@ -413,7 +412,7 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     private class Peripheral implements IPeripheral {
         @Override
         public String getType() {
-            return "ccpe:my_bearing";
+            return "aero_bearing";
         }
 
         @Override
@@ -550,7 +549,7 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
             return this.targetAngleDegrees;
         }
         final BlockState plateState = this.level.getBlockState(platePos);
-        if (!plateState.is(MyModBlocks.my_bearing_plate.get())) {
+        if (!plateState.is(MyModBlocks.aero_bearing_plate.get())) {
             return this.targetAngleDegrees;
         }
 
@@ -583,7 +582,7 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
      * <ul>
      *   <li>kP/kD 按两侧 sub-level 惯性张量沿旋转轴的投影缩放（{@code swivelBearingStiffness/Damping}）；</li>
      *   <li>目标角用 {@code angleLerp} 在物理 tick 间插值（平滑）；</li>
-     *   <li>my_bearing 无 POWERED 锁定开关（swivel 的红石锁定），当前阶段恒为锁定态
+     *   <li>aero_bearing 无 POWERED 锁定开关（swivel 的红石锁定），当前阶段恒为锁定态
      *       （防风帆被气流吹动），直接走 swivel 的锁定分支；</li>
      *   <li>目标角由 {@link #tick()} 按转速推进。</li>
      * </ul>
@@ -766,8 +765,8 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
             final SubLevel subLevel = container.getSubLevel(this.subLevelID);
             if (this.subLevelID != null && subLevel == null) return;
 
-            if (this.getLevel().getBlockState(platePos).is(MyModBlocks.my_bearing_plate.get())) {
-                MyModBlocks.my_bearing_plate.get().withBlockEntityDo(this.level, platePos, MyBearingPlateBlockEntity::beforeAssembly);
+            if (this.getLevel().getBlockState(platePos).is(MyModBlocks.aero_bearing_plate.get())) {
+                MyModBlocks.aero_bearing_plate.get().withBlockEntityDo(this.level, platePos, MyBearingPlateBlockEntity::beforeAssembly);
                 this.getLevel().setBlock(platePos, Blocks.AIR.defaultBlockState(), 2);
             }
         }
@@ -818,21 +817,21 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     @Override
     public boolean addToGoggleTooltip(final List<Component> tooltip, final boolean isPlayerSneaking) {
         tooltip.add(Component.literal("    ")
-                .append(Component.translatable("tooltip.ccpe.my_bearing.header")
+                .append(Component.translatable("tooltip.ccpe.aero_bearing.header")
                         .withStyle(ChatFormatting.WHITE)));
 
         tooltip.add(Component.literal("     ")
-                .append(Component.translatable("tooltip.ccpe.my_bearing.mode")
+                .append(Component.translatable("tooltip.ccpe.aero_bearing.mode")
                         .withStyle(ChatFormatting.GRAY))
                 .append(Component.translatable(controlMode
-                                ? "tooltip.ccpe.my_bearing.mode_control"
-                                : "tooltip.ccpe.my_bearing.mode_stress")
+                                ? "tooltip.ccpe.aero_bearing.mode_control"
+                                : "tooltip.ccpe.aero_bearing.mode_stress")
                         .withStyle(controlMode ? ChatFormatting.GOLD : ChatFormatting.AQUA)));
 
         // 仅 Lua 控制模式显示角度（应力驱动模式下角度由转速累计，无意义）
         if (controlMode) {
-            tooltip.add(angleLine("tooltip.ccpe.my_bearing.current_angle", this.getCurrentAngleDegrees()));
-            tooltip.add(angleLine("tooltip.ccpe.my_bearing.target_angle", this.getTargetAngleDegrees()));
+            tooltip.add(angleLine("tooltip.ccpe.aero_bearing.current_angle", this.getCurrentAngleDegrees()));
+            tooltip.add(angleLine("tooltip.ccpe.aero_bearing.target_angle", this.getTargetAngleDegrees()));
         }
 
         tooltip.add(Component.empty());

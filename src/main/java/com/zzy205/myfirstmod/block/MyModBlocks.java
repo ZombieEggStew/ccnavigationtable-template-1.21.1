@@ -50,8 +50,8 @@ public class MyModBlocks {
             ));
 
     /** 自研风帆轴承（轴向动力输入，无齿轮）；音效对齐 swivel_bearing（SharedProperties.netheriteMetal → SoundType.NETHERITE_BLOCK） */
-    public static final DeferredBlock<MyBearingBlock> my_bearing =
-            registerBlocks("my_bearing", () -> new MyBearingBlock(BlockBehaviour.Properties.of().
+    public static final DeferredBlock<MyBearingBlock> aero_bearing =
+            registerBlocks("aero_bearing", () -> new MyBearingBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
                     strength(5.0f, 6.0f).
                     noOcclusion()
@@ -64,8 +64,8 @@ public class MyModBlocks {
      * 玩家无法直接放置；plate 在装配时由 {@code MyBearingBlockEntity.assemble()}
      * 自动放置到 sub-level plot 内，作为轴承与从动物理体的连接点。
      */
-    public static final DeferredBlock<MyBearingPlateBlock> my_bearing_plate =
-            BLOCKS.register("my_bearing_plate", () -> new MyBearingPlateBlock(BlockBehaviour.Properties.of().
+    public static final DeferredBlock<MyBearingPlateBlock> aero_bearing_plate =
+            BLOCKS.register("aero_bearing_plate", () -> new MyBearingPlateBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
                     strength(5.0f, 6.0f).
                     noOcclusion()

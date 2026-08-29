@@ -1,11 +1,11 @@
-# My Bearing（自研风帆轴承）— 方案设计
+# My Bearing（航空轴承）— 方案设计
 
 > 状态：**阶段 1-6 已实现**（方块/注册/BE/装配/拆卸/驱动/渲染/CC 外设控制模式），已进游戏验证通过（旋转精准、半轴渲染、Lua 控制）。
 > 实现前先读参考源码（见文末「参考来源」）。
 
 ## 需求（与 simulated:swivel_bearing 的差异）
 
-| 维度 | swivel_bearing（参考） | 本项目轴承（my_bearing） |
+| 维度 | swivel_bearing（参考） | 本项目轴承（aero_bearing） |
 |---|---|---|
 | 应力网络 | **贯通传动杆**：一侧物理体 → 轴承 → 另一侧物理体，应力沿杆传递 | **不贯通**：轴承从一侧物理体（或世界方块）取动力，从动物理体只被带动旋转 |
 | 动力输入 | 中间**齿轮**，须从侧面用 Create 齿轮啮合传入 | **直接轴向输入**：像 Create `mechanical_bearing` 那样，传动轴/应力网络直接接在轴承轴上 |
@@ -49,23 +49,22 @@
   - `hasShaftTowards` → 轴向（未装配时双面，装配后仅背面，同 swivel 第 93-96 行）
   - 空手右键 = 装配/拆卸（`assembleNextTick = true`，同 swivel 第 66-73 行）
   - `ASSEMBLED` blockstate 属性
-  - `ROTATION` blockstate 属性（0/1/2/3 = 0°/90°/180°/270°）：**扳手点击与 FACING 轴平行的面 → rotation +90°（FACING 不变）**；
-    因为 swivel 模型绕 y 轴对称、my_bearing 模型不对称，不能靠旋转 FACING 表达顶部朝向
-    （FACING 是旋转轴方向，旋转它会破坏装配）
+  - ~~`ROTATION` blockstate 属性~~：**已删除**——模型改版后绕旋转轴对称（与 swivel 一致），
+    「绕 FACING 轴自转 90°」无视觉差异，不再需要（曾用于表达不对称 head 的顶部朝向）
   - **放置朝向 = 被点击的面**（覆写 `getStateForPlacement` → `FACING = context.getClickedFace()`）：
     点地板 → 竖直（默认模型）、点天花板 → 上下颠倒、点墙 → 躺倒；
     不用 Create 默认「视线反方向」（俯仰判定不可控 + 相邻轴自动对齐干扰）
-  - **扳手旋转 = 绕被点击的面转 90°**（覆写 `getRotatedBlockState`）：
-    点击面轴与 FACING 轴**平行** → `cycle(ROTATION)`（绕自身轴，FACING 不变）；
-    点击面轴与 FACING 轴**垂直** → `FACING = FACING.getClockWise(点击面轴)`（绕点击面轴转，同 Create 标准）
+  - **扳手旋转 = Create 标准**（不覆写 `getRotatedBlockState`，用 `IWrenchable` 默认，同 swivel）：
+    点击面轴与 FACING 轴**垂直** → `FACING = FACING.getClockWise(点击面轴)`（绕点击面轴转 90°）；
+    点击面轴与 FACING 轴**平行** → 绕旋转轴自转 90°，对称模型无视觉差异 → 无操作
 - 新建 `block/MyBearingPlateBlock.java`：plate（link block）方块，同 swivel `SwivelBearingPlateBlock`；
   **不注册物品**（玩家无法直接放置，装配时自动生成），拾取/掉落给主轴承物品；
-  **含 `ROTATION` 属性**（plate 模型绕 y 轴不对称，装配时从轴承 blockstate 继承顶部朝向）
+  模型 = 方形板（绕旋转轴对称，同 swivel，无 ROTATION）
 - 注册：`block/MyModBlocks.java` + `block/MyModBlockEntities.java`（沿用现有 `registerBlocks` 模式；
   plate 用 `BLOCKS.register` 直注册，不走 `registerBlockItems`）
-- 资源：`blockstates/my_bearing.json`（assembled × facing 变体，未装配用 `my_bearing_item` 模型、
-  装配后用 `my_bearing_assembled` 模型）、`blockstates/my_bearing_plate.json`、`models/item/my_bearing.json`
-  （parent → `block/my_bearing/my_bearing_item`）、loot table ×2、lang（en_us/zh_cn）、创造模式物品栏
+- 资源：`blockstates/aero_bearing.json`（assembled × facing = 12 变体，无 rotation；未装配用 `aero_bearing_item` 模型、
+  装配后用 `aero_bearing_assembled` 模型）、`blockstates/aero_bearing_plate.json`（6 变体）、`models/item/aero_bearing.json`
+  （parent → `block/aero_bearing/aero_bearing_item`）、loot table ×2、lang（en_us/zh_cn）、创造模式物品栏
 
 ### 阶段 2：方块实体骨架（已实现）
 
@@ -85,7 +84,7 @@
 - 空手右键 → `assemble()`：
   - 用 **SimAssemblyHelper.assembleFromSingleBlock(level, pos, facing 对面方块, false, false)**（swivel 第 415 行）把风帆结构组装成 sub-level；或 Sable 自带 `SubLevelAssemblyHelper.assembleBlocks` + `gatherConnectedBlocks`（`SubLevelAssemblyHelper.java` 第 69/191 行）——二选一，优先 Simulated 的（与 swivel 行为一致）
   - 记录 `subLevelID`
-  - 装配时在 sub-level plot 内自动放置 plate 方块（`my_bearing_plate`，模型 = `my_bearing_plate.json`，随从动物理体旋转）
+  - 装配时在 sub-level plot 内自动放置 plate 方块（`aero_bearing_plate`，模型 = `aero_bearing_plate.json`，随从动物理体旋转）
   - 创建约束：`pipeline.addConstraint(containingSubLevel, plateSubLevel, new RotaryConstraintConfiguration(anchorPos, platePos, facingVec, plateFacingVec))`（参照 swivel `attachConstraints` 第 571-596 行）
 - `disassemble()`：移除约束 + 拆回世界（`SimAssemblyHelper.disassembleSubLevel`）
 - **待验证**：重载重连（`checkPersistence` → `reattachConstraint`）与 plate 装配流程需进游戏实测
@@ -106,14 +105,14 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 
 - `kP`/`kD` 用 `SimConfigService` 的 `swivelBearingStiffness`（1600）/ `swivelBearingDamping`（40），**按两侧 sub-level 惯性张量沿旋转轴的投影缩放**（`totalInertia`，下限 10）
 - 目标角用 `AngleHelper.angleLerp(partialPhysicsTick, last, target)` 在物理 tick 间插值（平滑）
-- my_bearing 无 POWERED 锁定开关（swivel 的红石锁定），恒走锁定分支（防风帆被吹动）
+- aero_bearing 无 POWERED 锁定开关（swivel 的红石锁定），恒走锁定分支（防风帆被吹动）
 
 **防晃动关键**：装配成功后调用 `setTargetAngleFromCurrentOrientation(plateState, subLevel)`（同 swivel 337-355 行），
 把目标角初始化为当前物理朝向——否则 PD 伺服把从动物理体强扭到 0° 会导致顶部持续晃动。
 
 ### 阶段 5：渲染（已实现）
 
-- 轴承本体用 blockstate 模型（`my_bearing_item` / `my_bearing_assembled`）
+- 轴承本体用 blockstate 模型（`aero_bearing_item` / `aero_bearing_assembled`）
 - **背面半个传动杆**（`SHAFT_HALF`，轴向输入口）：
   - Flywheel：`MyBearingVisual`（OrientedInstance，每帧按当前 FACING 动态定向 + 绕 FACING 轴以 `转速 × 时间` 旋转，同 TransmissionPeripheralVisual 手法）
   - BER 回退：`MyBearingRenderer`（`CachedBuffers.partialFacing(SHAFT_HALF, state, facing.getOpposite())` + `kineticRotationTransform`）
@@ -121,7 +120,7 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 
 ### 阶段 6：CC 外设（Lua 控制模式）（已实现）
 
-- 外设类型 `ccpe:my_bearing`，注册见 `compat/cc/CCPeripheralCapabilities.java`
+- 外设类型 `ccpe:aero_bearing`，注册见 `compat/cc/CCPeripheralCapabilities.java`
 - **控制模式**（`setControlMode(true)`，`setTargetAngle` 自动进入）：tick 不再按应力网络转速推进目标角
   （应力网络仅保留应力消耗），旋转角度由 Lua 直接控制——**跳过「转速 × 时间 = 角度」的累计过程**；
   进入/退出控制模式时用 `setTargetAngleFromCurrentOrientation` 保持当前朝向（不跳变）
@@ -134,7 +133,7 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 - **待验证**：`setTargetAngle` 大角度（>360°）时物理走最短路径还是累计多圈
 - **Create 护目镜 tooltip**（`addToGoggleTooltip`，同 transmission_peripheral 结构）：显示模式
   （Lua 控制 / 应力驱动）、当前角度（`getCurrentAngleDegrees()`，从从动物理体实时朝向计算，同
-  swivel 337-355 公式）、目标角度、应力统计；lang 键 `tooltip.ccpe.my_bearing.*`
+  swivel 337-355 公式）、目标角度、应力统计；lang 键 `tooltip.ccpe.aero_bearing.*`
 - **角度传感器**（可选）：通过现有 `SableCompat.getAngularVelocity` 读从动物理体角速度
 - **无动力锁定**：`speed==0` 时用 `setMotor(axis, target, kP_high, kD, false, 0)` 锁在当前角（可选）
 
@@ -161,22 +160,22 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 
 | 文件 | 说明 |
 |---|---|
-| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlock.java` | 轴承方块（轴向输入、ASSEMBLED、空手右键装配、扳手先拆卸、放置朝向=点击面、扳手绕面旋转、装配后基座选择框 y 0-11.9、Sable 装配移动回调） |
-| `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlock.java` | plate 方块（同 swivel link block，无物品、拾取给主轴承；ROTATION 属性；选中框 y 12.1-16 / 碰撞框 y 12-16 xz 3-13） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlock.java` | 轴承方块（轴向输入、ASSEMBLED、空手右键装配、扳手先拆卸、放置朝向=点击面、扳手旋转 Create 标准（同 swivel，无 ROTATION）、装配后基座选择框 y 0-11.9、Sable 装配移动回调） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlock.java` | plate 方块（同 swivel link block，无物品、拾取给主轴承；模型对称无 ROTATION；选中框 y 12.1-16 / 碰撞框 y 12-16 xz 3-13） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingShapes.java` | 基座/plate 选择框与碰撞框（数值对齐 SimBlockShapes：BEARING_ASSEMBLED / PLATE / PLATE_COLLISION） |
-| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlockEntity.java` | 轴承 BE：装配/拆卸/重连/约束/NBT + 驱动（swivel 式：转速→目标角推进、惯性缩放 PD 伺服、装配时当前朝向初始化防晃动；plate 继承 FACING+ROTATION）+ 应力消耗（impact 4.0，同 swivel 注册值）+ CC 外设（Lua 控制模式：setTargetAngle 直接控制角度，跳过应力网络角度累计）+ 护目镜 tooltip（模式/当前角度/目标角度） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlockEntity.java` | 轴承 BE：装配/拆卸/重连/约束/NBT + 驱动（swivel 式：转速→目标角推进、惯性缩放 PD 伺服、装配时当前朝向初始化防晃动；plate 继承 FACING）+ 应力消耗（impact 4.0，同 swivel 注册值）+ CC 外设（Lua 控制模式：setTargetAngle 直接控制角度，跳过应力网络角度累计）+ 护目镜 tooltip（模式/当前角度/目标角度） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingVisual.java` | Flywheel 渲染：背面半个传动杆（SHAFT_HALF，OrientedInstance） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingRenderer.java` | BER 回退渲染：背面半个传动杆（SHAFT_HALF，kineticRotationTransform） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlockEntity.java` | plate BE：parent 关联、被破坏连锁破坏父轴承 |
-| `src/main/java/com/zzy205/myfirstmod/block/MyModBlocks.java` | 注册 my_bearing + my_bearing_plate（plate 不注册物品） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyModBlocks.java` | 注册 aero_bearing + aero_bearing_plate（plate 不注册物品） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyModBlockEntities.java` | 注册两个 BE 类型 |
-| `src/main/java/com/zzy205/myfirstmod/item/MyModCreativeModeTabs.java` | 物品栏加 my_bearing |
-| `src/main/resources/assets/ccpe/blockstates/my_bearing.json` | 未装配 `my_bearing_item` / 装配后 `my_bearing_assembled` × facing × rotation（48 变体，rotation 叠加 y 旋转） |
-| `src/main/resources/assets/ccpe/blockstates/my_bearing_plate.json` | plate 模型 × facing × rotation（24 变体；装配时 plate 继承轴承 FACING+ROTATION，顶部朝向一致） |
-| `src/main/resources/assets/ccpe/models/item/my_bearing.json` | 物品模型 → `block/my_bearing/my_bearing_item` |
-| `src/main/resources/data/ccpe/loot_table/blocks/my_bearing.json` | 掉自己 |
-| `src/main/resources/data/ccpe/loot_table/blocks/my_bearing_plate.json` | 掉主轴承（同 swivel dropOther） |
-| `src/main/resources/assets/ccpe/lang/en_us.json` / `zh_cn.json` | `block.ccpe.my_bearing` |
+| `src/main/java/com/zzy205/myfirstmod/item/MyModCreativeModeTabs.java` | 物品栏加 aero_bearing |
+| `src/main/resources/assets/ccpe/blockstates/aero_bearing.json` | 未装配 `aero_bearing_item` / 装配后 `aero_bearing_assembled` × facing（12 变体，无 rotation） |
+| `src/main/resources/assets/ccpe/blockstates/aero_bearing_plate.json` | plate 模型 × facing（6 变体） |
+| `src/main/resources/assets/ccpe/models/item/aero_bearing.json` | 物品模型 → `block/aero_bearing/aero_bearing_item` |
+| `src/main/resources/data/ccpe/loot_table/blocks/aero_bearing.json` | 掉自己 |
+| `src/main/resources/data/ccpe/loot_table/blocks/aero_bearing_plate.json` | 掉主轴承（同 swivel dropOther） |
+| `src/main/resources/assets/ccpe/lang/en_us.json` / `zh_cn.json` | `block.ccpe.aero_bearing` |
 
 ## 待确认问题
 

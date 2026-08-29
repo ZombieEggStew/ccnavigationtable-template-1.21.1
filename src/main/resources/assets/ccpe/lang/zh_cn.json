@@ -6,7 +6,7 @@
   "block.ccpe.transmission_peripheral": "电子变速箱",
   "block.ccpe.my_monitor": "监视器",
   "block.ccpe.my_control_desk": "控制台",
-  "block.ccpe.my_bearing": "风帆轴承",
+  "block.ccpe.aero_bearing": "航空轴承",
 
   "tooltip.ccpe.transmission_peripheral.header": "电子变速箱",
   "tooltip.ccpe.transmission_peripheral.mode": "模式：",
@@ -21,12 +21,12 @@
   "tooltip.ccpe.transmission_peripheral.servo_reaim_on": "开",
   "tooltip.ccpe.transmission_peripheral.servo_reaim_off": "关",
 
-  "tooltip.ccpe.my_bearing.header": "风帆轴承",
-  "tooltip.ccpe.my_bearing.mode": "模式：",
-  "tooltip.ccpe.my_bearing.mode_control": "Lua 控制",
-  "tooltip.ccpe.my_bearing.mode_stress": "应力驱动",
-  "tooltip.ccpe.my_bearing.current_angle": "当前角度：",
-  "tooltip.ccpe.my_bearing.target_angle": "目标角度：",
+  "tooltip.ccpe.aero_bearing.header": "航空轴承",
+  "tooltip.ccpe.aero_bearing.mode": "模式：",
+  "tooltip.ccpe.aero_bearing.mode_control": "Lua 控制",
+  "tooltip.ccpe.aero_bearing.mode_stress": "应力驱动",
+  "tooltip.ccpe.aero_bearing.current_angle": "当前角度：",
+  "tooltip.ccpe.aero_bearing.target_angle": "目标角度：",
 
   "gui.ccpe.monitor.module_info": "%s 位于 (%s, %s) 尺寸 %s×%s",
   "gui.ccpe.monitor_menu.done": "完成",

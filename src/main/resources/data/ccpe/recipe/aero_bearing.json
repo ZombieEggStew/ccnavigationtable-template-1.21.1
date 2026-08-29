@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:electron_tube"
+    },
+    "X": {
+      "item": "create:sequenced_gearshift"
+    },
+    "Y": {
+      "item": "create:industrial_iron_block"
+    },
+    "Z": {
+        "tag": "minecraft:wooden_slabs"
+    }
+  },
+  "pattern": [
+    " Z ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:aero_bearing"
+  }
+}

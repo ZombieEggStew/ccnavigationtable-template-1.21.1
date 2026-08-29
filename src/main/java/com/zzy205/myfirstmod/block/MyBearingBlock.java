@@ -23,14 +23,13 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
-import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
- * 自研风帆轴承（my_bearing）方块。
+ * 自研风帆轴承（aero_bearing）方块。
  * <p>
  * 与 simulated:swivel_bearing 的差异：
  * <ul>
@@ -46,23 +45,14 @@ public class MyBearingBlock extends DirectionalKineticBlock implements IBE<MyBea
 
     public static final BooleanProperty ASSEMBLED = BooleanProperty.create("assembled");
 
-    /**
-     * 顶部（head / plate）绕 y 轴的旋转档位：0/1/2/3 = 0°/90°/180°/270°。
-     * <p>
-     * swivel_bearing 的模型绕 y 轴对称，Create 标准 6 向 FACING 变体足够表达；
-     * 而 my_bearing 的模型不对称，扳手右键顶部时不能靠旋转 FACING（会改变旋转轴
-     * 方向、破坏装配），因此额外用该属性表达「顶部绕 y 轴转 90°」。
-     */
-    public static final IntegerProperty ROTATION = IntegerProperty.create("rotation", 0, 3);
-
     public MyBearingBlock(final Properties properties) {
         super(properties);
-        this.registerDefaultState(this.defaultBlockState().setValue(ASSEMBLED, false).setValue(ROTATION, 0));
+        this.registerDefaultState(this.defaultBlockState().setValue(ASSEMBLED, false));
     }
 
     @Override
     protected void createBlockStateDefinition(final StateDefinition.Builder<Block, BlockState> builder) {
-        super.createBlockStateDefinition(builder.add(ASSEMBLED).add(ROTATION));
+        super.createBlockStateDefinition(builder.add(ASSEMBLED));
     }
 
     // ═══════════════ 放置朝向 ═══════════════
@@ -147,22 +137,11 @@ public class MyBearingBlock extends DirectionalKineticBlock implements IBE<MyBea
     }
 
     /**
-     * 扳手旋转语义：<b>方块绕被点击的面旋转 90°</b>（Create 标准行为 + ROTATION 增强）。
-     * <ul>
-     *   <li>点击面与旋转轴（FACING 轴）<b>平行</b>：绕自身轴转 90°——FACING 不变，
-     *       {@link #ROTATION} +1（顶部朝向变化，同 swivel 无此属性时 Create 标准为「无反应」）；</li>
-     *   <li>点击面与旋转轴<b>垂直</b>：FACING 绕被点击面的轴转 90°（{@code getClockWise}，
-     *       同 Create {@code IWrenchable.getRotatedBlockState} 对 DirectionalKineticBlock 的行为）。</li>
-     * </ul>
+     * 扳手旋转语义：Create 标准（同 swivel，模型绕旋转轴对称，无需 ROTATION 属性）——
+     * 点击面与 FACING 轴<b>垂直</b>：FACING 绕被点击面的轴转 90°（{@code getClockWise}，
+     * 即 {@code IWrenchable.getRotatedBlockState} 默认行为）；点击面与 FACING 轴<b>平行</b>：
+     * 模型绕旋转轴自转 90°，对称模型无视觉差异 → 无操作。故不覆写，直接用 IWrenchable 默认。
      */
-    @Override
-    public BlockState getRotatedBlockState(final BlockState originalState, final Direction targetedFace) {
-        final Direction stateFacing = originalState.getValue(FACING);
-        if (stateFacing.getAxis() == targetedFace.getAxis()) {
-            return originalState.cycle(ROTATION);
-        }
-        return originalState.setValue(FACING, stateFacing.getClockWise(targetedFace.getAxis()));
-    }
 
     // ═══════════════ BE 绑定 ═══════════════
 
@@ -173,7 +152,7 @@ public class MyBearingBlock extends DirectionalKineticBlock implements IBE<MyBea
 
     @Override
     public BlockEntityType<? extends MyBearingBlockEntity> getBlockEntityType() {
-        return MyModBlockEntities.my_bearing_entity.get();
+        return MyModBlockEntities.aero_bearing_entity.get();
     }
 
     @Override

@@ -38,7 +38,7 @@ public class MyBearingPlateBlockEntity extends KineticBlockEntity implements Blo
     private boolean assembling;
 
     public MyBearingPlateBlockEntity(final BlockPos pos, final BlockState state) {
-        super(MyModBlockEntities.my_bearing_plate_entity.get(), pos, state);
+        super(MyModBlockEntities.aero_bearing_plate_entity.get(), pos, state);
     }
 
     /**
@@ -59,7 +59,7 @@ public class MyBearingPlateBlockEntity extends KineticBlockEntity implements Blo
     }
 
     private void destroyBearing() {
-        if (this.parent != null && this.getLevel().getBlockState(this.parent).is(MyModBlocks.my_bearing.get())) {
+        if (this.parent != null && this.getLevel().getBlockState(this.parent).is(MyModBlocks.aero_bearing.get())) {
             this.getLevel().destroyBlock(this.parent, false);
         }
     }

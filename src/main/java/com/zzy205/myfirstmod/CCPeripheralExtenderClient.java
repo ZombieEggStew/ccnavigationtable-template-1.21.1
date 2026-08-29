@@ -69,9 +69,9 @@ public class CCPeripheralExtenderClient {
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
-        // 注册 Flywheel Visual（my_bearing 背面半个传动杆）。
+        // 注册 Flywheel Visual（aero_bearing 背面半个传动杆）。
         // 轴承本体模型由 blockstate 渲染，半轴是唯一动态部分，Flywheel 可用时跳过 vanilla BE 渲染。
-        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.my_bearing_entity.get())
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.aero_bearing_entity.get())
                 .factory(MyBearingVisual::new)
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
@@ -110,7 +110,7 @@ public class CCPeripheralExtenderClient {
                 MyModBlockEntities.transmission_peripheral_entity.get(),
                 TransmissionPeripheralRenderer::new);
         event.registerBlockEntityRenderer(
-                MyModBlockEntities.my_bearing_entity.get(),
+                MyModBlockEntities.aero_bearing_entity.get(),
                 MyBearingRenderer::new);
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.control_desk_entity.get(),

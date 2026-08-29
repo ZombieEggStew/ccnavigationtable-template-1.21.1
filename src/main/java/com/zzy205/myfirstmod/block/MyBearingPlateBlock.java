@@ -18,8 +18,6 @@ import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -29,31 +27,15 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * <p>
  * 对应 simulated 的 {@code swivel_bearing_link_block}（SwivelBearingPlateBlock）：
  * 玩家把它放在轴承 facing 前方，装配时它连同前方结构一起进入 sub-level，
- * 由 Sable 渲染并随从动物理体旋转（模型 = {@code my_bearing_plate.json}）。
+ * 由 Sable 渲染并随从动物理体旋转（模型 = {@code aero_bearing_plate.json}）。
  * 空手右键 plate 会把装配请求转给父轴承（{@code setParentAssembleNextTick}）。
  * <p>
  * 参考来源：{@code references/Simulated-Project-main/.../swivel_bearing/link_block/SwivelBearingPlateBlock.java}。
  */
 public class MyBearingPlateBlock extends DirectionalKineticBlock implements IBE<MyBearingPlateBlockEntity>, BlockSubLevelAssemblyListener {
 
-    /**
-     * 顶部（head）绕 y 轴的旋转档位：0/1/2/3 = 0°/90°/180°/270°。
-     * <p>
-     * 与 {@link MyBearingBlock#ROTATION} 同名同义：装配时由
-     * {@code MyBearingBlockEntity.assemble()} 从轴承 blockstate 继承，
-     * 使 plate 顶部朝向与轴承顶部一致（plate 模型绕 y 轴不对称，
-     * 不同于 swivel 的 plate 模型绕 y 轴对称、无需 rotation）。
-     */
-    public static final IntegerProperty ROTATION = IntegerProperty.create("rotation", 0, 3);
-
     public MyBearingPlateBlock(final Properties properties) {
         super(properties);
-        this.registerDefaultState(this.defaultBlockState().setValue(ROTATION, 0));
-    }
-
-    @Override
-    protected void createBlockStateDefinition(final StateDefinition.Builder<Block, BlockState> builder) {
-        super.createBlockStateDefinition(builder.add(ROTATION));
     }
 
     @Override
@@ -73,7 +55,7 @@ public class MyBearingPlateBlock extends DirectionalKineticBlock implements IBE<
 
     @Override
     public BlockEntityType<? extends MyBearingPlateBlockEntity> getBlockEntityType() {
-        return MyModBlockEntities.my_bearing_plate_entity.get();
+        return MyModBlockEntities.aero_bearing_plate_entity.get();
     }
 
     @Override
@@ -122,7 +104,7 @@ public class MyBearingPlateBlock extends DirectionalKineticBlock implements IBE<
     @Override
     public ItemStack getCloneItemStack(final LevelReader level, final BlockPos pos, final BlockState state) {
         // 与 swivel 一致：拾取时给主轴承物品
-        return new ItemStack(MyModBlocks.my_bearing.get());
+        return new ItemStack(MyModBlocks.aero_bearing.get());
     }
 
     // ═══════════════ Sable 装配移动回调 ═══════════════

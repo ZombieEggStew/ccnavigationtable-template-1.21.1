@@ -47,6 +47,7 @@ plugins:
             Peripheral Extender: 外设扩展器
             Redstone Transceiver: 红石收发器
             Electronic Transmission: 电子变速箱
+            Aero Bearing: 航空轴承
             Servo Mode: 舵机模式
             Modular Monitor: 模块化监视器
             Monitor: 监视器
@@ -86,6 +87,7 @@ nav:
     - Peripheral Extender: peripheral-extender/overview.md
     - Redstone Transceiver: redstone-transceiver/overview.md
     - Electronic Transmission: electronic-transmission/overview.md
+    - Aero Bearing: aero-bearing/overview.md
     - Modular Monitor: monitor/overview.md
     - Control Desk: control-desk/overview.md
   - Peripheral Extender:
@@ -103,6 +105,8 @@ nav:
   - Electronic Transmission:
     - Overview: electronic-transmission/overview.md
     - Servo Mode: electronic-transmission/servo-mode.md
+  - Aero Bearing:
+    - Overview: aero-bearing/overview.md
   - Modular Monitor:
     - Overview: monitor/overview.md
     - Monitor: monitor/monitor.md

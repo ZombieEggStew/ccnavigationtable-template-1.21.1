@@ -11,11 +11,11 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "ccpe:my_bearing"
+          "name": "ccpe:aero_bearing"
         }
       ],
       "rolls": 1.0
     }
   ],
-  "random_sequence": "ccpe:blocks/my_bearing"
+  "random_sequence": "ccpe:blocks/aero_bearing"
 }
