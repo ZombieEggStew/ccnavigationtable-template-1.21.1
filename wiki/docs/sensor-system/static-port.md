@@ -1,8 +1,10 @@
 # Static Port
 
+> A lightweight and intelligent way to read aviation data
+
 ![static_port](../img/static_port.png)
 
-The **Static Port** (`ccpe:static_port`) is an attachable pressure-sensor block: place it on any block face with the hole facing outward (the hole faces the clicked face on placement). When installed on a physics body (Sable sub-level), CC:Tweaked computers on that body can read the pressure and altitude at the static port's own position via `ccpe.sensor_system`.
+The **Static Port** (`ccpe:static_port`) is an attachable pressure-sensor block. When installed on a physics body (Sable sub-level), CC:Tweaked computers on that body can read the pressure and altitude at the static port's own position via `ccpe.sensor_system`.
 
 ## Reading reference point
 

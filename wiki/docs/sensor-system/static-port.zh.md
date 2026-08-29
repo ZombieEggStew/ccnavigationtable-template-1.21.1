@@ -1,8 +1,11 @@
 # 静压孔
 
+> 轻量化与智能化的航空数据读取方式
+
 ![static_port](../img/static_port.png)
 
-**静压孔**（Static Port，`ccpe:static_port`）是一个贴附式气压传感器方块：贴在任意方块面上，孔朝外（放置时孔朝向 = 点击面）。装在物理体（Sable sub-level）上时，物理体上的 CC:Tweaked 电脑可以通过 `ccpe.sensor_system` 读取该静压孔位置的气压与高度。
+
+**静压孔**（Static Port，`ccpe:static_port`）是一个贴附式气压传感器方块。装在物理体（Sable sub-level）上时，物理体上的 CC:Tweaked 电脑可以通过 `ccpe.sensor_system` 读取该静压孔位置的气压与高度。
 
 ## 读数基准
 
