@@ -21,7 +21,7 @@ A computer on the same physics body (including constraint chains) uses `require(
 |---|---|---|
 | `isOnBody()` | boolean | Whether the computer is on a physics body |
 | `getBodyId()` | string / nil | UUID of the containing physics body |
-| `getSensors()` | table | Snapshot of all sensors (same tick): `{type, pos={x,y,z}, altitude, pressure}`; `pos` is the position **relative to the physics body origin** (stable across restarts — use it to tell ports apart) |
+| `getSensors()` | table | Snapshot of all sensors (same tick): `{type, pos={x,y,z}, pos_rel={x,y,z}, altitude, pressure}`; `pos` is relative to the **physics body origin**, `pos_rel` is relative to the **current computer** (recommended for telling ports apart) |
 | `getAltitude()` | number / nil | Altitude (world Y) of the **most recently placed** static port |
 | `getPressure()` | number / nil | Pressure of the **most recently placed** static port (atmosphere fraction, sea level = 1.0) |
 | `getAverageAltitude()` | number / nil | **Simple average** altitude over all static ports |
@@ -41,7 +41,10 @@ print("bodyId:", ss.getBodyId())
 
 local sensors = ss.getSensors()
 for i, s in ipairs(sensors) do
-    print(i, s.type, s.pos.x, s.pos.y, s.pos.z, s.altitude, s.pressure)
+    print(i, s.type,
+          "pos:", s.pos.x, s.pos.y, s.pos.z,
+          "pos_rel:", s.pos_rel.x, s.pos_rel.y, s.pos_rel.z,
+          s.altitude, s.pressure)
 end
 
 -- Convenience: most recently placed static port
@@ -68,12 +71,12 @@ end
 
     `getAltitude()/getPressure()` return data from the **most recently placed** static port, determined by registration order (= placement order), which is only valid **within the current session**. After a server restart, static ports re-register in chunk-load order, so these two methods **may point at a different static port**, and the target may differ between restarts.
 
-    If your script must reliably read a **specific** port, use `getSensors()` and identify it by `pos` (position relative to the body origin — stable across restarts):
+    If your script must reliably read a **specific** port, use `getSensors()` and identify it by `pos_rel` (position relative to the current computer) — `pos` (relative to the body origin) drifts when blocks are added to or removed from the body, since the origin (center of mass) moves:
 
     ```lua
     local sensors = ss.getSensors()
     for _, s in ipairs(sensors) do
-        if math.abs(s.pos.y - 2) < 0.5 then  -- e.g. the port 2 blocks above the body origin
+        if math.abs(s.pos_rel.y - 2) < 0.5 then  -- e.g. the port 2 blocks above the computer
             print("that port's pressure:", s.pressure)
         end
     end

@@ -45,7 +45,7 @@ import java.util.Map;
  * print(ss.getAltitude())         -- 最后放置的静压孔的高度（便捷方法）
  * print(ss.getPressure())         -- 最后放置的静压孔的气压（便捷方法）
  * local sensors = ss.getSensors() -- 全部传感器快照
- * -- {{type="static_port", pos={x,y,z}, altitude=..., pressure=...}, ...}
+ * -- {{type="static_port", pos={x,y,z}, pos_rel={x,y,z}, altitude=..., pressure=...}, ...}
  * }</pre>
  */
 public class SensorSystemAPI implements ILuaAPI {
@@ -58,8 +58,9 @@ public class SensorSystemAPI implements ILuaAPI {
     private volatile @Nullable String bodyId = null;
     private volatile List<SensorSnapshot> sensors = List.of();
 
-    /** 单个传感器的同一 tick 快照（相对物理体原点的局部坐标 + 读数；非压力类读数为 null） */
+    /** 单个传感器的同一 tick 快照（相对物理体原点 + 相对当前电脑的局部坐标 + 读数；非压力类读数为 null） */
     private record SensorSnapshot(SensorType type, double relX, double relY, double relZ,
+                                  double compX, double compY, double compZ,
                                   @Nullable Double altitude, @Nullable Double pressure) {}
 
     public SensorSystemAPI(IComputerSystem computer) {
@@ -92,6 +93,12 @@ public class SensorSystemAPI implements ILuaAPI {
         onBody = true;
         bodyId = SableCompat.getSubLevelId(sub);
 
+        // 电脑自身相对物理体原点的坐标（用于计算每个传感器的"相对电脑"坐标）
+        Vec3 compRel = SableCompat.toRelativePos(sub, computer.getPosition());
+        double crx = compRel != null ? compRel.x : Double.NaN;
+        double cry = compRel != null ? compRel.y : Double.NaN;
+        double crz = compRel != null ? compRel.z : Double.NaN;
+
         List<SensorSnapshot> list = new ArrayList<>();
         for (SensorEntry e : BodySensorRegistry.sensorsOnBody(sub)) {
             Double alt = null;
@@ -107,7 +114,11 @@ public class SensorSystemAPI implements ILuaAPI {
             double rx = rel != null ? rel.x : e.pos().getX();
             double ry = rel != null ? rel.y : e.pos().getY();
             double rz = rel != null ? rel.z : e.pos().getZ();
-            list.add(new SensorSnapshot(e.type(), rx, ry, rz, alt, press));
+            // 相对当前电脑 = 传感器相对原点 − 电脑相对原点；电脑相对坐标不可用时退化为原点相对
+            double cx = compRel != null ? rx - crx : rx;
+            double cy = compRel != null ? ry - cry : ry;
+            double cz = compRel != null ? rz - crz : rz;
+            list.add(new SensorSnapshot(e.type(), rx, ry, rz, cx, cy, cz, alt, press));
         }
         sensors = list;
     }
@@ -128,11 +139,15 @@ public class SensorSystemAPI implements ILuaAPI {
 
     /**
      * 所在物理体（含约束链）的全部传感器快照（同一 tick 一致）。
-     * 每项：{@code {type, pos={x,y,z}, altitude, pressure}}。
-     * <b>pos 为相对物理体原点的局部坐标</b>（plot 帧：{@code plot − rotationPoint}，
-     * rotationPoint = 物理体原点/质心枢轴在 plot 空间的坐标），可能为小数，
-     * 物理体移动/旋转时保持不变，用于稳定标识不同位置的传感器；
-     * 压力类（static_port）带 altitude/pressure 读数，其余类型读数为 nil。
+     * 每项：{@code {type, pos={x,y,z}, pos_rel={x,y,z}, altitude, pressure}}。
+     * <ul>
+     * <li><b>pos</b>：相对物理体原点的局部坐标（plot 帧 {@code plot − rotationPoint}，
+     *     rotationPoint = 物理体原点/质心枢轴）；物理体移动/旋转时不变，但<b>在物理体上
+     *     增删方块会改变原点（质心），pos 整体漂移</b>；</li>
+     * <li><b>pos_rel</b>：相对当前电脑的局部坐标（{@code 传感器 plot − 电脑 plot}），
+     *     只要电脑不动就不受原点漂移影响，跨会话更稳定，推荐用它标识特定传感器；</li>
+     * <li>压力类（static_port）带 altitude/pressure 读数，其余类型读数为 nil。</li>
+     * </ul>
      * 不在物理体上或物理体无传感器 → 空数组。
      */
     @LuaFunction
@@ -144,6 +159,9 @@ public class SensorSystemAPI implements ILuaAPI {
             m.put("pos", Map.of("x", s.relX(),
                                 "y", s.relY(),
                                 "z", s.relZ()));
+            m.put("pos_rel", Map.of("x", s.compX(),
+                                    "y", s.compY(),
+                                    "z", s.compZ()));
             m.put("altitude", s.altitude());
             m.put("pressure", s.pressure());
             out.add(m);

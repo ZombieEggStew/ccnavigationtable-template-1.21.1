@@ -22,7 +22,7 @@
 |---|---|---|
 | `isOnBody()` | boolean | 电脑是否在物理体上 |
 | `getBodyId()` | string / nil | 所在物理体 UUID |
-| `getSensors()` | table | 全部传感器快照（同一 tick）：`{type, pos={x,y,z}, altitude, pressure}`；`pos` 为**相对物理体原点**的局部坐标（跨重启稳定，用于区分不同静压孔） |
+| `getSensors()` | table | 全部传感器快照（同一 tick）：`{type, pos={x,y,z}, pos_rel={x,y,z}, altitude, pressure}`；`pos` 相对**物理体原点**，`pos_rel` 相对**当前电脑**（推荐用于区分不同静压孔） |
 | `getAltitude()` | number / nil | **最后放置的静压孔**的高度（世界 Y） |
 | `getPressure()` | number / nil | **最后放置的静压孔**的气压（大气压分数，海平面 = 1.0） |
 | `getAverageAltitude()` | number / nil | 全部静压孔高度的**简单平均值** |
@@ -42,7 +42,10 @@ print("bodyId:", ss.getBodyId())
 
 local sensors = ss.getSensors()
 for i, s in ipairs(sensors) do
-    print(i, s.type, s.pos.x, s.pos.y, s.pos.z, s.altitude, s.pressure)
+    print(i, s.type,
+          "pos:", s.pos.x, s.pos.y, s.pos.z,
+          "pos_rel:", s.pos_rel.x, s.pos_rel.y, s.pos_rel.z,
+          s.altitude, s.pressure)
 end
 
 -- 便捷方法：最后放置的静压孔
@@ -69,12 +72,12 @@ end
 
     `getAltitude()/getPressure()` 返回**最后放置**的静压孔的数据，其判定依据是注册顺序（= 放置顺序），该顺序**只在当前会话内有效**。服务器重启后，静压孔按区块加载顺序重新注册，这两个方法**可能指向另一个静压孔**，且每次重启之间指向也可能不同。
 
-    如果脚本需要稳定地读取**特定**静压孔，请使用 `getSensors()` 按 `pos`（相对物理体原点的局部坐标，跨重启稳定）区分：
+    如果脚本需要稳定地读取**特定**静压孔，请使用 `getSensors()` 按 `pos_rel`（相对当前电脑的局部坐标）区分——`pos`（相对物理体原点）会在物理体上增删方块时随原点（质心）漂移：
 
     ```lua
     local sensors = ss.getSensors()
     for _, s in ipairs(sensors) do
-        if math.abs(s.pos.y - 2) < 0.5 then  -- 例：物理体上方 2 格的那个静压孔
+        if math.abs(s.pos_rel.y - 2) < 0.5 then  -- 例：电脑上方 2 格的那个静压孔
             print("该孔气压:", s.pressure)
         end
     end
