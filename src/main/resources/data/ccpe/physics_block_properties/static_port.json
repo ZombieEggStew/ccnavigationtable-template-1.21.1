@@ -1,0 +1,7 @@
+{
+  "selector": "ccpe:static_port",
+  "properties": {
+    "sable:mass": 0.0,
+    "sable:volume": 0.0
+  }
+}

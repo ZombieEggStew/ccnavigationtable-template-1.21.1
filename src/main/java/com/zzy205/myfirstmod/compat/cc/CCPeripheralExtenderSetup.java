@@ -12,10 +12,11 @@ public final class CCPeripheralExtenderSetup {
 
     /**
      * 向 CC:Tweaked 注册传感器 Lua API 工厂。
-     * 每个计算机启动时都会通过该工厂创建一个 {@link PeripheralExtenderAPI} 实例。
-     * Lua 端通过 {@code require("ccpe.pe")} 使用。
+     * 每个计算机启动时都会通过工厂创建对应 API 实例。
+     * Lua 端通过 {@code require("ccpe.pe")} / {@code require("ccpe.sensor_system")} 使用。
      */
     public static void register() {
         ComputerCraftAPI.registerAPIFactory(computer -> new PeripheralExtenderAPI());
+        ComputerCraftAPI.registerAPIFactory(computer -> new SensorSystemAPI(computer));
     }
 }
