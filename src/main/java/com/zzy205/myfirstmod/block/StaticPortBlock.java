@@ -9,7 +9,12 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
@@ -18,14 +23,19 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
+import org.jetbrains.annotations.NotNull;
+
 /**
  * 降压孔（静压孔，Static Port）。
  * <p>
  * 贴附式传感器：贴在任意面上，孔朝外（放置时 FACING = 点击面）。
  * 模型绕 Y 轴对称，因此 blockstate 不区分水平 4 向旋转（不绕 Y 轴），
  * 仅需表达 朝上 / 朝下 / 贴墙 三类朝向（绕 X 轴 0/90/180/270）。
+ * <p>
+ * 带 {@link StaticPortBlockEntity}：注册进 {@code BodySensorRegistry}，
+ * 使 {@code ccpe.sensor_system} 能读到静压孔处的气压/高度。
  */
-public class StaticPortBlock extends Block implements IWrenchable {
+public class StaticPortBlock extends BaseEntityBlock implements IWrenchable {
 
     public static final MapCodec<StaticPortBlock> CODEC = simpleCodec(StaticPortBlock::new);
 
@@ -70,8 +80,34 @@ public class StaticPortBlock extends Block implements IWrenchable {
         return SHAPES.get(state.getValue(FACING));
     }
 
+    // ── 方块实体（BodySensorRegistry 注册） ──
+
     @Override
-    protected MapCodec<? extends Block> codec() {
+    public @NotNull RenderShape getRenderShape(@NotNull BlockState state) {
+        return RenderShape.MODEL;
+    }
+
+    @Override
+    public BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
+        return new StaticPortBlockEntity(pos, state);
+    }
+
+    private static final BlockEntityTicker<StaticPortBlockEntity> SERVER_TICKER =
+            StaticPortBlockEntity::serverTick;
+
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state, @NotNull BlockEntityType<T> type) {
+        if (level.isClientSide) return null;
+        if (type == MyModBlockEntities.static_port_entity.get()) {
+            @SuppressWarnings("unchecked")
+            BlockEntityTicker<T> ticker = (BlockEntityTicker<T>) (BlockEntityTicker<?>) SERVER_TICKER;
+            return ticker;
+        }
+        return null;
+    }
+
+    @Override
+    protected MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
     }
 }

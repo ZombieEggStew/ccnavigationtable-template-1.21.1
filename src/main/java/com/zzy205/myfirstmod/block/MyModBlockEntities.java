@@ -17,6 +17,7 @@ public final class MyModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ControlDeskBlockEntity>> control_desk_entity = BLOCK_ENTITY_TYPES.register("my_control_desk", () -> BlockEntityType.Builder.of(ControlDeskBlockEntity::new, MyModBlocks.my_control_desk.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MyBearingBlockEntity>> aero_bearing_entity = BLOCK_ENTITY_TYPES.register("aero_bearing", () -> BlockEntityType.Builder.of(MyBearingBlockEntity::new, MyModBlocks.aero_bearing.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MyBearingPlateBlockEntity>> aero_bearing_plate_entity = BLOCK_ENTITY_TYPES.register("aero_bearing_plate", () -> BlockEntityType.Builder.of(MyBearingPlateBlockEntity::new, MyModBlocks.aero_bearing_plate.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<StaticPortBlockEntity>> static_port_entity = BLOCK_ENTITY_TYPES.register("static_port", () -> BlockEntityType.Builder.of(StaticPortBlockEntity::new, MyModBlocks.static_port.get()).build(null));
 
     public static void register(IEventBus bus) {
         BLOCK_ENTITY_TYPES.register(bus);

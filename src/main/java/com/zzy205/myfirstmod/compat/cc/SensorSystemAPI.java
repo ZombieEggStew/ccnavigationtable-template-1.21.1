@@ -1,14 +1,23 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorEntry;
+import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorType;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dan200.computercraft.api.lua.IComputerSystem;
 import dan200.computercraft.api.lua.ILuaAPI;
 import dan200.computercraft.api.lua.LuaFunction;
 import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.SubLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 import org.jspecify.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * {@code ccpe.sensor_system}：所在物理体（Sable sub-level）的环境数据 Lua API。
@@ -17,19 +26,26 @@ import org.jspecify.annotations.Nullable;
  * <ul>
  * <li>{@link #update()} 每电脑 tick（服务端主线程，见 CC:Tweaked
  *     {@code ComputerExecutor.tick()} → {@code ServerComputerRegistry} 主线程 tick 链）
- *     刷新缓存：解析所在 sub-level → 物理体原点高度 / 气压（{@link DimensionPhysicsData#getAirPressure}，
- *     与 {@code simulated:altitude_sensor} 同源公式）；</li>
+ *     刷新缓存：解析所在 sub-level → 汇总 {@link BodySensorRegistry} 上本物理体（含约束链）
+ *     的全部传感器 → 每个静压孔 plot 坐标投影到世界 → 该点高度 / 气压
+ *     （{@link DimensionPhysicsData#getAirPressure}，与 {@code simulated:altitude_sensor}
+ *     同源公式），同一 tick 快照；</li>
+ * <li><b>读数基准 = 各静压孔自身位置</b>；物理体上没有静压孔时
+ *     {@code getAltitude()/getPressure()} 返回 nil（严格语义）；</li>
  * <li>缓存字段全部 {@code volatile}（主线程写、电脑线程读）；</li>
  * <li>Lua 方法 {@code @LuaFunction}（默认 mainThread=false）直读缓存，零主线程调度 ——
- *     实测直读版（mainThread=true）单次约 50ms（1 tick），缓存后应降到微秒级。</li>
+ *     实测直读版（mainThread=true）单次约 50ms（1 tick），缓存后 100 轮 ~0ms。</li>
  * </ul>
- * 不做传感器存在性门控（后续实现 {@code BodySensorRegistry} 时再加）。
+ * 不做传感器存在性门控（后续结合 {@link BodySensorRegistry} 实现）。
  *
  * <pre>{@code
  * local ss = require("ccpe.sensor_system")
- * print(ss.isOnBody())     -- boolean
- * print(ss.getAltitude())  -- 物理体原点世界 Y
- * print(ss.getPressure())  -- 大气压分数，海平面 = 1.0
+ * print(ss.isOnBody())            -- boolean
+ * print(ss.getBodyId())           -- 物理体 UUID
+ * print(ss.getAltitude())         -- 第一个静压孔的高度（便捷方法）
+ * print(ss.getPressure())         -- 第一个静压孔的气压（便捷方法）
+ * local sensors = ss.getSensors() -- 全部传感器快照
+ * -- {{type="static_port", pos={x,y,z}, altitude=..., pressure=...}, ...}
  * }</pre>
  */
 public class SensorSystemAPI implements ILuaAPI {
@@ -40,8 +56,11 @@ public class SensorSystemAPI implements ILuaAPI {
 
     private volatile boolean onBody = false;
     private volatile @Nullable String bodyId = null;
-    private volatile @Nullable Double altitude = null;
-    private volatile @Nullable Double pressure = null;
+    private volatile List<SensorSnapshot> sensors = List.of();
+
+    /** 单个传感器的同一 tick 快照（plot 坐标 + 读数；非压力类读数为 null） */
+    private record SensorSnapshot(SensorType type, BlockPos pos,
+                                  @Nullable Double altitude, @Nullable Double pressure) {}
 
     public SensorSystemAPI(IComputerSystem computer) {
         this.computer = computer;
@@ -59,7 +78,7 @@ public class SensorSystemAPI implements ILuaAPI {
 
     /**
      * 每电脑 tick（服务端主线程）刷新缓存。
-     * 电脑不在物理体上 → 缓存重置为默认值（onBody=false，其余 null）。
+     * 电脑不在物理体上 → 缓存重置为默认值（onBody=false，其余空）。
      */
     @Override
     public void update() {
@@ -67,15 +86,26 @@ public class SensorSystemAPI implements ILuaAPI {
         if (sub == null) {
             onBody = false;
             bodyId = null;
-            altitude = null;
-            pressure = null;
+            sensors = List.of();
             return;
         }
         onBody = true;
         bodyId = SableCompat.getSubLevelId(sub);
-        Vec3 origin = SableCompat.getSubLevelWorldPos(sub);
-        altitude = origin != null ? origin.y : null;
-        pressure = origin != null ? computePressure(origin) : null;
+
+        List<SensorSnapshot> list = new ArrayList<>();
+        for (SensorEntry e : BodySensorRegistry.sensorsOnBody(sub)) {
+            Double alt = null;
+            Double press = null;
+            if (e.type() == SensorType.PRESSURE) {
+                Vec3 worldPos = SableCompat.projectOutOfSubLevel(sub.getLevel(), e.pos());
+                if (worldPos != null) {
+                    alt = worldPos.y;
+                    press = computePressure(sub.getLevel(), worldPos);
+                }
+            }
+            list.add(new SensorSnapshot(e.type(), e.pos(), alt, press));
+        }
+        sensors = list;
     }
 
     // ═══════════════ Lua 读取（mainThread=false，直读 volatile 缓存） ═══════════════
@@ -92,28 +122,61 @@ public class SensorSystemAPI implements ILuaAPI {
         return bodyId;
     }
 
-    /** 所在物理体原点的高度（世界 Y，方块 = 米）；不在物理体上返回 nil */
-    @LuaFunction
-    public final @Nullable Double getAltitude() {
-        return altitude;
-    }
-
     /**
-     * 所在物理体原点高度的气压（大气压分数：海平面 = 1.0，0.0 = 真空）。
-     * 与 {@code simulated:altitude_sensor} 同源：Sable {@link DimensionPhysicsData#getAirPressure}。
-     * 不在物理体上返回 nil。
+     * 所在物理体（含约束链）的全部传感器快照（同一 tick 一致）。
+     * 每项：{@code {type, pos={x,y,z}, altitude, pressure}}，pos 为 plot 坐标（稳定标识）；
+     * 压力类（static_port）带 altitude/pressure 读数，其余类型读数为 nil。
+     * 不在物理体上或物理体无传感器 → 空数组。
      */
     @LuaFunction
+    public final List<Map<String, Object>> getSensors() {
+        List<Map<String, Object>> out = new ArrayList<>(sensors.size());
+        for (SensorSnapshot s : sensors) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("type", typeName(s.type()));
+            m.put("pos", Map.of("x", (double) s.pos().getX(),
+                                "y", (double) s.pos().getY(),
+                                "z", (double) s.pos().getZ()));
+            m.put("altitude", s.altitude());
+            m.put("pressure", s.pressure());
+            out.add(m);
+        }
+        return out;
+    }
+
+    /** 第一个静压孔的高度（世界 Y）；物理体上无静压孔返回 nil（便捷方法） */
+    @LuaFunction
+    public final @Nullable Double getAltitude() {
+        SensorSnapshot first = firstPressurePort();
+        return first != null ? first.altitude() : null;
+    }
+
+    /** 第一个静压孔的气压（大气压分数，海平面 = 1.0）；无静压孔返回 nil（便捷方法） */
+    @LuaFunction
     public final @Nullable Double getPressure() {
-        return pressure;
+        SensorSnapshot first = firstPressurePort();
+        return first != null ? first.pressure() : null;
     }
 
     // ═══════════════ 主线程辅助 ═══════════════
 
-    private @Nullable Double computePressure(Vec3 origin) {
+    private @Nullable SensorSnapshot firstPressurePort() {
+        for (SensorSnapshot s : sensors)
+            if (s.type() == SensorType.PRESSURE) return s;
+        return null;
+    }
+
+    private static String typeName(SensorType type) {
+        return switch (type) {
+            case PRESSURE -> "static_port";
+            case SPEED -> "pitot_tube"; // 后续接入
+        };
+    }
+
+    private @Nullable Double computePressure(Level level, Vec3 worldPos) {
         try {
-            return DimensionPhysicsData.getAirPressure(computer.getLevel(),
-                    new Vector3d(origin.x, origin.y, origin.z));
+            return DimensionPhysicsData.getAirPressure(level,
+                    new Vector3d(worldPos.x, worldPos.y, worldPos.z));
         } catch (Exception e) {
             return null;
         }
