@@ -55,9 +55,6 @@ if com then
     print("COM rel to comp:", string.format("x=%.2f y=%.2f z=%.2f", com.x, com.y, com.z))
 end
 ```
-
-These methods require **an FMC (`ccpe:fmc`) installed on the body**; the INS-gated attitude/physics methods are documented on the [Inertial Navigation System](ins.md) page.
-
 ## Propeller speed tool
 
 The FMC also provides a propeller speed solver (also FMC-gated): given the desired thrust and current flight state, it inverts the propeller physics model to compute the rotation speed the propeller bearings should output. The tool depends on aeronautics' propeller physics config.
