@@ -32,8 +32,11 @@ public class AicRenderer extends SafeBlockEntityRenderer<AicBlockEntity> {
             return;
         }
 
-        final Quaternionf base = be.getBaseQuaternion(); // blockstate facing（绕方块中心）
-        final Quaternionf q = new Quaternionf(base);
+        final Quaternionf base = be.getBaseQuaternion(); // blockstate facing（绕方块中心），下面单独应用
+        // 姿态 q 只含 Y·Z·X（不含 facing）：facing 已由 buf.rotate(base) 应用，
+        // 若 q 再含 base 会导致 facing 重复旋转（Flywheel 路径 position 已吸收 facing，旋转需含 base；
+        // BER 路径按矩阵链 T(c)·R(facing)·T(P−c)·R(q)，q 必须不含 facing）
+        final Quaternionf q = new Quaternionf();
         be.applyCompassQuaternion(q, partialTicks);
         be.applyPrimaryQuaternion(q, partialTicks);
         be.applySecondaryQuaternion(q, partialTicks);

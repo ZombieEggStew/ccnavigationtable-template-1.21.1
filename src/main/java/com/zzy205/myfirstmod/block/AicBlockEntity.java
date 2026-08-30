@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dev.ryanhcode.sable.companion.math.Pose3d;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
@@ -17,6 +18,7 @@ import org.joml.Quaterniond;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
+import org.joml.Vector3f;
 
 import static java.lang.Math.*;
 
@@ -55,6 +57,10 @@ public class AicBlockEntity extends BlockEntity {
     private Vector3d angleVelocities = new Vector3d(0, 0, 0);
     private Quaterniond lastShellOrientation = null;
 
+    /** 调试输出节流：每 40 tick（2 秒）输出一次罗盘姿态关键信息，排查万向锁/朝向问题 */
+    private int debugCounter = 0;
+    private static final boolean DEBUG_LOG = true;
+
     public AicBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.aic_entity.get(), pos, state);
     }
@@ -78,6 +84,48 @@ public class AicBlockEntity extends BlockEntity {
         final SubLevel subLevel = SableCompat.getContainingSubLevel(this);
         final Pose3dc pose = subLevel != null ? subLevel.logicalPose() : IDENTITY_POSE;
         this.animateClientRotation(subLevel, pose);
+        if (DEBUG_LOG && ++debugCounter % 40 == 0) {
+            this.logDebug();
+        }
+    }
+
+    /**
+     * 调试：输出罗盘姿态关键信息（每秒 1 次）。
+     * <ul>
+     * <li>pitch/roll/yaw = eulerAngles 三轴（度）；</li>
+     * <li>红面（模型 -Z 面）经完整链 {@code base·Y·Z·X} 后的世界方向与"世界北 (−Z)"的夹角；</li>
+     * <li>noYaw 对比：去掉 yaw 后红面与北的夹角（诊断 yaw 是否生效 / 被万向锁吞掉）。</li>
+     * </ul>
+     * 万向锁特征：northAngle 偏大时 pitch 接近 ±90°。
+     */
+    private void logDebug() {
+        final Quaternionf base = getBaseQuaternion();
+        final float pitch = (float) eulerAngles.y; // 绕 X
+        final float roll = (float) eulerAngles.x;  // 绕 Z
+        final float yaw = (float) eulerAngles.z;   // 绕 Y
+
+        final Quaternionf full = new Quaternionf(base).rotateY(yaw).rotateZ(roll).rotateX(pitch);
+        final Quaternionf noYaw = new Quaternionf(base).rotateZ(roll).rotateX(pitch);
+        final Vector3f redFaceFull = new Vector3f(0, 0, -1).rotate(full);
+        final Vector3f redFaceNoYaw = new Vector3f(0, 0, -1).rotate(noYaw);
+        final Vector3f north = new Vector3f(0, 0, -1);
+        final double fullAngle = angleDeg(redFaceFull, north);
+        final double noYawAngle = angleDeg(redFaceNoYaw, north);
+
+        CCPeripheralExtender.LOGGER.info(
+                "[AicDebug] facing={} pitch={}° roll={}° yaw={}° | 红面(全链)=({}, {}, {}) 北夹角={}° | 红面(无yaw) 北夹角={}°",
+                getBlockState().getValue(AicBlock.FACING),
+                String.format("%.1f", Math.toDegrees(pitch)),
+                String.format("%.1f", Math.toDegrees(roll)),
+                String.format("%.1f", Math.toDegrees(yaw)),
+                String.format("%.2f", redFaceFull.x), String.format("%.2f", redFaceFull.y), String.format("%.2f", redFaceFull.z),
+                String.format("%.1f", fullAngle),
+                String.format("%.1f", noYawAngle));
+    }
+
+    private static double angleDeg(final Vector3f a, final Vector3f b) {
+        final double dot = Math.max(-1.0, Math.min(1.0, a.dot(b)));
+        return Math.toDegrees(Math.acos(dot));
     }
 
     /** 扳手/空手右键扰动：给角速度随机初值；偏航（z）不瞬移也不归零，只给小幅随机角速度（同 INS 修正） */
