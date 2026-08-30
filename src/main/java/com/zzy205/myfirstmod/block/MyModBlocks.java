@@ -89,10 +89,10 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
-    /** 航空集成计算机（AIC）：6 向朝向方块（blockstate 旋转参考 create:display_link，见 AicBlock）；带 BE 注册进 BodySensorRegistry（ATTITUDE + FMC 双门控，等同 INS + FMC） */
+    /** 航空集成计算机（AIC）：6 向朝向方块（blockstate 旋转参考 create:display_link，见 AicBlock）；带 BE 注册进 BodySensorRegistry（ATTITUDE + FMC 双门控，等同 INS + FMC）；音效对齐 FMC（SoundType.COPPER） */
     public static final DeferredBlock<AicBlock> aic =
             registerBlocks("aic", () -> new AicBlock(BlockBehaviour.Properties.of().
-                    sound(SoundType.METAL).
+                    sound(SoundType.COPPER).
                     strength(1.0f, 6.0f).
                     noOcclusion()
             ));

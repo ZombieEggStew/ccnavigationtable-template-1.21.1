@@ -58,5 +58,8 @@
 1.0.9
 - Added isAxisXPositive/isAxisXNegative/isAxisYPositive/isAxisYNegative for joystick.
 - Added reaim mode for transmission peripheral.
-- **!?NEWNEW?!** Added an Aero Bearing, Check the wiki for more details.
+- **!?NEWNEW?!** Added the Aero Bearing, Check the wiki for more details.
 - **!?NEWNEW?!** Added a new sensor system, Check the wiki for more details.
+
+1.1.0
+- Added the Aviation Integrated Computer (AIC), Check the wiki for more details.
