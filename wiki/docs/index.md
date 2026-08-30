@@ -36,7 +36,7 @@ Directly read and send Create Redstone Link signals without stacking redstone li
 ### [🎛️ Electronic Transmission](electronic-transmission/overview.md)
 A rotation speed controller optimized for CC:T control, avoiding the network cascade issues of Create's vanilla controller.
 
-### [🧿 Aero Bearing](aero-bearing/overview.md)
+### [🍌 Aero Bearing](aero-bearing/overview.md)
 A Sable-physics bearing with direct axial power input. In **Lua Control mode** the rotation angle is set directly via Lua, skipping the stress-network angle accumulation — position your sail/control surface exactly.
 
 ---

@@ -74,6 +74,7 @@ plugins:
             Chunk & Physics Body Loading: 区块/物理结构加载
             Sensor System: 传感器系统
             Static Port: 静压孔
+            Pitot Tube: 皮托管
             Lua API Reference: Lua API 参考
             FAQ: 常见问题
             Changelog: 更新日志
@@ -111,6 +112,7 @@ nav:
     - Overview: aero-bearing/overview.md
   - Sensor System:
     - Static Port: sensor-system/static-port.md
+    - Pitot Tube: sensor-system/pitot-tube.md
   - Modular Monitor:
     - Overview: monitor/overview.md
     - Monitor: monitor/monitor.md

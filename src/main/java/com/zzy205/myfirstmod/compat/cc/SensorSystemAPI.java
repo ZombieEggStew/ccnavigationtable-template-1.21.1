@@ -31,8 +31,8 @@ import java.util.Map;
  *     刷新缓存：解析所在 sub-level → 汇总 {@link BodySensorRegistry} 上本物理体（含约束链）
  *     的全部传感器 → 每个静压孔 plot 坐标投影到世界 → 该点高度 / 气压
  *     （{@link DimensionPhysicsData#getAirPressure}，与 {@code simulated:altitude_sensor}
- *     同源公式）；每个皮托管求沿管口朝向的世界速度分量（同 simulated:velocity_sensor 算法）
- *     ——同一 tick 快照；</li>
+ *     同源公式）；每个皮托管求沿管口朝向的世界速度分量（同 simulated:velocity_sensor 算法，
+ *     <b>门控：仅当物理体同时有皮托管与静压孔时计算</b>）——同一 tick 快照；</li>
  * <li><b>读数基准 = 各传感器自身位置</b>；物理体上没有对应传感器时
  *     {@code getAltitude()/getPressure()/getSpeed()} 返回 nil（严格语义）；</li>
  * <li>缓存字段全部 {@code volatile}（主线程写、电脑线程读）；</li>
@@ -46,10 +46,11 @@ import java.util.Map;
  * print(ss.getBodyId())           -- 物理体 UUID
  * print(ss.getAltitude())         -- 最后放置的静压孔的高度（便捷方法）
  * print(ss.getPressure())         -- 最后放置的静压孔的气压（便捷方法）
- * print(ss.getSpeed())            -- 最后放置的皮托管沿管口朝向的速度（m/s，便捷方法）
+ * print(ss.getSpeed())            -- 最后放置的皮托管沿管口朝向的对地速度（m/s，便捷方法）
+ * print(ss.getAirSpeed())         -- 最后放置的皮托管沿管口朝向的空速（m/s，便捷方法）
  * local sensors = ss.getSensors() -- 全部传感器快照
  * -- {{type="static_port", pos={x,y,z}, pos_rel={x,y,z}, altitude=..., pressure=...},
- * --  {type="pitot_tube",  pos={x,y,z}, pos_rel={x,y,z}, speed=...}, ...}
+ * --  {type="pitot_tube",  pos={x,y,z}, pos_rel={x,y,z}, speed=..., air_speed=...}, ...}
  * }</pre>
  */
 public class SensorSystemAPI implements ILuaAPI {
@@ -66,7 +67,7 @@ public class SensorSystemAPI implements ILuaAPI {
     private record SensorSnapshot(SensorType type, double relX, double relY, double relZ,
                                   double compX, double compY, double compZ,
                                   @Nullable Double altitude, @Nullable Double pressure,
-                                  @Nullable Double speed) {}
+                                  @Nullable Double speed, @Nullable Double airSpeed) {}
 
     public SensorSystemAPI(IComputerSystem computer) {
         this.computer = computer;
@@ -104,19 +105,37 @@ public class SensorSystemAPI implements ILuaAPI {
         double cry = compRel != null ? compRel.y : Double.NaN;
         double crz = compRel != null ? compRel.z : Double.NaN;
 
+        List<SensorEntry> entries = BodySensorRegistry.sensorsOnBody(sub);
+
+        // 门控（存在性）：速度类读数（speed / air_speed）要求物理体（含约束链）同时有
+        // ≥1 皮托管 且 ≥1 静压孔（皮托管-静压系统：空速 = 动压 − 静压，缺静态参考无法得空速）。
+        // 不满足 → 速度读数为 null（getSpeed/getAirSpeed 返回 nil，getSensors 对应字段为 nil）。
+        boolean speedGate = false;
+        {
+            boolean hasSpeed = false;
+            boolean hasPressure = false;
+            for (SensorEntry e : entries) {
+                if (e.type() == SensorType.SPEED) hasSpeed = true;
+                else if (e.type() == SensorType.PRESSURE) hasPressure = true;
+            }
+            speedGate = hasSpeed && hasPressure;
+        }
+
         List<SensorSnapshot> list = new ArrayList<>();
-        for (SensorEntry e : BodySensorRegistry.sensorsOnBody(sub)) {
+        for (SensorEntry e : entries) {
             Double alt = null;
             Double press = null;
             Double speed = null;
+            Double airSpeed = null;
             if (e.type() == SensorType.PRESSURE) {
                 Vec3 worldPos = SableCompat.projectOutOfSubLevel(sub.getLevel(), e.pos());
                 if (worldPos != null) {
                     alt = worldPos.y;
                     press = computePressure(sub.getLevel(), worldPos);
                 }
-            } else if (e.type() == SensorType.SPEED) {
+            } else if (e.type() == SensorType.SPEED && speedGate) {
                 speed = computeSpeed(sub, e.pos());
+                airSpeed = computeAirSpeed(sub, e.pos());
             }
             Vec3 rel = SableCompat.toRelativePos(sub, e.pos());
             double rx = rel != null ? rel.x : e.pos().getX();
@@ -126,7 +145,7 @@ public class SensorSystemAPI implements ILuaAPI {
             double cx = compRel != null ? rx - crx : rx;
             double cy = compRel != null ? ry - cry : ry;
             double cz = compRel != null ? rz - crz : rz;
-            list.add(new SensorSnapshot(e.type(), rx, ry, rz, cx, cy, cz, alt, press, speed));
+            list.add(new SensorSnapshot(e.type(), rx, ry, rz, cx, cy, cz, alt, press, speed, airSpeed));
         }
         sensors = list;
     }
@@ -147,7 +166,7 @@ public class SensorSystemAPI implements ILuaAPI {
 
     /**
      * 所在物理体（含约束链）的全部传感器快照（同一 tick 一致）。
-     * 每项：{@code {type, pos={x,y,z}, pos_rel={x,y,z}, altitude, pressure, speed}}。
+     * 每项：{@code {type, pos={x,y,z}, pos_rel={x,y,z}, altitude, pressure, speed, air_speed}}。
      * <ul>
      * <li><b>pos</b>：相对物理体原点的局部坐标（plot 帧 {@code plot − rotationPoint}，
      *     rotationPoint = 物理体原点/质心枢轴）；物理体移动/旋转时不变，但<b>在物理体上
@@ -155,7 +174,9 @@ public class SensorSystemAPI implements ILuaAPI {
      * <li><b>pos_rel</b>：相对当前电脑的局部坐标（{@code 传感器 plot − 电脑 plot}），
      *     只要电脑不动就不受原点漂移影响，跨会话更稳定，推荐用它标识特定传感器；</li>
      * <li>压力类（static_port）带 altitude/pressure 读数，速度类（pitot_tube）带
-     *     speed 读数（沿管口朝向，m/s，有符号），其余类型读数为 nil。</li>
+     *     speed（对地，沿管口朝向）与 air_speed（空速，相对空气，沿管口朝向，m/s，有符号）——
+     *     <b>速度读数受门控：仅当物理体同时有 ≥1 皮托管 且 ≥1 静压孔时才有值</b>，否则为 nil；
+     *     其余类型读数为 nil。</li>
      * </ul>
      * 不在物理体上或物理体无传感器 → 空数组。
      */
@@ -174,6 +195,7 @@ public class SensorSystemAPI implements ILuaAPI {
             m.put("altitude", s.altitude());
             m.put("pressure", s.pressure());
             m.put("speed", s.speed());
+            m.put("air_speed", s.airSpeed());
             out.add(m);
         }
         return out;
@@ -194,8 +216,11 @@ public class SensorSystemAPI implements ILuaAPI {
     }
 
     /**
-     * 最后放置（最新注册）的皮托管沿管口朝向的速度分量（m/s，有符号：正 = 朝向管口，
-     * 负 = 背向管口）；物理体上无皮托管返回 nil（便捷方法）。
+     * 最后放置（最新注册）的皮托管沿管口朝向的对地速度分量（m/s，有符号：正 = 朝向管口，
+     * 负 = 背向管口）（便捷方法）。
+     * <p>
+     * <b>门控（存在性）</b>：物理体（含约束链）必须<b>同时</b>有 ≥1 皮托管 且 ≥1 静压孔
+     * （皮托管-静压系统），否则返回 nil。
      * <p>
      * 算法同 {@code simulated:velocity_sensor}：速度 = 皮托管位置的世界点速度
      * （{@link SableCompat#getVelocity}，含旋转贡献，服务端 = {@code ω×r + v}），
@@ -206,6 +231,24 @@ public class SensorSystemAPI implements ILuaAPI {
     public final @Nullable Double getSpeed() {
         SensorSnapshot last = lastPitot();
         return last != null ? last.speed() : null;
+    }
+
+    /**
+     * 最后放置（最新注册）的皮托管沿管口朝向的<b>空速</b>分量（m/s，有符号：正 = 朝向管口，
+     * 负 = 背向管口）（便捷方法）。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getSpeed()} 相同——物理体（含约束链）必须<b>同时</b>
+     * 有 ≥1 皮托管 且 ≥1 静压孔，否则返回 nil。
+     * <p>
+     * 与 {@link #getSpeed()} 同构，仅速度源不同：空速 = 相对空气速度（
+     * {@link SableCompat#getAirVelocity} = {@code Sable.HELPER.getVelocityRelativeToAir}，
+     * 已减去风速，同 {@code ccpe.pe.getPhysicsAirVelocity}），沿管口朝向的有符号投影；
+     * |读数| &lt; 0.05 归零（防静止抖动）。
+     */
+    @LuaFunction
+    public final @Nullable Double getAirSpeed() {
+        SensorSnapshot last = lastPitot();
+        return last != null ? last.airSpeed() : null;
     }
 
     /** 全部静压孔高度的简单平均值；无静压孔返回 nil */
@@ -300,22 +343,30 @@ public class SensorSystemAPI implements ILuaAPI {
         }
     }
 
+    /** 皮托管沿管口朝向的<b>对地</b>速度分量（m/s，有符号） */
+    private @Nullable Double computeSpeed(SubLevel sub, BlockPos sensorPos) {
+        return axisSpeed(sub, sensorPos, SableCompat.getVelocity(sub.getLevel(), sensorPos));
+    }
+
+    /** 皮托管沿管口朝向的<b>空速</b>分量（相对空气，已减风速，m/s，有符号） */
+    private @Nullable Double computeAirSpeed(SubLevel sub, BlockPos sensorPos) {
+        return axisSpeed(sub, sensorPos, SableCompat.getAirVelocity(sub.getLevel(), sensorPos));
+    }
+
     /**
-     * 皮托管沿轴速度（m/s，有符号，同 simulated:velocity_sensor 算法）：
-     * 世界点速度 {@code v}（皮托管位置，含旋转贡献）在<b>世界管口朝向</b>上的投影。
-     * 管口朝向 = blockstate 的 24 态轴（{@link PitotTubeBlock#axisOf}，plot 帧）
-     * 经物理体姿态转到世界；|读数| &lt; 0.05 归零（防静止抖动）。
+     * 速度 {@code v}（世界系，皮托管位置的点速度）在<b>世界管口朝向</b>上的有符号投影
+     * （同 simulated:velocity_sensor 算法）；管口朝向 = blockstate 的 24 态轴
+     * （{@link PitotTubeBlock#axisOf}，plot 帧）经物理体姿态转到世界；|读数| &lt; 0.05 归零（防静止抖动）。
      * <p>
      * 注：轴向与速度均以电脑所在 sub-level 的姿态为基准（与静压孔读数一致）；
      * 传感器位于约束链其它 sub-level 时轴向姿态可能有偏差（现有已知边界）。
      *
      * @return 沿轴速度；注册表滞后（方块已拆）或速度/姿态读取失败返回 null
      */
-    private @Nullable Double computeSpeed(SubLevel sub, BlockPos sensorPos) {
+    private @Nullable Double axisSpeed(SubLevel sub, BlockPos sensorPos, @Nullable Vec3 vel) {
+        if (vel == null) return null;
         BlockState state = sub.getLevel().getBlockState(sensorPos);
         if (!(state.getBlock() instanceof PitotTubeBlock)) return null; // 注册表滞后：方块已拆
-        Vec3 vel = SableCompat.getVelocity(sub.getLevel(), sensorPos);
-        if (vel == null) return null;
         Vec3 worldAxis = SableCompat.transformNormalToWorld(sub,
                 Vec3.atLowerCornerOf(PitotTubeBlock.axisOf(state).getNormal()));
         if (worldAxis == null) return null;

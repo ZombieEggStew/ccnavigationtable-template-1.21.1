@@ -38,7 +38,7 @@
 ### [🎛️ 电子变速箱](electronic-transmission/overview.md)
 专为 CC:T 控制优化的转速控制器，避免了 Create 原版控制器的网络级联问题。
 
-### [🧿 航空轴承](aero-bearing/overview.md)
+### [🍌 航空轴承](aero-bearing/overview.md)
 Sable 物理轴承，直接轴向动力输入。**Lua 控制模式**下旋转角度由 Lua 直接设定，跳过应力网络角度累计——精确控制你的风帆/舵面角度。
 
 ---
