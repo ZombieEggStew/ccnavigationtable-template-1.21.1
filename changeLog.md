@@ -58,3 +58,5 @@
 1.0.9
 - isAxisXPositive/isAxisXNegative/isAxisYPositive/isAxisYNegative
 - servo的reaim功能
+- Added an Aero Bearing, Check the wiki for more details.
+- **!?NEWNEW?!** Added a new sensor system, Check the wiki for more details.
