@@ -42,6 +42,8 @@ public class MyModPartialModels {
     public static final PartialModel INS_COMPASS = block("my_aero_sensor/ins/compass");
     /** 惯性导航系统（INS）：偏航指示标记（绕自身 Y 永远面向北方，跟罗盘盘一起转） */
     public static final PartialModel INS_YAW = block("my_aero_sensor/ins/test");
+    /** 航空集成计算机（AIC）：可旋转罗盘（以旋转中心为原点建模，渲染时平移到 COMPASS_POS 再旋转） */
+    public static final PartialModel AIC_COMPASS = block("my_aero_sensor/aic/compass");
 
     private static PartialModel block(String path) {
         return PartialModel.of(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "block/" + path));

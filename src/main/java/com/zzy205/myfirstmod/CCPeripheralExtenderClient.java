@@ -7,6 +7,8 @@ import com.zzy205.myfirstmod.block.MyBearingRenderer;
 import com.zzy205.myfirstmod.block.MyBearingVisual;
 import com.zzy205.myfirstmod.block.InsRenderer;
 import com.zzy205.myfirstmod.block.InsVisual;
+import com.zzy205.myfirstmod.block.AicRenderer;
+import com.zzy205.myfirstmod.block.AicVisual;
 import com.zzy205.myfirstmod.block.ControlDeskVisual;
 import com.zzy205.myfirstmod.block.ControlDeskRenderer;
 import com.zzy205.myfirstmod.block.MonitorVisual;
@@ -102,6 +104,12 @@ public class CCPeripheralExtenderClient {
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
+        // 注册 Flywheel Visual（航空集成计算机：可旋转罗盘实例化渲染，外壳/gyro 由 blockstate 渲染）。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.aic_entity.get())
+                .factory(AicVisual::new)
+                .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
         // 初始化自定义 PartialModel（参照 Create 的 AllPartialModels.init()）
         MyModPartialModels.init();
         event.enqueueWork(MonitorBackgrounds::reload);
@@ -130,6 +138,9 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.ins_entity.get(),
                 InsRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.aic_entity.get(),
+                AicRenderer::new);
     }
 
     @SubscribeEvent

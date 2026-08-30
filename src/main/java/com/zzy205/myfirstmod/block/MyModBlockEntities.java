@@ -21,6 +21,7 @@ public final class MyModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PitotTubeBlockEntity>> pitot_tube_entity = BLOCK_ENTITY_TYPES.register("pitot_tube", () -> BlockEntityType.Builder.of(PitotTubeBlockEntity::new, MyModBlocks.pitot_tube.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<InsBlockEntity>> ins_entity = BLOCK_ENTITY_TYPES.register("ins", () -> BlockEntityType.Builder.of(InsBlockEntity::new, MyModBlocks.ins.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FmcBlockEntity>> fmc_entity = BLOCK_ENTITY_TYPES.register("fmc", () -> BlockEntityType.Builder.of(FmcBlockEntity::new, MyModBlocks.fmc.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AicBlockEntity>> aic_entity = BLOCK_ENTITY_TYPES.register("aic", () -> BlockEntityType.Builder.of(AicBlockEntity::new, MyModBlocks.aic.get()).build(null));
 
     public static void register(IEventBus bus) {
         BLOCK_ENTITY_TYPES.register(bus);
