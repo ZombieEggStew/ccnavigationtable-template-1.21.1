@@ -28,19 +28,19 @@ import org.jetbrains.annotations.NotNull;
  * <li><b>无 blockstate 旋转</b>：去掉 gimbal_sensor 的 {@code HORIZONTAL_AXIS} 属性，
  *     所有朝向渲染一致（模型保持默认朝向，base 恒为单位旋转）；</li>
  * <li><b>无红石逻辑</b>：不是红石源，不输出信号；</li>
- * <li>扳手旋转时给 BE 一个随机扰动（{@link MyAeroSensorBlockEntity#randomNudge()}）。</li>
+ * <li>扳手旋转时给 BE 一个随机扰动（{@link InsBlockEntity#randomNudge()}）。</li>
  * </ul>
- * 可动部件（万向环 / 罗盘盘）由 BER（{@link MyAeroSensorRenderer}）或
- * Flywheel（{@link MyAeroSensorVisual}）叠加渲染，不参与 blockstate 模型。
+ * 可动部件（万向环 / 罗盘盘）由 BER（{@link InsRenderer}）或
+ * Flywheel（{@link InsVisual}）叠加渲染，不参与 blockstate 模型。
  */
-public class MyAeroSensorBlock extends BaseEntityBlock implements IWrenchable {
+public class InsBlock extends BaseEntityBlock implements IWrenchable {
 
-    public static final MapCodec<MyAeroSensorBlock> CODEC = simpleCodec(MyAeroSensorBlock::new);
+    public static final MapCodec<InsBlock> CODEC = simpleCodec(InsBlock::new);
 
     /** 选择框/碰撞盒：中心 4×6×4 盒体（6,0,6 → 10,6,10），不随朝向旋转 */
     private static final VoxelShape SHAPE = Block.box(6, 0, 6, 10, 6, 10);
 
-    public MyAeroSensorBlock(Properties properties) {
+    public InsBlock(Properties properties) {
         super(properties);
     }
 
@@ -58,11 +58,11 @@ public class MyAeroSensorBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     public BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
-        return new MyAeroSensorBlockEntity(pos, state);
+        return new InsBlockEntity(pos, state);
     }
 
-    private static final BlockEntityTicker<MyAeroSensorBlockEntity> TICKER =
-            MyAeroSensorBlockEntity::tick;
+    private static final BlockEntityTicker<InsBlockEntity> TICKER =
+            InsBlockEntity::tick;
 
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state, @NotNull BlockEntityType<T> type) {
@@ -74,15 +74,15 @@ public class MyAeroSensorBlock extends BaseEntityBlock implements IWrenchable {
         return null;
     }
 
-    private MyAeroSensorBlockEntity getBlockEntity(BlockGetter level, BlockPos pos) {
+    private InsBlockEntity getBlockEntity(BlockGetter level, BlockPos pos) {
         BlockEntity be = level.getBlockEntity(pos);
-        return be instanceof MyAeroSensorBlockEntity myAeroSensorBlockEntity ? myAeroSensorBlockEntity : null;
+        return be instanceof InsBlockEntity insBlockEntity ? insBlockEntity : null;
     }
 
     /** 空手右键：与扳手相同的随机扰动（客户端直接生效，服务端无副作用） */
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
-        if (level.getBlockEntity(pos) instanceof MyAeroSensorBlockEntity be) {
+        if (level.getBlockEntity(pos) instanceof InsBlockEntity be) {
             be.randomNudge();
         }
         return InteractionResult.SUCCESS;
@@ -92,7 +92,7 @@ public class MyAeroSensorBlock extends BaseEntityBlock implements IWrenchable {
     public InteractionResult onWrenched(BlockState state, UseOnContext context) {
         InteractionResult result = IWrenchable.super.onWrenched(state, context);
         if (result == InteractionResult.SUCCESS) {
-            if (context.getLevel().getBlockEntity(context.getClickedPos()) instanceof MyAeroSensorBlockEntity be) {
+            if (context.getLevel().getBlockEntity(context.getClickedPos()) instanceof InsBlockEntity be) {
                 be.randomNudge();
             }
         }

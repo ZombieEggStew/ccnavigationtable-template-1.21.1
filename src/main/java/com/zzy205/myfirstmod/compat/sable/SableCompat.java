@@ -376,6 +376,27 @@ public final class SableCompat {
     }
 
     /**
+     * 获取 SubLevel 物理刚体的质心在局部（plot）坐标系中<b>相对物理体原点（质心枢轴）</b>的偏移。
+     * <p>
+     * 与 {@link #getCenterOfMass}（世界坐标）不同，该偏移不随物理体移动/旋转变化；
+     * 与 {@link #toRelativePos} 同帧（plot 帧差值），可与电脑/传感器的相对坐标直接相减。
+     *
+     * @return 相对原点偏移（plot 帧）；失败或不存在时返回 null
+     */
+    public static Vec3 getCenterOfMassLocal(SubLevel subLevel) {
+        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
+        try {
+            MassData massTracker = serverSubLevel.getMassTracker();
+            if (massTracker == null) return null;
+            Vector3dc com = massTracker.getCenterOfMass();
+            if (com == null) return null;
+            return new Vec3(com.x(), com.y(), com.z());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * 获取 SubLevel 及其所有约束连接的物理结构的总质量。
      */
     public static Double getChainMass(SubLevel subLevel) {

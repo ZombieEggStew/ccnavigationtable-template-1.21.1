@@ -5,8 +5,8 @@ import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
 import com.zzy205.myfirstmod.block.MyBearingRenderer;
 import com.zzy205.myfirstmod.block.MyBearingVisual;
-import com.zzy205.myfirstmod.block.MyAeroSensorRenderer;
-import com.zzy205.myfirstmod.block.MyAeroSensorVisual;
+import com.zzy205.myfirstmod.block.InsRenderer;
+import com.zzy205.myfirstmod.block.InsVisual;
 import com.zzy205.myfirstmod.block.ControlDeskVisual;
 import com.zzy205.myfirstmod.block.ControlDeskRenderer;
 import com.zzy205.myfirstmod.block.MonitorVisual;
@@ -98,7 +98,7 @@ public class CCPeripheralExtenderClient {
         // 注册 Flywheel Visual（惯性导航系统：万向环/罗盘盘实例化渲染，外壳由 blockstate 渲染）。
         // Flywheel 可用时跳过 vanilla BE 渲染（外壳静态，无 BER 必须内容）。
         SimpleBlockEntityVisualizer.builder(MyModBlockEntities.ins_entity.get())
-                .factory(MyAeroSensorVisual::new)
+                .factory(InsVisual::new)
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
@@ -129,7 +129,7 @@ public class CCPeripheralExtenderClient {
                 MonitorRenderer::new);
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.ins_entity.get(),
-                MyAeroSensorRenderer::new);
+                InsRenderer::new);
     }
 
     @SubscribeEvent

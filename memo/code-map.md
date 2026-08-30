@@ -92,10 +92,10 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `client/ControlDeskClientRegistry.java` | 客户端已加载 controlDesk 坐标注册表（`ConcurrentHashMap.newKeySet`，onLoad 加 / setRemoved 与 onChunkUnloaded 删，`ControlDeskBlockEntity` 维护）；供 monitor_2 表面小 Monitor 独立命中检测枚举候选（对齐 `MonitorClientRegistry`），坐标保留 plot 语义兼容 Sable | monitor_2 命中检测候选枚举 |
 | `client/Monitor2HitDetector.java` | monitor_2 表面小 Monitor 独立命中检测器（对齐 `MonitorHitDetector`）：遍历 `ControlDeskClientRegistry` 候选控制台（仅已装 MONITOR_2），玩家视线射线 + monitor_2 屏幕面实时变换（facing 逆 → shift 逆 → case 22.5° x 旋转逆，严格互逆于 `ControlDeskPlacementOverlay.monitor2World`）做屏幕面板正面求交 + 背面剔除 + 落点在屏幕面内（x2..14 / y1..11）+ 遮挡检测（`ClipContext.COLLIDER`，controlDesk 底座不覆盖屏幕不自遮挡）+ Sable 射线回投，取最近命中；返回 `{pos, facing, distance, screenX, screenY, grid}`（`localToGrid` 10×8 转换） | monitor_2 屏幕命中、遮挡、Sable 兼容 |
 | `client/Monitor2GridOverlay.java` | monitor_2 表面小 Monitor 客户端完整交互（对齐 `MonitorGridOverlay`）：手持 Monitor 模块物品（toggle_switch/knob/button/screen）且命中 monitor_2 屏幕面 → 显示 10×8 网格 + 模块框 + 放置预览（`monitor2World` 变换）；右键放置模块 / 屏幕两点放置 / 按钮按压 / 钮子切换 / 旋钮拖拽（payload 复用 Monitor 的 8 个包，pos = controlDesk 方块）；扳手蹲下右键拆除；右键模块/屏幕打开 `MonitorModuleScreen`；悬停 tooltip；交互状态按 BlockPos 隔离 | monitor_2 放置/交互/拆除/配置菜单 |
-| `block/MyAeroSensorBlock.java` | 惯性导航系统（INS）方块：**无 blockstate 旋转**（`HORIZONTAL_AXIS` 已删，base 恒单位四元数，模型保持默认朝向）、**无红石**（isSignalSource/getSignal/canConnectRedstone 已删）；选择框/碰撞盒 `Block.box(6,0,6,10,6,10)`（不随朝向旋转）；空手右键 `useWithoutItem` 与扳手 `onWrenched` 都触发 `randomNudge()` | INS 朝向/交互/碰撞、`getBaseQuaternion` 固定朝向调整 |
-| `block/MyAeroSensorBlockEntity.java` | INS 方块实体：客户端每 tick **重力摆动画模拟**（照抄 gimbal_sensor：重力扭矩永远水平 + 指北扭矩 + 外壳角速度甩动 + 惯性/阻尼/限位碰撞，限位固定 90°）+ 服务端 `XAngle/ZAngle` 倾角（getter 预留接 sensor_system）；**部件层级（外→内）test(Y 偏航)→gimbal(Z 滚转)→compass(X 俯仰)，动画逆变换链必须与渲染层级一致**；`randomNudge()` 扰动（**不能重置 `eulerAngles.z`**，否则指北大角度瞬间跳回；只给 z 小幅随机角速度）；`CompassTarget` 自然维度指北/非自然维度随机 | INS 动画/层级/指北/扰动、三处逆变换（重力/指北/外壳角速度） |
-| `block/MyAeroSensorVisual.java` | INS Flywheel 渲染：三个 `OrientedInstance`（gimbal/compass/test），每帧 `identityRotation` 后按 `Y / Y·Z / Y·Z·X` 独立四元数重建；`PIVOT_DROP`（转动部件下移量，当前 3.5px，与 BER 同步） | INS Flywheel 渲染、部件下移量 |
-| `block/MyAeroSensorRenderer.java` | INS 原版 BER 回退渲染（Flywheel 不可用时）：三部件同层级（SuperByteBuffer，`translate(0.5, 0.5-PIVOT_DROP, 0.5)` + `rotate`）+ partialTick 插值 | INS BER 回退路径 |
+| `block/InsBlock.java` | 惯性导航系统（INS）方块：**无 blockstate 旋转**（`HORIZONTAL_AXIS` 已删，base 恒单位四元数，模型保持默认朝向）、**无红石**（isSignalSource/getSignal/canConnectRedstone 已删）；选择框/碰撞盒 `Block.box(6,0,6,10,6,10)`（不随朝向旋转）；空手右键 `useWithoutItem` 与扳手 `onWrenched` 都触发 `randomNudge()` | INS 朝向/交互/碰撞、`getBaseQuaternion` 固定朝向调整 |
+| `block/InsBlockEntity.java` | INS 方块实体：客户端每 tick **重力摆动画模拟**（照抄 gimbal_sensor：重力扭矩永远水平 + 指北扭矩 + 外壳角速度甩动 + 惯性/阻尼/限位碰撞，限位固定 90°）+ 服务端 `XAngle/ZAngle` 倾角（gimbal_sensor 风格，兼容保留）并**注册进 `BodySensorRegistry`（ATTITUDE 传感器，onLoad/setRemoved/每 20 tick 复核 UUID），作 `ccpe.sensor_system.getAngles()` 姿态门控**；**部件层级（外→内）test(Y 偏航)→gimbal(Z 滚转)→compass(X 俯仰)，动画逆变换链必须与渲染层级一致**；`randomNudge()` 扰动（**不能重置 `eulerAngles.z`**，否则指北大角度瞬间跳回；只给 z 小幅随机角速度）；`CompassTarget` 自然维度指北/非自然维度随机 | INS 动画/层级/指北/扰动、三处逆变换（重力/指北/外壳角速度）、姿态门控注册 |
+| `block/InsVisual.java` | INS Flywheel 渲染：三个 `OrientedInstance`（gimbal/compass/test），每帧 `identityRotation` 后按 `Y / Y·Z / Y·Z·X` 独立四元数重建；`PIVOT_DROP`（转动部件下移量，当前 3.5px，与 BER 同步） | INS Flywheel 渲染、部件下移量 |
+| `block/InsRenderer.java` | INS 原版 BER 回退渲染（Flywheel 不可用时）：三部件同层级（SuperByteBuffer，`translate(0.5, 0.5-PIVOT_DROP, 0.5)` + `rotate`）+ partialTick 插值 | INS BER 回退路径 |
 
 ### 控制台模型布局（北向基准）
 
@@ -195,6 +195,8 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 |---|---|
 | `compat/cc/CCPeripheralExtenderSetup.java` | 注册 CC:Tweaked Lua API |
 | `compat/cc/PeripheralExtenderAPI.java` | Peripheral Extender 的 Lua 全局 API |
+| `compat/cc/SensorSystemAPI.java` | `ccpe.sensor_system` Lua API：所在物理体（含约束链）环境数据（静压孔高度/气压、皮托管速度/空速、**INS 姿态 getAngles()、位置 getPosition()（INS 世界坐标）、机体原点 getBodyPosition()（世界坐标）、四元数 getOrientation()、角速度 getAngularVelocity()——均门控 = 机体上有 ≥1 INS**；**物理数据不门控：getPhysicsCenterOfMassRel()（重心相对电脑，plot 帧差值）、getPhysicsMass()/getPhysicsChainMass()（kg）、getPhysicsGravityForce()/getPhysicsChainGravityForce()（pN = 质量×11）**）；每电脑 tick `update()` 主线程刷新 volatile 缓存（姿态 pitch/roll/yaw 度 = gimbal_sensor 重力投影 + 世界北水平方位；INS/机体原点世界坐标经 `SableCompat.projectOutOfSubLevel` / `getSubLevelWorldPos`；四元数/角速度/质量/质心直接读 SableCompat），Lua 方法 mainThread=false 直读 |
+| `compat/cc/BodySensorRegistry.java` | 物理体传感器注册表（sub-level UUID → 传感器集合）：静压孔（PRESSURE）、皮托管（SPEED）、惯性导航系统（ATTITUDE）；`sensorsOnBody` 汇总含约束链；供 SensorSystemAPI 门控与快照 |
 | `compat/cc/GlobalChannelRegistry.java` | 传感器+显示器+控制台共享的全局频道注册表 |
 | `compat/cc/PeripheralExtenderRegistry.java` | 传感器频道登记表（委托全局注册表） |
 | `compat/cc/MonitorRegistry.java` | Monitor 频道登记表（委托全局注册表） |
@@ -216,7 +218,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/RedstoneTransceiverRegistry.java` | Receiver 频道和外设实例登记 |
 | `compat/create/CreateRedstoneCompat.java` | Create 红石链接兼容，建立虚拟红石连接 |
 | `compat/jei/AddonJEIPlugin.java` | JEI 分类/配方及 Receiver 的幽灵物品处理 |
-| `compat/sable/SableCompat.java` | Sable 模组兼容入口（子次元 plot/world 坐标互转，命中检测用） |
+| `compat/sable/SableCompat.java` | Sable 模组兼容入口（子次元 plot/world 坐标互转、命中检测用；物理读取：姿态/角速度/质量/质心——`getCenterOfMassLocal` 返回质心相对原点的 plot 帧偏移，供相对坐标差值） |
 
 ## 物品
 
@@ -253,7 +255,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | 修改 CC:Tweaked Lua API | `compat/cc/PeripheralExtenderAPI.java` | `CCPeripheralExtenderSetup.java`、相关 BlockEntity 和 registry |
 | 修改屏幕文本/图形渲染或 Lua API | `monitor/ScreenText.java`、`compat/cc/ScreenModuleHandle.java`、`client/ScreenTextRenderer.java` | `MonitorBlockEntity.java`（screenWrite/screenDrawRect 等）、`MonitorRenderer.java`、`SyncGridPayload` |
 | 修改 Create 兼容或传动渲染 | `compat/create/CreateRedstoneCompat.java` / `TransmissionPeripheral*` | Create 源码参考和客户端注册 |
-| 修改惯性导航系统（INS）姿态指示器 | `block/MyAeroSensorBlockEntity.java`（动画/层级/指北/扰动/逆变换链）、`block/MyAeroSensorVisual.java` / `block/MyAeroSensorRenderer.java`（渲染与 PIVOT_DROP） | `MyModPartialModels.java`（部件模型注册）、`assets/ccpe/models/block/my_aero_sensor/`、`memo/my_aero_sensor.md`（实现记录与坑） |
+| 修改惯性导航系统（INS）姿态指示器 | `block/InsBlockEntity.java`（动画/层级/指北/扰动/逆变换链/姿态门控注册）、`block/InsVisual.java` / `block/InsRenderer.java`（渲染与 PIVOT_DROP） | `MyModPartialModels.java`（部件模型注册）、`compat/cc/BodySensorRegistry.java`（ATTITUDE 注册）、`compat/cc/SensorSystemAPI.java`（getAngles 姿态计算/门控）、`assets/ccpe/models/block/my_aero_sensor/`、`memo/my_aero_sensor.md`（实现记录与坑） |
 | 修改资源模型、纹理或语言 | `src/main/resources/assets/ccpe/` | 对应 Java 注册/渲染类、资源 instruction |
 
 ## 核心数据流
@@ -298,4 +300,4 @@ flowchart LR
 - 客户端命中检测不依赖原版 `mc.hitResult`：`MonitorHitDetector` 遍历 `MonitorClientRegistry` 枚举候选，Sable 子次元下需把视线射线回投到 plot 坐标（`SableCompat.toLocalPosition/toLocalDirection`）再求交。
 - 屏幕文本（`screen*`，格子模型）走 `SyncGridPayload`（gzip 压缩 + 紧凑 int[] 编码），经 `ScreenTextRenderer` 渲染；monitor 背景平面已不可绘制（`monitorDisplay*` 通道已移除，内容只能在 screen 模块上绘制）。
 - 屏幕字形用 `RenderType.textPolygonOffset(ascii.png)` 渲染（polygonOffset 防 z-fighting）：顶点格式含 UV2（必须 `.setLight`），且「北面局部 X 轴与逻辑列轴相反」（字形/矩形需水平翻转、文本列锚定右缘），详见 `memo/record_screen_text.md`。
-- 惯性导航系统（INS，`MyAeroSensorBlockEntity`）：**部件层级（外→内）固定为 test(Y)→gimbal(Z)→compass(X)**；渲染（`MyAeroSensorVisual`/`Renderer`）与动画三处逆变换（重力/指北/外壳角速度）必须使用同一层级，改一处必须同步其余；`randomNudge()` 不得重置 `eulerAngles.z`（会破坏指北稳态，详见 `memo/my_aero_sensor.md`）。
+- 惯性导航系统（INS，`InsBlockEntity`）：**部件层级（外→内）固定为 test(Y)→gimbal(Z)→compass(X)**；渲染（`InsVisual`/`InsRenderer`）与动画三处逆变换（重力/指北/外壳角速度）必须使用同一层级，改一处必须同步其余；`randomNudge()` 不得重置 `eulerAngles.z`（会破坏指北稳态，详见 `memo/my_aero_sensor.md`）。姿态读数（`ccpe.sensor_system.getAngles()`）由 `SensorSystemAPI` 直接算自机体姿态（gimbal_sensor 重力投影 + 世界北水平方位，度），**门控 = 机体（含约束链）上有 ≥1 INS**；BE 的 `XAngle/ZAngle` 仅兼容保留，不是 getAngles 的数据源。

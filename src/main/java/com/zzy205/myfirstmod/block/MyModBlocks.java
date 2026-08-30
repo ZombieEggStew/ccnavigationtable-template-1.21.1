@@ -74,8 +74,8 @@ public class MyModBlocks {
             ));
 
     /** 惯性导航系统（INS）：可动罗盘/万向环姿态指示器，照抄 simulated:gimbal_sensor（自定义部件层级，见 memo/my_aero_sensor.md） */
-    public static final DeferredBlock<MyAeroSensorBlock> ins =
-            registerBlocks("ins", () -> new MyAeroSensorBlock(BlockBehaviour.Properties.of().
+    public static final DeferredBlock<InsBlock> ins =
+            registerBlocks("ins", () -> new InsBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.COPPER).
                     strength(1.0f, 6.0f).
                     noOcclusion()

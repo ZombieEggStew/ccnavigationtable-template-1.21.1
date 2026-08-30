@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
+import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dev.ryanhcode.sable.companion.math.JOMLConversion;
 import dev.ryanhcode.sable.companion.math.Pose3d;
@@ -18,6 +19,10 @@ import org.joml.Quaterniond;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
+import org.jspecify.annotations.Nullable;
+
+import java.util.Objects;
+import java.util.UUID;
 
 import static java.lang.Math.*;
 
@@ -31,7 +36,9 @@ import static java.lang.Math.*;
  * 始终水平，物理体翻滚时有惯性摆动感。渲染时用 previous→current 插值平滑。
  * <p>
  * 服务端每 tick 由物理体姿态计算真实倾角 {@link #XAngle}/{@link #ZAngle}
- * （保留 getter，供未来读取）。
+ * （兼容保留，供 gimbal_sensor 风格读取），并把自身注册进 {@link BodySensorRegistry}
+ * （ATTITUDE 传感器），作为 {@code ccpe.sensor_system.getAngles()} 的姿态读数门控
+ * （机体上必须有 INS 才返回 pitch/roll/yaw，度）。
  * <p>
  * 与原版的差异（本 mod 简化）：
  * <ul>
@@ -42,7 +49,7 @@ import static java.lang.Math.*;
  *     与 gimbal_sensor 的 needle(Y) 最内不同；z 轴（偏航）模拟由 test 标记使用。</li>
  * </ul>
  */
-public class MyAeroSensorBlockEntity extends BlockEntity {
+public class InsBlockEntity extends BlockEntity {
 
     /** 物理体姿态缺省值：单位姿态（不在物理体上时罗盘保持世界水平） */
     private static final Pose3dc IDENTITY_POSE = new Pose3d(new Vector3d(), new Quaterniond(), new Vector3d(), new Vector3d(1.0));
@@ -63,11 +70,15 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
     private Vector3d angleVelocities = new Vector3d(0, 0, 0);
     private Quaterniond lastShellOrientation = null;
 
-    /** 服务端真实倾角（供未来 Lua API 读取） */
+    /** 服务端真实倾角（gimbal_sensor 风格，兼容保留；sensor_system 姿态读数由机体姿态直接计算） */
     private double ZAngle;
     private double XAngle;
 
-    public MyAeroSensorBlockEntity(BlockPos pos, BlockState state) {
+    /** 注册进 {@link BodySensorRegistry} 的所在物理体 UUID（生命周期对齐 StaticPortBlockEntity 模式） */
+    private UUID registeredBodyId = null;
+    private int tickCounter = 0;
+
+    public InsBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.ins_entity.get(), pos, state);
     }
 
@@ -76,11 +87,22 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
         super.onLoad();
         if (level != null && level.isClientSide) {
             this.randomNudge();
+        } else if (level != null) {
+            registeredBodyId = containingBodyId();
+            BodySensorRegistry.register(this);
         }
     }
 
+    @Override
+    public void setRemoved() {
+        if (level != null && !level.isClientSide) {
+            BodySensorRegistry.unregister(this);
+        }
+        super.setRemoved();
+    }
+
     /** 客户端跑动画模拟，服务端算倾角（替代 gimbal_sensor 的 SmartBlockEntity.tick） */
-    public static void tick(Level level, BlockPos pos, BlockState state, MyAeroSensorBlockEntity be) {
+    public static void tick(Level level, BlockPos pos, BlockState state, InsBlockEntity be) {
         if (level.isClientSide) {
             be.tickClient();
         } else {
@@ -95,6 +117,17 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
     }
 
     private void tickServer() {
+        // 周期性复核所在物理体 UUID；变化则先注销旧条目再按新物理体重注册
+        // （兜底 onLoad 时 sub-level 尚未就绪的情况，对齐 StaticPortBlockEntity）
+        if (++tickCounter % 20 == 0) {
+            UUID current = containingBodyId();
+            if (!Objects.equals(current, registeredBodyId)) {
+                BodySensorRegistry.unregister(this);
+                registeredBodyId = current;
+                if (current != null) BodySensorRegistry.register(this);
+            }
+        }
+
         final SubLevel subLevel = SableCompat.getContainingSubLevel(this);
         if (subLevel == null)
             return;
@@ -105,6 +138,12 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
         // 世界"下"方向在方块局部系的投影 → 两个倾角
         this.XAngle = ld.y() < 0 || ld.z() * ld.z() > 0.001 ? atan2(ld.z(), -ld.y()) : 0;
         this.ZAngle = ld.y() < 0 || ld.x() * ld.x() > 0.001 ? atan2(ld.x(), -ld.y()) : 0;
+    }
+
+    /** 所在物理体 UUID；不在物理体上返回 null */
+    private @Nullable UUID containingBodyId() {
+        SubLevel sub = SableCompat.getContainingSubLevel(this);
+        return sub != null ? SableCompat.getSubLevelUUID(sub) : null;
     }
 
     /** 扳手/空手右键扰动：给角速度一个随机初值；偏航（test）不瞬移也不归零，只给小幅随机角速度 */

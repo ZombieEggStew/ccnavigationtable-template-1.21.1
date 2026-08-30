@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.InsBlockEntity;
 import com.zzy205.myfirstmod.block.PitotTubeBlockEntity;
 import com.zzy205.myfirstmod.block.StaticPortBlockEntity;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
@@ -22,11 +23,12 @@ import java.util.UUID;
  * <p>
  * 仅服务端主线程访问（BE onLoad/tick/setRemoved 与 {@link SensorSystemAPI#update()} 都在主线程）。
  * 与 {@code GlobalChannelRegistry} / Peripheral Extender 注册表同模式；登记
- * {@link StaticPortBlockEntity}（PRESSURE）与 {@link PitotTubeBlockEntity}（SPEED）两类传感器。
+ * {@link StaticPortBlockEntity}（PRESSURE）、{@link PitotTubeBlockEntity}（SPEED）与
+ * {@link InsBlockEntity}（ATTITUDE，惯性导航系统）三类传感器。
  */
 public final class BodySensorRegistry {
 
-    public enum SensorType { SPEED, PRESSURE }
+    public enum SensorType { SPEED, PRESSURE, ATTITUDE }
 
     public record SensorEntry(SensorType type, BlockPos pos) {}
 
@@ -77,6 +79,7 @@ public final class BodySensorRegistry {
     private static @Nullable SensorType sensorTypeOf(BlockEntity be) {
         if (be instanceof StaticPortBlockEntity) return SensorType.PRESSURE;
         if (be instanceof PitotTubeBlockEntity) return SensorType.SPEED;
+        if (be instanceof InsBlockEntity) return SensorType.ATTITUDE;
         return null;
     }
 }

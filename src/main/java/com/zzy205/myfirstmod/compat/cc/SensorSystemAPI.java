@@ -7,9 +7,12 @@ import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dan200.computercraft.api.lua.IComputerSystem;
 import dan200.computercraft.api.lua.ILuaAPI;
 import dan200.computercraft.api.lua.LuaFunction;
+import dev.ryanhcode.sable.companion.math.JOMLConversion;
+import dev.ryanhcode.sable.companion.math.Pose3dc;
 import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -32,9 +35,12 @@ import java.util.Map;
  *     的全部传感器 → 每个静压孔 plot 坐标投影到世界 → 该点高度 / 气压
  *     （{@link DimensionPhysicsData#getAirPressure}，与 {@code simulated:altitude_sensor}
  *     同源公式）；每个皮托管求沿管口朝向的世界速度分量（同 simulated:velocity_sensor 算法，
- *     <b>门控：仅当物理体同时有皮托管与静压孔时计算</b>）——同一 tick 快照；</li>
+ *     <b>门控：仅当物理体同时有皮托管与静压孔时计算</b>）；机体上有惯性导航系统
+ *     （ccpe:ins，ATTITUDE 传感器）时计算姿态角（pitch/roll/yaw，度，
+ *     <b>门控：仅当物理体上有 INS 时计算</b>）——同一 tick 快照；</li>
  * <li><b>读数基准 = 各传感器自身位置</b>；物理体上没有对应传感器时
- *     {@code getAltitude()/getPressure()/getSpeed()} 返回 nil（严格语义）；</li>
+ *     {@code getAltitude()/getPressure()/getSpeed()} 返回 nil（严格语义）；姿态读数
+ *     {@code getAngles()} 在物理体上没有 INS 时返回 nil；</li>
  * <li>缓存字段全部 {@code volatile}（主线程写、电脑线程读）；</li>
  * <li>Lua 方法 {@code @LuaFunction}（默认 mainThread=false）直读缓存，零主线程调度 ——
  *     实测直读版（mainThread=true）单次约 50ms（1 tick），缓存后 100 轮 ~0ms。</li>
@@ -48,9 +54,20 @@ import java.util.Map;
  * print(ss.getPressure())         -- 最后放置的静压孔的气压（便捷方法）
  * print(ss.getSpeed())            -- 最后放置的皮托管沿管口朝向的对地速度（m/s，便捷方法）
  * print(ss.getAirSpeed())         -- 最后放置的皮托管沿管口朝向的空速（m/s，便捷方法）
+ * print(ss.getAngles())           -- {pitch=, roll=, yaw=}（度；门控：机体上必须有 INS）
+ * print(ss.getPosition())         -- 最后放置的 INS 的世界坐标 {x, y, z}（门控：机体上必须有 INS）
+ * print(ss.getOrientation())      -- 机体姿态四元数 {x, y, z, w}（门控：机体上必须有 INS）
+ * print(ss.getAngularVelocity())  -- 机体世界系角速度 {x, y, z} rad/s（门控：机体上必须有 INS）
+ * print(ss.getBodyPosition())     -- 物理体原点世界坐标 {x, y, z}（门控：机体上必须有 INS）
+ * print(ss.getPhysicsCenterOfMassRel()) -- 重心相对电脑的机体局部系位置 {x, y, z}（不门控）
+ * print(ss.getPhysicsMass())      -- 所在物理体质量 kg（不门控）
+ * print(ss.getPhysicsChainMass()) -- 所在物理体链总质量 kg（不门控）
+ * print(ss.getPhysicsGravityForce()) -- 所在物理体重力 pN（不门控）
+ * print(ss.getPhysicsChainGravityForce()) -- 所在物理体链总重力 pN（不门控）
  * local sensors = ss.getSensors() -- 全部传感器快照
  * -- {{type="static_port", pos={x,y,z}, pos_rel={x,y,z}, altitude=..., pressure=...},
- * --  {type="pitot_tube",  pos={x,y,z}, pos_rel={x,y,z}, speed=..., air_speed=...}, ...}
+ * --  {type="pitot_tube",  pos={x,y,z}, pos_rel={x,y,z}, speed=..., air_speed=...},
+ * --  {type="ins",         pos={x,y,z}, pos_rel={x,y,z}}, ...}
  * }</pre>
  */
 public class SensorSystemAPI implements ILuaAPI {
@@ -62,6 +79,56 @@ public class SensorSystemAPI implements ILuaAPI {
     private volatile boolean onBody = false;
     private volatile @Nullable String bodyId = null;
     private volatile List<SensorSnapshot> sensors = List.of();
+
+    /** 姿态缓存（度）：门控 = 所在物理体（含约束链）上有 ≥1 个 INS（ATTITUDE 传感器） */
+    private volatile boolean attitudeAvailable = false;
+    private volatile double pitchDeg = 0;
+    private volatile double rollDeg = 0;
+    private volatile double yawDeg = 0;
+
+    /** INS 位置缓存（世界坐标）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
+    private volatile boolean insPositionAvailable = false;
+    private volatile double insPosX = 0;
+    private volatile double insPosY = 0;
+    private volatile double insPosZ = 0;
+
+    /** 姿态四元数缓存（{x,y,z,w}）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
+    private volatile boolean orientationAvailable = false;
+    private volatile double orientX = 0;
+    private volatile double orientY = 0;
+    private volatile double orientZ = 0;
+    private volatile double orientW = 1;
+
+    /** 角速度缓存（世界系 rad/s）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
+    private volatile boolean angularVelocityAvailable = false;
+    private volatile double angVelX = 0;
+    private volatile double angVelY = 0;
+    private volatile double angVelZ = 0;
+
+    /** 物理体原点世界坐标缓存：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
+    private volatile boolean bodyPosAvailable = false;
+    private volatile double bodyPosX = 0;
+    private volatile double bodyPosY = 0;
+    private volatile double bodyPosZ = 0;
+
+    /** 重力常数：重力（pN）= 质量（kg）× {@value}（Sable 物理单位） */
+    private static final double GRAVITY_CONSTANT = 11.0;
+
+    // ── 物理数据缓存（不门控：只要在物理体上就计算，与传感器无关） ──
+
+    /** 重心相对当前电脑的局部坐标（plot 帧差值，机体局部系，不随旋转变化） */
+    private volatile boolean comRelAvailable = false;
+    private volatile double comRelX = 0;
+    private volatile double comRelY = 0;
+    private volatile double comRelZ = 0;
+
+    /** 所在物理体质量（kg） */
+    private volatile boolean massAvailable = false;
+    private volatile double massKg = 0;
+
+    /** 所在物理体（含约束链）总质量（kg） */
+    private volatile boolean chainMassAvailable = false;
+    private volatile double chainMassKg = 0;
 
     /** 单个传感器的同一 tick 快照（相对物理体原点 + 相对当前电脑的局部坐标 + 读数；非对应类型读数为 null） */
     private record SensorSnapshot(SensorType type, double relX, double relY, double relZ,
@@ -94,6 +161,23 @@ public class SensorSystemAPI implements ILuaAPI {
             onBody = false;
             bodyId = null;
             sensors = List.of();
+            attitudeAvailable = false;
+            pitchDeg = rollDeg = yawDeg = 0;
+            insPositionAvailable = false;
+            insPosX = insPosY = insPosZ = 0;
+            orientationAvailable = false;
+            orientX = orientY = orientZ = 0;
+            orientW = 1;
+            angularVelocityAvailable = false;
+            angVelX = angVelY = angVelZ = 0;
+            bodyPosAvailable = false;
+            bodyPosX = bodyPosY = bodyPosZ = 0;
+            comRelAvailable = false;
+            comRelX = comRelY = comRelZ = 0;
+            massAvailable = false;
+            massKg = 0;
+            chainMassAvailable = false;
+            chainMassKg = 0;
             return;
         }
         onBody = true;
@@ -110,15 +194,114 @@ public class SensorSystemAPI implements ILuaAPI {
         // 门控（存在性）：速度类读数（speed / air_speed）要求物理体（含约束链）同时有
         // ≥1 皮托管 且 ≥1 静压孔（皮托管-静压系统：空速 = 动压 − 静压，缺静态参考无法得空速）。
         // 不满足 → 速度读数为 null（getSpeed/getAirSpeed 返回 nil，getSensors 对应字段为 nil）。
+        // 姿态类读数（getAngles）要求 ≥1 惯性导航系统（INS，ATTITUDE 传感器）。
         boolean speedGate = false;
+        boolean attitudeGate = false;
         {
             boolean hasSpeed = false;
             boolean hasPressure = false;
+            boolean hasIns = false;
             for (SensorEntry e : entries) {
                 if (e.type() == SensorType.SPEED) hasSpeed = true;
                 else if (e.type() == SensorType.PRESSURE) hasPressure = true;
+                else if (e.type() == SensorType.ATTITUDE) hasIns = true;
             }
             speedGate = hasSpeed && hasPressure;
+            attitudeGate = hasIns;
+        }
+
+        // 姿态缓存（度；门控：机体上有 INS 才计算，与速度门控同一 tick 快照）
+        double[] attitude = attitudeGate ? computeAttitudeDeg(sub) : null;
+        if (attitude != null) {
+            attitudeAvailable = true;
+            pitchDeg = attitude[0];
+            rollDeg = attitude[1];
+            yawDeg = attitude[2];
+        } else {
+            attitudeAvailable = false;
+            pitchDeg = rollDeg = yawDeg = 0;
+        }
+
+        // INS 位置缓存（世界坐标；门控：机体上有 INS 才计算，与姿态同一 tick 快照）
+        double[] insPos = attitudeGate ? computeInsPosition(sub, entries) : null;
+        if (insPos != null) {
+            insPositionAvailable = true;
+            insPosX = insPos[0];
+            insPosY = insPos[1];
+            insPosZ = insPos[2];
+        } else {
+            insPositionAvailable = false;
+            insPosX = insPosY = insPosZ = 0;
+        }
+
+        // 姿态四元数缓存（{x,y,z,w}；门控：机体上有 INS 才计算，与姿态/位置同一 tick 快照）
+        double[] orient = attitudeGate ? SableCompat.getSubLevelOrientation(sub) : null;
+        if (orient != null) {
+            orientationAvailable = true;
+            orientX = orient[0];
+            orientY = orient[1];
+            orientZ = orient[2];
+            orientW = orient[3];
+        } else {
+            orientationAvailable = false;
+            orientX = orientY = orientZ = 0;
+            orientW = 1;
+        }
+
+        // 角速度缓存（世界系 rad/s；门控：机体上有 INS 才计算）
+        Vec3 angVel = attitudeGate ? SableCompat.getAngularVelocity(sub.getLevel(), sub) : null;
+        if (angVel != null) {
+            angularVelocityAvailable = true;
+            angVelX = angVel.x;
+            angVelY = angVel.y;
+            angVelZ = angVel.z;
+        } else {
+            angularVelocityAvailable = false;
+            angVelX = angVelY = angVelZ = 0;
+        }
+
+        // 物理体原点世界坐标缓存（门控：机体上有 INS 才计算，与姿态同一 tick 快照）
+        Vec3 bodyPos = attitudeGate ? SableCompat.getSubLevelWorldPos(sub) : null;
+        if (bodyPos != null) {
+            bodyPosAvailable = true;
+            bodyPosX = bodyPos.x;
+            bodyPosY = bodyPos.y;
+            bodyPosZ = bodyPos.z;
+        } else {
+            bodyPosAvailable = false;
+            bodyPosX = bodyPosY = bodyPosZ = 0;
+        }
+
+        // ── 物理数据缓存（不门控：只要在物理体上就计算，与传感器无关） ──
+        // 重心相对当前电脑 = 重心相对原点偏移 − 电脑相对原点偏移（plot 帧差值，机体局部系，
+        // 不随物理体移动/旋转变化；与 getSensors 的 pos_rel 同帧可比较）
+        Vec3 comLocal = SableCompat.getCenterOfMassLocal(sub);
+        if (comLocal != null && compRel != null) {
+            comRelAvailable = true;
+            comRelX = comLocal.x - crx;
+            comRelY = comLocal.y - cry;
+            comRelZ = comLocal.z - crz;
+        } else {
+            comRelAvailable = false;
+            comRelX = comRelY = comRelZ = 0;
+        }
+
+        Double mass = SableCompat.getMass(sub);
+        if (mass != null) {
+            massAvailable = true;
+            massKg = mass;
+        } else {
+            massAvailable = false;
+            massKg = 0;
+        }
+
+        Double chainMass = SableCompat.getChainMass(sub);
+        if (chainMass != null) {
+            chainMassAvailable = true;
+            chainMassKg = chainMass;
+        } else {
+            chainMassAvailable = false;
+            chainMassKg = 0;
         }
 
         List<SensorSnapshot> list = new ArrayList<>();
@@ -176,7 +359,7 @@ public class SensorSystemAPI implements ILuaAPI {
      * <li>压力类（static_port）带 altitude/pressure 读数，速度类（pitot_tube）带
      *     speed（对地，沿管口朝向）与 air_speed（空速，相对空气，沿管口朝向，m/s，有符号）——
      *     <b>速度读数受门控：仅当物理体同时有 ≥1 皮托管 且 ≥1 静压孔时才有值</b>，否则为 nil；
-     *     其余类型读数为 nil。</li>
+     *     惯性导航系统（ins）条目无读数（姿态用 {@link #getAngles()} 读取）；其余类型读数为 nil。</li>
      * </ul>
      * 不在物理体上或物理体无传感器 → 空数组。
      */
@@ -249,6 +432,163 @@ public class SensorSystemAPI implements ILuaAPI {
     public final @Nullable Double getAirSpeed() {
         SensorSnapshot last = lastPitot();
         return last != null ? last.airSpeed() : null;
+    }
+
+    /**
+     * 机体姿态角（度）：{@code {pitch=, roll=, yaw=}}。
+     * <ul>
+     * <li><b>pitch</b> 俯仰：绕机体局部 X 轴，正 = 抬头（机头向上）；</li>
+     * <li><b>roll</b> 滚转：绕机体局部 Z 轴，正 = 右翼下压（右倾）；</li>
+     * <li><b>yaw</b> 航向：0 = 机体局部 −Z 指向世界北，正 = 右转（从上往下看顺时针），−180..180。</li>
+     * </ul>
+     * 算法同 {@code simulated:gimbal_sensor} 的 XAngle/ZAngle（世界"下"方向投影），
+     * yaw 由世界北方向在机体局部系的水平方位提取（稳态下等于 INS 指北标记读数）。
+     * <p>
+     * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个惯性导航系统
+     * （ccpe:ins），否则返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getAngles() {
+        if (!attitudeAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("pitch", pitchDeg);
+        m.put("roll", rollDeg);
+        m.put("yaw", yawDeg);
+        return m;
+    }
+
+    /**
+     * 最后放置（最新注册）的惯性导航系统（ccpe:ins）的世界坐标 {@code {x, y, z}}。
+     * <p>
+     * 方块 plot 坐标经 Sable 物理体变换投影到世界（{@link SableCompat#projectOutOfSubLevel}，
+     * 与静压孔高度/气压的世界点同一来源），随物理体移动/旋转实时变化；
+     * 与 {@link #getSensors()} 的 {@code pos}（相对物理体原点）/{@code pos_rel}（相对电脑）不同，
+     * 这是 INS 在世界中实际渲染的位置。
+     * <p>
+     * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个惯性导航系统
+     * （ccpe:ins），否则返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getPosition() {
+        if (!insPositionAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("x", insPosX);
+        m.put("y", insPosY);
+        m.put("z", insPosZ);
+        return m;
+    }
+
+    /**
+     * 所在物理体（含约束链）的姿态四元数 {@code {x, y, z, w}}
+     * （{@code subLevel.logicalPose().orientation()}，世界系）。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getAngles()} 相同——所在物理体上必须有 ≥1 个
+     * 惯性导航系统（ccpe:ins），否则返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getOrientation() {
+        if (!orientationAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("x", orientX);
+        m.put("y", orientY);
+        m.put("z", orientZ);
+        m.put("w", orientW);
+        return m;
+    }
+
+    /**
+     * 所在物理体（含约束链）的世界系角速度 {@code {x, y, z}}（rad/s，
+     * {@link SableCompat#getAngularVelocity}，刚体角速度）。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getAngles()} 相同——所在物理体上必须有 ≥1 个
+     * 惯性导航系统（ccpe:ins），否则返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getAngularVelocity() {
+        if (!angularVelocityAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("x", angVelX);
+        m.put("y", angVelY);
+        m.put("z", angVelZ);
+        return m;
+    }
+
+    /**
+     * 所在物理体原点的世界坐标 {@code {x, y, z}}
+     * （{@code subLevel.logicalPose().position()}，经 Sable 物理体变换投影到世界；
+     * 与 {@link #getPosition()}（INS 方块坐标）不同，这是整个物理体的原点/质心枢轴位置）。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getAngles()} 相同——所在物理体上必须有 ≥1 个
+     * 惯性导航系统（ccpe:ins），否则返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getBodyPosition() {
+        if (!bodyPosAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("x", bodyPosX);
+        m.put("y", bodyPosY);
+        m.put("z", bodyPosZ);
+        return m;
+    }
+
+    // ═══════════════ 物理数据（不门控：只要在物理体上就有值） ═══════════════
+
+    /**
+     * 物理体重心相对于当前电脑的机体局部系位置 {@code {x, y, z}}。
+     * <p>
+     * = 重心相对物理体原点的偏移 − 电脑相对物理体原点的偏移（plot 帧差值，
+     * 与 {@link #getSensors()} 的 {@code pos_rel} 同帧），<b>不随物理体移动/旋转变化</b>。
+     * <p>
+     * <b>不门控</b>：只要电脑在物理体上就有值；不在物理体上或质量数据不可用返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getPhysicsCenterOfMassRel() {
+        if (!comRelAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("x", comRelX);
+        m.put("y", comRelY);
+        m.put("z", comRelZ);
+        return m;
+    }
+
+    /**
+     * 电脑所在物理体的质量（kg）。
+     * <p>
+     * <b>不门控</b>：只要电脑在物理体上就有值；不在物理体上或质量数据不可用返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Double getPhysicsMass() {
+        return massAvailable ? massKg : null;
+    }
+
+    /**
+     * 电脑所在物理体（含约束链）的总质量（kg）。
+     * <p>
+     * <b>不门控</b>：只要电脑在物理体上就有值；不在物理体上或质量数据不可用返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Double getPhysicsChainMass() {
+        return chainMassAvailable ? chainMassKg : null;
+    }
+
+    /**
+     * 电脑所在物理体的重力（pN，= 质量 × {@value #GRAVITY_CONSTANT}）。
+     * <p>
+     * <b>不门控</b>：只要电脑在物理体上就有值；不在物理体上或质量数据不可用返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Double getPhysicsGravityForce() {
+        return massAvailable ? massKg * GRAVITY_CONSTANT : null;
+    }
+
+    /**
+     * 电脑所在物理体（含约束链）的总重力（pN，= 链总质量 × {@value #GRAVITY_CONSTANT}）。
+     * <p>
+     * <b>不门控</b>：只要电脑在物理体上就有值；不在物理体上或质量数据不可用返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Double getPhysicsChainGravityForce() {
+        return chainMassAvailable ? chainMassKg * GRAVITY_CONSTANT : null;
     }
 
     /** 全部静压孔高度的简单平均值；无静压孔返回 nil */
@@ -330,8 +670,52 @@ public class SensorSystemAPI implements ILuaAPI {
     private static String typeName(SensorType type) {
         return switch (type) {
             case PRESSURE -> "static_port";
-            case SPEED -> "pitot_tube"; // 后续接入
+            case SPEED -> "pitot_tube";
+            case ATTITUDE -> "ins"; // 惯性导航系统：姿态读数走 getAngles()
         };
+    }
+
+    /**
+     * 机体姿态欧拉角（度）：{@code {pitch, roll, yaw}}，算法同
+     * {@code simulated:gimbal_sensor}：
+     * <ul>
+     * <li>pitch/roll：世界"下"方向经机体姿态转到局部系后投影（XAngle/ZAngle 同款公式），
+     *     pitch 正 = 抬头（绕局部 X）、roll 正 = 右翼下压（绕局部 Z）；</li>
+     * <li>yaw：世界北 (0,0,-1) 转到机体局部系后取水平方位（忽略局部 Y 分量），
+     *     0 = 局部 −Z 指北，正 = 右转（顺时针从上往下看），−180..180。</li>
+     * </ul>
+     *
+     * @return {pitch, roll, yaw}（度）
+     */
+    private double[] computeAttitudeDeg(SubLevel sub) {
+        final Pose3dc pose = sub.logicalPose();
+
+        final Vector3d ld = JOMLConversion.toJOML(Vec3.atLowerCornerOf(Direction.DOWN.getNormal()));
+        pose.orientation().transformInverse(ld);
+        final double pitch = ld.y() < 0 || ld.z() * ld.z() > 0.001 ? Math.atan2(ld.z(), -ld.y()) : 0;
+        final double roll = ld.y() < 0 || ld.x() * ld.x() > 0.001 ? Math.atan2(ld.x(), -ld.y()) : 0;
+
+        final Vector3d north = new Vector3d(0, 0, -1);
+        pose.orientation().transformInverse(north);
+        final double yaw = -Math.atan2(north.x(), -north.z());
+
+        return new double[] { Math.toDegrees(pitch), Math.toDegrees(roll), Math.toDegrees(yaw) };
+    }
+
+    /**
+     * 最后放置（最新注册）的 INS 的世界坐标（plot 坐标经 Sable 物理体变换投影到世界，
+     * 同 {@code simulated:altitude_sensor} 的 worldPos 用法）。
+     *
+     * @return {x, y, z}（世界坐标）；机体上无 INS（门控）或投影失败返回 null
+     */
+    private @Nullable double[] computeInsPosition(SubLevel sub, List<SensorEntry> entries) {
+        SensorEntry lastIns = null;
+        for (SensorEntry e : entries)
+            if (e.type() == SensorType.ATTITUDE) lastIns = e; // 注册顺序 = 放置顺序，取最后
+        if (lastIns == null) return null;
+        Vec3 worldPos = SableCompat.projectOutOfSubLevel(sub.getLevel(), lastIns.pos());
+        if (worldPos == null) return null;
+        return new double[] { worldPos.x, worldPos.y, worldPos.z };
     }
 
     private @Nullable Double computePressure(Level level, Vec3 worldPos) {

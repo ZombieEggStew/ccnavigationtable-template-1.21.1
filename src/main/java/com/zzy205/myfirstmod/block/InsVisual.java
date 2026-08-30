@@ -20,7 +20,7 @@ import java.util.function.Consumer;
  * 层级（外→内）：test 绕 Y 偏航指北 → gimbal 绕 Z 滚转 → compass 绕 X 俯仰
  * （四元数 Y / Y·Z / Y·Z·X，各自独立实例），与 BER 共享同一套朝向约定。
  */
-public class MyAeroSensorVisual extends AbstractBlockEntityVisual<MyAeroSensorBlockEntity>
+public class InsVisual extends AbstractBlockEntityVisual<InsBlockEntity>
         implements SimpleDynamicVisual {
 
     /** 转动部件（万向环/罗盘盘/偏航标记）整体下移量（块单位）：模型与旋转中心同步下移 3.5px */
@@ -32,23 +32,23 @@ public class MyAeroSensorVisual extends AbstractBlockEntityVisual<MyAeroSensorBl
 
     private final List<ColoredLitInstance> allInstances = new ArrayList<>();
 
-    public MyAeroSensorVisual(final VisualizationContext ctx, final MyAeroSensorBlockEntity blockEntity, final float partialTick) {
+    public InsVisual(final VisualizationContext ctx, final InsBlockEntity blockEntity, final float partialTick) {
         super(ctx, blockEntity, partialTick);
 
         this.gimbal = this.instancerProvider().instancer(InstanceTypes.ORIENTED,
-                        Models.partial(MyModPartialModels.MY_AERO_SENSOR_GIMBAL))
+                        Models.partial(MyModPartialModels.INS_GIMBAL))
                 .createInstance().position(this.getVisualPosition())
                 .translatePosition(0.5f, 0.5f - PIVOT_DROP, 0.5f)
                 .translatePivot(-0.5f, -0.5f, -0.5f);
 
         this.compass = this.instancerProvider().instancer(InstanceTypes.ORIENTED,
-                        Models.partial(MyModPartialModels.MY_AERO_SENSOR_COMPASS))
+                        Models.partial(MyModPartialModels.INS_COMPASS))
                 .createInstance().position(this.getVisualPosition())
                 .translatePosition(0.5f, 0.5f - PIVOT_DROP, 0.5f)
                 .translatePivot(-0.5f, -0.5f, -0.5f);
 
         this.yaw = this.instancerProvider().instancer(InstanceTypes.ORIENTED,
-                        Models.partial(MyModPartialModels.MY_AERO_SENSOR_YAW))
+                        Models.partial(MyModPartialModels.INS_YAW))
                 .createInstance().position(this.getVisualPosition())
                 .translatePosition(0.5f, 0.5f - PIVOT_DROP, 0.5f)
                 .translatePivot(-0.5f, -0.5f, -0.5f);

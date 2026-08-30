@@ -2,6 +2,7 @@
 
 > 状态：**已实现并进游戏验证通过**（2026-08 完成）。视觉行为照抄 `simulated:gimbal_sensor` 的重力摆动画，
 > 但部件层级做了自定义（比 simulated 更进一步：偏航标记 test 在最外层并正确指北）。
+> 逻辑部分（`ccpe.sensor_system.getAngles()`，pitch/roll/yaw 度，门控 INS）**已实现，待进游戏验证**。
 > 本文记录实现细节与关键坑，修改该方块前先读本文。
 
 ## 需求与结果
@@ -25,7 +26,7 @@
 - **建模约定**：所有可动部件模型以**方块中心 (8,8,8) 为原点**建模（Blockbench origin 8,8,8，
   元素坐标可为负/超出 0-16）；渲染时平移到 `(0.5, 0.5-PIVOT_DROP, 0.5)` 再绕该点旋转。
 - **PIVOT_DROP**：转动部件整体下移量（当前 `3.5f/16f`，用户在游戏里调过 5px → 3.5px），
-  模型与旋转中心同步下移。改位移只改 `MyAeroSensorVisual` / `MyAeroSensorRenderer` 顶部的 `PIVOT_DROP`。
+  模型与旋转中心同步下移。改位移只改 `InsVisual` / `InsRenderer` 顶部的 `PIVOT_DROP`。
 - 纹理：`textures/block/my_aero_sensor/ins.png`。
 
 ## 渲染层级（核心，勿乱改）
@@ -40,13 +41,16 @@ compass  = Y·Z·X          (applyCompass→applyPrimary→applySecondary, euler
 
 - 四元数右乘调用顺序 = `rotateY → rotateZ → rotateX`（对 yaw/gimbal/compass 依次叠加）。
 - 与 simulated 原版（needle(Y) 最内、gimbal=Z、compass=Z·X）不同；本 mod 的 Y 在最外层。
-- 双渲染路径必须保持一致：`MyAeroSensorVisual`（Flywheel，OrientedInstance ×3）与
-  `MyAeroSensorRenderer`（BER 回退，SuperByteBuffer）。`PIVOT_DROP` 两处都要改。
+- 双渲染路径必须保持一致：`InsVisual`（Flywheel，OrientedInstance ×3）与
+  `InsRenderer`（BER 回退，SuperByteBuffer）。`PIVOT_DROP` 两处都要改。
 
-## 动画模拟（客户端每 tick，`MyAeroSensorBlockEntity`）
+## 动画模拟（客户端每 tick，`InsBlockEntity`）
 
 - 位置：`BlockEntity` + 静态 `tick(level, pos, state, be)`（项目模式，替代 simulated 的 SmartBlockEntity），
-  客户端 `tickClient` 跑模拟，服务端 `tickServer` 只算 `XAngle/ZAngle`（getter 预留，未来接 `ccpe.sensor_system` Lua）。
+  客户端 `tickClient` 跑模拟，服务端 `tickServer` 算 `XAngle/ZAngle`（gimbal_sensor 风格，兼容保留）
+  并**注册进 `BodySensorRegistry`（ATTITUDE 传感器）**，作为 `ccpe.sensor_system.getAngles()` 的姿态门控
+  （机体上有 INS 才返回 pitch/roll/yaw，度；生命周期对齐 StaticPortBlockEntity：onLoad 注册 /
+  setRemoved 注销 / tickServer 每 20 tick 复核 UUID 重注册）。
 - 参数（照抄 simulated）：`angleInertia = (110, 110, 34)`、`angleDamping = (0.2, 0.2, 0.2)`；
   限位固定 90°（原版 ScrollValueBehaviour 可调，本 mod 砍掉）。
 - 组成：重力扭矩 `addGravityTorque`（永远水平）、指北扭矩 `addCompassTorque`（test 指北）、
@@ -88,8 +92,8 @@ compass  = Y·Z·X          (applyCompass→applyPrimary→applySecondary, euler
 ## 注册链
 
 `MyModBlocks.ins` → `MyModBlockEntities.ins_entity` →
-`MyModPartialModels.MY_AERO_SENSOR_GIMBAL/COMPASS/YAW`（路径 `my_aero_sensor/ins/*`）→
-`MyModCreativeModeTabs` → `CCPeripheralExtenderClient`（Visualizer `MyAeroSensorVisual` + BER `MyAeroSensorRenderer`）。
+`MyModPartialModels.INS_GIMBAL/COMPASS/YAW`（路径 `my_aero_sensor/ins/*`）→
+`MyModCreativeModeTabs` → `CCPeripheralExtenderClient`（Visualizer `InsVisual` + BER `InsRenderer`）。
 资源：blockstate / models/item / loot_table / lang（「惯性导航系统」/「Inertial Navigation System」）。
 
 ## 参考来源
@@ -99,6 +103,15 @@ compass  = Y·Z·X          (applyCompass→applyPrimary→applySecondary, euler
 
 ## 后续可选项
 
-- 接 `ccpe.sensor_system` Lua API（`XAngle/ZAngle` getter 已预留，或直接读 `logicalPose().orientation()`）。
+- [x] 接 `ccpe.sensor_system` Lua API（`getAngles()` 已实现，2026-08：pitch 正=抬头 / roll 正=右翼下压 /
+      yaw 0=局部 −Z 指北、正=右转（顺时针从上往下看）−180..180，全部度；门控 = 机体含约束链上有 ≥1 INS；
+      算法 = gimbal_sensor 重力投影（XAngle/ZAngle 同款）+ 世界北水平方位（稳态等于指北标记读数）；
+      姿态在 `SensorSystemAPI.update()` 每 tick 由 `sub.logicalPose()` 直接计算，不走 BE 的 XAngle/ZAngle）。
+- [x] `getPosition()` 已实现（2026-08）：最后放置的 INS 的**世界坐标** {x, y, z}（plot 坐标经
+      `SableCompat.projectOutOfSubLevel` 投影到世界，与静压孔高度同源；随物理体移动/旋转实时变化；
+      门控与 getAngles 相同 = 机体上有 ≥1 INS）。
+- [x] `getOrientation()` / `getAngularVelocity()` 已实现（2026-08）：机体姿态四元数 {x, y, z, w} 与
+      世界系角速度 {x, y, z} rad/s（分别复用 `SableCompat.getSubLevelOrientation` / `getAngularVelocity`，
+      均为刚体属性直接读取）；门控与 getAngles/getPosition 相同 = 机体上有 ≥1 INS。
 - Create 护目镜 tooltip 显示俯仰/滚转/航向读数。
 - 非自然维度指北行为开关（当前随机乱转）。

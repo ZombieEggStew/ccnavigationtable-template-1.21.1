@@ -38,10 +38,10 @@ public class MyModPartialModels {
     public static final PartialModel MODULE_KNOB_BASE = block("knob_1/knob_1_base");
     public static final PartialModel MODULE_KNOB_HANDLE = block("knob_1/knob_1");
     /** 惯性导航系统（INS）：万向环 / 罗盘盘（照抄 simulated gimbal_sensor：gimbal + compass；外壳由 blockstate 渲染） */
-    public static final PartialModel MY_AERO_SENSOR_GIMBAL = block("my_aero_sensor/ins/gimbal");
-    public static final PartialModel MY_AERO_SENSOR_COMPASS = block("my_aero_sensor/ins/compass");
+    public static final PartialModel INS_GIMBAL = block("my_aero_sensor/ins/gimbal");
+    public static final PartialModel INS_COMPASS = block("my_aero_sensor/ins/compass");
     /** 惯性导航系统（INS）：偏航指示标记（绕自身 Y 永远面向北方，跟罗盘盘一起转） */
-    public static final PartialModel MY_AERO_SENSOR_YAW = block("my_aero_sensor/ins/test");
+    public static final PartialModel INS_YAW = block("my_aero_sensor/ins/test");
 
     private static PartialModel block(String path) {
         return PartialModel.of(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "block/" + path));
