@@ -10,6 +10,7 @@
   "block.ccpe.static_port": "Static Port",
   "block.ccpe.pitot_tube": "Pitot Tube",
   "block.ccpe.ins": "Inertial Navigation System",
+  "block.ccpe.fmc": "Flight Management Computer",
 
   "tooltip.ccpe.transmission_peripheral.header": "Electronic Transmission",
   "tooltip.ccpe.transmission_peripheral.mode": "Mode:",

@@ -59,11 +59,11 @@ import java.util.Map;
  * print(ss.getOrientation())      -- 机体姿态四元数 {x, y, z, w}（门控：机体上必须有 INS）
  * print(ss.getAngularVelocity())  -- 机体世界系角速度 {x, y, z} rad/s（门控：机体上必须有 INS）
  * print(ss.getBodyPosition())     -- 物理体原点世界坐标 {x, y, z}（门控：机体上必须有 INS）
- * print(ss.getPhysicsCenterOfMassRel()) -- 重心相对电脑的机体局部系位置 {x, y, z}（不门控）
- * print(ss.getPhysicsMass())      -- 所在物理体质量 kg（不门控）
- * print(ss.getPhysicsChainMass()) -- 所在物理体链总质量 kg（不门控）
- * print(ss.getPhysicsGravityForce()) -- 所在物理体重力 pN（不门控）
- * print(ss.getPhysicsChainGravityForce()) -- 所在物理体链总重力 pN（不门控）
+ * print(ss.getPhysicsCenterOfMassRel()) -- 重心相对电脑的机体局部系位置 {x, y, z}（门控：机体上有 FMC）
+ * print(ss.getPhysicsMass())      -- 所在物理体质量 kg（门控：机体上有 FMC）
+ * print(ss.getPhysicsChainMass()) -- 所在物理体链总质量 kg（门控：机体上有 FMC）
+ * print(ss.getPhysicsGravityForce()) -- 所在物理体重力 pN（门控：机体上有 FMC）
+ * print(ss.getPhysicsChainGravityForce()) -- 所在物理体链总重力 pN（门控：机体上有 FMC）
  * local sensors = ss.getSensors() -- 全部传感器快照
  * -- {{type="static_port", pos={x,y,z}, pos_rel={x,y,z}, altitude=..., pressure=...},
  * --  {type="pitot_tube",  pos={x,y,z}, pos_rel={x,y,z}, speed=..., air_speed=...},
@@ -114,7 +114,7 @@ public class SensorSystemAPI implements ILuaAPI {
     /** 重力常数：重力（pN）= 质量（kg）× {@value}（Sable 物理单位） */
     private static final double GRAVITY_CONSTANT = 11.0;
 
-    // ── 物理数据缓存（不门控：只要在物理体上就计算，与传感器无关） ──
+    // ── 物理数据缓存（门控：机体（含约束链）上有 ≥1 个 FMC 才计算，与传感器存在性相关） ──
 
     /** 重心相对当前电脑的局部坐标（plot 帧差值，机体局部系，不随旋转变化） */
     private volatile boolean comRelAvailable = false;
@@ -195,19 +195,24 @@ public class SensorSystemAPI implements ILuaAPI {
         // ≥1 皮托管 且 ≥1 静压孔（皮托管-静压系统：空速 = 动压 − 静压，缺静态参考无法得空速）。
         // 不满足 → 速度读数为 null（getSpeed/getAirSpeed 返回 nil，getSensors 对应字段为 nil）。
         // 姿态类读数（getAngles）要求 ≥1 惯性导航系统（INS，ATTITUDE 传感器）。
+        // 物理数据类读数（getPhysics*）要求 ≥1 飞行管理计算机（FMC，ccpe:fmc）。
         boolean speedGate = false;
         boolean attitudeGate = false;
+        boolean physicsGate = false;
         {
             boolean hasSpeed = false;
             boolean hasPressure = false;
             boolean hasIns = false;
+            boolean hasFmc = false;
             for (SensorEntry e : entries) {
                 if (e.type() == SensorType.SPEED) hasSpeed = true;
                 else if (e.type() == SensorType.PRESSURE) hasPressure = true;
                 else if (e.type() == SensorType.ATTITUDE) hasIns = true;
+                else if (e.type() == SensorType.FMC) hasFmc = true;
             }
             speedGate = hasSpeed && hasPressure;
             attitudeGate = hasIns;
+            physicsGate = hasFmc;
         }
 
         // 姿态缓存（度；门控：机体上有 INS 才计算，与速度门控同一 tick 快照）
@@ -272,34 +277,43 @@ public class SensorSystemAPI implements ILuaAPI {
             bodyPosX = bodyPosY = bodyPosZ = 0;
         }
 
-        // ── 物理数据缓存（不门控：只要在物理体上就计算，与传感器无关） ──
-        // 重心相对当前电脑 = 重心相对原点偏移 − 电脑相对原点偏移（plot 帧差值，机体局部系，
-        // 不随物理体移动/旋转变化；与 getSensors 的 pos_rel 同帧可比较）
-        Vec3 comLocal = SableCompat.getCenterOfMassLocal(sub);
-        if (comLocal != null && compRel != null) {
-            comRelAvailable = true;
-            comRelX = comLocal.x - crx;
-            comRelY = comLocal.y - cry;
-            comRelZ = comLocal.z - crz;
+        // ── 物理数据缓存（门控：机体（含约束链）上有 ≥1 个 FMC 才计算，与姿态/速度同一 tick 快照） ──
+        if (physicsGate) {
+            // 重心相对当前电脑 = 重心相对原点偏移 − 电脑相对原点偏移（plot 帧差值，机体局部系，
+            // 不随物理体移动/旋转变化；与 getSensors 的 pos_rel 同帧可比较）
+            Vec3 comLocal = SableCompat.getCenterOfMassLocal(sub);
+            if (comLocal != null && compRel != null) {
+                comRelAvailable = true;
+                comRelX = comLocal.x - crx;
+                comRelY = comLocal.y - cry;
+                comRelZ = comLocal.z - crz;
+            } else {
+                comRelAvailable = false;
+                comRelX = comRelY = comRelZ = 0;
+            }
+
+            Double mass = SableCompat.getMass(sub);
+            if (mass != null) {
+                massAvailable = true;
+                massKg = mass;
+            } else {
+                massAvailable = false;
+                massKg = 0;
+            }
+
+            Double chainMass = SableCompat.getChainMass(sub);
+            if (chainMass != null) {
+                chainMassAvailable = true;
+                chainMassKg = chainMass;
+            } else {
+                chainMassAvailable = false;
+                chainMassKg = 0;
+            }
         } else {
             comRelAvailable = false;
             comRelX = comRelY = comRelZ = 0;
-        }
-
-        Double mass = SableCompat.getMass(sub);
-        if (mass != null) {
-            massAvailable = true;
-            massKg = mass;
-        } else {
             massAvailable = false;
             massKg = 0;
-        }
-
-        Double chainMass = SableCompat.getChainMass(sub);
-        if (chainMass != null) {
-            chainMassAvailable = true;
-            chainMassKg = chainMass;
-        } else {
             chainMassAvailable = false;
             chainMassKg = 0;
         }
@@ -359,7 +373,9 @@ public class SensorSystemAPI implements ILuaAPI {
      * <li>压力类（static_port）带 altitude/pressure 读数，速度类（pitot_tube）带
      *     speed（对地，沿管口朝向）与 air_speed（空速，相对空气，沿管口朝向，m/s，有符号）——
      *     <b>速度读数受门控：仅当物理体同时有 ≥1 皮托管 且 ≥1 静压孔时才有值</b>，否则为 nil；
-     *     惯性导航系统（ins）条目无读数（姿态用 {@link #getAngles()} 读取）；其余类型读数为 nil。</li>
+     *     惯性导航系统（ins）条目无读数（姿态用 {@link #getAngles()} 读取）；
+     *     飞行管理计算机（fmc）条目无读数（物理数据门控用，见 {@code getPhysics*} 方法）；
+     *     其余类型读数为 nil。</li>
      * </ul>
      * 不在物理体上或物理体无传感器 → 空数组。
      */
@@ -531,7 +547,7 @@ public class SensorSystemAPI implements ILuaAPI {
         return m;
     }
 
-    // ═══════════════ 物理数据（不门控：只要在物理体上就有值） ═══════════════
+    // ═══════════════ 物理数据（门控：机体（含约束链）上有 ≥1 个 FMC 才有值） ═══════════════
 
     /**
      * 物理体重心相对于当前电脑的机体局部系位置 {@code {x, y, z}}。
@@ -539,7 +555,8 @@ public class SensorSystemAPI implements ILuaAPI {
      * = 重心相对物理体原点的偏移 − 电脑相对物理体原点的偏移（plot 帧差值，
      * 与 {@link #getSensors()} 的 {@code pos_rel} 同帧），<b>不随物理体移动/旋转变化</b>。
      * <p>
-     * <b>不门控</b>：只要电脑在物理体上就有值；不在物理体上或质量数据不可用返回 nil。
+     * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
+     * （FMC，ccpe:fmc），否则返回 nil；不在物理体上或质量数据不可用同样返回 nil。
      */
     @LuaFunction
     public final @Nullable Map<String, Double> getPhysicsCenterOfMassRel() {
@@ -554,7 +571,8 @@ public class SensorSystemAPI implements ILuaAPI {
     /**
      * 电脑所在物理体的质量（kg）。
      * <p>
-     * <b>不门控</b>：只要电脑在物理体上就有值；不在物理体上或质量数据不可用返回 nil。
+     * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
+     * （FMC，ccpe:fmc），否则返回 nil；不在物理体上或质量数据不可用同样返回 nil。
      */
     @LuaFunction
     public final @Nullable Double getPhysicsMass() {
@@ -564,7 +582,8 @@ public class SensorSystemAPI implements ILuaAPI {
     /**
      * 电脑所在物理体（含约束链）的总质量（kg）。
      * <p>
-     * <b>不门控</b>：只要电脑在物理体上就有值；不在物理体上或质量数据不可用返回 nil。
+     * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
+     * （FMC，ccpe:fmc），否则返回 nil；不在物理体上或质量数据不可用同样返回 nil。
      */
     @LuaFunction
     public final @Nullable Double getPhysicsChainMass() {
@@ -574,7 +593,8 @@ public class SensorSystemAPI implements ILuaAPI {
     /**
      * 电脑所在物理体的重力（pN，= 质量 × {@value #GRAVITY_CONSTANT}）。
      * <p>
-     * <b>不门控</b>：只要电脑在物理体上就有值；不在物理体上或质量数据不可用返回 nil。
+     * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
+     * （FMC，ccpe:fmc），否则返回 nil；不在物理体上或质量数据不可用同样返回 nil。
      */
     @LuaFunction
     public final @Nullable Double getPhysicsGravityForce() {
@@ -584,7 +604,8 @@ public class SensorSystemAPI implements ILuaAPI {
     /**
      * 电脑所在物理体（含约束链）的总重力（pN，= 链总质量 × {@value #GRAVITY_CONSTANT}）。
      * <p>
-     * <b>不门控</b>：只要电脑在物理体上就有值；不在物理体上或质量数据不可用返回 nil。
+     * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
+     * （FMC，ccpe:fmc），否则返回 nil；不在物理体上或质量数据不可用同样返回 nil。
      */
     @LuaFunction
     public final @Nullable Double getPhysicsChainGravityForce() {
@@ -672,6 +693,7 @@ public class SensorSystemAPI implements ILuaAPI {
             case PRESSURE -> "static_port";
             case SPEED -> "pitot_tube";
             case ATTITUDE -> "ins"; // 惯性导航系统：姿态读数走 getAngles()
+            case FMC -> "fmc"; // 飞行管理计算机：物理数据门控，无读数
         };
     }
 

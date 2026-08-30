@@ -1,6 +1,10 @@
-# Physics Data
+# Flight Management Computer
 
-The `ccpe.sensor_system` physics-data methods are **not gated**: they require **no sensor block** at all. As long as the computer is on a physics body (Sable sub-level, including constraint chains), these values are available. They return `nil` when the computer is not on a body, or the underlying physics data is unavailable.
+![fmc](../img/fmc_item.png)
+
+## FMC gate
+
+The physics body must have **at least 1 FMC** (`ccpe:fmc`) installed, otherwise all the methods below return `nil`. They also return `nil` when the computer is not on a body, or the underlying physics data is unavailable.
 
 | Method | Returns | Description |
 |---|---|---|
@@ -52,4 +56,4 @@ if com then
 end
 ```
 
-These methods are available **without any sensor**; the INS-gated attitude/physics methods are documented on the [Inertial Navigation System](ins.md) page.
+These methods require **an FMC (`ccpe:fmc`) installed on the body**; the INS-gated attitude/physics methods are documented on the [Inertial Navigation System](ins.md) page.

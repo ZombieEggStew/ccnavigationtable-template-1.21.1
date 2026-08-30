@@ -58,4 +58,4 @@ print("quaternion:", textutils.serialize(ss.getOrientation()))
 print("ang vel:   ", textutils.serialize(ss.getAngularVelocity()))
 ```
 
-The shared methods (`isOnBody()`, `getBodyId()`, `getSensors()`, ...) behave as documented on the [Static Port](static-port.md) page. Gated physics data that requires **no** sensor is documented on the [Physics Data](physics-data.md) page.
+The shared methods (`isOnBody()`, `getBodyId()`, `getSensors()`, ...) behave as documented on the [Static Port](static-port.md) page. Physics data gated by the **Flight Management Computer (FMC)** is documented on the [Physics Data](physics-data.md) page.

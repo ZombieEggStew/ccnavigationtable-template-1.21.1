@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.FmcBlockEntity;
 import com.zzy205.myfirstmod.block.InsBlockEntity;
 import com.zzy205.myfirstmod.block.PitotTubeBlockEntity;
 import com.zzy205.myfirstmod.block.StaticPortBlockEntity;
@@ -23,12 +24,13 @@ import java.util.UUID;
  * <p>
  * 仅服务端主线程访问（BE onLoad/tick/setRemoved 与 {@link SensorSystemAPI#update()} 都在主线程）。
  * 与 {@code GlobalChannelRegistry} / Peripheral Extender 注册表同模式；登记
- * {@link StaticPortBlockEntity}（PRESSURE）、{@link PitotTubeBlockEntity}（SPEED）与
- * {@link InsBlockEntity}（ATTITUDE，惯性导航系统）三类传感器。
+ * {@link StaticPortBlockEntity}（PRESSURE）、{@link PitotTubeBlockEntity}（SPEED）、
+ * {@link InsBlockEntity}（ATTITUDE，惯性导航系统）与 {@link FmcBlockEntity}（FMC，
+ * 飞行管理计算机，物理数据方法的存在性门控）四类传感器。
  */
 public final class BodySensorRegistry {
 
-    public enum SensorType { SPEED, PRESSURE, ATTITUDE }
+    public enum SensorType { SPEED, PRESSURE, ATTITUDE, FMC }
 
     public record SensorEntry(SensorType type, BlockPos pos) {}
 
@@ -80,6 +82,7 @@ public final class BodySensorRegistry {
         if (be instanceof StaticPortBlockEntity) return SensorType.PRESSURE;
         if (be instanceof PitotTubeBlockEntity) return SensorType.SPEED;
         if (be instanceof InsBlockEntity) return SensorType.ATTITUDE;
+        if (be instanceof FmcBlockEntity) return SensorType.FMC;
         return null;
     }
 }

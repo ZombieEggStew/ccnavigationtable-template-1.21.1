@@ -81,6 +81,14 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 飞行管理计算机（FMC）：贴附式方块（blockstate 结构参考 micro_peripheral_extender，见 FmcBlock）；带 BE 注册进 BodySensorRegistry，作物理数据门控 */
+    public static final DeferredBlock<FmcBlock> fmc =
+            registerBlocks("fmc", () -> new FmcBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.COPPER).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     /**
      * 风帆轴承 plate（link block）。
      * <p>

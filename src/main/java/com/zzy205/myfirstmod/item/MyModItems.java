@@ -41,6 +41,10 @@ public class MyModItems {
     public static final DeferredItem<Item> CONTROL_THROTTLE_2 = ITEMS.register(
             "throttle_2", () -> new Item(new Item.Properties()));
 
+    // ── 航空电子物品 ──
+    // 注：飞行管理计算机（fmc）是方块，BlockItem 由 MyModBlocks.registerBlocks → registerBlockItems 自动注册，
+    //     不要在 MyModItems 重复注册同名物品。
+
     /** 创建指定普通 Monitor 模块的物品栈；未知类型返回空栈。 */
     public static ItemStack monitorModuleStack(ModuleType type) {
         if (type == null) return ItemStack.EMPTY;
