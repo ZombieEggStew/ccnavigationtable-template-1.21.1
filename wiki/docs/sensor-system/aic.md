@@ -10,5 +10,6 @@ An AIC counts as **both** an INS and an FMC for `ccpe.sensor_system` gating: a p
 
 In `getSensors()`, an AIC appears as **two entries at the same position**: `{type="ins", pos={x,y,z}, pos_rel={x,y,z}}` and `{type="fmc", pos={x,y,z}, pos_rel={x,y,z}}`.
 
+For the complete method explanation, see the [Inertial Navigation System](ins.md) and [Flight Management Computer](fmc.md) pages.
 
-The shared methods (`isOnBody()`, `getBodyId()`, `getSensors()`, ...) behave as documented on the [Static Port](static-port.md) page.
+
