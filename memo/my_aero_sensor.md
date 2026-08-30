@@ -1,4 +1,4 @@
-# 惯性导航系统（my_aero_sensor，INS）实现记录
+# 惯性导航系统（ccpe:ins，INS）实现记录
 
 > 状态：**已实现并进游戏验证通过**（2026-08 完成）。视觉行为照抄 `simulated:gimbal_sensor` 的重力摆动画，
 > 但部件层级做了自定义（比 simulated 更进一步：偏航标记 test 在最外层并正确指北）。
@@ -6,7 +6,7 @@
 
 ## 需求与结果
 
-- 新方块 `ccpe:my_aero_sensor`「惯性导航系统」（INS）：装在物理体（Sable sub-level）上的姿态指示器，
+- 新方块 `ccpe:ins`「惯性导航系统」（INS）：装在物理体（Sable sub-level）上的姿态指示器，
   实时反映物理体滚转（绕 Z）、俯仰（绕 X），并带一个永远面向北方的偏航标记（绕 Y）。
 - 视觉核心 = simulated:gimbal_sensor 的「重力摆模拟」：罗盘被重力扭矩"托"着永远水平，
   物理体翻滚时有惯性摆动感、撞限位反弹、外壳角速度耦合甩动。
@@ -87,7 +87,7 @@ compass  = Y·Z·X          (applyCompass→applyPrimary→applySecondary, euler
 
 ## 注册链
 
-`MyModBlocks.my_aero_sensor` → `MyModBlockEntities.my_aero_sensor_entity` →
+`MyModBlocks.ins` → `MyModBlockEntities.ins_entity` →
 `MyModPartialModels.MY_AERO_SENSOR_GIMBAL/COMPASS/YAW`（路径 `my_aero_sensor/ins/*`）→
 `MyModCreativeModeTabs` → `CCPeripheralExtenderClient`（Visualizer `MyAeroSensorVisual` + BER `MyAeroSensorRenderer`）。
 资源：blockstate / models/item / loot_table / lang（「惯性导航系统」/「Inertial Navigation System」）。

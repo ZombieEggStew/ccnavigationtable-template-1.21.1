@@ -97,7 +97,7 @@ public class CCPeripheralExtenderClient {
 
         // 注册 Flywheel Visual（惯性导航系统：万向环/罗盘盘实例化渲染，外壳由 blockstate 渲染）。
         // Flywheel 可用时跳过 vanilla BE 渲染（外壳静态，无 BER 必须内容）。
-        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.my_aero_sensor_entity.get())
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.ins_entity.get())
                 .factory(MyAeroSensorVisual::new)
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
@@ -128,7 +128,7 @@ public class CCPeripheralExtenderClient {
                 MyModBlockEntities.monitor_entity.get(),
                 MonitorRenderer::new);
         event.registerBlockEntityRenderer(
-                MyModBlockEntities.my_aero_sensor_entity.get(),
+                MyModBlockEntities.ins_entity.get(),
                 MyAeroSensorRenderer::new);
     }
 

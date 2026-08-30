@@ -11,11 +11,11 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "ccpe:my_aero_sensor"
+          "name": "ccpe:ins"
         }
       ],
       "rolls": 1.0
     }
   ],
-  "random_sequence": "ccpe:blocks/my_aero_sensor"
+  "random_sequence": "ccpe:blocks/ins"
 }

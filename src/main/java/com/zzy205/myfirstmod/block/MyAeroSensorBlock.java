@@ -66,7 +66,7 @@ public class MyAeroSensorBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state, @NotNull BlockEntityType<T> type) {
-        if (type == MyModBlockEntities.my_aero_sensor_entity.get()) {
+        if (type == MyModBlockEntities.ins_entity.get()) {
             @SuppressWarnings("unchecked")
             BlockEntityTicker<T> ticker = (BlockEntityTicker<T>) (BlockEntityTicker<?>) TICKER;
             return ticker;

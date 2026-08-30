@@ -68,7 +68,7 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
     private double XAngle;
 
     public MyAeroSensorBlockEntity(BlockPos pos, BlockState state) {
-        super(MyModBlockEntities.my_aero_sensor_entity.get(), pos, state);
+        super(MyModBlockEntities.ins_entity.get(), pos, state);
     }
 
     @Override

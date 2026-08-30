@@ -73,9 +73,9 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
-    /** 惯性导航系统（INS）：可动罗盘/万向环姿态指示器，照抄 simulated:gimbal_sensor（HORIZONTAL_AXIS + 四向红石输出） */
-    public static final DeferredBlock<MyAeroSensorBlock> my_aero_sensor =
-            registerBlocks("my_aero_sensor", () -> new MyAeroSensorBlock(BlockBehaviour.Properties.of().
+    /** 惯性导航系统（INS）：可动罗盘/万向环姿态指示器，照抄 simulated:gimbal_sensor（自定义部件层级，见 memo/my_aero_sensor.md） */
+    public static final DeferredBlock<MyAeroSensorBlock> ins =
+            registerBlocks("ins", () -> new MyAeroSensorBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.COPPER).
                     strength(1.0f, 6.0f).
                     noOcclusion()

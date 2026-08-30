@@ -9,7 +9,7 @@
   "block.ccpe.aero_bearing": "Aero Bearing",
   "block.ccpe.static_port": "Static Port",
   "block.ccpe.pitot_tube": "Pitot Tube",
-  "block.ccpe.my_aero_sensor": "Inertial Navigation System",
+  "block.ccpe.ins": "Inertial Navigation System",
 
   "tooltip.ccpe.transmission_peripheral.header": "Electronic Transmission",
   "tooltip.ccpe.transmission_peripheral.mode": "Mode:",
