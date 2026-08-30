@@ -38,8 +38,8 @@ import static java.lang.Math.*;
  * <li>无 ScrollValueBehaviour 滚轮调节——限位角固定 {@value #PRIMARY_LIMIT_DEG}°；</li>
  * <li>无红石输出（gimbal_sensor 的四向 0–15 倾角信号）；</li>
  * <li>无 blockstate 旋转——base 恒为单位四元数，模型保持默认朝向；</li>
- * <li>未渲染罗盘指针（needle）与红石指示灯（indicator），动画中指针的
- *     z 轴模拟保留（未来加模型可直接启用 {@link #applyCompassQuaternion}）。</li>
+ * <li>部件层级（外→内）为 test(Y 偏航) → gimbal(Z 滚转) → compass(X 俯仰)，
+ *     与 gimbal_sensor 的 needle(Y) 最内不同；z 轴（偏航）模拟由 test 标记使用。</li>
  * </ul>
  */
 public class MyAeroSensorBlockEntity extends BlockEntity {
@@ -147,7 +147,7 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
         totalVelocity.sub(shellVelocity, this.angleVelocities);
     }
 
-    /** 重力扭矩：世界重力 → 方块局部系 → 万向环系，与罗盘"下"方向叉积 */
+    /** 重力扭矩：世界重力 → 方块局部系 → test(Y) → gimbal(Z) 系，与罗盘"下"方向叉积 */
     void addGravityTorque(final Pose3dc pose, final Vector3d torque) {
         final Vec3 worldPos = SableCompat.projectOutOfSubLevel(this.level, this.getBlockPos());
         final Vector3d localGravity = worldPos != null
@@ -155,10 +155,12 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
                 : new Vector3d(0, -1, 0); // 兜底：世界重力向下
         this.transformBaseInverse(localGravity, pose);
 
-        // transforms to be relative to the gimbal ring
-        this.transformPrimaryInverse(localGravity);
+        // 层级（外→内）：test(Y) → gimbal(Z) → compass(X)，重力变换到 gimbal 系：先逆 Y（test）再逆 Z（gimbal）
+        this.transformCompassInverse(localGravity);//from base to test ring (inverse yaw)
+        this.transformPrimaryInverse(localGravity);//from test ring to gimbal ring (inverse roll)
 
         // the down direction of the compass, relative to the gimbal ring
+        //（compass 相对 gimbal 只绕 X，compass 局部 X = gimbal 局部 X）
         final Vector3d localDown = new Vector3d(0, -1, 0).rotateX(this.eulerAngles.y);
         final Vector3d localTorque = localDown.cross(localGravity);
 
@@ -166,18 +168,16 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
         torque.y += localTorque.x;
     }
 
-    /** 罗盘指针指北扭矩（驱动 z 轴，当前未渲染 needle，保留模拟） */
+    /** 偏航标记指北扭矩（驱动 z 轴）：目标变换到 test(Y) 最外层系 */
     void addCompassTorque(final Pose3dc pose, final Vector3d torque, final Vector3d target) {
         this.transformBaseInverse(target, pose);
-        this.transformPrimaryInverse(target);//from base to gimbal ring
-        this.transformSecondaryInverse(target);//from gimbal ring to compass
-        this.transformCompassInverse(target);//from compass to needle
+        this.transformCompassInverse(target);//from base to test ring (inverse yaw)
 
         final Vector3d localTorque = new Vector3d(0, 0, -1).cross(target);
         torque.z += localTorque.y;
     }
 
-    /** 外壳角速度：上一帧与当前帧姿态差旋转 → 变换到罗盘系，让罗盘随物理体翻转"甩动" */
+    /** 外壳角速度：上一帧与当前帧姿态差旋转 → 按层级分解到各层角速度，让部件随物理体翻转"甩动" */
     private Vector3d getShellVelocity(final SubLevel subLevel) {
         final Vector3d shellVelocity = new Vector3d();
         if (subLevel != null) {
@@ -189,11 +189,11 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
                 final Quaterniond rotationDiff = this.lastShellOrientation.div(pose.orientation(), new Quaterniond());
                 final Vector3d angularVelocity = new Vector3d(rotationDiff.x, rotationDiff.y, rotationDiff.z).mul(2);
                 this.transformBaseInverse(angularVelocity, pose);
-                shellVelocity.x = angularVelocity.z;
-                this.transformPrimaryInverse(angularVelocity);
-                shellVelocity.y = angularVelocity.x;
-                this.transformSecondaryInverse(angularVelocity);
-                shellVelocity.z = angularVelocity.y;
+                shellVelocity.z = angularVelocity.y;      // test（Y）层：base 系 Y 分量
+                this.transformCompassInverse(angularVelocity);//→ test 系
+                shellVelocity.x = angularVelocity.z;      // gimbal（Z）层：test 系 Z 分量（gimbal Z 轴 = test 局部 Z）
+                this.transformPrimaryInverse(angularVelocity);//→ gimbal 系
+                shellVelocity.y = angularVelocity.x;      // compass（X）层：gimbal 系 X 分量（compass X 轴 = gimbal 局部 X）
                 this.lastShellOrientation.set(pose.orientation());
             }
         } else
@@ -248,16 +248,19 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
         return v;
     }
 
+    /** 逆 gimbal 滚转（绕 Z，中间层） */
     private Vector3d transformPrimaryInverse(final Vector3d v) {
         v.rotateZ(-this.eulerAngles.x);
         return v;
     }
 
+    /** 逆 compass 俯仰（绕 X，最里层） */
     private Vector3d transformSecondaryInverse(final Vector3d v) {
         v.rotateX(-this.eulerAngles.y);
         return v;
     }
 
+    /** 逆 test 偏航（绕 Y，最外层） */
     private Vector3d transformCompassInverse(final Vector3d v) {
         v.rotateY(-this.eulerAngles.z);
         return v;

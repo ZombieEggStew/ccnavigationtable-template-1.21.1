@@ -51,5 +51,6 @@
 				"down": {"uv": [6, 3, 7, 4], "rotation": 270, "texture": "#0"}
 			}
 		}
-	]
+	],
+	"display": {}
 }

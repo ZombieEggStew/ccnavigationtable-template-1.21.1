@@ -14,9 +14,9 @@ import org.joml.Quaternionf;
 
 /**
  * 惯性导航系统原版 BER 回退渲染（Flywheel 不可用时使用），照抄
- * {@code simulated:gimbal_sensor} 的 GimbalSensorRenderer：
- * 万向环 = base(朝向 Y) + 绕 Z（滚转），罗盘盘 = 再 + 绕 X（俯仰），
- * 偏航标记 = 再 + 绕自身 Y（指北），父子累积旋转 + partialTick 插值。
+ * {@code simulated:gimbal_sensor} 的 GimbalSensorRenderer。
+ * 层级（外→内）：test 绕 Y 偏航指北 → gimbal 绕 Z 滚转 → compass 绕 X 俯仰
+ * （四元数 Y / Y·Z / Y·Z·X，各自独立实例），partialTick 插值。
  * 外壳由 blockstate 静态模型渲染。
  */
 public class MyAeroSensorRenderer extends SafeBlockEntityRenderer<MyAeroSensorBlockEntity> {
@@ -35,16 +35,25 @@ public class MyAeroSensorRenderer extends SafeBlockEntityRenderer<MyAeroSensorBl
         }
 
         final VertexConsumer vb = buffer.getBuffer(RenderType.cutout());
-        final Quaternionf Q = be.getBaseQuaternion();
 
-        be.applyPrimaryQuaternion(Q, partialTicks);
-        this.apply(MyModPartialModels.MY_AERO_SENSOR_GIMBAL, be, Q, light, ms, vb);
+        // 层级（外→内）：test(Y 偏航) → gimbal(Z 滚转) → compass(X 俯仰)，每个部件独立四元数
+        // test（最外层）：只绕 Y
+        final Quaternionf testQ = be.getBaseQuaternion();
+        be.applyCompassQuaternion(testQ, partialTicks);
+        this.apply(MyModPartialModels.MY_AERO_SENSOR_YAW, be, testQ, light, ms, vb);
 
-        be.applySecondaryQuaternion(Q, partialTicks);
-        this.apply(MyModPartialModels.MY_AERO_SENSOR_COMPASS, be, Q, light, ms, vb);
+        // gimbal（中间层）：Y·Z
+        final Quaternionf gimbalQ = be.getBaseQuaternion();
+        be.applyCompassQuaternion(gimbalQ, partialTicks);
+        be.applyPrimaryQuaternion(gimbalQ, partialTicks);
+        this.apply(MyModPartialModels.MY_AERO_SENSOR_GIMBAL, be, gimbalQ, light, ms, vb);
 
-        be.applyCompassQuaternion(Q, partialTicks);
-        this.apply(MyModPartialModels.MY_AERO_SENSOR_YAW, be, Q, light, ms, vb);
+        // compass（最里层）：Y·Z·X
+        final Quaternionf compassQ = be.getBaseQuaternion();
+        be.applyCompassQuaternion(compassQ, partialTicks);
+        be.applyPrimaryQuaternion(compassQ, partialTicks);
+        be.applySecondaryQuaternion(compassQ, partialTicks);
+        this.apply(MyModPartialModels.MY_AERO_SENSOR_COMPASS, be, compassQ, light, ms, vb);
     }
 
     private void apply(final PartialModel model, final MyAeroSensorBlockEntity te, final Quaternionf Q,

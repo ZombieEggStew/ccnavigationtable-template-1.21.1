@@ -16,8 +16,9 @@ import java.util.function.Consumer;
 
 /**
  * 惯性导航系统 Flywheel 渲染，照抄 {@code simulated:gimbal_sensor} 的 GimbalSensorVisual：
- * 万向环/罗盘盘/偏航标记三个 {@link OrientedInstance}，每帧 identityRotation 后重建父子旋转
- * （base → 绕 Z → 绕 X → 偏航标记再绕自身 Y 指北），与 BER 共享同一套朝向约定。
+ * 万向环/罗盘盘/偏航标记三个 {@link OrientedInstance}，每帧 identityRotation 后重建父子旋转。
+ * 层级（外→内）：test 绕 Y 偏航指北 → gimbal 绕 Z 滚转 → compass 绕 X 俯仰
+ * （四元数 Y / Y·Z / Y·Z·X，各自独立实例），与 BER 共享同一套朝向约定。
  */
 public class MyAeroSensorVisual extends AbstractBlockEntityVisual<MyAeroSensorBlockEntity>
         implements SimpleDynamicVisual {
@@ -67,20 +68,27 @@ public class MyAeroSensorVisual extends AbstractBlockEntityVisual<MyAeroSensorBl
         this.compass.identityRotation();
         this.yaw.identityRotation();
 
-        final Quaternionf base = this.blockEntity.getBaseQuaternion();
+        // 层级（外→内）：test(Y 偏航) → gimbal(Z 滚转) → compass(X 俯仰)，每个部件独立四元数
+        // test（最外层）：只绕 Y
+        final Quaternionf testQ = this.blockEntity.getBaseQuaternion();
+        this.blockEntity.applyCompassQuaternion(testQ, partialTicks);
+        this.yaw.rotation(testQ);
+        this.yaw.setChanged();
 
-        this.blockEntity.applyPrimaryQuaternion(base, partialTicks);
-        this.gimbal.rotation(base);
+        // gimbal（中间层）：Y·Z
+        final Quaternionf gimbalQ = this.blockEntity.getBaseQuaternion();
+        this.blockEntity.applyCompassQuaternion(gimbalQ, partialTicks);
+        this.blockEntity.applyPrimaryQuaternion(gimbalQ, partialTicks);
+        this.gimbal.rotation(gimbalQ);
         this.gimbal.setChanged();
 
-        this.blockEntity.applySecondaryQuaternion(base, partialTicks);
-        this.compass.rotation(base);
+        // compass（最里层）：Y·Z·X
+        final Quaternionf compassQ = this.blockEntity.getBaseQuaternion();
+        this.blockEntity.applyCompassQuaternion(compassQ, partialTicks);
+        this.blockEntity.applyPrimaryQuaternion(compassQ, partialTicks);
+        this.blockEntity.applySecondaryQuaternion(compassQ, partialTicks);
+        this.compass.rotation(compassQ);
         this.compass.setChanged();
-
-        // 偏航标记跟随罗盘盘（滚转/俯仰）后再绕自身 Y 指北
-        this.blockEntity.applyCompassQuaternion(base, partialTicks);
-        this.yaw.rotation(base);
-        this.yaw.setChanged();
     }
 
     @Override
