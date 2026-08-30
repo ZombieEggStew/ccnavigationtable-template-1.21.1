@@ -9,7 +9,12 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
@@ -18,6 +23,8 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
+
+import org.jetbrains.annotations.NotNull;
 
 /**
  * 皮托管（Pitot Tube）。
@@ -29,8 +36,11 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * </ul>
  * 共 24 个朝向。Create 扳手右键<b>模型顶面</b>（= FACING 方向的面）时，绕该面旋转：ROLL +1
  * （FACING 不变，管子绕点击面转）；右键侧面 / 前面 / 底面等其它面不旋转。
+ * <p>
+ * 带 {@link PitotTubeBlockEntity}：注册进 {@code BodySensorRegistry}（SPEED），
+ * 使 {@code ccpe.sensor_system} 能读到沿管口朝向的速度分量（见 {@link #axisOf}）。
  */
-public class PitotTubeBlock extends Block implements IWrenchable {
+public class PitotTubeBlock extends BaseEntityBlock implements IWrenchable {
 
     public static final MapCodec<PitotTubeBlock> CODEC = simpleCodec(PitotTubeBlock::new);
 
@@ -79,6 +89,43 @@ public class PitotTubeBlock extends Block implements IWrenchable {
 
     private static VoxelShape shapeFor(Direction facing, int roll) {
         return SHAPES.get(facing)[roll];
+    }
+
+    /**
+     * 24 个朝向的<b>感应轴线（管口朝向）</b>（plot 帧轴方向）：facing → roll 0..3。
+     * <p>
+     * 推导：模型管口向量 = 未旋转模型局部 (0,0,−1)（管口朝北/−Z，含 z90 烘焙模型——
+     * 绕 Z 旋转不改轴方向），经 blockstate 旋转 {@code Ry(−θy)·Rx(−θx)} 逐项计算，
+     * 并与已进游戏验证的 24 个选择框逐项核对（管口端 = 盒长轴端）一致。
+     */
+    private static final EnumMap<Direction, Direction[]> AXES = buildAxes();
+
+    private static EnumMap<Direction, Direction[]> buildAxes() {
+        // 每行 = 一个 facing，每列 = roll 0..3；值 = 管口朝向（Direction）
+        Direction[][] axes = {
+            // up:    roll0 −Z(NORTH)  roll1 −X(WEST)  roll2 +Z(SOUTH)  roll3 +X(EAST)
+            { Direction.NORTH, Direction.WEST, Direction.SOUTH, Direction.EAST },
+            // down:  roll0 +Z(SOUTH)  roll1 −X(WEST)  roll2 −Z(NORTH)  roll3 +X(EAST)
+            { Direction.SOUTH, Direction.WEST, Direction.NORTH, Direction.EAST },
+            // north: roll0 −Y(DOWN)   roll1 −X(WEST)  roll2 +Y(UP)     roll3 +X(EAST)
+            { Direction.DOWN, Direction.WEST, Direction.UP, Direction.EAST },
+            // south: roll0 −Y(DOWN)   roll1 +X(EAST)  roll2 +Y(UP)     roll3 −X(WEST)
+            { Direction.DOWN, Direction.EAST, Direction.UP, Direction.WEST },
+            // east:  roll0 −Y(DOWN)   roll1 −Z(NORTH) roll2 +Y(UP)     roll3 +Z(SOUTH)
+            { Direction.DOWN, Direction.NORTH, Direction.UP, Direction.SOUTH },
+            // west:  roll0 −Y(DOWN)   roll1 +Z(SOUTH) roll2 +Y(UP)     roll3 −Z(NORTH)
+            { Direction.DOWN, Direction.SOUTH, Direction.UP, Direction.NORTH },
+        };
+        Direction[] dirs = { Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST };
+        EnumMap<Direction, Direction[]> map = new EnumMap<>(Direction.class);
+        for (int i = 0; i < dirs.length; i++)
+            map.put(dirs[i], axes[i]);
+        return map;
+    }
+
+    /** 该状态皮托管的感应轴线（管口朝向，plot 帧轴方向）；供 {@code ccpe.sensor_system} 计算沿轴速度 */
+    public static Direction axisOf(BlockState state) {
+        return AXES.get(state.getValue(FACING))[state.getValue(ROLL)];
     }
 
     public PitotTubeBlock(BlockBehaviour.Properties properties) {
@@ -138,8 +185,34 @@ public class PitotTubeBlock extends Block implements IWrenchable {
         return shapeFor(state.getValue(FACING), state.getValue(ROLL));
     }
 
+    // ── 方块实体（BodySensorRegistry 注册） ──
+
     @Override
-    protected MapCodec<? extends Block> codec() {
+    public @NotNull RenderShape getRenderShape(@NotNull BlockState state) {
+        return RenderShape.MODEL;
+    }
+
+    @Override
+    public BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
+        return new PitotTubeBlockEntity(pos, state);
+    }
+
+    private static final BlockEntityTicker<PitotTubeBlockEntity> SERVER_TICKER =
+            PitotTubeBlockEntity::serverTick;
+
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state, @NotNull BlockEntityType<T> type) {
+        if (level.isClientSide) return null;
+        if (type == MyModBlockEntities.pitot_tube_entity.get()) {
+            @SuppressWarnings("unchecked")
+            BlockEntityTicker<T> ticker = (BlockEntityTicker<T>) (BlockEntityTicker<?>) SERVER_TICKER;
+            return ticker;
+        }
+        return null;
+    }
+
+    @Override
+    protected MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
     }
 }

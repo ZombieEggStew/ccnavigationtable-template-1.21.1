@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.PitotTubeBlockEntity;
 import com.zzy205.myfirstmod.block.StaticPortBlockEntity;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dev.ryanhcode.sable.sublevel.SubLevel;
@@ -20,9 +21,8 @@ import java.util.UUID;
  * 物理体传感器注册表：Sable sub-level UUID → 传感器集合（类型 + plot 坐标）。
  * <p>
  * 仅服务端主线程访问（BE onLoad/tick/setRemoved 与 {@link SensorSystemAPI#update()} 都在主线程）。
- * 与 {@code GlobalChannelRegistry} / Peripheral Extender 注册表同模式；目前只登记
- * {@link StaticPortBlockEntity}（PRESSURE），后续 pitot_tube（SPEED）接入时扩展
- * {@link #sensorTypeOf}。
+ * 与 {@code GlobalChannelRegistry} / Peripheral Extender 注册表同模式；登记
+ * {@link StaticPortBlockEntity}（PRESSURE）与 {@link PitotTubeBlockEntity}（SPEED）两类传感器。
  */
 public final class BodySensorRegistry {
 
@@ -76,6 +76,7 @@ public final class BodySensorRegistry {
 
     private static @Nullable SensorType sensorTypeOf(BlockEntity be) {
         if (be instanceof StaticPortBlockEntity) return SensorType.PRESSURE;
-        return null; // SPEED 后续接入 pitot_tube 时补
+        if (be instanceof PitotTubeBlockEntity) return SensorType.SPEED;
+        return null;
     }
 }
