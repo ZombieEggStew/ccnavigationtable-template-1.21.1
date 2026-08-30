@@ -56,7 +56,7 @@
 - **!?NEWNEW?!** Added control desk system, including two joysticks, two throttles, one dual pedal, one screen, expansion dock and baffle.
 
 1.0.9
-- isAxisXPositive/isAxisXNegative/isAxisYPositive/isAxisYNegative
-- servo的reaim功能
-- Added an Aero Bearing, Check the wiki for more details.
+- Added isAxisXPositive/isAxisXNegative/isAxisYPositive/isAxisYNegative for joystick.
+- Added reaim mode for transmission peripheral.
+- **!?NEWNEW?!** Added an Aero Bearing, Check the wiki for more details.
 - **!?NEWNEW?!** Added a new sensor system, Check the wiki for more details.
