@@ -12,7 +12,8 @@
 | `pe.getNavRelativeAngle(ch)` | `number` | 方位角（度，0~360） |
 
 
-## 速度传感器集成
+## 速度传感器集成（已弃用）
+> 使用 [传感器系统](../sensor-system/pitot-tube.zh.md) 代替
 
 | 方法 | 返回值 | 说明 |
 |---|---|---|
@@ -22,7 +23,8 @@
 | `getAxisVelocity(ch)` | `number` | 返回沿传感器安装轴线的速度分量（m/s）|
 
 
-## 物理数据读取
+## 物理数据读取（已弃用）
+> 使用 [传感器系统](../sensor-system/pitot-tube.zh.md) 代替
 
 需要pe附着在物理体上的任意方块上
 

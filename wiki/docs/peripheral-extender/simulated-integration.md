@@ -12,7 +12,8 @@
 | `pe.getNavRelativeAngle(ch)` | `number` | Bearing angle (degrees, 0~360) |
 
 
-## Velocity Sensor Integration
+## Velocity Sensor Integration (Deprecated)
+> Use [Sensor System](../sensor-system/pitot-tube.md) instead.
 
 | Method | Returns | Description |
 |---|---|---|
@@ -22,7 +23,8 @@
 | `getAxisVelocity(ch)` | `number` | Velocity component along the sensor's mounting axis (m/s)|
 
 
-## Physics Data Reading
+## Physics Data Reading (Deprecated)
+> Use [Sensor System](../sensor-system/pitot-tube.md) instead.
 
 Requires the pe to be attached to any block on a physics body.
 
