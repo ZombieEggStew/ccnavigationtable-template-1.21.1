@@ -16,11 +16,12 @@ import org.joml.Quaternionf;
  * 惯性导航系统原版 BER 回退渲染（Flywheel 不可用时使用），照抄
  * {@code simulated:gimbal_sensor} 的 GimbalSensorRenderer：
  * 万向环 = base(朝向 Y) + 绕 Z（滚转），罗盘盘 = 再 + 绕 X（俯仰），
- * 父子累积旋转 + partialTick 插值。外壳由 blockstate 静态模型渲染。
+ * 偏航标记 = 再 + 绕自身 Y（指北），父子累积旋转 + partialTick 插值。
+ * 外壳由 blockstate 静态模型渲染。
  */
 public class MyAeroSensorRenderer extends SafeBlockEntityRenderer<MyAeroSensorBlockEntity> {
 
-    /** 转动部件（万向环/罗盘盘）整体下移量（块单位）：模型与旋转中心同步下移 3.5px */
+    /** 转动部件（万向环/罗盘盘/偏航标记）整体下移量（块单位）：模型与旋转中心同步下移 3.5px */
     private static final float PIVOT_DROP = 3.5f / 16f;
 
     public MyAeroSensorRenderer(final BlockEntityRendererProvider.Context context) {
@@ -41,6 +42,9 @@ public class MyAeroSensorRenderer extends SafeBlockEntityRenderer<MyAeroSensorBl
 
         be.applySecondaryQuaternion(Q, partialTicks);
         this.apply(MyModPartialModels.MY_AERO_SENSOR_COMPASS, be, Q, light, ms, vb);
+
+        be.applyCompassQuaternion(Q, partialTicks);
+        this.apply(MyModPartialModels.MY_AERO_SENSOR_YAW, be, Q, light, ms, vb);
     }
 
     private void apply(final PartialModel model, final MyAeroSensorBlockEntity te, final Quaternionf Q,

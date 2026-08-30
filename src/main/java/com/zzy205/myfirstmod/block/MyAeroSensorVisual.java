@@ -16,17 +16,18 @@ import java.util.function.Consumer;
 
 /**
  * 惯性导航系统 Flywheel 渲染，照抄 {@code simulated:gimbal_sensor} 的 GimbalSensorVisual：
- * 万向环/罗盘盘两个 {@link OrientedInstance}，每帧 identityRotation 后重建父子旋转
- * （base → 绕 Z → 绕 X），与 BER 共享同一套朝向约定。
+ * 万向环/罗盘盘/偏航标记三个 {@link OrientedInstance}，每帧 identityRotation 后重建父子旋转
+ * （base → 绕 Z → 绕 X → 偏航标记再绕自身 Y 指北），与 BER 共享同一套朝向约定。
  */
 public class MyAeroSensorVisual extends AbstractBlockEntityVisual<MyAeroSensorBlockEntity>
         implements SimpleDynamicVisual {
 
-    /** 转动部件（万向环/罗盘盘）整体下移量（块单位）：模型与旋转中心同步下移 3.5px */
+    /** 转动部件（万向环/罗盘盘/偏航标记）整体下移量（块单位）：模型与旋转中心同步下移 3.5px */
     private static final float PIVOT_DROP = 3.5f / 16f;
 
     private final OrientedInstance gimbal;
     private final OrientedInstance compass;
+    private final OrientedInstance yaw;
 
     private final List<ColoredLitInstance> allInstances = new ArrayList<>();
 
@@ -45,8 +46,15 @@ public class MyAeroSensorVisual extends AbstractBlockEntityVisual<MyAeroSensorBl
                 .translatePosition(0.5f, 0.5f - PIVOT_DROP, 0.5f)
                 .translatePivot(-0.5f, -0.5f, -0.5f);
 
+        this.yaw = this.instancerProvider().instancer(InstanceTypes.ORIENTED,
+                        Models.partial(MyModPartialModels.MY_AERO_SENSOR_YAW))
+                .createInstance().position(this.getVisualPosition())
+                .translatePosition(0.5f, 0.5f - PIVOT_DROP, 0.5f)
+                .translatePivot(-0.5f, -0.5f, -0.5f);
+
         this.allInstances.add(this.gimbal);
         this.allInstances.add(this.compass);
+        this.allInstances.add(this.yaw);
     }
 
     @Override
@@ -57,6 +65,7 @@ public class MyAeroSensorVisual extends AbstractBlockEntityVisual<MyAeroSensorBl
     private void handleRotations(final float partialTicks) {
         this.gimbal.identityRotation();
         this.compass.identityRotation();
+        this.yaw.identityRotation();
 
         final Quaternionf base = this.blockEntity.getBaseQuaternion();
 
@@ -67,6 +76,11 @@ public class MyAeroSensorVisual extends AbstractBlockEntityVisual<MyAeroSensorBl
         this.blockEntity.applySecondaryQuaternion(base, partialTicks);
         this.compass.rotation(base);
         this.compass.setChanged();
+
+        // 偏航标记跟随罗盘盘（滚转/俯仰）后再绕自身 Y 指北
+        this.blockEntity.applyCompassQuaternion(base, partialTicks);
+        this.yaw.rotation(base);
+        this.yaw.setChanged();
     }
 
     @Override
