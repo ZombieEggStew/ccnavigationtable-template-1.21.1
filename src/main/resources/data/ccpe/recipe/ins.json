@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:electron_tube"
+    },
+    "X": {
+      "item": "simulated:gyroscopic_mechanism"
+    },
+    "Y": {
+      "item": "create:andesite_casing"
+    }
+  },
+  "pattern": [
+    "   ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:ins"
+  }
+}
