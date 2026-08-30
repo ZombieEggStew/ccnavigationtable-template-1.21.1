@@ -12,15 +12,12 @@ import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaterniond;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
-
-import java.util.EnumMap;
 
 import static java.lang.Math.*;
 
@@ -33,13 +30,14 @@ import static java.lang.Math.*;
  * "下"方向叉积得到扭矩，经惯性/阻尼/限位积分出欧拉角——罗盘被重力"托"着
  * 始终水平，物理体翻滚时有惯性摆动感。渲染时用 previous→current 插值平滑。
  * <p>
- * 服务端每 tick 由物理体姿态计算真实倾角 {@link #XAngle}/{@link #ZAngle}，
- * 并按主/副轴（{@link MyAeroSensorBlock#HORIZONTAL_AXIS}）归一化输出四向红石。
+ * 服务端每 tick 由物理体姿态计算真实倾角 {@link #XAngle}/{@link #ZAngle}
+ * （保留 getter，供未来读取）。
  * <p>
  * 与原版的差异（本 mod 简化）：
  * <ul>
  * <li>无 ScrollValueBehaviour 滚轮调节——限位角固定 {@value #PRIMARY_LIMIT_DEG}°；</li>
- * <li>无护目镜 tooltip；</li>
+ * <li>无红石输出（gimbal_sensor 的四向 0–15 倾角信号）；</li>
+ * <li>无 blockstate 旋转——base 恒为单位四元数，模型保持默认朝向；</li>
  * <li>未渲染罗盘指针（needle）与红石指示灯（indicator），动画中指针的
  *     z 轴模拟保留（未来加模型可直接启用 {@link #applyCompassQuaternion}）。</li>
  * </ul>
@@ -48,15 +46,11 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
 
     /** 物理体姿态缺省值：单位姿态（不在物理体上时罗盘保持世界水平） */
     private static final Pose3dc IDENTITY_POSE = new Pose3d(new Vector3d(), new Quaterniond(), new Vector3d(), new Vector3d(1.0));
-    private static final double MAX_ANGLE_X = Math.toRadians(90);
-    private static final double MAX_ANGLE_Z = Math.toRadians(90);
     /** 主/副轴限位角（原版由滚轮 ScrollValueBehaviour 在 ±90° 内调节，本 mod 固定 90°） */
     private static final int PRIMARY_LIMIT_DEG = 90;
     private static final int SECONDARY_LIMIT_DEG = 90;
     private static final double PRIMARY_LIMIT = Math.toRadians(PRIMARY_LIMIT_DEG);
     private static final double SECONDARY_LIMIT = Math.toRadians(SECONDARY_LIMIT_DEG);
-
-    private final EnumMap<Direction, Integer> redstoneMap;
 
     // ── 客户端动画状态（照抄 gimbal_sensor） ──
     private final Vector3d previousAngles = new Vector3d(0, 0, 0);
@@ -69,16 +63,12 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
     private Vector3d angleVelocities = new Vector3d(0, 0, 0);
     private Quaterniond lastShellOrientation = null;
 
-    /** 服务端真实倾角（供红石/未来 Lua API 读取） */
+    /** 服务端真实倾角（供未来 Lua API 读取） */
     private double ZAngle;
     private double XAngle;
 
     public MyAeroSensorBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.my_aero_sensor_entity.get(), pos, state);
-        this.redstoneMap = new EnumMap<>(Direction.class);
-        for (final Direction dir : Direction.values()) {
-            this.redstoneMap.put(dir, 0);
-        }
     }
 
     @Override
@@ -89,7 +79,7 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
         }
     }
 
-    /** 客户端跑动画模拟，服务端算倾角 + 红石（替代 gimbal_sensor 的 SmartBlockEntity.tick） */
+    /** 客户端跑动画模拟，服务端算倾角（替代 gimbal_sensor 的 SmartBlockEntity.tick） */
     public static void tick(Level level, BlockPos pos, BlockState state, MyAeroSensorBlockEntity be) {
         if (level.isClientSide) {
             be.tickClient();
@@ -115,12 +105,6 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
         // 世界"下"方向在方块局部系的投影 → 两个倾角
         this.XAngle = ld.y() < 0 || ld.z() * ld.z() > 0.001 ? atan2(ld.z(), -ld.y()) : 0;
         this.ZAngle = ld.y() < 0 || ld.x() * ld.x() > 0.001 ? atan2(ld.x(), -ld.y()) : 0;
-
-        this.setPower(this.ZAngle, Direction.EAST);
-        this.setPower(-this.ZAngle, Direction.WEST);
-
-        this.setPower(this.XAngle, Direction.SOUTH);
-        this.setPower(-this.XAngle, Direction.NORTH);
     }
 
     /** 扳手扰动：给角速度一个随机初值 + 罗盘随机初始朝向 */
@@ -233,26 +217,11 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
         velocity.setComponent(index, v * m);
     }
 
-    private void setPower(final double angle, final Direction dir) {
-        final boolean alongPrimary = (dir.getAxis() == this.getBlockState().getValue(MyAeroSensorBlock.HORIZONTAL_AXIS));
-        final double angleLimit = alongPrimary ? PRIMARY_LIMIT : SECONDARY_LIMIT;
-
-        final int newPower = angleLimit == 0 ? 0 : max(min((int) (14.5 * angle / angleLimit + 0.5), 15), 0);
-        if (this.redstoneMap.get(dir) != newPower) {
-            this.redstoneMap.put(dir, newPower);
-            this.level.updateNeighborsAt(this.worldPosition, this.getBlockState().getBlock());
-            this.level.updateNeighborsAt(this.worldPosition.relative(dir), this.getBlockState().getBlock());
-        }
-    }
-
     // ═══════════════ 渲染变换（照抄 gimbal_sensor） ═══════════════
 
-    /** 基座四元数：绕 Y 转到方块朝向（HORIZONTAL_AXIS 正向） */
+    /** 基座四元数：无 blockstate 旋转，恒为单位四元数（模型保持默认朝向） */
     public Quaternionf getBaseQuaternion() {
-        final Quaternionf Q = new Quaternionf();
-        final float angle = Direction.fromAxisAndDirection(this.getBlockState().getValue(MyAeroSensorBlock.HORIZONTAL_AXIS), Direction.AxisDirection.POSITIVE).toYRot();
-        Q.rotateY((float) Math.toRadians(angle));
-        return Q;
+        return new Quaternionf();
     }
 
     /** 万向环：base + 绕 Z（滚转） */
@@ -273,10 +242,9 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
         return Q;
     }
 
+    /** 世界向量 → 方块局部系（无 base Y 旋转：方块不区分朝向） */
     private Vector3d transformBaseInverse(final Vector3d v, final Pose3dc ctx) {
-        final float angle = Direction.fromAxisAndDirection(this.getBlockState().getValue(MyAeroSensorBlock.HORIZONTAL_AXIS), Direction.AxisDirection.POSITIVE).toYRot();
         ctx.orientation().transformInverse(v);
-        v.rotateY(-Math.toRadians(angle));
         return v;
     }
 
@@ -297,10 +265,6 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
 
     float lerp(final float a, final float b, final float t) {
         return a * (1 - t) + b * t;
-    }
-
-    public int getPower(final Direction dir) {
-        return this.redstoneMap.get(dir);
     }
 
     public double getZAngle() {

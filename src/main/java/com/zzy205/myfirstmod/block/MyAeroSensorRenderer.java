@@ -20,8 +20,8 @@ import org.joml.Quaternionf;
  */
 public class MyAeroSensorRenderer extends SafeBlockEntityRenderer<MyAeroSensorBlockEntity> {
 
-    /** 转动部件（万向环/罗盘盘）整体下移量（块单位）：模型与旋转中心同步下移 5px */
-    private static final float PIVOT_DROP = 4.5f / 16f;
+    /** 转动部件（万向环/罗盘盘）整体下移量（块单位）：模型与旋转中心同步下移 3.5px */
+    private static final float PIVOT_DROP = 3.5f / 16f;
 
     public MyAeroSensorRenderer(final BlockEntityRendererProvider.Context context) {
     }

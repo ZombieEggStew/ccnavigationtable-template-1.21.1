@@ -1,0 +1,35 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "ccpe:block/my_aero_sensor/ins",
+		"particle": "ccpe:block/my_aero_sensor/ins"
+	},
+	"elements": [
+		{
+			"from": [-0.5, -2.01, -0.5],
+			"to": [0.5, -1.01, 2.5],
+			"rotation": {"angle": 0, "axis": "y", "origin": [-1, -2, 0]},
+			"faces": {
+				"north": {"uv": [6, 9, 7, 10], "texture": "#0"},
+				"east": {"uv": [4, 9, 7, 10], "texture": "#0"},
+				"west": {"uv": [7, 9, 4, 10], "texture": "#0"},
+				"up": {"uv": [7, 9, 4, 10], "rotation": 90, "texture": "#0"},
+				"down": {"uv": [4, 9, 7, 10], "rotation": 90, "texture": "#0"}
+			}
+		},
+		{
+			"from": [-0.5, -2.01, 2.5],
+			"to": [0.5, 1.99, 3.5],
+			"rotation": {"angle": 0, "axis": "y", "origin": [0, -2, -1]},
+			"faces": {
+				"north": {"uv": [3, 6, 4, 10], "texture": "#0"},
+				"east": {"uv": [3, 6, 4, 10], "texture": "#0"},
+				"south": {"uv": [3, 6, 4, 10], "texture": "#0"},
+				"west": {"uv": [3, 6, 4, 10], "texture": "#0"},
+				"up": {"uv": [0, 6, 1, 7], "rotation": 90, "texture": "#0"},
+				"down": {"uv": [0, 11, 1, 12], "rotation": 270, "texture": "#0"}
+			}
+		}
+	]
+}

@@ -1,10 +1,6 @@
 {
   "variants": {
-    "axis=x": {
-      "model": "ccpe:block/my_aero_sensor/ins/block",
-      "y": 90
-    },
-    "axis=z": {
+    "": {
       "model": "ccpe:block/my_aero_sensor/ins/block"
     }
   }
