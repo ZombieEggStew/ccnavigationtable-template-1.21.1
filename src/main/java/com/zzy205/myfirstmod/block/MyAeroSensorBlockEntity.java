@@ -107,14 +107,16 @@ public class MyAeroSensorBlockEntity extends BlockEntity {
         this.ZAngle = ld.y() < 0 || ld.x() * ld.x() > 0.001 ? atan2(ld.x(), -ld.y()) : 0;
     }
 
-    /** 扳手/空手右键扰动：给角速度一个随机初值；偏航（test）不瞬移大角度，只给小幅随机角速度 */
+    /** 扳手/空手右键扰动：给角速度一个随机初值；偏航（test）不瞬移也不归零，只给小幅随机角速度 */
     public void randomNudge() {
         final Vec3 v = VecHelper.offsetRandomly(new Vec3(0, 0, 0), this.level.random, 0.2f);
         this.angleVelocities.set(v.x, v.y, v.z);
-        // 原版 eulerAngles.z 直接随机 0~2π 会让 test 瞬间旋转大角度；改为只给一个小幅随机角速度初值，
+        // 原版 eulerAngles.z 直接随机 0~2π 会让 test 瞬间旋转大角度；且归零会让已转过
+        // 大角度指北的 test 瞬间跳回原点。改为保留当前 z 角，只给一个小幅随机角速度初值，
         // test 轻轻摆一下即被指北扭矩拉回
         this.angleVelocities.z = (this.level.random.nextFloat() * 2 - 1) * 0.15;
-        this.eulerAngles.set(0, 0, 0);
+        this.eulerAngles.x = 0;
+        this.eulerAngles.y = 0;
     }
 
     // ═══════════════ 客户端重力摆模拟（照抄 gimbal_sensor） ═══════════════

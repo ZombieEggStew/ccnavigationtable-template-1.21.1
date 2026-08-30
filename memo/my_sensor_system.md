@@ -127,6 +127,7 @@ ss.hasPressureSensor()   -- boolean
 | `ILuaAPI.update()` / `IComputerSystem` | `references/CC-Tweaked-mc-1.21.x/projects/common-api/.../api/lua/` | 每电脑 tick 主线程钩子；`getLevel()/getPosition()` 公开接口 |
 | `SableCompat` | `src/main/java/com/zzy205/myfirstmod/compat/sable/` | 全部物理读取 API（复用，不改） |
 | `PeripheralExtenderBlockEntity` | `src/main/java/com/zzy205/myfirstmod/block/` | 生命周期（onLoad/tick/setRemoved）、按需缓存模式（本次改为每 tick 恒定刷新） |
+| `MyAeroSensorBlockEntity` | `src/main/java/com/zzy205/myfirstmod/block/` | 惯性导航系统（INS，姿态指示器）：服务端 `XAngle/ZAngle` getter 已预留；未来 `getOrientation` 可直接读 `subLevel.logicalPose().orientation()`，实现记录见 `memo/my_aero_sensor.md` |
 
 ## 将改动的文件（实施时）
 
