@@ -5,6 +5,8 @@ import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
 import com.zzy205.myfirstmod.block.MyBearingRenderer;
 import com.zzy205.myfirstmod.block.MyBearingVisual;
+import com.zzy205.myfirstmod.block.MyAeroSensorRenderer;
+import com.zzy205.myfirstmod.block.MyAeroSensorVisual;
 import com.zzy205.myfirstmod.block.ControlDeskVisual;
 import com.zzy205.myfirstmod.block.ControlDeskRenderer;
 import com.zzy205.myfirstmod.block.MonitorVisual;
@@ -93,6 +95,13 @@ public class CCPeripheralExtenderClient {
                 .neverSkipVanillaRender()
                 .apply();
 
+        // 注册 Flywheel Visual（惯性导航系统：万向环/罗盘盘实例化渲染，外壳由 blockstate 渲染）。
+        // Flywheel 可用时跳过 vanilla BE 渲染（外壳静态，无 BER 必须内容）。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.my_aero_sensor_entity.get())
+                .factory(MyAeroSensorVisual::new)
+                .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
         // 初始化自定义 PartialModel（参照 Create 的 AllPartialModels.init()）
         MyModPartialModels.init();
         event.enqueueWork(MonitorBackgrounds::reload);
@@ -118,6 +127,9 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.monitor_entity.get(),
                 MonitorRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.my_aero_sensor_entity.get(),
+                MyAeroSensorRenderer::new);
     }
 
     @SubscribeEvent
