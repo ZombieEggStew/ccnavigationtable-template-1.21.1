@@ -57,3 +57,44 @@ end
 ```
 
 These methods require **an FMC (`ccpe:fmc`) installed on the body**; the INS-gated attitude/physics methods are documented on the [Inertial Navigation System](ins.md) page.
+
+## Propeller speed tool
+
+The FMC also provides a propeller speed solver (also FMC-gated): given the desired thrust and current flight state, it inverts the propeller physics model to compute the rotation speed the propeller bearings should output. The tool depends on aeronautics' propeller physics config.
+
+### initPropeller(N, S)
+
+Must be called once before use:
+
+```lua
+-- N = number of propellers (Propeller Bearings)
+-- S = number of power blocks per propeller (sails / sym sym sails / wool blocks)
+local ok = ss.initPropeller(N, S)
+```
+
+| Argument | Description |
+|---|---|
+| `N` | Number of propellers (≥ 1) |
+| `S` | Number of power blocks per propeller (≥ 1) |
+
+Returns `true` on success; returns `false` when the **body (including constraint chains) has no FMC** (gate fails) or the arguments are invalid.
+
+### getPropellerRPM(F, P, V, θ?)
+
+```lua
+-- F = desired thrust; P = air pressure (sea level = 1.0); V = velocity (m/s)
+-- θ = angle between the propeller plane and the velocity direction (degrees, optional, default 0)
+local rpm = ss.getPropellerRPM(F, P, V, thetaDeg)
+```
+
+Formula (inverted from the aeronautics thrust/airflow model):
+
+```
+R = F / (P × S^1.5 × N × T) + V × sin(θ) / (S^0.5 × A)
+```
+
+where **T** (Propeller Bearing Thrust, default 0.2) and **A** (Propeller Bearing Airflow, default 0.05) come from the aeronautics config (`aeronautics > server > Physics`). The values are cached once when entering the game (server start) and when an FMC is placed/loaded (static cache, not refreshed per tick) — after changing the config in-game, re-enter the world or re-place an FMC for the new values to take effect.
+
+Returns the required speed R; returns `nil` when not initialized, when the gate fails (no FMC), or when arguments are invalid (e.g. `P ≤ 0`).
+
+> Feed `getPressure()` (static port reading) as pressure and `getSpeed()`/`getAverageSpeed()` (pitot tube readings) as velocity to build a closed-loop thrust controller.

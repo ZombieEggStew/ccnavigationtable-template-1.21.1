@@ -46,13 +46,15 @@ A computer on the same physics body (including constraint chains) uses `require(
 |---|---|---|
 | `getSpeed()` | number / nil | **Ground speed** along the mouth axis of the **most recently placed** pitot tube (m/s, signed; positive = toward the mouth). `nil` when the pitot-static gate fails |
 | `getAirSpeed()` | number / nil | **Airspeed** along the mouth axis (m/s, signed; relative to the air, wind subtracted). Same gate; differs from `getSpeed()` only when a wind source is present |
+| `getAverageSpeed()` | number / nil | **Simple average** of the ground speed of all pitot tubes (m/s, signed component along each tube's mouth axis). Same gate |
+| `getAverageAirSpeed()` | number / nil | **Simple average** of the airspeed of all pitot tubes (m/s, along each mouth axis, relative to the air). Same gate |
 | `getSensors()` | table | Snapshot of all sensors (same tick); pitot entries carry `{type="pitot_tube", pos={x,y,z}, pos_rel={x,y,z}, speed, air_speed}` (`nil` readings when the gate fails) |
 
 Shared methods (`isOnBody()`, `getBodyId()`, ...) behave as documented on the [Static Port](static-port.md) page.
 
 - **Ground vs air speed**: `getSpeed()` uses the world velocity; `getAirSpeed()` uses the velocity **relative to the air** (`Sable.HELPER.getVelocityRelativeToAir`, wind subtracted). Sable registers no wind by itself — without a wind-providing mod (e.g. PMWeather) both return the same value.
 - **Dead zone**: |reading| < 0.05 m/s is clamped to 0 (stationary → 0).
-- Multiple pitot tubes: `getSpeed()/getAirSpeed()` use the **most recently placed** one (registration order = placement order — see the restart warning below).
+- Multiple pitot tubes: `getSpeed()/getAirSpeed()` use the **most recently placed** one (registration order = placement order — see the restart warning below); `getAverageSpeed()/getAverageAirSpeed()` average **all** tubes (same-tick snapshot) and are immune to ordering.
 
 ```lua
 local ss = require("ccpe.sensor_system")
@@ -60,6 +62,8 @@ local ss = require("ccpe.sensor_system")
 print("onBody:", ss.isOnBody())
 print("ground speed along mouth:", ss.getSpeed())
 print("airspeed along mouth:    ", ss.getAirSpeed())
+print("avg ground speed (all):  ", ss.getAverageSpeed())
+print("avg airspeed (all):      ", ss.getAverageAirSpeed())
 
 local sensors = ss.getSensors()
 for i, s in ipairs(sensors) do
@@ -72,7 +76,7 @@ end
 
 ## Multiple pitot tubes
 
-Each pitot tube has its own independent `speed/air_speed` reading (same-tick snapshot). `getSensors()` is the way to read a **specific** tube:
+Each pitot tube has its own independent `speed/air_speed` reading (same-tick snapshot). `getAverageSpeed()/getAverageAirSpeed()` give the simple average over all tubes directly (`nil` when the pitot-static gate fails). `getSensors()` is the way to read a **specific** tube:
 
 ```lua
 local sensors = ss.getSensors()

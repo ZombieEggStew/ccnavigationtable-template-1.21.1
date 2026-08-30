@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry;
+import com.zzy205.myfirstmod.compat.cc.SensorSystemAPI;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
@@ -40,6 +41,8 @@ public class FmcBlockEntity extends BlockEntity {
     public void onLoad() {
         super.onLoad();
         if (level != null && !level.isClientSide) {
+            // 放置/加载 FMC 时刷新一次 aeronautics 螺旋桨配置静态缓存（T/A；另在服务器启动时刷新）
+            SensorSystemAPI.refreshAeroConfig();
             registeredBodyId = containingBodyId();
             BodySensorRegistry.register(this);
         }

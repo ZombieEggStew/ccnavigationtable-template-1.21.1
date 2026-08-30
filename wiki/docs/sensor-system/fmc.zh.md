@@ -56,3 +56,44 @@ end
 ```
 
 这些方法**需要物理体上装有 FMC（`ccpe:fmc`）** 才能读取；需要 INS 门控的姿态/物理方法见[惯性导航系统](ins.zh.md)页面。
+
+## 螺旋桨转速工具
+
+FMC 还提供螺旋桨转速求解工具（同为 FMC 门控）：根据期望推力与当前飞行状态，反解出螺旋桨（Propeller Bearing）应输出的转速。该工具依赖 aeronautics 的螺旋桨物理配置。
+
+### initPropeller(N, S)
+
+使用前必须先初始化一次：
+
+```lua
+-- N = 螺旋桨（Propeller Bearing）数量
+-- S = 每个螺旋桨上动力方块的数量（风帆 / 对称风帆 / 羊毛方块）
+local ok = ss.initPropeller(N, S)
+```
+
+| 参数 | 说明 |
+|---|---|
+| `N` | 螺旋桨数量（≥ 1） |
+| `S` | 每个螺旋桨上的动力方块数量（≥ 1） |
+
+返回 `true` 表示成功；**机体（含约束链）上没有 FMC（门控不满足）或参数非法时返回 `false`**。
+
+### getPropellerRPM(F, P, V, θ?)
+
+```lua
+-- F = 期望推力；P = 气压（海平面 = 1.0）；V = 速度（m/s）
+-- θ = 螺旋桨平面与速度方向的夹角（度，可选，默认 0）
+local rpm = ss.getPropellerRPM(F, P, V, thetaDeg)
+```
+
+公式（由 aeronautics 推力/气流模型反解）：
+
+```
+R = F / (P × S^1.5 × N × T) + V × sin(θ) / (S^0.5 × A)
+```
+
+其中 **T**（Propeller Bearing Thrust，默认 0.2）与 **A**（Propeller Bearing Airflow，默认 0.05）来自 aeronautics 配置（`aeronautics > server > Physics`）。配置在**进游戏（服务器启动）时与放置/加载 FMC 时缓存一次**（静态缓存，不逐 tick 读取）——游戏中修改配置后，需要重进世界或重新放置一次 FMC 才生效。
+
+返回所需转速 R；未 init、门控不满足（无 FMC）或参数非法（如 `P ≤ 0`）返回 `nil`。
+
+> 气压可用 `getPressure()`（静压孔读数）、速度可用 `getSpeed()`/`getAverageSpeed()`（皮托管读数）直接代入，组合成推力闭环控制。

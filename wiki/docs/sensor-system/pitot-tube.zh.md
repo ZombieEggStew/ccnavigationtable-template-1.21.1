@@ -47,13 +47,15 @@
 |---|---|---|
 | `getSpeed()` | number / nil | **最后放置的皮托管**沿管口轴线的**对地速度**（m/s，有符号；正 = 朝向管口）。门控不满足时为 `nil` |
 | `getAirSpeed()` | number / nil | 沿管口轴线的**空速**（m/s，有符号；相对空气，已减风速）。门控同上；仅在有风源时才与 `getSpeed()` 不同 |
+| `getAverageSpeed()` | number / nil | 全部皮托管对地速度的**简单平均值**（m/s，沿各自管口轴线的有符号分量）。门控同上 |
+| `getAverageAirSpeed()` | number / nil | 全部皮托管空速的**简单平均值**（m/s，沿各自管口轴线，相对空气）。门控同上 |
 | `getSensors()` | table | 全部传感器快照（同一 tick）；皮托管项为 `{type="pitot_tube", pos={x,y,z}, pos_rel={x,y,z}, speed, air_speed}`（门控不满足时读数为 `nil`） |
 
 共享方法（`isOnBody()`、`getBodyId()` 等）行为与[静压孔](static-port.zh.md)页面一致。
 
 - **对地 vs 空速**：`getSpeed()` 用世界速度；`getAirSpeed()` 用**相对空气**的速度（`Sable.HELPER.getVelocityRelativeToAir`，已减风速）。Sable 本身不注册风——未装提供风的模组（如 PMWeather）时两者数值相同。
 - **死区**：|读数| < 0.05 m/s 归零（静止 → 0）。
-- 多个皮托管时，`getSpeed()/getAirSpeed()` 取**最后放置**的那个（注册顺序 = 放置顺序——见下方重启警告）。
+- 多个皮托管时，`getSpeed()/getAirSpeed()` 取**最后放置**的那个（注册顺序 = 放置顺序——见下方重启警告）；`getAverageSpeed()/getAverageAirSpeed()` 则平均**全部**皮托管（同一 tick 快照），不受顺序影响。
 
 ```lua
 local ss = require("ccpe.sensor_system")
@@ -61,6 +63,8 @@ local ss = require("ccpe.sensor_system")
 print("onBody:", ss.isOnBody())
 print("沿管口对地速度:", ss.getSpeed())
 print("沿管口空速:    ", ss.getAirSpeed())
+print("全部皮托管平均对地速度:", ss.getAverageSpeed())
+print("全部皮托管平均空速:    ", ss.getAverageAirSpeed())
 
 local sensors = ss.getSensors()
 for i, s in ipairs(sensors) do
@@ -73,7 +77,7 @@ end
 
 ## 多个皮托管
 
-每个皮托管有自己独立的 `speed/air_speed` 读数（同一 tick 快照）。要读**特定**皮托管请用 `getSensors()`：
+每个皮托管有自己独立的 `speed/air_speed` 读数（同一 tick 快照）。`getAverageSpeed()/getAverageAirSpeed()` 直接给出全部皮托管的简单平均值（皮托管-静压门控不满足时为 `nil`）。要读**特定**皮托管请用 `getSensors()`：
 
 ```lua
 local sensors = ss.getSensors()

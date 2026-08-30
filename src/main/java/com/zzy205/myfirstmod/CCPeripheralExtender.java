@@ -6,6 +6,7 @@ import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralCapabilities;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralExtenderSetup;
 import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
+import com.zzy205.myfirstmod.compat.cc.SensorSystemAPI;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.network.ModPackets;
@@ -18,6 +19,7 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import org.slf4j.Logger;
@@ -50,6 +52,7 @@ public class CCPeripheralExtender {
         modEventBus.addListener(RegisterCapabilitiesEvent.class, CCPeripheralCapabilities::register);
 
         // 全局频道注册表是静态字段：服务器停止（回主菜单/关世界）时清空，防止旧世界设备残留占用频道
+        NeoForge.EVENT_BUS.addListener(CCPeripheralExtender::onServerStarting);
         NeoForge.EVENT_BUS.addListener(CCPeripheralExtender::onServerStopping);
 
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
@@ -65,6 +68,11 @@ public class CCPeripheralExtender {
             CCPeripheralExtenderSetup.register();
             LOGGER.info("CC:Tweaked sensor API registered");
         }
+    }
+
+    /** 服务器启动（进游戏/开世界）：刷新 aeronautics 螺旋桨配置静态缓存（T/A，进游戏缓存一次）。 */
+    private static void onServerStarting(ServerStartingEvent event) {
+        SensorSystemAPI.refreshAeroConfig();
     }
 
     /** 服务器停止（关世界/回主菜单）：清空静态全局频道注册表，避免跨世界残留占用频道。 */

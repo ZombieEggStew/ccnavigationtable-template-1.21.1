@@ -185,6 +185,16 @@ dependencies {
     // the extracted simulated-neoforge JAR explicitly on the compile classpath.
     compileOnly files("libs/simulated-neoforge-1.21.1-1.3.0.jar")
 
+    // ---- Aeronautics (required — propeller bearing thrust/airflow config) ----
+    // Create Aeronautics is a REQUIRED runtime dependency (declared in
+    // neoforge.mods.toml). Its classes are jarJar'd inside
+    // create-aeronautics-bundled (META-INF/jarjar/), which — like Simulated —
+    // does not expose nested classes at compile time, so we use the extracted
+    // aeronautics-neoforge JAR on the compile classpath, and the bundled JAR
+    // (which carries aeronautics + simulated + offroad) at runtime.
+    compileOnly files("libs/aeronautics-neoforge-1.21.1-1.3.2.jar")
+    localRuntime files("libs/create-aeronautics-bundled-1.21.1-1.3.2.jar")
+
     // ---- Sable (required) -------------------------------------------------
     // Sable is a REQUIRED runtime dependency (declared in neoforge.mods.toml).
     // We only need its API at compile time; the full jar comes from the user's

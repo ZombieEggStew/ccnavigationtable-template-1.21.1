@@ -7,6 +7,7 @@ import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dan200.computercraft.api.lua.IComputerSystem;
 import dan200.computercraft.api.lua.ILuaAPI;
 import dan200.computercraft.api.lua.LuaFunction;
+import dev.eriksonn.aeronautics.config.AeroConfig;
 import dev.ryanhcode.sable.companion.math.JOMLConversion;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
 import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * {@code ccpe.sensor_system}：所在物理体（Sable sub-level）的环境数据 Lua API。
@@ -130,6 +132,32 @@ public class SensorSystemAPI implements ILuaAPI {
     private volatile boolean chainMassAvailable = false;
     private volatile double chainMassKg = 0;
 
+    // ── 螺旋桨转速工具缓存（门控：机体（含约束链）上有 ≥1 个 FMC；T/A 静态缓存，不每 tick 刷新） ──
+
+    /** 螺旋桨工具门控：所在物理体（含约束链）上有 ≥1 个 FMC（ccpe:fmc），与物理数据门控同源 */
+    private volatile boolean propellerGateAvailable = false;
+
+    /** 螺旋桨参数是否已 init（N/S 已设置） */
+    private volatile boolean propellerInit = false;
+
+    /** 螺旋桨数量 N */
+    private volatile int propellerCount = 0;
+
+    /** 每个螺旋桨上的动力方块数量（风帆/对称风帆/羊毛方块）S */
+    private volatile int sailsPerPropeller = 0;
+
+    /**
+     * aeronautics 配置 T：Propeller Bearing Thrust（默认 0.2）。
+     * 静态缓存：进游戏（服务器启动）与放置/加载 FMC 时刷新，不每 tick 读配置。
+     */
+    private static volatile double propellerBearingThrust = 0.2;
+
+    /**
+     * aeronautics 配置 A：Propeller Bearing Airflow（默认 0.05）。
+     * 静态缓存：进游戏（服务器启动）与放置/加载 FMC 时刷新，不每 tick 读配置。
+     */
+    private static volatile double propellerBearingAirflow = 0.05;
+
     /** 单个传感器的同一 tick 快照（相对物理体原点 + 相对当前电脑的局部坐标 + 读数；非对应类型读数为 null） */
     private record SensorSnapshot(SensorType type, double relX, double relY, double relZ,
                                   double compX, double compY, double compZ,
@@ -178,6 +206,7 @@ public class SensorSystemAPI implements ILuaAPI {
             massKg = 0;
             chainMassAvailable = false;
             chainMassKg = 0;
+            propellerGateAvailable = false;
             return;
         }
         onBody = true;
@@ -214,6 +243,10 @@ public class SensorSystemAPI implements ILuaAPI {
             attitudeGate = hasIns;
             physicsGate = hasFmc;
         }
+
+        // 螺旋桨工具门控（与物理数据同源：机体上有 ≥1 个 FMC）。
+        // T/A 配置不在此刷新（静态缓存，进游戏/放置 FMC 时刷新一次，见 refreshAeroConfig）。
+        propellerGateAvailable = physicsGate;
 
         // 姿态缓存（度；门控：机体上有 INS 才计算，与速度门控同一 tick 快照）
         double[] attitude = attitudeGate ? computeAttitudeDeg(sub) : null;
@@ -612,6 +645,95 @@ public class SensorSystemAPI implements ILuaAPI {
         return chainMassAvailable ? chainMassKg * GRAVITY_CONSTANT : null;
     }
 
+    // ═══════════════ 螺旋桨转速工具（门控：机体（含约束链）上有 ≥1 个 FMC） ═══════════════
+
+    /**
+     * 初始化螺旋桨参数（求解所需转速前必须调用一次）。
+     * <p>
+     * 参数来自 aeronautics 的螺旋桨（Propeller Bearing）装配：
+     * <ul>
+     * <li><b>N</b>：螺旋桨（Propeller Bearing）数量；</li>
+     * <li><b>S</b>：每个螺旋桨上动力方块的数量（风帆 / 对称风帆 / 羊毛方块）。</li>
+     * </ul>
+     * 转速求解使用以下 aeronautics 配置（aeronautics &gt; server &gt; Physics）：
+     * <ul>
+     * <li><b>T</b>：Propeller Bearing Thrust，默认 0.2；</li>
+     * <li><b>A</b>：Propeller Bearing Airflow，默认 0.05。</li>
+     * </ul>
+     * 配置值每 tick 由主线程缓存（改配置后最多滞后 1 tick 生效）。
+     * <p>
+     * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
+     * （FMC，ccpe:fmc），否则返回 false。
+     *
+     * @param n 螺旋桨数量（≥ 1）
+     * @param s 每个螺旋桨上的动力方块数量（≥ 1）
+     * @return 是否初始化成功（门控不满足或参数非法返回 false）
+     */
+    @LuaFunction
+    public final boolean initPropeller(double n, double s) {
+        if (!propellerGateAvailable) return false;
+        if (n < 1 || s < 1) return false;
+        propellerCount = (int) Math.floor(n);
+        sailsPerPropeller = (int) Math.floor(s);
+        propellerInit = true;
+        return true;
+    }
+
+    /**
+     * 求解螺旋桨要达到需求输出所需的转速 R（与 aeronautics 转速单位一致，同
+     * {@code PropellerBearingBlockEntity} 的转速语义）。
+     * <p>
+     * 公式（由 aeronautics 推力/气流模型反解）：
+     * <pre>{@code
+     * R = F / (P × S^1.5 × N × T) + V × sin(θ) / (S^0.5 × A)
+     * }</pre>
+     * 其中：
+     * <ul>
+     * <li><b>F</b>：期望推力（与 aeronautics 推力单位一致）；</li>
+     * <li><b>P</b>：气压（大气压分数，海平面 = 1.0，可用 {@link #getPressure()}）；</li>
+     * <li><b>V</b>：速度（m/s，机体当前速度，可用 {@link #getSpeed()}）；</li>
+     * <li><b>θ</b>：螺旋桨平面与速度方向的夹角（度，可选，默认 0）；</li>
+     * <li><b>N</b>、<b>S</b>：{@link #initPropeller(double, double)} 设置的螺旋桨参数；</li>
+     * <li><b>T</b>、<b>A</b>：aeronautics 配置（见 {@link #initPropeller(double, double)}）。</li>
+     * </ul>
+     * <p>
+     * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
+     * （FMC，ccpe:fmc），否则返回 nil。
+     *
+     * @param force   期望推力 F
+     * @param pressure 气压 P（必须 &gt; 0）
+     * @param velocity 速度 V（m/s）
+     * @param thetaDeg 螺旋桨平面与速度方向的夹角 θ（度，可选，缺省 = 0）
+     * @return 所需转速 R；未 init / 门控不满足 / 参数非法返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Double getPropellerRPM(double force, double pressure, double velocity,
+                                                  Optional<Double> thetaDeg) {
+        if (!propellerGateAvailable || !propellerInit) return null;
+        if (pressure <= 0) return null;
+        double s = sailsPerPropeller;
+        double n = propellerCount;
+        double theta = thetaDeg.map(Math::toRadians).orElse(0.0);
+        double baseRpm = force / (pressure * Math.pow(s, 1.5) * n * propellerBearingThrust);
+        double flowRpm = velocity * Math.sin(theta) / (Math.sqrt(s) * propellerBearingAirflow);
+        return baseRpm + flowRpm;
+    }
+
+    /**
+     * 刷新 aeronautics 螺旋桨配置静态缓存（T：Propeller Bearing Thrust，A：Propeller Bearing Airflow）。
+     * <p>
+     * 调用时机：进游戏（服务器启动）与放置/加载 FMC（{@link FmcBlockEntity#onLoad()}）时调用一次；
+     * 不随每 tick 刷新。aeronautics 为必须依赖，但仍防御性兜底——读取失败时保留默认值（0.2 / 0.05）。
+     */
+    public static void refreshAeroConfig() {
+        try {
+            propellerBearingThrust = AeroConfig.server().physics.propellerBearingThrust.get();
+            propellerBearingAirflow = AeroConfig.server().physics.propellerBearingAirflowMult.get();
+        } catch (Exception ignored) {
+            // aeronautics 配置不可用时保留默认值（0.2 / 0.05）
+        }
+    }
+
     /** 全部静压孔高度的简单平均值；无静压孔返回 nil */
     @LuaFunction
     public final @Nullable Double getAverageAltitude() {
@@ -633,6 +755,44 @@ public class SensorSystemAPI implements ILuaAPI {
         for (SensorSnapshot s : sensors) {
             if (s.type() != SensorType.PRESSURE || s.pressure() == null) continue;
             sum += s.pressure();
+            count++;
+        }
+        return count > 0 ? sum / count : null;
+    }
+
+    /**
+     * 全部皮托管对地速度（沿各自管口轴线的有符号分量，m/s）的<b>简单平均值</b>。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getSpeed()} 相同——物理体（含约束链）必须<b>同时</b>
+     * 有 ≥1 皮托管 且 ≥1 静压孔（皮托管-静压系统），否则返回 nil。
+     * 门控满足时，各皮托管读数均来自同一 tick 快照（若个别读数不可用则跳过）。
+     */
+    @LuaFunction
+    public final @Nullable Double getAverageSpeed() {
+        double sum = 0;
+        int count = 0;
+        for (SensorSnapshot s : sensors) {
+            if (s.type() != SensorType.SPEED || s.speed() == null) continue;
+            sum += s.speed();
+            count++;
+        }
+        return count > 0 ? sum / count : null;
+    }
+
+    /**
+     * 全部皮托管空速（沿各自管口轴线的有符号分量，相对空气已减风速，m/s）的<b>简单平均值</b>。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getAirSpeed()} 相同——物理体（含约束链）必须<b>同时</b>
+     * 有 ≥1 皮托管 且 ≥1 静压孔（皮托管-静压系统），否则返回 nil。
+     * 门控满足时，各皮托管读数均来自同一 tick 快照（若个别读数不可用则跳过）。
+     */
+    @LuaFunction
+    public final @Nullable Double getAverageAirSpeed() {
+        double sum = 0;
+        int count = 0;
+        for (SensorSnapshot s : sensors) {
+            if (s.type() != SensorType.SPEED || s.airSpeed() == null) continue;
+            sum += s.airSpeed();
             count++;
         }
         return count > 0 ? sum / count : null;
