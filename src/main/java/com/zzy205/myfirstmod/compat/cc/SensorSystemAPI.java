@@ -61,7 +61,7 @@ import java.util.Optional;
  * print(ss.getOrientation())      -- 机体姿态四元数 {x, y, z, w}（门控：机体上必须有 INS）
  * print(ss.getAngularVelocity())  -- 机体世界系角速度 {x, y, z} rad/s（门控：机体上必须有 INS）
  * print(ss.getBodyPosition())     -- 物理体原点世界坐标 {x, y, z}（门控：机体上必须有 INS）
- * print(ss.getPhysicsCenterOfMassRel()) -- 重心相对电脑的机体局部系位置 {x, y, z}（门控：机体上有 FMC）
+ * print(ss.getPhysicsCenterOfMassRel()) -- 重心相对最后放置的 FMC 的机体局部系位置 {x, y, z}（门控：机体上有 FMC）
  * print(ss.getPhysicsMass())      -- 所在物理体质量 kg（门控：机体上有 FMC）
  * print(ss.getPhysicsChainMass()) -- 所在物理体链总质量 kg（门控：机体上有 FMC）
  * print(ss.getPhysicsGravityForce()) -- 所在物理体重力 pN（门控：机体上有 FMC）
@@ -118,7 +118,7 @@ public class SensorSystemAPI implements ILuaAPI {
 
     // ── 物理数据缓存（门控：机体（含约束链）上有 ≥1 个 FMC 才计算，与传感器存在性相关） ──
 
-    /** 重心相对当前电脑的局部坐标（plot 帧差值，机体局部系，不随旋转变化） */
+    /** 重心相对最后放置的 FMC（含 AIC）的局部坐标（plot 帧差值，机体局部系，不随旋转变化） */
     private volatile boolean comRelAvailable = false;
     private volatile double comRelX = 0;
     private volatile double comRelY = 0;
@@ -312,14 +312,17 @@ public class SensorSystemAPI implements ILuaAPI {
 
         // ── 物理数据缓存（门控：机体（含约束链）上有 ≥1 个 FMC 才计算，与姿态/速度同一 tick 快照） ──
         if (physicsGate) {
-            // 重心相对当前电脑 = 重心相对原点偏移 − 电脑相对原点偏移（plot 帧差值，机体局部系，
-            // 不随物理体移动/旋转变化；与 getSensors 的 pos_rel 同帧可比较）
+            // 重心相对 FMC（最后放置的 FMC 传感器，AIC 等同 FMC）=
+            //   重心相对物理体原点偏移（getCenterOfMassLocal 已做 plot−rotationPoint 转换）
+            //   − FMC 相对物理体原点偏移（lastFmcRel = toRelativePos），
+            // 两者同为 plot 帧差值（机体局部系），不随物理体移动/旋转变化；参考点不依赖电脑位置。
             Vec3 comLocal = SableCompat.getCenterOfMassLocal(sub);
-            if (comLocal != null && compRel != null) {
+            Vec3 fmcRel = lastFmcRel(sub, entries);
+            if (comLocal != null && fmcRel != null) {
                 comRelAvailable = true;
-                comRelX = comLocal.x - crx;
-                comRelY = comLocal.y - cry;
-                comRelZ = comLocal.z - crz;
+                comRelX = comLocal.x - fmcRel.x;
+                comRelY = comLocal.y - fmcRel.y;
+                comRelZ = comLocal.z - fmcRel.z;
             } else {
                 comRelAvailable = false;
                 comRelX = comRelY = comRelZ = 0;
@@ -583,10 +586,16 @@ public class SensorSystemAPI implements ILuaAPI {
     // ═══════════════ 物理数据（门控：机体（含约束链）上有 ≥1 个 FMC 才有值） ═══════════════
 
     /**
-     * 物理体重心相对于当前电脑的机体局部系位置 {@code {x, y, z}}。
+     * 物理体重心相对于<b>最后放置的 FMC</b>（含 AIC，AIC 等同 FMC）的机体局部系位置
+     * {@code {x, y, z}}。
      * <p>
-     * = 重心相对物理体原点的偏移 − 电脑相对物理体原点的偏移（plot 帧差值，
-     * 与 {@link #getSensors()} 的 {@code pos_rel} 同帧），<b>不随物理体移动/旋转变化</b>。
+     * = 重心相对物理体原点的偏移 − FMC 相对物理体原点的偏移（两者均经 Sable 的
+     * {@code plot − rotationPoint} 转换，plot 帧差值，与 {@link #getSensors()} 的
+     * {@code pos} 同帧），<b>不随物理体移动/旋转变化</b>；参考点 = 所在物理体（含约束链）
+     * 上最后放置的 FMC 传感器（多个 FMC 时取最后）。
+     * <p>
+     * 注：Sable 的物理体原点（rotationPoint）运行时与质心同步，因此该值 ≈
+     * FMC 相对物理体原点的偏移取反（重心在机体上相对 FMC 的方位）。
      * <p>
      * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
      * （FMC，ccpe:fmc），否则返回 nil；不在物理体上或质量数据不可用同样返回 nil。
@@ -898,6 +907,19 @@ public class SensorSystemAPI implements ILuaAPI {
         Vec3 worldPos = SableCompat.projectOutOfSubLevel(sub.getLevel(), lastIns.pos());
         if (worldPos == null) return null;
         return new double[] { worldPos.x, worldPos.y, worldPos.z };
+    }
+
+    /**
+     * 最后放置（最新注册）的 FMC 传感器（AIC 等同 FMC，也登记 FMC 类型）相对物理体原点的
+     * 局部坐标（plot 帧，与 {@link SableCompat#getCenterOfMassLocal} 同帧，可直接相减）。
+     * 参考点语义：机体上无 FMC（门控）时返回 null。
+     */
+    private @Nullable Vec3 lastFmcRel(SubLevel sub, List<SensorEntry> entries) {
+        SensorEntry lastFmc = null;
+        for (SensorEntry e : entries)
+            if (e.type() == SensorType.FMC) lastFmc = e; // 注册顺序 = 放置顺序，取最后
+        if (lastFmc == null) return null;
+        return SableCompat.toRelativePos(sub, lastFmc.pos());
     }
 
     private @Nullable Double computePressure(Level level, Vec3 worldPos) {

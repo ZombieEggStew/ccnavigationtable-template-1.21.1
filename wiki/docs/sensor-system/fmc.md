@@ -8,7 +8,7 @@ The physics body must have **at least 1 FMC** (`ccpe:fmc`) installed, otherwise 
 
 | Method | Returns | Description |
 |---|---|---|
-| `getPhysicsCenterOfMassRel()` | table / nil | Center of mass **relative to the current computer**, body-local `{x, y, z}` |
+| `getPhysicsCenterOfMassRel()` | table / nil | Center of mass **relative to the most recently placed FMC** (AIC counts as FMC), body-local `{x, y, z}` |
 | `getPhysicsMass()` | number / nil | Mass of the computer's physics body (kg) |
 | `getPhysicsChainMass()` | number / nil | Total mass of the body **including all constraint chains** (kg) |
 | `getPhysicsGravityForce()` | number / nil | Gravity force of the body (pN = mass × 11) |
@@ -16,13 +16,17 @@ The physics body must have **at least 1 FMC** (`ccpe:fmc`) installed, otherwise 
 
 ## Center of mass semantics
 
-`getPhysicsCenterOfMassRel()` returns the **body-local** (plot-frame) offset of the center of mass from the computer:
+`getPhysicsCenterOfMassRel()` returns the **body-local** (plot-frame) offset of the center of mass from the **most recently placed FMC** on the body (including constraint chains; with several FMCs/AICs, the last one placed wins):
 
 ```
-重心相对电脑 = (重心相对物理体原点的偏移) − (电脑相对物理体原点的偏移)
+COM relative to FMC = (COM relative to the physics body origin) − (FMC relative to the physics body origin)
 ```
 
-- Same frame as the `pos_rel` field in `getSensors()` — **it does not change** as the body moves or rotates, which makes it stable for identifying where the center of mass sits on the vehicle (e.g. how far forward/up it is from the cockpit).
+Both offsets go through the Sable conversion `plot − rotationPoint` (same frame as the `pos` field in `getSensors()`), so the result **does not change** as the body moves or rotates — stable for identifying where the center of mass sits on the vehicle (e.g. how far forward/up it is from the FMC).
+
+!!! note "Body origin = center of mass"
+    Sable keeps the physics body origin (`rotationPoint`) in sync with the center of mass at runtime, so the first term above is ≈ 0 and this value is ≈ **the FMC's own offset from the body origin, negated** (i.e. where the COM sits relative to the FMC).
+
 - Use `getOrientation()` to rotate this vector into the world frame if needed.
 
 ## Gravity
@@ -49,10 +53,10 @@ print("chain mass (kg):  ", ss.getPhysicsChainMass())
 print("gravity (pN):     ", ss.getPhysicsGravityForce())
 print("chain gravity(pN):", ss.getPhysicsChainGravityForce())
 
--- Center of mass relative to this computer (body-local, stable under rotation)
+-- Center of mass relative to the most recently placed FMC (body-local, stable under rotation)
 local com = ss.getPhysicsCenterOfMassRel()
 if com then
-    print("COM rel to comp:", string.format("x=%.2f y=%.2f z=%.2f", com.x, com.y, com.z))
+    print("COM rel to FMC:", string.format("x=%.2f y=%.2f z=%.2f", com.x, com.y, com.z))
 end
 ```
 ## Propeller speed tool

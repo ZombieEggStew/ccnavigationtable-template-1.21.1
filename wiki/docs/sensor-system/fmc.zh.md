@@ -7,7 +7,7 @@
 
 | 方法 | 返回 | 说明 |
 |---|---|---|
-| `getPhysicsCenterOfMassRel()` | table / nil | 重心**相对当前电脑**的机体局部系位置 `{x, y, z}` |
+| `getPhysicsCenterOfMassRel()` | table / nil | 重心**相对最后放置的 FMC**（AIC 等同 FMC）的机体局部系位置 `{x, y, z}` |
 | `getPhysicsMass()` | number / nil | 电脑所在物理体的质量（kg） |
 | `getPhysicsChainMass()` | number / nil | 物理体**含全部约束链**的总质量（kg） |
 | `getPhysicsGravityForce()` | number / nil | 所在物理体的重力（pN = 质量 × 11） |
@@ -15,13 +15,17 @@
 
 ## 重心语义
 
-`getPhysicsCenterOfMassRel()` 返回重心相对电脑的**机体局部系**（plot 帧）偏移：
+`getPhysicsCenterOfMassRel()` 返回重心相对**机体上最后放置的 FMC**（含约束链；多个 FMC/AIC 时取最后放置的那个）的**机体局部系**（plot 帧）偏移：
 
 ```
-重心相对电脑 = (重心相对物理体原点的偏移) − (电脑相对物理体原点的偏移)
+重心相对 FMC = (重心相对物理体原点的偏移) − (FMC 相对物理体原点的偏移)
 ```
 
-- 与 `getSensors()` 的 `pos_rel` 同一坐标系——**不随物理体移动/旋转变化**，适合稳定地识别重心装在机体的哪个位置（比如离驾驶舱前后/上下多远）。
+两个偏移都经过 Sable 转换 `plot − rotationPoint`（与 `getSensors()` 的 `pos` 同一坐标系）——结果**不随物理体移动/旋转变化**，适合稳定地识别重心装在机体的哪个位置（比如离 FMC 前后/上下多远）。
+
+!!! note "物理体原点 = 质心"
+    Sable 运行时会把物理体原点（`rotationPoint`）与质心保持同步，因此上式第一项 ≈ 0，该值 ≈ **FMC 相对物理体原点的偏移取反**（即重心相对 FMC 的方位）。
+
 - 需要世界系时，用 `getOrientation()` 把该向量旋转到世界。
 
 ## 重力
@@ -48,10 +52,10 @@ print("链总质量 (kg):    ", ss.getPhysicsChainMass())
 print("重力 (pN):        ", ss.getPhysicsGravityForce())
 print("链总重力 (pN):    ", ss.getPhysicsChainGravityForce())
 
--- 重心相对当前电脑（机体局部系，旋转时不变）
+-- 重心相对最后放置的 FMC（机体局部系，旋转时不变）
 local com = ss.getPhysicsCenterOfMassRel()
 if com then
-    print("重心相对电脑:", string.format("x=%.2f y=%.2f z=%.2f", com.x, com.y, com.z))
+    print("重心相对FMC:", string.format("x=%.2f y=%.2f z=%.2f", com.x, com.y, com.z))
 end
 ```
 

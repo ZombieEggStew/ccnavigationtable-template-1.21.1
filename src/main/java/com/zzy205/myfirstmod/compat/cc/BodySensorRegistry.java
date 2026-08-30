@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.AicBlockEntity;
 import com.zzy205.myfirstmod.block.FmcBlockEntity;
 import com.zzy205.myfirstmod.block.InsBlockEntity;
 import com.zzy205.myfirstmod.block.PitotTubeBlockEntity;
@@ -8,7 +9,6 @@ import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,8 +25,10 @@ import java.util.UUID;
  * 仅服务端主线程访问（BE onLoad/tick/setRemoved 与 {@link SensorSystemAPI#update()} 都在主线程）。
  * 与 {@code GlobalChannelRegistry} / Peripheral Extender 注册表同模式；登记
  * {@link StaticPortBlockEntity}（PRESSURE）、{@link PitotTubeBlockEntity}（SPEED）、
- * {@link InsBlockEntity}（ATTITUDE，惯性导航系统）与 {@link FmcBlockEntity}（FMC，
- * 飞行管理计算机，物理数据方法的存在性门控）四类传感器。
+ * {@link InsBlockEntity}（ATTITUDE，惯性导航系统）、{@link FmcBlockEntity}（FMC，
+ * 飞行管理计算机，物理数据方法的存在性门控）与 {@link AicBlockEntity}（AIC，航空集成
+ * 计算机，<b>同时登记 ATTITUDE + FMC 两种传感器</b>——机体上放置 AIC 等同装有 INS + FMC，
+ * 同时满足 sensor_system 的姿态门控与物理数据门控）。
  */
 public final class BodySensorRegistry {
 
@@ -38,14 +40,15 @@ public final class BodySensorRegistry {
 
     private BodySensorRegistry() {}
 
-    /** 注册一个传感器 BE（仅服务端）；不在物理体上则忽略 */
+    /** 注册一个传感器 BE（仅服务端）；不在物理体上则忽略。一个 BE 可登记多个类型（如 AIC） */
     public static void register(BlockEntity be) {
         if (be.getLevel() == null || be.getLevel().isClientSide) return;
         SubLevel sub = SableCompat.getContainingSubLevel(be);
         UUID id = sub != null ? SableCompat.getSubLevelUUID(sub) : null;
-        SensorType type = sensorTypeOf(be);
-        if (id == null || type == null) return;
-        SENSORS.computeIfAbsent(id, k -> new LinkedHashSet<>()).add(new SensorEntry(type, be.getBlockPos()));
+        if (id == null) return;
+        for (SensorType type : sensorTypesOf(be)) {
+            SENSORS.computeIfAbsent(id, k -> new LinkedHashSet<>()).add(new SensorEntry(type, be.getBlockPos()));
+        }
     }
 
     /** 注销一个传感器 BE（仅服务端）；按 plot 坐标从所有物理体条目中移除（不存在则忽略） */
@@ -78,11 +81,13 @@ public final class BodySensorRegistry {
         return out;
     }
 
-    private static @Nullable SensorType sensorTypeOf(BlockEntity be) {
-        if (be instanceof StaticPortBlockEntity) return SensorType.PRESSURE;
-        if (be instanceof PitotTubeBlockEntity) return SensorType.SPEED;
-        if (be instanceof InsBlockEntity) return SensorType.ATTITUDE;
-        if (be instanceof FmcBlockEntity) return SensorType.FMC;
-        return null;
+    /** BE → 传感器类型（可多个）：AIC 同时登记 ATTITUDE（=INS）与 FMC，等同机体装有 INS + FMC */
+    private static List<SensorType> sensorTypesOf(BlockEntity be) {
+        if (be instanceof AicBlockEntity) return List.of(SensorType.ATTITUDE, SensorType.FMC);
+        if (be instanceof StaticPortBlockEntity) return List.of(SensorType.PRESSURE);
+        if (be instanceof PitotTubeBlockEntity) return List.of(SensorType.SPEED);
+        if (be instanceof InsBlockEntity) return List.of(SensorType.ATTITUDE);
+        if (be instanceof FmcBlockEntity) return List.of(SensorType.FMC);
+        return List.of();
     }
 }

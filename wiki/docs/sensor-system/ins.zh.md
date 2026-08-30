@@ -58,4 +58,4 @@ print("quaternion:", textutils.serialize(ss.getOrientation()))
 print("ang vel:   ", textutils.serialize(ss.getAngularVelocity()))
 ```
 
-共享方法（`isOnBody()`、`getBodyId()`、`getSensors()` 等）的行为见[静压孔](static-port.zh.md)页面。**需要 FMC 门控**的物理数据见[物理数据](physics-data.zh.md)页面。
+共享方法（`isOnBody()`、`getBodyId()`、`getSensors()` 等）的行为见[静压孔](static-port.zh.md)页面。**需要 FMC 门控**的物理数据见[飞行管理计算机](fmc.zh.md)页面。

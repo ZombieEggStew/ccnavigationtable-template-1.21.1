@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:andesite_alloy"
+    },
+    "X": {
+      "item": "ccpe:ins"
+    },
+    "Y": {
+      "item": "ccpe:fmc"
+    }
+  },
+  "pattern": [
+    "   ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:aic"
+  }
+}

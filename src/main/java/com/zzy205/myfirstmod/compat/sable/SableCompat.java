@@ -378,6 +378,11 @@ public final class SableCompat {
     /**
      * 获取 SubLevel 物理刚体的质心在局部（plot）坐标系中<b>相对物理体原点（质心枢轴）</b>的偏移。
      * <p>
+     * Sable 的 mass tracker 返回的是 plot 空间<b>绝对坐标</b>（与方块坐标同帧，
+     * 见 {@code MassTracker.build} 按 plot 方块坐标加权平均），必须按
+     * {@link #toRelativePos} 同款转换（{@code plot − rotationPoint}）才是相对原点的偏移。
+     * rotationPoint 运行时与质心同步（{@code MergedMassTracker.uploadData}），但方块
+     * 增删后的同一 tick 内二者可能瞬时不同，因此这一步转换不能省。
      * 与 {@link #getCenterOfMass}（世界坐标）不同，该偏移不随物理体移动/旋转变化；
      * 与 {@link #toRelativePos} 同帧（plot 帧差值），可与电脑/传感器的相对坐标直接相减。
      *
@@ -390,7 +395,8 @@ public final class SableCompat {
             if (massTracker == null) return null;
             Vector3dc com = massTracker.getCenterOfMass();
             if (com == null) return null;
-            return new Vec3(com.x(), com.y(), com.z());
+            Vector3dc rp = subLevel.logicalPose().rotationPoint();
+            return new Vec3(com.x() - rp.x(), com.y() - rp.y(), com.z() - rp.z());
         } catch (Exception e) {
             return null;
         }

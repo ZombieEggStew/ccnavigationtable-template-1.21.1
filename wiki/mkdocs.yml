@@ -77,6 +77,7 @@ plugins:
             Pitot Tube: 皮托管
             Inertial Navigation System: 惯性导航系统
             Flight Management Computer: 飞行管理计算机
+            Aviation Integrated Computer: 航空集成计算机
             Lua API Reference: Lua API 参考
             FAQ: 常见问题
             Changelog: 更新日志
@@ -117,6 +118,7 @@ nav:
     - Pitot Tube: sensor-system/pitot-tube.md
     - Inertial Navigation System: sensor-system/ins.md
     - Flight Management Computer: sensor-system/fmc.md
+    - Aviation Integrated Computer: sensor-system/aic.md
   - Modular Monitor:
     - Overview: monitor/overview.md
     - Monitor: monitor/monitor.md

@@ -3,7 +3,9 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.DirectionalBlock;
@@ -15,9 +17,15 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Vector3f;
 
 import org.jetbrains.annotations.NotNull;
+
+import java.util.EnumMap;
+import java.util.Map;
 
 /**
  * 航空集成计算机（AIC，Aviation Integrated Computer）。
@@ -44,6 +52,50 @@ public class AicBlock extends DirectionalBlock implements IWrenchable, EntityBlo
         super(properties);
     }
 
+    // ── 选择框（与 blockstate 变体旋转一致，结构参考 FmcBlock） ──
+
+    /** 6 向选择框：up 未旋转盒 (1,0,1,15,4,15)；down x180 → (1,12,1,15,16,15)；水平四向 = WALL 基准盒绕 Y 四向 */
+    private static final Map<Direction, VoxelShape> SHAPES = buildShapes();
+
+    private static Map<Direction, VoxelShape> buildShapes() {
+        Map<Direction, VoxelShape> shapes = new EnumMap<>(Direction.class);
+        shapes.put(Direction.UP, Block.box(1, 0, 1, 15, 4, 15));
+        shapes.put(Direction.DOWN, Block.box(1, 12, 1, 15, 16, 15));
+        // 水平四向基准盒 = facing=north（模型绕 X 90° 竖立后，同 FMC WALL 盒），绕 Y 旋转出四向
+        shapes.putAll(buildHorizontalShapes(Block.box(1, 1, 12, 15, 15, 16)));
+        return shapes;
+    }
+
+    private static Map<Direction, VoxelShape> buildHorizontalShapes(VoxelShape northShape) {
+        Map<Direction, VoxelShape> shapes = new EnumMap<>(Direction.class);
+        shapes.put(Direction.NORTH, northShape);
+        shapes.put(Direction.EAST, rotateShapeY(northShape, 1));
+        shapes.put(Direction.SOUTH, rotateShapeY(northShape, 2));
+        shapes.put(Direction.WEST, rotateShapeY(northShape, 3));
+        return shapes;
+    }
+
+    private static VoxelShape rotateShapeY(VoxelShape shape, int quarterTurns) {
+        VoxelShape[] result = new VoxelShape[]{Shapes.empty()};
+        int turns = ((quarterTurns % 4) + 4) % 4;
+
+        shape.forAllBoxes((minX, minY, minZ, maxX, maxY, maxZ) -> {
+            switch (turns) {
+                case 0 -> result[0] = Shapes.or(result[0], Shapes.box(minX, minY, minZ, maxX, maxY, maxZ));
+                case 1 -> result[0] = Shapes.or(result[0], Shapes.box(1.0D - maxZ, minY, minX, 1.0D - minZ, maxY, maxX));
+                case 2 -> result[0] = Shapes.or(result[0], Shapes.box(1.0D - maxX, minY, 1.0D - maxZ, 1.0D - minX, maxY, 1.0D - minZ));
+                case 3 -> result[0] = Shapes.or(result[0], Shapes.box(minZ, minY, 1.0D - maxX, maxZ, maxY, 1.0D - minX));
+            }
+        });
+
+        return result[0].optimize();
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return SHAPES.get(state.getValue(FACING));
+    }
+
     /**
      * NeoForge 1.21.1 的 {@link DirectionalBlock} 只是壳：只声明 {@code FACING} 常量，
      * 不会把属性注册进 stateDefinition（曾因此放置时 {@code setValue(FACING)} 崩溃），
@@ -60,7 +112,7 @@ public class AicBlock extends DirectionalBlock implements IWrenchable, EntityBlo
         return defaultBlockState().setValue(FACING, context.getClickedFace());
     }
 
-    // ── 方块实体（客户端罗盘摆动画） ──
+    // ── 方块实体（客户端罗盘摆动画 + 服务端 BodySensorRegistry 注册） ──
 
     @Override
     public @NotNull RenderShape getRenderShape(@NotNull BlockState state) {
@@ -76,8 +128,7 @@ public class AicBlock extends DirectionalBlock implements IWrenchable, EntityBlo
 
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state, @NotNull BlockEntityType<T> type) {
-        // 罗盘摆动画只在客户端跑；服务端无逻辑
-        if (!level.isClientSide) return null;
+        // 客户端跑罗盘摆动画；服务端跑 BodySensorRegistry 所在物理体 UUID 复核（AIC = INS + FMC 门控）
         if (type == MyModBlockEntities.aic_entity.get()) {
             @SuppressWarnings("unchecked")
             BlockEntityTicker<T> ticker = (BlockEntityTicker<T>) (BlockEntityTicker<?>) TICKER;
