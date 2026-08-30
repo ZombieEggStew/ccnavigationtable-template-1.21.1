@@ -1,0 +1,23 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "ccpe:block/my_aero_sensor/ins",
+		"particle": "ccpe:block/my_aero_sensor/ins"
+	},
+	"elements": [
+		{
+			"from": [-1, -1.5, -1],
+			"to": [1, 0.5, 1],
+			"rotation": {"angle": 0, "axis": "y", "origin": [1, -0.5, 0]},
+			"faces": {
+				"north": {"uv": [12, 5, 14, 7], "texture": "#0"},
+				"east": {"uv": [14, 4, 12, 6], "rotation": 270, "texture": "#0"},
+				"south": {"uv": [12, 3, 14, 5], "texture": "#0"},
+				"west": {"uv": [14, 4, 12, 6], "rotation": 90, "texture": "#0"},
+				"up": {"uv": [14, 6, 12, 4], "texture": "#0"},
+				"down": {"uv": [12, 4, 14, 6], "texture": "#0"}
+			}
+		}
+	]
+}

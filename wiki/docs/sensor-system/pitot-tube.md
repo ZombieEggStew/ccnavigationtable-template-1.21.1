@@ -1,6 +1,6 @@
 # Pitot Tube
 
-> Directional airspeed sensing along the tube axis
+> A lightweight and intelligent way to read aviation data
 
 ![pitot_tube](../img/pitot_tube.png)
 
