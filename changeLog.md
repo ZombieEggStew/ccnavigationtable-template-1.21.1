@@ -63,3 +63,5 @@
 
 1.1.0
 - Added the Aviation Integrated Computer (AIC), Check the wiki for more details.
+
+1.1.1
