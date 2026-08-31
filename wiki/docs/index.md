@@ -45,7 +45,7 @@ Aviation sensors for physics bodies (Sable sub-levels), all readable from Lua vi
 - **[Static Port](sensor-system/static-port.md)** — pressure & altitude readings at the port's own position
 - **[Pitot Tube](sensor-system/pitot-tube.md)** — directional speed sensor, ground speed & airspeed along the tube's mouth axis
 - **[INS](sensor-system/ins.md)** — attitude indicator: pitch / roll / yaw, position, orientation quaternion and angular velocity
-- **[FMC](sensor-system/fmc.md)** — physics data: mass, gravity force, center of mass
+- **[FMC](sensor-system/fmc.md)** — physics data: mass, gravity force, center of mass; plus the attached block's Create stress network (remaining / capacity stress)
 - **[AIC](sensor-system/aic.md)** — one block that counts as both an INS and an FMC
 
 ---

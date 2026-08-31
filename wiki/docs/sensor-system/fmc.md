@@ -13,6 +13,8 @@ The physics body must have **at least 1 FMC** (`ccpe:fmc`) installed, otherwise 
 | `getPhysicsChainMass()` | number / nil | Total mass of the body **including all constraint chains** (kg) |
 | `getPhysicsGravityForce()` | number / nil | Gravity force of the body (pN = mass × 11) |
 | `getPhysicsChainGravityForce()` | number / nil | Total gravity force of the whole chain (pN = chain mass × 11) |
+| `getStressRemaining()` | number / nil | Remaining stress (su) of the Create stress network the **most recently placed FMC's attached block** belongs to (negative when overstressed) |
+| `getStressCapacity()` | number / nil | Total stress capacity (su) of that network |
 
 ## Center of mass semantics
 
@@ -39,6 +41,16 @@ gravity (pN) = mass (kg) × 11
 
 `getPhysicsGravityForce()` uses the mass of the computer's own body; `getPhysicsChainGravityForce()` uses the chain total (see `getPhysicsChainMass()`).
 
+## Attached block stress network
+
+`getStressRemaining()` and `getStressCapacity()` read the **Create stress network** of the block the **most recently placed FMC** (AIC counts as FMC) is attached to:
+
+- **attached block** — the block on the FMC's support face (FMC: the face determined by its `FACE`/`FACING` blockstate; AIC: the block behind its `FACING` direction). The attached block must be a Create **kinetic block** (`KineticBlockEntity`, e.g. a gearbox, shaft or propeller bearing), otherwise both methods return `nil`.
+- **`getStressCapacity()`** — total capacity of the network, in stress units (su).
+- **`getStressRemaining()`** — remaining stress, `capacity − current stress` (su). Negative when the network is **overstressed**.
+
+Both methods are gated exactly like the rest of the FMC methods (the body — including constraint chains — must have ≥ 1 FMC, and the computer must be on a body). The reading refreshes once per tick.
+
 ## Example
 
 ```lua
@@ -58,6 +70,10 @@ local com = ss.getPhysicsCenterOfMassRel()
 if com then
     print("COM rel to FMC:", string.format("x=%.2f y=%.2f z=%.2f", com.x, com.y, com.z))
 end
+
+-- Create stress network of the block the last FMC is attached to (su)
+print("stress capacity (su): ", ss.getStressCapacity())
+print("stress remaining (su):", ss.getStressRemaining())
 ```
 ## Propeller speed tool
 

@@ -12,6 +12,8 @@
 | `getPhysicsChainMass()` | number / nil | 物理体**含全部约束链**的总质量（kg） |
 | `getPhysicsGravityForce()` | number / nil | 所在物理体的重力（pN = 质量 × 11） |
 | `getPhysicsChainGravityForce()` | number / nil | 整条物理体链的总重力（pN = 链总质量 × 11） |
+| `getStressRemaining()` | number / nil | **最后放置的 FMC 的附着面方块**所在 Create 应力网络的**剩余应力**（su，过载时为负） |
+| `getStressCapacity()` | number / nil | 该网络的总容量（su） |
 
 ## 重心语义
 
@@ -38,6 +40,16 @@
 
 `getPhysicsGravityForce()` 用电脑所在物理体自身的质量；`getPhysicsChainGravityForce()` 用链总质量（见 `getPhysicsChainMass()`）。
 
+## 附着方块应力网络
+
+`getStressRemaining()` 与 `getStressCapacity()` 读取**最后放置的 FMC**（AIC 等同 FMC）所**贴着的方块**所在 Create 应力网络：
+
+- **附着方块** — FMC 支撑面方向上的方块（FMC：由 blockstate 的 `FACE`/`FACING` 决定的支撑面；AIC：`FACING` 背面的方块）。附着方块必须是 Create **动力方块**（`KineticBlockEntity`，如齿轮箱、传动轴、螺旋桨轴承），否则两个方法都返回 `nil`。
+- **`getStressCapacity()`** — 网络总容量（su）。
+- **`getStressRemaining()`** — 剩余应力 = 总容量 − 当前总应力（su），网络**过载**时为负。
+
+两个方法与其余 FMC 方法同门控（机体含约束链上必须有 ≥1 个 FMC、电脑必须在物理体上）；读数每 tick 刷新。
+
 ## 示例
 
 ```lua
@@ -57,6 +69,10 @@ local com = ss.getPhysicsCenterOfMassRel()
 if com then
     print("重心相对FMC:", string.format("x=%.2f y=%.2f z=%.2f", com.x, com.y, com.z))
 end
+
+-- 最后放置的 FMC 的附着面方块所在 Create 应力网络（su）
+print("应力容量 (su):    ", ss.getStressCapacity())
+print("剩余应力 (su):    ", ss.getStressRemaining())
 ```
 
 

@@ -1,9 +1,13 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.AicBlock;
+import com.zzy205.myfirstmod.block.FmcBlock;
 import com.zzy205.myfirstmod.block.PitotTubeBlock;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorEntry;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorType;
+import com.zzy205.myfirstmod.compat.create.CreateStressReadout;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
+import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import dan200.computercraft.api.lua.IComputerSystem;
 import dan200.computercraft.api.lua.ILuaAPI;
 import dan200.computercraft.api.lua.LuaFunction;
@@ -15,6 +19,7 @@ import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
@@ -66,6 +71,8 @@ import java.util.Optional;
  * print(ss.getPhysicsChainMass()) -- 所在物理体链总质量 kg（门控：机体上有 FMC）
  * print(ss.getPhysicsGravityForce()) -- 所在物理体重力 pN（门控：机体上有 FMC）
  * print(ss.getPhysicsChainGravityForce()) -- 所在物理体链总重力 pN（门控：机体上有 FMC）
+ * print(ss.getStressRemaining()) -- 最后放置的 FMC 的附着面方块所在 Create 应力网络的剩余应力 su（门控：机体上有 FMC 且附着面方块是动力方块）
+ * print(ss.getStressCapacity()) -- 同上，网络总容量 su（门控同上）
  * local sensors = ss.getSensors() -- 全部传感器快照
  * -- {{type="static_port", pos={x,y,z}, pos_rel={x,y,z}, altitude=..., pressure=...},
  * --  {type="pitot_tube",  pos={x,y,z}, pos_rel={x,y,z}, speed=..., air_speed=...},
@@ -131,6 +138,17 @@ public class SensorSystemAPI implements ILuaAPI {
     /** 所在物理体（含约束链）总质量（kg） */
     private volatile boolean chainMassAvailable = false;
     private volatile double chainMassKg = 0;
+
+    // ── 附着方块应力网络缓存（门控：机体（含约束链）上有 ≥1 个 FMC；读数 = 最后放置的 FMC 的附着面方块） ──
+
+    /** 附着方块是否可读（机体上有 FMC 且其附着面方块是 Create 动力方块且读数成功） */
+    private volatile boolean attachedStressAvailable = false;
+
+    /** 附着方块所在应力网络的当前总应力（su） */
+    private volatile double attachedStress = 0;
+
+    /** 附着方块所在应力网络的总容量（su） */
+    private volatile double attachedCapacity = 0;
 
     // ── 螺旋桨转速工具缓存（门控：机体（含约束链）上有 ≥1 个 FMC；T/A 静态缓存，不每 tick 刷新） ──
 
@@ -206,6 +224,7 @@ public class SensorSystemAPI implements ILuaAPI {
             massKg = 0;
             chainMassAvailable = false;
             chainMassKg = 0;
+            resetAttachedStress();
             propellerGateAvailable = false;
             return;
         }
@@ -224,7 +243,8 @@ public class SensorSystemAPI implements ILuaAPI {
         // ≥1 皮托管 且 ≥1 静压孔（皮托管-静压系统：空速 = 动压 − 静压，缺静态参考无法得空速）。
         // 不满足 → 速度读数为 null（getSpeed/getAirSpeed 返回 nil，getSensors 对应字段为 nil）。
         // 姿态类读数（getAngles）要求 ≥1 惯性导航系统（INS，ATTITUDE 传感器）。
-        // 物理数据类读数（getPhysics*）要求 ≥1 飞行管理计算机（FMC，ccpe:fmc）。
+        // 物理数据类读数（getPhysics*）与附着方块应力网络（getStressRemaining/getStressCapacity）
+        // 要求 ≥1 飞行管理计算机（FMC，ccpe:fmc）。
         boolean speedGate = false;
         boolean attitudeGate = false;
         boolean physicsGate = false;
@@ -345,6 +365,9 @@ public class SensorSystemAPI implements ILuaAPI {
                 chainMassAvailable = false;
                 chainMassKg = 0;
             }
+
+            // 附着方块应力网络（最后放置的 FMC 的附着面方块；与质量/重心同一 tick 快照）
+            computeAttachedStress(sub, entries);
         } else {
             comRelAvailable = false;
             comRelX = comRelY = comRelZ = 0;
@@ -352,6 +375,7 @@ public class SensorSystemAPI implements ILuaAPI {
             massKg = 0;
             chainMassAvailable = false;
             chainMassKg = 0;
+            resetAttachedStress();
         }
 
         List<SensorSnapshot> list = new ArrayList<>();
@@ -654,6 +678,36 @@ public class SensorSystemAPI implements ILuaAPI {
         return chainMassAvailable ? chainMassKg * GRAVITY_CONSTANT : null;
     }
 
+    /**
+     * 最后放置的 FMC（含 AIC，AIC 等同 FMC）的<b>附着面方块</b>所在 Create 应力网络的
+     * <b>剩余应力</b>（su = 总容量 − 当前总应力，过载时为负）。
+     * <p>
+     * 附着面方块 = FMC 支撑方向上的方块（FMC：FACE/FACING 决定的支撑面；AIC：FACING 背面），
+     * 参考点语义与 {@link #getPhysicsCenterOfMassRel()} 相同（机体上多个 FMC 时取最后放置的）。
+     * <p>
+     * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
+     * （FMC，ccpe:fmc），且最后放置的 FMC 的附着面方块必须是 Create 动力方块
+     * （{@link KineticBlockEntity}，如齿轮箱/传动轴/螺旋桨轴承）且读数成功，
+     * 否则返回 nil；不在物理体上同样返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Double getStressRemaining() {
+        return attachedStressAvailable ? attachedCapacity - attachedStress : null;
+    }
+
+    /**
+     * 最后放置的 FMC（含 AIC，AIC 等同 FMC）的<b>附着面方块</b>所在 Create 应力网络的
+     * <b>总容量</b>（su）。
+     * <p>
+     * 门控（存在性）与 {@link #getStressRemaining()} 相同：所在物理体（含约束链）上必须有
+     * ≥1 个飞行管理计算机（FMC，ccpe:fmc），且最后放置的 FMC 的附着面方块必须是 Create
+     * 动力方块（{@link KineticBlockEntity}）且读数成功，否则返回 nil；不在物理体上同样返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Double getStressCapacity() {
+        return attachedStressAvailable ? attachedCapacity : null;
+    }
+
     // ═══════════════ 螺旋桨转速工具（门控：机体（含约束链）上有 ≥1 个 FMC） ═══════════════
 
     /**
@@ -920,6 +974,55 @@ public class SensorSystemAPI implements ILuaAPI {
             if (e.type() == SensorType.FMC) lastFmc = e; // 注册顺序 = 放置顺序，取最后
         if (lastFmc == null) return null;
         return SableCompat.toRelativePos(sub, lastFmc.pos());
+    }
+
+    /**
+     * 刷新附着方块应力网络缓存：最后放置（最新注册）的 FMC 传感器（AIC 等同 FMC）的
+     * 附着面方块若为 Create 动力方块（{@link KineticBlockEntity}），读其所在应力网络的
+     * 总应力/总容量（{@link CreateStressReadout}，缓存值）与公开读数；任一环节失败 → 重置为空。
+     */
+    private void computeAttachedStress(SubLevel sub, List<SensorEntry> entries) {
+        SensorEntry lastFmc = null;
+        for (SensorEntry e : entries)
+            if (e.type() == SensorType.FMC) lastFmc = e; // 注册顺序 = 放置顺序，取最后
+        if (lastFmc == null) {
+            resetAttachedStress();
+            return;
+        }
+        Level level = sub.getLevel();
+        BlockState fmcState = level.getBlockState(lastFmc.pos());
+        BlockPos attachedPos = attachedBlockPos(fmcState, lastFmc.pos());
+        BlockEntity be = attachedPos != null ? level.getBlockEntity(attachedPos) : null;
+        if (!(be instanceof KineticBlockEntity kbe)) {
+            resetAttachedStress();
+            return;
+        }
+        CreateStressReadout.StressInfo info = CreateStressReadout.stressOf(kbe);
+        if (info == null) {
+            resetAttachedStress();
+            return;
+        }
+        attachedStressAvailable = true;
+        attachedStress = info.stress();
+        attachedCapacity = info.capacity();
+    }
+
+    /** 传感器方块（FMC/AIC）的附着面方块坐标；非 FMC/AIC 方块返回 null */
+    private @Nullable BlockPos attachedBlockPos(BlockState state, BlockPos pos) {
+        if (state.getBlock() instanceof FmcBlock) {
+            return pos.relative(FmcBlock.supportDirectionOf(state));
+        }
+        if (state.getBlock() instanceof AicBlock) {
+            return pos.relative(state.getValue(AicBlock.FACING).getOpposite());
+        }
+        return null;
+    }
+
+    /** 附着方块应力网络缓存重置为空（不可读） */
+    private void resetAttachedStress() {
+        attachedStressAvailable = false;
+        attachedStress = 0;
+        attachedCapacity = 0;
     }
 
     private @Nullable Double computePressure(Level level, Vec3 worldPos) {

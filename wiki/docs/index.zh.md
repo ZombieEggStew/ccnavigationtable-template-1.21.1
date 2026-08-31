@@ -47,7 +47,7 @@ Sable 物理轴承，直接轴向动力输入。**Lua 控制模式**下旋转角
 - **[静压孔](sensor-system/static-port.md)** — 读取静压孔所在位置的气压与高度
 - **[皮托管](sensor-system/pitot-tube.md)** — 方向性速度传感器，沿管口轴线读取地速与空速
 - **[惯性导航系统](sensor-system/ins.md)** — 姿态指示器：俯仰/滚转/偏航、位置、姿态四元数与角速度
-- **[飞行管理计算机](sensor-system/fmc.md)** — 物理数据：质量、重力、重心
+- **[飞行管理计算机](sensor-system/fmc.md)** — 物理数据：质量、重力、重心；以及附着方块所在 Create 应力网络（剩余/容量应力）
 - **[航空集成计算机](sensor-system/aic.md)** — 一块方块同时充当 INS 与 FMC
 
 ---
