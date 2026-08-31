@@ -2,6 +2,7 @@
   "itemGroup.ccpe.my_mod_tab": "电脑外设扩展",
 
   "block.ccpe.micro_peripheral_extender": "微型外设扩展器",
+  "block.ccpe.short_range_linker": "短程信号链接器",
   "block.ccpe.redstone_transceiver": "红石收发器",
   "block.ccpe.transmission_peripheral": "电子变速箱",
   "block.ccpe.my_monitor": "监视器",

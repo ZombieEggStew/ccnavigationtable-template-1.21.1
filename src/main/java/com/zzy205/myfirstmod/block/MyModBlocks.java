@@ -28,6 +28,14 @@ public class MyModBlocks {
                     strength(1.0f , 6.0f)
             ));
 
+    /** 短程信号链接器：贴附式方块（结构照抄 micro_peripheral_extender），频道作用域 = 单个物理体（Sable 约束链）；选择框/音效对齐 static_port（SoundType.COPPER） */
+    public static final DeferredBlock<ShortRangeLinkerBlock> short_range_linker =
+            registerBlocks("short_range_linker" , () -> new ShortRangeLinkerBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.COPPER).
+                    strength(1.0f , 6.0f).
+                    noOcclusion()
+            ));
+
     public static final DeferredBlock<TransmissionPeripheralBlock> transmission_peripheral =
             registerBlocks("transmission_peripheral", () -> new TransmissionPeripheralBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.METAL).

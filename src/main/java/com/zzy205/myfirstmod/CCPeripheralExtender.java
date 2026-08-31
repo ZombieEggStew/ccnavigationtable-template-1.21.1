@@ -7,6 +7,7 @@ import com.zzy205.myfirstmod.compat.cc.CCPeripheralCapabilities;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralExtenderSetup;
 import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
 import com.zzy205.myfirstmod.compat.cc.SensorSystemAPI;
+import com.zzy205.myfirstmod.compat.cc.ShortRangeLinkerRegistry;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.network.ModPackets;
@@ -78,5 +79,6 @@ public class CCPeripheralExtender {
     /** 服务器停止（关世界/回主菜单）：清空静态全局频道注册表，避免跨世界残留占用频道。 */
     private static void onServerStopping(ServerStoppingEvent event) {
         GlobalChannelRegistry.clear();
+        ShortRangeLinkerRegistry.clear();
     }
 }

@@ -75,6 +75,8 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `block/PeripheralExtenderBlockEntity.java` | Peripheral Extender 的频道、过滤器、负载模式和缓存传感器 NBT |
 | `screen/PeripheralExtenderMenu.java` | Peripheral Extender 服务端菜单和数据同步 |
 | `screen/PeripheralExtenderScreen.java` | Peripheral Extender 客户端 GUI、过滤器/频道/传感器数据显示 |
+| `block/ShortRangeLinkerBlock.java` | 短程信号链接器方块：贴附式（FACE 地面/天花板/墙面 + 水平 FACING，**blockstate 仅 6 形态：地面 1 + 天花板 1 + 墙壁 4**，floor/ceiling 不随 facing 旋转，**躺/竖共用一个模型** `models/block/short_range_link/short_range_link.json`）；结构照抄 `PeripheralExtenderBlock`（canSurvive/红石 getSignal/isSignalSource/POWERED/`getAttachedPos`）；**选择框抄 static_port**（`VoxelShaper.forDirectional(Block.box(5,0,5,11,3,11), UP)`：FLOOR→UP / CEILING→DOWN / WALL→水平四向）；音效对齐 static_port（COPPER）；右键/扳手暂无 GUI（下一阶段接入菜单） | 链接器交互、朝向、附着坐标、红石输出 |
+| `block/ShortRangeLinkerBlockEntity.java` | 短程信号链接器 BE：**物理体作用域频道**（onLoad 注册 / setRemoved 注销 / 每 20 tick 复核同链冲突顺延）+ **链上共享「加载物理体」开关 bodyLoad**（任一链接器切换 → 同步全链 last-toggle-wins，onLoad OR 自愈；Sable force-load + PORTAL ticket 管理照抄 `PeripheralExtenderBlockEntity`）+ 红石输出/输入 + NBT / `writeSafe` 蓝图兼容 | 链接器频道、共享加载开关、红石、持久化 |
 | `block/RedstoneTransceiverBlock.java` | Redstone Transceiver 方块交互和方块实体创建 |
 | `block/RedstoneTransceiverBlockEntity.java` | Receiver 的频道、横幅数据、负载模式和持久化状态 |
 | `screen/RedstoneTransceiverMenu.java` | Redstone Transceiver 服务端菜单 |
@@ -189,7 +191,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `channel/ChannelRegistry.java` | 通用频道注册表 `ChannelRegistry<O>`：按频道登记、查询和释放外围设备；最小空闲分配、冲突顺延、僵尸清理、占用变化回调 |
 | `channel/ChannelScrollHelper.java` | GUI 滚轮选择频道/ID：钳位 → 跳过占用 → 边界反向再跳占，支持 Shift 步进 |
 
-传感器、显示器与控制台共享同一全局频道命名空间（`compat/cc/GlobalChannelRegistry`，内部是同一个 `ChannelRegistry` 实例），保证频道全局唯一。
+传感器、显示器与控制台共享同一全局频道命名空间（`compat/cc/GlobalChannelRegistry`，内部是同一个 `ChannelRegistry` 实例），保证频道全局唯一。短程信号链接器是**独立物理体作用域频道空间**（`compat/cc/ShortRangeLinkerRegistry`，见下），与全局空间完全隔离。
 
 ## CC:Tweaked 与其他兼容层
 
@@ -201,6 +203,7 @@ GUI 数据流：`MonitorGridOverlay` 打开 `MonitorModuleScreen` → GUI 发送
 | `compat/cc/BodySensorRegistry.java` | 物理体传感器注册表（sub-level UUID → 传感器集合）：静压孔（PRESSURE）、皮托管（SPEED）、惯性导航系统（ATTITUDE）、飞行管理计算机（FMC，物理数据门控）、**航空集成计算机 AIC（同时登记 ATTITUDE + FMC，等同 INS + FMC）**；`sensorsOnBody` 汇总含约束链；供 SensorSystemAPI 门控与快照 |
 | `compat/cc/GlobalChannelRegistry.java` | 传感器+显示器+控制台共享的全局频道注册表 |
 | `compat/cc/PeripheralExtenderRegistry.java` | 传感器频道登记表（委托全局注册表） |
+| `compat/cc/ShortRangeLinkerRegistry.java` | **短程信号链接器频道注册表（物理体作用域，与全局注册表完全独立）**：按「子次元 UUID → (频道 → 链接器)」登记，查询 / 占用判定按调用方约束链（`SableCompat.getConnectedChain`）聚合——同链共享频道空间、跨体不可见；链内冲突顺延、僵尸清理、链内占用快照与链接器遍历（bodyLoad 共享同步用） |
 | `compat/cc/MonitorRegistry.java` | Monitor 频道登记表（委托全局注册表） |
 | `compat/cc/ControlDeskRegistry.java` | 控制台频道登记表（委托全局注册表，`get(channel)` 供 `pe.getPeripheral` 查找） |
 | `compat/cc/ControlDeskPeripheral.java` | 控制台的 `IPeripheral` 实现（`getType()` = `"ccpe:control_desk"`；`getModule("pedal"/"joystick"/"joystick_2"/"throttle"/"throttle_2")` 返回控件模块实例，未安装返回 nil；**`getModule("monitor")` → `MonitorPeripheral`（type = "ccpe:monitor_2"）——monitor_2 表面小 Monitor 的模块/屏幕查询入口，方法同 Monitor 外设**；**`getMonitor2Module(id)` / `getMonitor2CellModule(x,y)` 查询 monitor_2 表面模块/屏幕，复用 Monitor 的 `ModuleHandle` 体系**） |
