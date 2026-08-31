@@ -13,6 +13,7 @@
   "block.ccpe.fmc": "Flight Management Computer",
   "block.ccpe.aic": "Aviation Integrated Computer",
   "block.ccpe.fluid_port": "Fluid Port",
+  "block.ccpe.fluid_port.tooltip.summary": "Easily makes your fluid tanks interactable with fluid containers.",
   "block.ccpe.fluid_port.tooltip.condition1": "When R-Clicked",
   "block.ccpe.fluid_port.tooltip.behaviour1": "Deposits contained fluid from your held item into a tank next to the port (any side except the opening). If the held item cannot be emptied, it fills the item from a tank instead.",
 
