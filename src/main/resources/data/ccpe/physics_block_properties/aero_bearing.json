@@ -3,5 +3,10 @@
   "properties": {
     "sable:mass": 0.5,
     "sable:volume": 1.0
+  },
+  "overrides": {
+    "assembled=true": {
+      "sable:mass": 0.375
+    }
   }
 }

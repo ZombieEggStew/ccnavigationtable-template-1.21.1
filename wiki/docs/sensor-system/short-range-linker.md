@@ -2,6 +2,8 @@
 
 > Peripheral access scoped to a single physics body
 
+![short_range_linker](../img/short_range_link.png)
+
 The **Short-Range Signal Linker** (`ccpe:short_range_linker`) is an attachable block (floor / ceiling / wall, like the Micro Peripheral Extender). When placed on a physics body (Sable sub-level), it registers a **channel** that is only addressable *within that physics body* (including constraint chains). CC:Tweaked computers on the same body can then fetch the peripheral of the block the linker is attached to via `ccpe.sensor_system`.
 
 Unlike the global channels of the Micro Peripheral Extender, linker channels are **per-body**: two aircraft can both use channel `1` without interfering with each other.

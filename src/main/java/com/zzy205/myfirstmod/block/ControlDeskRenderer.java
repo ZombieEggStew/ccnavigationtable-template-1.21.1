@@ -1,7 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
 import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
 import com.zzy205.myfirstmod.client.SeatControlState;
@@ -76,7 +75,10 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         BlockState state = be.getBlockState();
         Direction facing = state.getValue(ControlDeskBlock.FACING);
 
-        VertexConsumer vb = bufferSource.getBuffer(RenderType.cutoutMipped());
+        // 注意：不提前持有 cutoutMipped 的 VertexConsumer —— BufferSource 的 sharedBuffer 机制下，
+        // 中途 getBuffer 其他共享 RenderType（solidBlockSheet/text 等）会把上一个共享 buffer 强制 endBatch，
+        // 提前持有的 vb 会变成 not building，renderInto 时抛 "Not building!"（Diagram 图纸界面渲染装配体 BE 时触发）。
+        // 与 AicRenderer/MyBearingRenderer 一致：每次 renderInto 前现场 getBuffer、拿到即用。
 
         // monitor_2 屏幕 9 宫格 + 文字（无论 Flywheel 是否可用都由 BER 画，对齐 MonitorRenderer）
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)) {
@@ -94,20 +96,20 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         if (shellInstanced) return;
 
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)) {
-            renderPart(MyModPartialModels.CONTROL_DESK_PEDAL_BASE, state, facing, ms, vb, light, 0);
+            renderPart(MyModPartialModels.CONTROL_DESK_PEDAL_BASE, state, facing, ms, bufferSource, light, 0);
             float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
             float[] smooth = smoothPedals.computeIfAbsent(be.getBlockPos(), k -> new float[2]);
             float[] target = PedalMotion.targetPx(be);
             smooth[0] = JoystickTilt.approach(smooth[0], target[0], frameTicks);
             smooth[1] = JoystickTilt.approach(smooth[1], target[1], frameTicks);
-            renderPedal(MyModPartialModels.CONTROL_DESK_PEDAL, state, facing, ms, vb, light, smooth[0]);
-            renderPedal(MyModPartialModels.CONTROL_DESK_PEDAL_RIGHT, state, facing, ms, vb, light, smooth[1]);
+            renderPedal(MyModPartialModels.CONTROL_DESK_PEDAL, state, facing, ms, bufferSource, light, smooth[0]);
+            renderPedal(MyModPartialModels.CONTROL_DESK_PEDAL_RIGHT, state, facing, ms, bufferSource, light, smooth[1]);
         } else {
             smoothPedals.remove(be.getBlockPos());
         }
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)) {
-            renderPart(MyModPartialModels.CONTROL_DESK_JOYSTICK_BASE, state, facing, ms, vb, light, 0);
-            renderJoystick(be, state, facing, ms, vb, light);
+            renderPart(MyModPartialModels.CONTROL_DESK_JOYSTICK_BASE, state, facing, ms, bufferSource, light, 0);
+            renderJoystick(be, state, facing, ms, bufferSource, light);
         } else {
             smoothTilts.remove(be.getBlockPos());
         }
@@ -116,20 +118,20 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
             SuperByteBuffer buffer = placedBuffer(MyModPartialModels.CONTROL_DESK_MONITOR_2, state, facing,
                     be.getMonitor2PlaceX(), be.getMonitor2PlaceZ(),
                     ControlDeskBlockEntity.MONITOR_2_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, 0);
-            buffer.light(light).renderInto(ms, vb);
+            buffer.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
             renderMonitor2Modules(be, state, facing, ms, bufferSource, light, overlay);
         }
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
             int backRot = be.getBackSlotRotation();
-            renderThrottlePart(MyModPartialModels.CONTROL_DESK_THROTTLE_BASE, be, state, facing, ms, vb, light, backRot);
-            renderThrottleHandle(be, state, facing, ms, vb, light, backRot);
+            renderThrottlePart(MyModPartialModels.CONTROL_DESK_THROTTLE_BASE, be, state, facing, ms, bufferSource, light, backRot);
+            renderThrottleHandle(be, state, facing, ms, bufferSource, light, backRot);
             // 指示灯：随油门档位大小着色（参考 Create analog lever / Simulated diode）
             SuperByteBuffer indicator = placedBuffer(MyModPartialModels.CONTROL_DESK_THROTTLE_INDICATOR, state, facing,
                     be.getThrottlePlaceX(), be.getThrottlePlaceZ(),
                     ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, backRot);
             indicator.light(light)
                     .color(ThrottleMotion.indicatorColor(be.getThrottleGear()))
-                    .renderInto(ms, vb);
+                    .renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
         } else {
             smoothThrottles.remove(be.getBlockPos());
             throttleCharge.remove(be.getBlockPos());
@@ -137,16 +139,16 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         // joystick_2：底座静态 + 手柄倾斜动画；模型平移到放置位（预览盒位置），安装朝向旋转绕放置中心
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)) {
             int backRot = be.getBackSlotRotation();
-            renderJoystick2Part(MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE, be, state, facing, ms, vb, light, backRot);
-            renderJoystick2(be, state, facing, ms, vb, light, backRot);
+            renderJoystick2Part(MyModPartialModels.CONTROL_DESK_JOYSTICK_2_BASE, be, state, facing, ms, bufferSource, light, backRot);
+            renderJoystick2(be, state, facing, ms, bufferSource, light, backRot);
         } else {
             smoothTilt2s.remove(be.getBlockPos());
         }
         // throttle_2：底座静态 + 手柄绕枢轴 (4,2,8) 旋转（总距杆类型，见 Throttle2Motion），放置变换与 throttle 同链
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)) {
             int backRot = be.getBackSlotRotation();
-            renderThrottle2Part(MyModPartialModels.CONTROL_DESK_THROTTLE_2_BASE, be, state, facing, ms, vb, light, backRot);
-            renderThrottle2Handle(be, state, facing, ms, vb, light, backRot);
+            renderThrottle2Part(MyModPartialModels.CONTROL_DESK_THROTTLE_2_BASE, be, state, facing, ms, bufferSource, light, backRot);
+            renderThrottle2Handle(be, state, facing, ms, bufferSource, light, backRot);
         } else {
             smoothThrottle2s.remove(be.getBlockPos());
         }
@@ -155,18 +157,18 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
     /** 踏板本体：facing 旋转 + 向模型空间 +z 平移（动画 = 指数逼近追逐压下值 × 1px）。 */
     private static void renderPedal(dev.engine_room.flywheel.lib.model.baked.PartialModel model,
                                     BlockState state, Direction facing,
-                                    PoseStack ms, VertexConsumer vb, int light, float zPx) {
+                                    PoseStack ms, MultiBufferSource bufferSource, int light, float zPx) {
         SuperByteBuffer buffer = CachedBuffers.partial(model, state);
         buffer.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
         if (zPx != 0f) {
             buffer.translate(0f, 0f, zPx);
         }
-        buffer.light(light).renderInto(ms, vb);
+        buffer.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 
     /** 操纵杆本体：facing 旋转 + 绕枢轴 (8,6,3) 倾斜（动画 = 指数逼近追逐模拟轴 × 15°）。 */
     private void renderJoystick(ControlDeskBlockEntity be, BlockState state, Direction facing,
-                                PoseStack ms, VertexConsumer vb, int light) {
+                                PoseStack ms, MultiBufferSource bufferSource, int light) {
         float[] smooth = smoothTilts.computeIfAbsent(be.getBlockPos(), k -> new float[2]);
         float[] target = JoystickTilt.targetDeg(be);
         float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
@@ -183,12 +185,12 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
                     .rotate(Mth.DEG_TO_RAD * tiltX, Direction.SOUTH)
                     .translate(-JoystickTilt.PIVOT_X, -JoystickTilt.PIVOT_Y, -JoystickTilt.PIVOT_Z);
         }
-        stick.light(light).renderInto(ms, vb);
+        stick.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 
     /** 摇杆2 手柄：放置变换（平移到放置位 + 安装朝向旋转绕放置中心）+ 绕枢轴 (8,1,8) 倾斜（动画 = 指数逼近追逐服务端权威轴值 × 15°，逻辑照抄 {@link #renderJoystick}，见 {@link Joystick2Motion}）。 */
     private void renderJoystick2(ControlDeskBlockEntity be, BlockState state, Direction facing,
-                                 PoseStack ms, VertexConsumer vb, int light, int backRot) {
+                                 PoseStack ms, MultiBufferSource bufferSource, int light, int backRot) {
         float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
         float[] smooth = smoothTilt2s.computeIfAbsent(be.getBlockPos(), k -> new float[2]);
         float[] target = Joystick2Motion.targetDeg(be);
@@ -206,12 +208,12 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
                     .rotate(Mth.DEG_TO_RAD * tiltX, Direction.SOUTH)
                     .translate(-Joystick2Motion.PIVOT_X, -Joystick2Motion.PIVOT_Y, -Joystick2Motion.PIVOT_Z);
         }
-        stick.light(light).renderInto(ms, vb);
+        stick.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 
     /** 油门手柄：放置变换（平移到放置位 + 安装朝向旋转绕放置中心）+ 沿模型空间 x 轴平移（档位位置 + 操作者本地张力蠕动，步进突然快速到位）。 */
     private void renderThrottleHandle(ControlDeskBlockEntity be, BlockState state, Direction facing,
-                                      PoseStack ms, VertexConsumer vb, int light, int backRot) {
+                                      PoseStack ms, MultiBufferSource bufferSource, int light, int backRot) {
         float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
         float gearPx = ThrottleMotion.targetPx(be);
         // 张力充电进度 {progress, lastDir, lastGearPx}：帧时间平滑推进（避免游戏时间整 tick 跳变卡顿）
@@ -239,39 +241,39 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         if (smooth != 0f) {
             handle.translate(smooth, 0f, 0f);
         }
-        handle.light(light).renderInto(ms, vb);
+        handle.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 
     /** 静态部件：facing 旋转 + 安装朝向旋转（backRot，0 跳过）。 */
     private static void renderPart(dev.engine_room.flywheel.lib.model.baked.PartialModel model,
                                    BlockState state, Direction facing, PoseStack ms,
-                                   VertexConsumer vb, int light, int backRot) {
+                                   MultiBufferSource bufferSource, int light, int backRot) {
         SuperByteBuffer buffer = CachedBuffers.partial(model, state);
         buffer.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
         if (backRot != 0) {
             buffer.rotateCenteredDegrees(backRot, Direction.UP);
         }
-        buffer.light(light).renderInto(ms, vb);
+        buffer.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 
     /** throttle 静态部件：facing 旋转 + 模型平移到放置位 + 安装朝向旋转（只能 0°/180°）绕放置中心。 */
     private static void renderThrottlePart(dev.engine_room.flywheel.lib.model.baked.PartialModel model,
                                            ControlDeskBlockEntity be, BlockState state, Direction facing,
-                                           PoseStack ms, VertexConsumer vb, int light, int backRot) {
+                                           PoseStack ms, MultiBufferSource bufferSource, int light, int backRot) {
         SuperByteBuffer buffer = placedBuffer(model, state, facing,
                 be.getThrottlePlaceX(), be.getThrottlePlaceZ(),
                 ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM, backRot);
-        buffer.light(light).renderInto(ms, vb);
+        buffer.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 
     /** throttle_2 静态部件：facing 旋转 + 模型平移到放置位 + 安装朝向旋转（只能 0°/180°）绕放置中心。 */
     private static void renderThrottle2Part(dev.engine_room.flywheel.lib.model.baked.PartialModel model,
                                             ControlDeskBlockEntity be, BlockState state, Direction facing,
-                                            PoseStack ms, VertexConsumer vb, int light, int backRot) {
+                                            PoseStack ms, MultiBufferSource bufferSource, int light, int backRot) {
         SuperByteBuffer buffer = placedBuffer(model, state, facing,
                 be.getThrottle2PlaceX(), be.getThrottle2PlaceZ(),
                 ControlDeskBlockEntity.THROTTLE_2_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, backRot);
-        buffer.light(light).renderInto(ms, vb);
+        buffer.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 
     /**
@@ -280,7 +282,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
      * 与 {@link #renderJoystick2} 同变换结构——tiltX 绕 Z 轴（横向水平轴），tiltY 不参与）。
      */
     private void renderThrottle2Handle(ControlDeskBlockEntity be, BlockState state, Direction facing,
-                                       PoseStack ms, VertexConsumer vb, int light, int backRot) {
+                                       PoseStack ms, MultiBufferSource bufferSource, int light, int backRot) {
         float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
         float target = Throttle2Motion.targetDeg(be);
         float smooth = smoothThrottle2s.computeIfAbsent(be.getBlockPos(), k -> 0f);
@@ -295,7 +297,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
                     .rotate(Mth.DEG_TO_RAD * smooth, Direction.SOUTH)
                     .translate(-Throttle2Motion.PIVOT_X, -Throttle2Motion.PIVOT_Y, -Throttle2Motion.PIVOT_Z);
         }
-        handle.light(light).renderInto(ms, vb);
+        handle.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 
     /**
@@ -304,11 +306,11 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
      */
     private static void renderJoystick2Part(dev.engine_room.flywheel.lib.model.baked.PartialModel model,
                                             ControlDeskBlockEntity be, BlockState state, Direction facing,
-                                            PoseStack ms, VertexConsumer vb, int light, int backRot) {
+                                            PoseStack ms, MultiBufferSource bufferSource, int light, int backRot) {
         SuperByteBuffer buffer = placedBuffer(model, state, facing,
                 be.getJoystick2PlaceX(), be.getJoystick2PlaceZ(),
                 ControlDeskBlockEntity.JOYSTICK_2_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, backRot);
-        buffer.light(light).renderInto(ms, vb);
+        buffer.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 
     /** 放置变换公共链：facing 旋转 + 平移到放置位 + 安装朝向旋转绕放置中心（与 Flywheel {@code ControlDeskVisual.applyPlacement} 同链）。 */

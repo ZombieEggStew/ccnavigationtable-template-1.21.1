@@ -65,4 +65,7 @@
 - Added the Aviation Integrated Computer (AIC), Check the wiki for more details.
 
 1.1.1
-- Added the Fluid Port
+- **!?NEWNEW?!** Added the Fluid Port
+- **!?NEWNEW?!** Added the Short Range Linker, Check the wiki for more details.
+- Fixed aero bearing not adjusting its mass when assembled properly
+- 
