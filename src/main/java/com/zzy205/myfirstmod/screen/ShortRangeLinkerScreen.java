@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.screen;
 import com.simibubi.create.foundation.gui.AllIcons;
 import com.zzy205.myfirstmod.block.ShortRangeLinkerBlockEntity;
 import com.zzy205.myfirstmod.channel.ChannelScrollHelper;
+import com.zzy205.myfirstmod.foundation.gui.MyIcons;
 import com.zzy205.myfirstmod.foundation.gui.widget.HoverTintIconButton;
 import com.zzy205.myfirstmod.foundation.gui.widget.ToggleButton;
 import com.zzy205.myfirstmod.network.ShortRangeLinkerConfigPayload;
@@ -51,21 +52,21 @@ public class ShortRangeLinkerScreen extends AbstractContainerScreen<ShortRangeLi
     private static final int CTRL_W = 144;
     private static final int CTRL_H = 18;
     /** 控件区绘制位置（窗口相对 Y，先放在背景正下方，位置参数由用户自行调整） */
-    private static final int CTRL_Y_OFFSET = 18;
+    private static final int CTRL_Y_OFFSET = 20;
 
     private static final int DONE_BTN_RIGHT = 25;
-    private static final int DONE_BTN_BOTTOM = 24;
+    private static final int DONE_BTN_BOTTOM = 26;
 
     // ── 频道滚轮（窗口相对坐标，位置由用户自行调整）──
     /** 频道数字区域 X（滚轮命中区） */
     private static final int CHANNEL_HIT_X = 48;
     private static final int CHANNEL_HIT_W = 46;
     /** 频道数字区域 Y（滚轮命中区） */
-    private static final int CHANNEL_HIT_Y = 20;
+    private static final int CHANNEL_HIT_Y = 18;
     private static final int CHANNEL_HIT_H = 18;
     /** 频道数字文本绘制位置 */
-    private static final int CHANNEL_TEXT_X = 47;
-    private static final int CHANNEL_TEXT_Y = 28;
+    private static final int CHANNEL_TEXT_X = 52;
+    private static final int CHANNEL_TEXT_Y = 25;
 
     // ── 「加载物理体」开关（窗口相对坐标，位置由用户自行调整）──
     private static final int LOAD_TOGGLE_RIGHT = 55;
@@ -96,7 +97,7 @@ public class ShortRangeLinkerScreen extends AbstractContainerScreen<ShortRangeLi
             this.loadToggle = new ToggleButton(
                     winLeft + WIN_W - LOAD_TOGGLE_RIGHT, 
                     winTop + WIN_H - DONE_BTN_BOTTOM,
-                    AllIcons.I_ACTIVE, AllIcons.I_PASSIVE, 0x80FF80);
+                    MyIcons.YES, MyIcons.NO, 0x80FF80);
             this.loadToggle.setWidth(18);
             this.loadToggle.setHeight(18);
             this.loadToggle.setSelected(this.menu.isBodyLoad());
@@ -186,8 +187,8 @@ public class ShortRangeLinkerScreen extends AbstractContainerScreen<ShortRangeLi
 
         // 频道数字区域悬浮提示（标题 频道选择、滚动修改（斜体）、Shift 加速（斜体））
         if (this.menu.isOnPhysicsBody()) {
-            int hitX = this.leftPos + CHANNEL_HIT_X;
-            int hitY = this.topPos + CHANNEL_HIT_Y;
+            int hitX = (this.width - WIN_W) / 2 + CHANNEL_HIT_X;
+            int hitY = (this.height - WIN_H) / 2 + CHANNEL_HIT_Y;
             if (mouseX >= hitX && mouseX <= hitX + CHANNEL_HIT_W
                     && mouseY >= hitY && mouseY <= hitY + CHANNEL_HIT_H) {
                 List<Component> lines = new ArrayList<>();
@@ -213,7 +214,7 @@ public class ShortRangeLinkerScreen extends AbstractContainerScreen<ShortRangeLi
 
         // 频道号（控件区条带内，位置由用户自行调整）
         if (this.menu.isOnPhysicsBody()) {
-            g.drawString(this.font, String.valueOf(this.scrolledValue), CHANNEL_TEXT_X, CHANNEL_TEXT_Y, 0xfcfceb, true);
+            g.drawString(this.font, String.valueOf(this.scrolledValue),winLeft + CHANNEL_TEXT_X, winTop + CHANNEL_TEXT_Y, 0xfcfceb, true);
         }
         // 不画「物品栏」标签（playerInventoryTitle）
     }
@@ -224,8 +225,8 @@ public class ShortRangeLinkerScreen extends AbstractContainerScreen<ShortRangeLi
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         // 频道区域滚轮：±1，Shift=±10，跳过同链已占用频道
         if (this.menu.isOnPhysicsBody() && scrollY != 0) {
-            int hitX = this.leftPos + CHANNEL_HIT_X;
-            int hitY = this.topPos + CHANNEL_HIT_Y;
+            int hitX = (this.width - WIN_W) / 2 + CHANNEL_HIT_X;
+            int hitY = (this.height - WIN_H) / 2 + CHANNEL_HIT_Y;
             if (mouseX >= hitX && mouseX <= hitX + CHANNEL_HIT_W
                     && mouseY >= hitY && mouseY <= hitY + CHANNEL_HIT_H) {
                 int dir = scrollY > 0 ? 1 : -1;

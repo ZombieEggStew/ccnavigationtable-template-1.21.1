@@ -57,6 +57,9 @@ public class MyIcons implements ScreenElement {
     public static final MyIcons RECOVER = new MyIcons(2, 5);
     public static final MyIcons FREE_MODE = new MyIcons(3, 5);
 
+    public static final MyIcons NO = new MyIcons(0, 6);
+    public static final MyIcons YES = new MyIcons(1, 6);
+
 
 
     private final int u;
