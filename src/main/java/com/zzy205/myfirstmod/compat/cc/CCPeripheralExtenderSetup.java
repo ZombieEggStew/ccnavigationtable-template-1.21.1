@@ -18,6 +18,5 @@ public final class CCPeripheralExtenderSetup {
     public static void register() {
         ComputerCraftAPI.registerAPIFactory(computer -> new PeripheralExtenderAPI());
         ComputerCraftAPI.registerAPIFactory(computer -> new SensorSystemAPI(computer));
-        ComputerCraftAPI.registerAPIFactory(computer -> new ShortRangeLinkerAPI(computer));
     }
 }

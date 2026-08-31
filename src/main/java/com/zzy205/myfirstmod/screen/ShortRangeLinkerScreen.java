@@ -9,6 +9,7 @@ import com.zzy205.myfirstmod.foundation.gui.widget.ToggleButton;
 import com.zzy205.myfirstmod.network.ShortRangeLinkerConfigPayload;
 
 import net.createmod.catnip.gui.element.ScreenElement;
+import net.createmod.catnip.gui.widget.AbstractSimiWidget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -184,6 +185,18 @@ public class ShortRangeLinkerScreen extends AbstractContainerScreen<ShortRangeLi
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
         this.renderTooltip(g, mouseX, mouseY);
+
+        // 子控件 tooltip 前景层（照 AbstractMonitorScreen.renderWidgetTooltips）：
+        // 原版 Screen 不会为子控件画 tooltip，Create 的 AbstractSimiWidget 依赖手动渲染；
+        // 必须在控件渲染（super.render）之后再画，否则会被后添加的控件（如右下角"完成"按钮）盖住。
+        for (var widget : this.renderables) {
+            if (widget instanceof AbstractSimiWidget simi && simi.isMouseOver(mouseX, mouseY)) {
+                var tooltip = simi.getToolTip();
+                if (!tooltip.isEmpty()) {
+                    g.renderComponentTooltip(this.font, tooltip, mouseX, mouseY);
+                }
+            }
+        }
 
         // 频道数字区域悬浮提示（标题 频道选择、滚动修改（斜体）、Shift 加速（斜体））
         if (this.menu.isOnPhysicsBody()) {

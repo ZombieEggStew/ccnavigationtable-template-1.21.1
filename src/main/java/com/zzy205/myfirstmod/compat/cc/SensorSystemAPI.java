@@ -3,6 +3,8 @@ package com.zzy205.myfirstmod.compat.cc;
 import com.zzy205.myfirstmod.block.AicBlock;
 import com.zzy205.myfirstmod.block.FmcBlock;
 import com.zzy205.myfirstmod.block.PitotTubeBlock;
+import com.zzy205.myfirstmod.block.ShortRangeLinkerBlock;
+import com.zzy205.myfirstmod.block.ShortRangeLinkerBlockEntity;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorEntry;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorType;
 import com.zzy205.myfirstmod.compat.create.CreateStressReadout;
@@ -11,6 +13,8 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import dan200.computercraft.api.lua.IComputerSystem;
 import dan200.computercraft.api.lua.ILuaAPI;
 import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.peripheral.IPeripheral;
+import dan200.computercraft.api.peripheral.PeripheralCapability;
 import dev.eriksonn.aeronautics.config.AeroConfig;
 import dev.ryanhcode.sable.companion.math.JOMLConversion;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
@@ -26,13 +30,20 @@ import org.joml.Vector3d;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * {@code ccpe.sensor_system}：所在物理体（Sable sub-level）的环境数据 Lua API。
+ * <p>
+ * 同时并入原 {@code ccpe.link} 的短程信号链接器寻址（作用域同为调用电脑所在物理体）：
+ * {@link #getPeripheral(int)} / {@link #getRedstoneOutput(int)} /
+ * {@link #getRedstoneInput(int)} / {@link #setRedstoneOutput(int, int)}。
  * <p>
  * <b>高频缓存模式</b>（对齐 memo/my_sensor_system.md）：
  * <ul>
@@ -77,6 +88,9 @@ import java.util.Optional;
  * -- {{type="static_port", pos={x,y,z}, pos_rel={x,y,z}, altitude=..., pressure=...},
  * --  {type="pitot_tube",  pos={x,y,z}, pos_rel={x,y,z}, speed=..., air_speed=...},
  * --  {type="ins",         pos={x,y,z}, pos_rel={x,y,z}}, ...}
+ * local sensor = ss.getPeripheral(1)    -- 本机物理体（含约束链）上频道 1 的链接器附着的外设（寻址模型，频道 = 目标链接器地址）
+ * print(ss.getRedstoneInput(2))         -- 目标链接器位置的红石输入
+ * ss.setRedstoneOutput(2, 15)           -- 写目标链接器红石输出（相邻红石线随之响应）
  * }</pre>
  */
 public class SensorSystemAPI implements ILuaAPI {
@@ -87,6 +101,8 @@ public class SensorSystemAPI implements ILuaAPI {
 
     private volatile boolean onBody = false;
     private volatile @Nullable String bodyId = null;
+    /** 所在物理体（含约束链）的全部子次元 UUID（主线程 update() 计算，Lua 线程只读缓存；不在物理体上为空集合） */
+    private volatile Set<UUID> chainUuids = Set.of();
     private volatile List<SensorSnapshot> sensors = List.of();
 
     /** 姿态缓存（度）：门控 = 所在物理体（含约束链）上有 ≥1 个 INS（ATTITUDE 传感器） */
@@ -206,6 +222,7 @@ public class SensorSystemAPI implements ILuaAPI {
         if (sub == null) {
             onBody = false;
             bodyId = null;
+            chainUuids = Set.of();
             sensors = List.of();
             attitudeAvailable = false;
             pitchDeg = rollDeg = yawDeg = 0;
@@ -230,6 +247,7 @@ public class SensorSystemAPI implements ILuaAPI {
         }
         onBody = true;
         bodyId = SableCompat.getSubLevelId(sub);
+        chainUuids = chainUuidsOf(sub);
 
         // 电脑自身相对物理体原点的坐标（用于计算每个传感器的"相对电脑"坐标）
         Vec3 compRel = SableCompat.toRelativePos(sub, computer.getPosition());
@@ -893,6 +911,65 @@ public class SensorSystemAPI implements ILuaAPI {
         return den > 0 ? num / den : null;
     }
 
+    // ═══════════════ 短程信号链接器（并入 sensor_system：原 ccpe.link 的四个方法） ═══════════════
+    //
+    // 寻址模型：频道号是链接器在物理体内的「地址」（同体内 1:1，冲突自动顺延，见
+    // ShortRangeLinkerRegistry），查询方（电脑）不需要自己的频道号；
+    // 作用域 = 调用电脑所在物理体（含约束链），由 update() 主线程刷新的 chainUuids 缓存决定
+    // （电脑不在物理体上 → 空集合 → 一律 nil，严格语义与「非物理体不链接」一致）。
+
+    /**
+     * 本机物理体（含约束链）内频道 {@code channel} 的链接器所附着方块的外设（IPeripheral）。
+     * <p>
+     * 电脑不在任何物理体上 / 频道未被同体链接器占用 / 附着方块无 CC:T 外设时返回 nil。
+     *
+     * @param channel 目标链接器的频道号
+     * @return 目标链接器附着方块的外设；未命中返回 nil
+     */
+    @LuaFunction(mainThread = true)
+    public final @Nullable Object getPeripheral(int channel) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.get(chainUuids, channel);
+        if (linker == null) return null;
+        Level level = linker.getLevel();
+        if (level == null) return null;
+        BlockState state = linker.getBlockState();
+        BlockPos attachedPos = ShortRangeLinkerBlock.getAttachedPos(state, linker.getBlockPos());
+        BlockEntity attached = level.getBlockEntity(attachedPos);
+        // 附着方块自身就是 CC:T 外设（如 Monitor）→ 直接返回；否则走 Capability 查询
+        if (attached instanceof IPeripheral p) return p;
+        return level.getCapability(PeripheralCapability.get(), attachedPos, sideFromAttachedView(state));
+    }
+
+    /**
+     * 目标链接器当前的红石输出信号（0-15，只读，mainThread=false）。
+     * 未命中（电脑不在物理体上 / 频道空闲）返回 0。
+     */
+    @LuaFunction
+    public final int getRedstoneOutput(int channel) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.get(chainUuids, channel);
+        return linker != null ? linker.getRedstoneOutput() : 0;
+    }
+
+    /**
+     * 目标链接器位置当前接收到的最强红石信号（0-15，只读，mainThread=false）。
+     * 未命中返回 0。
+     */
+    @LuaFunction
+    public final int getRedstoneInput(int channel) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.get(chainUuids, channel);
+        return linker != null ? linker.getRedstoneInput() : 0;
+    }
+
+    /**
+     * 写目标链接器的红石输出（0-15，越界自动钳位），并更新方块 POWERED 状态
+     * （相邻红石线 / 红石机械随之响应；mainThread=true）。
+     */
+    @LuaFunction(mainThread = true)
+    public final void setRedstoneOutput(int channel, int signal) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.get(chainUuids, channel);
+        if (linker != null) linker.setRedstoneOutput(Math.clamp(signal, 0, 15));
+    }
+
     // ═══════════════ 主线程辅助 ═══════════════
 
     /** 最后注册的静压孔（注册顺序 = 放置顺序，LinkedHashSet 保序） */
@@ -1072,5 +1149,24 @@ public class SensorSystemAPI implements ILuaAPI {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** 物理体（含约束链）的全部子次元 UUID 集合（主线程 update() 计算，供 Lua 线程只读缓存） */
+    private static Set<UUID> chainUuidsOf(SubLevel sub) {
+        Set<UUID> ids = new HashSet<>();
+        for (SubLevel s : SableCompat.getConnectedChain(sub)) {
+            UUID id = SableCompat.getSubLevelUUID(s);
+            if (id != null) ids.add(id);
+        }
+        return ids;
+    }
+
+    /** 从附着方块的视角看链接器所在的面（照 PeripheralExtenderAPI.getSensorSide） */
+    private static Direction sideFromAttachedView(BlockState state) {
+        return switch (state.getValue(ShortRangeLinkerBlock.FACE)) {
+            case FLOOR -> Direction.UP;      // 链接器在地面 → 附着方块在下方 → 从附着方块看是 UP
+            case CEILING -> Direction.DOWN;  // 链接器在天花板 → 附着方块在上方 → 从附着方块看是 DOWN
+            case WALL -> state.getValue(ShortRangeLinkerBlock.FACING);
+        };
     }
 }
