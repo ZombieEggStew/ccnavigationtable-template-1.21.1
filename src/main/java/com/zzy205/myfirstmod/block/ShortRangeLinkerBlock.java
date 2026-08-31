@@ -215,12 +215,23 @@ public class ShortRangeLinkerBlock extends BaseEntityBlock implements IWrenchabl
             return InteractionResult.PASS;
         }
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
-            // 是否在物理体上：决定 GUI 显示提示还是控件区
+            // 是否在物理体上 + 频道数据：决定 GUI 显示提示还是控件区（照 PeripheralExtenderBlock）
             final boolean onPhysicsBody;
+            final int linkerChannel;
+            final int[] occupiedChannels;
+            final boolean bodyLoad;
             if (level.getBlockEntity(pos) instanceof ShortRangeLinkerBlockEntity linkerBE) {
+                // 打开 GUI 前刷新链内占用快照，保证滚轮「跳过同体占用」用的是最新数据
+                linkerBE.refreshOccupiedChannels();
                 onPhysicsBody = linkerBE.isOnPhysicsBody();
+                linkerChannel = linkerBE.getScrolledValue();
+                occupiedChannels = linkerBE.getOccupiedChannels();
+                bodyLoad = linkerBE.isBodyLoad();
             } else {
                 onPhysicsBody = false;
+                linkerChannel = 0;
+                occupiedChannels = new int[0];
+                bodyLoad = false;
             }
 
             serverPlayer.openMenu(
@@ -231,6 +242,12 @@ public class ShortRangeLinkerBlock extends BaseEntityBlock implements IWrenchabl
                     buf -> {
                         buf.writeBlockPos(pos);
                         buf.writeBoolean(onPhysicsBody);
+                        buf.writeVarInt(linkerChannel);
+                        buf.writeVarInt(occupiedChannels.length);
+                        for (int ch : occupiedChannels) {
+                            buf.writeVarInt(ch);
+                        }
+                        buf.writeBoolean(bodyLoad);
                     }
             );
         }
