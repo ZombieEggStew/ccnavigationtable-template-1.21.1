@@ -28,6 +28,7 @@ import com.zzy205.myfirstmod.client.SeatControlListener;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import com.zzy205.myfirstmod.screen.RedstoneTransceiverScreen;
 import com.zzy205.myfirstmod.screen.PeripheralExtenderScreen;
+import com.zzy205.myfirstmod.screen.ShortRangeLinkerScreen;
 
 import com.simibubi.create.foundation.item.ItemDescription;
 import com.simibubi.create.foundation.item.TooltipModifier;
@@ -160,5 +161,6 @@ public class CCPeripheralExtenderClient {
     static void registerScreens(RegisterMenuScreensEvent event) {
         event.register(MyModMenus.PERIPHERAL_EXTENDER_MENU.get(), PeripheralExtenderScreen::new);
         event.register(MyModMenus.REDSTONE_TRANSCEIVER_MENU.get(), RedstoneTransceiverScreen::new);
+        event.register(MyModMenus.SHORT_RANGE_LINKER_MENU.get(), ShortRangeLinkerScreen::new);
     }
 }

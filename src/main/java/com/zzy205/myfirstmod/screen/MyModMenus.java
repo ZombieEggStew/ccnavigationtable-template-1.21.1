@@ -18,6 +18,9 @@ public class MyModMenus {
     public static final DeferredHolder<MenuType<?>, MenuType<RedstoneTransceiverMenu>> REDSTONE_TRANSCEIVER_MENU =
             MENUS.register("redstone_transceiver_menu", () -> IMenuTypeExtension.create(RedstoneTransceiverMenu::new));
 
+    public static final DeferredHolder<MenuType<?>, MenuType<ShortRangeLinkerMenu>> SHORT_RANGE_LINKER_MENU =
+            MENUS.register("short_range_linker_menu", () -> IMenuTypeExtension.create(ShortRangeLinkerMenu::new));
+
     public static void register(IEventBus bus) {
         MENUS.register(bus);
     }

@@ -1,0 +1,7 @@
+{
+  "selector": "ccpe:short_range_linker",
+  "properties": {
+    "sable:mass": 0.0,
+    "sable:volume": 0.0
+  }
+}

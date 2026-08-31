@@ -2,10 +2,17 @@ package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
+import com.zzy205.myfirstmod.screen.ShortRangeLinkerMenu;
 import net.createmod.catnip.math.VoxelShaper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
@@ -24,6 +31,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -34,7 +42,7 @@ import org.jetbrains.annotations.NotNull;
  * 结构照抄 {@link PeripheralExtenderBlock}；blockstate 只有 6 种形态
  * （地面 1 + 天花板 1 + 墙壁 4：floor/ceiling 不随 facing 旋转，wall 四向旋转）。
  * <p>
- * 本阶段（方块先入游戏）：右键/扳手暂无 GUI（下一阶段接入菜单）；红石输出通道已就绪
+ * 本阶段：右键打开链接器 GUI（当前只显示背景，频道滚轮 / 加载开关后续阶段接入）；红石输出通道已就绪
  * （BE {@code setRedstoneOutput} 经 Lua API 调用，下一阶段接入）。
  */
 public class ShortRangeLinkerBlock extends BaseEntityBlock implements IWrenchable {
@@ -184,5 +192,37 @@ public class ShortRangeLinkerBlock extends BaseEntityBlock implements IWrenchabl
             case WALL -> state.getValue(FACING).getOpposite();
         };
         return linkerPos.relative(supportDir);
+    }
+
+    // ────────────────────────────────────────
+    //  右键 GUI
+    // ────────────────────────────────────────
+
+    private static final Component LINKER_GUI_TITLE =
+            Component.translatable("block.ccpe.short_range_linker");
+
+    @Override
+    public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+        return useWithoutItem(state, context.getLevel(), context.getClickedPos(), context.getPlayer(),
+                new BlockHitResult(context.getClickLocation(), context.getClickedFace(), context.getClickedPos(), true));
+    }
+
+    @Override
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
+                                               Player player, BlockHitResult hitResult) {
+        // 蹲下右键时放行，交给扳手处理拆除（与 redstone_transceiver 一致）
+        if (player.isCrouching()) {
+            return InteractionResult.PASS;
+        }
+        if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
+            serverPlayer.openMenu(
+                    new SimpleMenuProvider(
+                            (containerId, inv, p) -> new ShortRangeLinkerMenu(containerId, pos, inv),
+                            LINKER_GUI_TITLE
+                    ),
+                    buf -> buf.writeBlockPos(pos)
+            );
+        }
+        return InteractionResult.sidedSuccess(level.isClientSide);
     }
 }

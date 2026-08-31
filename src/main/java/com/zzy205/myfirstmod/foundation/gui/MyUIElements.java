@@ -26,8 +26,6 @@ public class MyUIElements implements ScreenElement{
 
     public static final MyUIElements ICON_DISPLAY = new MyUIElements(0, 297, ATLAS_SIZE_X, 18);
 
-
-
     public static final MyUIElements BACKGROUND = new MyUIElements(0, 0, ATLAS_SIZE_X, 169);
 
     private final int x;
