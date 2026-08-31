@@ -43,7 +43,7 @@ public class ShortRangeLinkerScreen extends AbstractContainerScreen<ShortRangeLi
 
     /** 窗口尺寸（= 背景区域尺寸，贴图 (0,0) 起 144×92） */
     private static final int WIN_W = 144;
-    private static final int WIN_H = 92;
+    private static final int WIN_H = 96;
 
     /** 控件区贴图：贴图 (0,96) 起 144×40 */
     private static final int CTRL_U = 0;
@@ -58,11 +58,11 @@ public class ShortRangeLinkerScreen extends AbstractContainerScreen<ShortRangeLi
 
     // ── 频道滚轮（窗口相对坐标，位置由用户自行调整）──
     /** 频道数字区域 X（滚轮命中区） */
-    private static final int CHANNEL_HIT_X = 42;
-    private static final int CHANNEL_HIT_W = 36;
+    private static final int CHANNEL_HIT_X = 48;
+    private static final int CHANNEL_HIT_W = 46;
     /** 频道数字区域 Y（滚轮命中区） */
-    private static final int CHANNEL_HIT_Y = 24;
-    private static final int CHANNEL_HIT_H = 16;
+    private static final int CHANNEL_HIT_Y = 20;
+    private static final int CHANNEL_HIT_H = 18;
     /** 频道数字文本绘制位置 */
     private static final int CHANNEL_TEXT_X = 47;
     private static final int CHANNEL_TEXT_Y = 28;
@@ -205,15 +205,15 @@ public class ShortRangeLinkerScreen extends AbstractContainerScreen<ShortRangeLi
     @Override
     protected void renderLabels(GuiGraphics g, int mouseX, int mouseY) {
         // renderLabels 已在窗口原点：以下坐标均为窗口相对坐标
-        // 标题：顶部居中（Y=3，位置由用户自行调整）
+        // 标题：顶部居中（Y=4，位置由用户自行调整）
         int winLeft = (this.width - WIN_W) / 2;
         int winTop = (this.height - WIN_H) / 2;
-        g.drawString(this.font, this.title, winLeft + 4, winTop + 3, 0xFFFFFFFF, true);
+        g.drawString(this.font, this.title, winLeft + 4, winTop + 4, 0x3c3b47, false);
 
 
         // 频道号（控件区条带内，位置由用户自行调整）
         if (this.menu.isOnPhysicsBody()) {
-            g.drawString(this.font, String.valueOf(this.scrolledValue), winLeft + CHANNEL_TEXT_X, winTop + CHANNEL_TEXT_Y, 0xfcfceb, true);
+            g.drawString(this.font, String.valueOf(this.scrolledValue), CHANNEL_TEXT_X, CHANNEL_TEXT_Y, 0xfcfceb, true);
         }
         // 不画「物品栏」标签（playerInventoryTitle）
     }
