@@ -3,6 +3,7 @@
 
   "block.ccpe.micro_peripheral_extender": "Micro Peripheral Extender",
   "block.ccpe.short_range_linker": "Short-Range Signal Linker",
+  "gui.ccpe.short_range_linker.require_body": "Only usable on a physics body",
   "block.ccpe.redstone_transceiver": "Redstone Transceiver",
   "block.ccpe.transmission_peripheral": "Electronic Transmission",
   "block.ccpe.my_monitor": "Monitor",

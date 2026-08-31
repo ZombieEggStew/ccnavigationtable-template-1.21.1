@@ -383,4 +383,12 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
         compound.putInt("ScrolledValue", scrolledValue);
         compound.putBoolean("BodyLoad", bodyLoad);
     }
+
+    /** 检测链接器是否在 Sable 物理体上（自身或其附着方块在子次元内，照 PeripheralExtenderBlockEntity） */
+    public boolean isOnPhysicsBody() {
+        if (level == null || level.isClientSide) return false;
+        if (SableCompat.getContainingSubLevel(this) != null) return true;
+        BlockPos attached = ShortRangeLinkerBlock.getAttachedPos(this.getBlockState(), this.worldPosition);
+        return SableCompat.getContainingSubLevel(level, attached) != null;
+    }
 }

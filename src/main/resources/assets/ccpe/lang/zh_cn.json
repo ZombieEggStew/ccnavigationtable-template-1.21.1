@@ -3,6 +3,7 @@
 
   "block.ccpe.micro_peripheral_extender": "微型外设扩展器",
   "block.ccpe.short_range_linker": "短程信号链接器",
+  "gui.ccpe.short_range_linker.require_body": "只在物理体上可用",
   "block.ccpe.redstone_transceiver": "红石收发器",
   "block.ccpe.transmission_peripheral": "电子变速箱",
   "block.ccpe.my_monitor": "监视器",

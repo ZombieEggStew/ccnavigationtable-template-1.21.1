@@ -215,12 +215,23 @@ public class ShortRangeLinkerBlock extends BaseEntityBlock implements IWrenchabl
             return InteractionResult.PASS;
         }
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
+            // 是否在物理体上：决定 GUI 显示提示还是控件区
+            final boolean onPhysicsBody;
+            if (level.getBlockEntity(pos) instanceof ShortRangeLinkerBlockEntity linkerBE) {
+                onPhysicsBody = linkerBE.isOnPhysicsBody();
+            } else {
+                onPhysicsBody = false;
+            }
+
             serverPlayer.openMenu(
                     new SimpleMenuProvider(
-                            (containerId, inv, p) -> new ShortRangeLinkerMenu(containerId, pos, inv),
+                            (containerId, inv, p) -> new ShortRangeLinkerMenu(containerId, pos, inv, onPhysicsBody),
                             LINKER_GUI_TITLE
                     ),
-                    buf -> buf.writeBlockPos(pos)
+                    buf -> {
+                        buf.writeBlockPos(pos);
+                        buf.writeBoolean(onPhysicsBody);
+                    }
             );
         }
         return InteractionResult.sidedSuccess(level.isClientSide);

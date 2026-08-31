@@ -21,13 +21,21 @@ public class ShortRangeLinkerScreen extends AbstractContainerScreen<ShortRangeLi
     private static final ResourceLocation GUI_TEXTURE =
             ResourceLocation.fromNamespaceAndPath("ccpe", "textures/gui/gui_link.png");
 
-    /** 窗口尺寸（= 背景区域尺寸，贴图 (0,0) 起 144×68） */
-    private static final int WIN_W = 144;
-    private static final int WIN_H = 111;
-
     /** 贴图文件实际尺寸（g.blit 最后两个参数，用于 UV 归一化） */
     private static final int TEX_W = 144;
     private static final int TEX_H = 144;
+
+    /** 窗口尺寸（= 背景区域尺寸，贴图 (0,0) 起 144×68） */
+    private static final int WIN_W = 144;
+    private static final int WIN_H = 92;
+
+    /** 控件区贴图：贴图 (0,96) 起 144×40 */
+    private static final int CTRL_U = 0;
+    private static final int CTRL_V = 96;
+    private static final int CTRL_W = 144;
+    private static final int CTRL_H = 40;
+    /** 控件区绘制位置（相对窗口顶部，先放在背景正下方，位置参数由用户自行调整） */
+    private static final int CTRL_Y_OFFSET = 18;
 
     private static final int DONE_BTN_RIGHT = 25;
     private static final int DONE_BTN_BOTTOM = 24;
@@ -56,19 +64,35 @@ public class ShortRangeLinkerScreen extends AbstractContainerScreen<ShortRangeLi
     }
 
     @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        // 覆盖默认：跳过 renderTransparentBackground（整屏暗色遮罩），背景不变暗，直接画窗口贴图
+        this.renderBg(g, partialTick, mouseX, mouseY);
+    }
+
+    @Override
     protected void renderBg(GuiGraphics g, float partialTick, int mouseX, int mouseY) {
         int winLeft = (this.width - WIN_W) / 2;
         int winTop = (this.height - WIN_H) / 2;
         // 背景从贴图 (0,0) 起，整块 144×68（g.blit 最后两个参数是贴图文件实际尺寸）
         g.blit(GUI_TEXTURE, winLeft, winTop, 0, 0, WIN_W, WIN_H, TEX_W, TEX_H);
+
+        if (this.menu.isOnPhysicsBody()) {
+            // 在物理体上：绘制控件区贴图（贴图 (0,96) 起 144×40）
+            g.blit(GUI_TEXTURE, winLeft, winTop + CTRL_Y_OFFSET, CTRL_U, CTRL_V, CTRL_W, CTRL_H, TEX_W, TEX_H);
+        } else {
+            // 非物理体：显示「只在物理体上可用」提示
+            Component msg = Component.translatable("gui.ccpe.short_range_linker.require_body");
+            int tx = winLeft + (WIN_W - this.font.width(msg)) / 2;
+            g.drawString(this.font, msg, tx, winTop + 38, 0xFFFFFF, true);
+        }
     }
 
     @Override
     protected void renderLabels(GuiGraphics g, int mouseX, int mouseY) {
         // 标题：先放在顶部居中（Y=6），位置参数由用户自行调整
-        int titleWidth = this.font.width(this.title);
-        int titleX = (WIN_W - titleWidth) / 2;
-        g.drawString(this.font, this.title, titleX, 6, 0xFFFFFFFF, false);
+        int winLeft = (this.width - WIN_W) / 2;
+        int winTop = (this.height - WIN_H) / 2;
+        g.drawString(this.font, this.title, winLeft + 4, winTop + 3, 0xFFFFFFFF, true);
         // 不画「物品栏」标签（playerInventoryTitle）
     }
 }
