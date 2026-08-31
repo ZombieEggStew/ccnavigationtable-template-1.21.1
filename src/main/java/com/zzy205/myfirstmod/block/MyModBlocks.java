@@ -97,6 +97,14 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 流体端口（fluid_port）：6 向附着式方块（blockstate 旋转参考 aic/display_link，见 FluidPortBlock）；当前为纯放置逻辑，无方块实体、无流体逻辑、无 OPEN 状态 */
+    public static final DeferredBlock<FluidPortBlock> fluid_port =
+            registerBlocks("fluid_port", () -> new FluidPortBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.COPPER).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     /**
      * 风帆轴承 plate（link block）。
      * <p>

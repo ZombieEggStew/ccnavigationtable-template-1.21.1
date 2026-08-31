@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod;
 
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
+import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
 import com.zzy205.myfirstmod.block.MyBearingRenderer;
@@ -28,6 +29,10 @@ import com.zzy205.myfirstmod.screen.MyModMenus;
 import com.zzy205.myfirstmod.screen.RedstoneTransceiverScreen;
 import com.zzy205.myfirstmod.screen.PeripheralExtenderScreen;
 
+import com.simibubi.create.foundation.item.ItemDescription;
+import com.simibubi.create.foundation.item.TooltipModifier;
+import net.createmod.catnip.lang.FontHelper;
+import net.minecraft.world.item.Item;
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import dev.engine_room.flywheel.lib.visualization.SimpleBlockEntityVisualizer;
 import net.neoforged.api.distmarker.Dist;
@@ -67,6 +72,14 @@ public class CCPeripheralExtenderClient {
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
+        // 流体端口物品 tooltip（参考 CreateFluidLogistics fluid_hatch 模式：ItemDescription，
+        // 平时只显示"按住 SHIFT 查看"提示，按住 SHIFT 展开 summary + 用法；Create ClientEvents 自动应用）。
+        // 注意：不能在 mod 构造器里注册 —— 那时方块 DeferredHolder 尚未绑定（unbound value 崩溃），
+        // 必须等 FMLClientSetupEvent（注册已完成）后再取。
+        Item fluidPortItem = MyModBlocks.fluid_port.get().asItem();
+        TooltipModifier.REGISTRY.register(fluidPortItem,
+                new ItemDescription.Modifier(fluidPortItem, FontHelper.Palette.STANDARD_CREATE));
+
         // 注册 Flywheel Visual（shaft 渲染）
         SimpleBlockEntityVisualizer.builder(MyModBlockEntities.transmission_peripheral_entity.get())
                 .factory(TransmissionPeripheralVisual::new)

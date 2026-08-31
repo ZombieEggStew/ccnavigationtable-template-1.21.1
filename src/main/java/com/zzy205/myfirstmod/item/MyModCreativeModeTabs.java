@@ -31,6 +31,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.ins);
                 output.accept(MyModBlocks.fmc);
                 output.accept(MyModBlocks.aic);
+                output.accept(MyModBlocks.fluid_port);
                 output.accept(MyModItems.CONTROL_PEDAL);
                 output.accept(MyModItems.CONTROL_JOYSTICK);
                 output.accept(MyModItems.CONTROL_MONITOR_2);
