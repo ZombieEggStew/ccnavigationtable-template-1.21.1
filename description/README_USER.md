@@ -11,6 +11,9 @@
 - 🤪 Modular Monitor
 - 📻 Redstone Transceiver
 - 🎛️ Electronic Transmission
+- 🛠️ Control Desk
+- 🍌 Aero Bearing
+- 🛰️ Sensor System
 
 
 ## Requirements
