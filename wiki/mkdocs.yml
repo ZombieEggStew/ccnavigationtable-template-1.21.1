@@ -80,7 +80,6 @@ plugins:
             Aviation Integrated Computer: 航空集成计算机
             Lua API Reference: Lua API 参考
             FAQ: 常见问题
-            Changelog: 更新日志
         - locale: en
           name: English
           default: true
@@ -139,4 +138,3 @@ nav:
   - Examples & Tutorials:
     - Simple Monitoring System: peripheral-extender/example.md
   - FAQ: faq.md
-  - Changelog: changelog.md
