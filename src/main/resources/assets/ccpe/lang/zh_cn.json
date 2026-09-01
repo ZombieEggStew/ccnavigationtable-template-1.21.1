@@ -19,6 +19,8 @@
   "block.ccpe.fmc": "飞行管理计算机",
   "block.ccpe.aic": "航空集成计算机",
   "block.ccpe.red_position_light": "红色航行灯",
+  "block.ccpe.green_position_light": "绿色航行灯",
+  "block.ccpe.white_position_light": "白色航行灯",
   "block.ccpe.fluid_port": "流体端口",
   "block.ccpe.fluid_port.tooltip.summary": "!?轻轻?!",
   "block.ccpe.fluid_port.tooltip.condition1": "右键点击时",

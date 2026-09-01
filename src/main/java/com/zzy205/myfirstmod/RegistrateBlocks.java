@@ -12,11 +12,13 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ItemLike;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.neoforged.neoforge.client.model.generators.ConfiguredModel;
 import net.neoforged.neoforge.client.model.generators.ModelFile;
+import org.joml.Vector3f;
 
 /**
  * 用 Registrate 注册的方块（与手写 DeferredRegister 的 MyModBlocks 并存）。
@@ -42,7 +44,7 @@ public class RegistrateBlocks {
 	}
 
 	/**
-	 * 红色航行灯。注册链同时产出：
+	 * 三色航行灯（红/绿/白）。每条注册链同时产出：
 	 * blockstate（6 朝向 × 亮灭 + 旋转）、两个薄变体模型（亮/灭）、物品模型、掉落自身战利品表、
 	 * mineable/pickaxe 标签、合成配方。
 	 * <p>
@@ -50,18 +52,11 @@ public class RegistrateBlocks {
 	 * 在 MyModCreativeModeTabs.displayItems 手动 accept（与其他方块一致，已验证安全）。
 	 */
 	public static final BlockEntry<PositionLightBlock> RED_POSITION_LIGHT =
-		CCPeripheralExtender.REGISTRATE
-			.block("red_position_light", PositionLightBlock::new)
-			.properties(p -> p
-				.noOcclusion()
-				.strength(0.5F)
-				.sound(SoundType.LANTERN)
-				.lightLevel(state -> state.getValue(BlockStateProperties.LIT) ? 15 : 0))
-			.blockstate(RegistrateBlocks::positionLightBlockstate)
-			.tag(BlockTags.MINEABLE_WITH_PICKAXE)
-			.recipe(RegistrateBlocks::positionLightRecipe)
-			.simpleItem()
-			.register();
+		positionLight("red_position_light", new Vector3f(1.0F, 0.0F, 0.0F), "red", Items.REDSTONE_TORCH);
+	public static final BlockEntry<PositionLightBlock> GREEN_POSITION_LIGHT =
+		positionLight("green_position_light", new Vector3f(0.0F, 1.0F, 0.0F), "green", Items.GREEN_DYE);
+	public static final BlockEntry<PositionLightBlock> WHITE_POSITION_LIGHT =
+		positionLight("white_position_light", new Vector3f(1.0F, 1.0F, 1.0F), "white", Items.WHITE_DYE);
 
 	/** 在 mod 构造器中调用：触发本类静态初始化（执行上方注册链）。 */
 	public static void init() {
@@ -69,11 +64,31 @@ public class RegistrateBlocks {
 	}
 
 	/**
-	 * 生成 blockstates/red_position_light.json（FACING × LIT 变体）与
-	 * models/block/red_position_light.json / red_position_light_off.json（薄变体，仅换灯体贴图）。
+	 * 单色航行灯注册链模板。
+	 * {@code color} 为切换粒子的颜色；{@code textureColor} 决定 blockstate/模型生成的贴图后缀
+	 * （如 "red" → red_on/red_off）；{@code dye} 为配方中间材料（红色用红石火把，绿/白用对应染料）。
+	 */
+	private static BlockEntry<PositionLightBlock> positionLight(String name, Vector3f color, String textureColor, ItemLike dye) {
+		return CCPeripheralExtender.REGISTRATE
+			.block(name, p -> new PositionLightBlock(p, color))
+			.properties(p -> p
+				.noOcclusion()
+				.strength(0.5F)
+				.sound(SoundType.LANTERN)
+				.lightLevel(state -> state.getValue(BlockStateProperties.LIT) ? 15 : 0))
+			.blockstate((ctx, prov) -> positionLightBlockstate(ctx, prov, textureColor))
+			.tag(BlockTags.MINEABLE_WITH_PICKAXE)
+			.recipe((ctx, prov) -> positionLightRecipe(ctx, prov, dye))
+			.simpleItem()
+			.register();
+	}
+
+	/**
+	 * 生成 blockstates/&lt;name&gt;.json（FACING × LIT 变体）与
+	 * models/block/&lt;name&gt;.json / &lt;name&gt;_off.json（薄变体，仅换灯体贴图）。
 	 * 旋转方案照搬 CreateDeco BlockStateGenerator.cageLamp：UP 为基准（x=0），DOWN x=180，水平四向 x=90 + y 旋转。
 	 */
-	private static void positionLightBlockstate(DataGenContext<Block, PositionLightBlock> ctx, RegistrateBlockstateProvider prov) {
+	private static void positionLightBlockstate(DataGenContext<Block, PositionLightBlock> ctx, RegistrateBlockstateProvider prov, String textureColor) {
 		prov.getVariantBuilder(ctx.get()).forAllStates(state -> {
 			int y = 0;
 			int x = 90;
@@ -89,21 +104,24 @@ public class RegistrateBlocks {
 			ModelFile model = prov.models().withExistingParent(
 					ctx.getName() + (lit ? "" : "_off"),
 					prov.modLoc("block/position_light/position_light"))
-				.texture("0", prov.modLoc("block/position_light/" + (lit ? "red_on" : "red_off")))
+				.texture("0", prov.modLoc("block/position_light/" + textureColor + (lit ? "_on" : "_off")))
 				.texture("1", prov.modLoc("block/position_light/base"))
-				.texture("particle", prov.modLoc("block/position_light/red_off"));
+				.texture("particle", prov.modLoc("block/position_light/" + textureColor + "_off"));
 			return ConfiguredModel.builder().modelFile(model).rotationX(x).rotationY(y).build();
 		});
 	}
 
-	/** 合成配方：铁粒 + 红石火把 + 铁锭（形状照搬 CreateDeco 笼灯的 n/t/p 三行）。 */
-	private static void positionLightRecipe(DataGenContext<Block, PositionLightBlock> ctx, RegistrateRecipeProvider prov) {
+	/**
+	 * 合成配方：铁粒 + 中间材料 + 铁锭（形状照搬 CreateDeco 笼灯的 n/t/p 三行；
+	 * 红色中间为红石火把，绿/白为对应染料）。
+	 */
+	private static void positionLightRecipe(DataGenContext<Block, PositionLightBlock> ctx, RegistrateRecipeProvider prov, ItemLike dye) {
 		ShapedRecipeBuilder.shaped(RecipeCategory.DECORATIONS, ctx.get())
 			.pattern("n")
 			.pattern("t")
 			.pattern("p")
 			.define('n', Items.IRON_NUGGET)
-			.define('t', Items.REDSTONE_TORCH)
+			.define('t', dye)
 			.define('p', Items.IRON_INGOT)
 			.unlockedBy("has_iron", InventoryChangeTrigger.TriggerInstance.hasItems(Items.IRON_INGOT))
 			.save(prov);

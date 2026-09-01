@@ -48,11 +48,12 @@ public class PositionLightBlock extends DirectionalBlock implements SimpleWaterl
 	protected static final VoxelShape AABB_SOUTH = Block.box(5, 5, 0, 11, 11, 5);
 	protected static final VoxelShape AABB_NORTH = Block.box(5, 5, 11, 11, 11, 16);
 
-	/** 切换开关时的红色粒子（用法对齐 CreateDeco 的 DustParticleOptions）。 */
-	public final DustParticleOptions particle = new DustParticleOptions(new Vector3f(1.0F, 0.0F, 0.0F), 0.3F);
+	/** 切换开关时的粒子（颜色由构造器传入，用法对齐 CreateDeco 的 DustParticleOptions）。 */
+	public final DustParticleOptions particle;
 
-	public PositionLightBlock(BlockBehaviour.Properties props) {
+	public PositionLightBlock(BlockBehaviour.Properties props, Vector3f color) {
 		super(props);
+		this.particle = new DustParticleOptions(color, 0.3F);
 		registerDefaultState(defaultBlockState()
 			.setValue(FACING, Direction.UP)
 			.setValue(BlockStateProperties.LIT, false)
