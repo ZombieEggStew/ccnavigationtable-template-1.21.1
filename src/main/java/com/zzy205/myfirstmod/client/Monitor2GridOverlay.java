@@ -109,6 +109,19 @@ public class Monitor2GridOverlay {
     private static BlockPos hoveredKnobPos = null;
     private static int hoveredKnobModuleId = -1;
 
+    /**
+     * 最近一渲染帧准心是否命中 monitor_2 屏幕面（供 {@link MonitorUseInterceptor} 读取）。
+     * 输入事件在客户端 tick 内（handleKeybinds）触发，而 Sable 物理体姿态与玩家位置要到
+     * 本帧 level.tick 才推进（晚于 handleKeybinds），tick 内现算射线会滞后一帧，高速运动的
+     * 物理体上打不中屏幕；直接复用本 overlay 上一渲染帧算好的结果，与玩家所见完全一致。
+     */
+    private static volatile boolean lastFrameScreenHovered = false;
+
+    /** 最近一渲染帧准心是否命中 monitor_2 屏幕面（与所见一致；供拦截器判断是否 drain 右键）。 */
+    public static boolean isScreenHovered() {
+        return lastFrameScreenHovered;
+    }
+
     /** 获取正在拖动的旋钮角度；未拖动或模块不匹配时返回 null。 */
     public static Float getActiveKnobAngle(BlockPos pos, int moduleId) {
         InteractionState state = interactions.get(pos);
@@ -153,6 +166,8 @@ public class Monitor2GridOverlay {
 
         // ── 独立命中检测：瞄准 monitor_2 屏幕面 ──
         Monitor2HitDetector.Monitor2Hit hit = Monitor2HitDetector.find(level, player, partialTick);
+        // 缓存本帧命中结果供 MonitorUseInterceptor 读取（tick 内姿态滞后一帧，不能现算）
+        lastFrameScreenHovered = hit != null;
         if (hit == null) {
             if (DEBUG_HIT && (++debugHitTick & 19) == 0) {
                 CCPeripheralExtender.LOGGER.info("[Monitor2Hit] 未命中 monitor_2 屏幕（准星 {}）",
