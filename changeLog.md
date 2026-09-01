@@ -68,4 +68,5 @@
 - **!?NEWNEW?!** Added the Fluid Port
 - **!?NEWNEW?!** Added the Short Range Linker, Check the wiki for more details.
 - Fixed aero bearing not adjusting its mass when assembled properly
+- Fixed crash "Not building!" when opening the Diagram screen (Aeronautics) with a control desk inside an assembled physics body (Sable sub-level). 
 - 

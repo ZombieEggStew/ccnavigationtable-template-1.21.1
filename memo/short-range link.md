@@ -1,7 +1,7 @@
 # 短程信号链接器（ccpe:short_range_linker）实现方案
 
-> 状态：**实现中**。已落地（`./gradlew.bat classes` 通过）：`ShortRangeLinkerRegistry`（物理体作用域频道注册表）、`ShortRangeLinkerBlock` / `ShortRangeLinkerBlockEntity`（频道 + bodyLoad 共享开关 + ticket + 红石 + NBT/蓝图）、注册（方块/BE/创造标签/主入口 clear）、资源（blockstate 6 形态：地面 1 + 天花板 1 + 墙壁 4；**躺/竖共用一个模型** `models/block/short_range_link/short_range_link.json`（用户自建扁平小方块）+ 贴图 `textures/block/short_range_link/tex.png`；语言键 `block.ccpe.short_range_linker`）、**选择框抄 static_port**（`VoxelShaper.forDirectional(Block.box(5,0,5,11,3,11), UP)`，FLOOR→UP / CEILING→DOWN / WALL→水平四向）、**音效对齐 static_port（SoundType.COPPER）**。待做：Lua API（`ccpe.link`）、GUI（频道滚轮 + 加载开关 + 非物理体提示）、payload（`ShortRangeLinkerConfigPayload`）。
-> 已确认决策：API = `getPeripheral` + 红石输入/输出；非物理体严格不链接；物理体 = Sable 约束链；物理体加载 = 链上共享开关；方块 ID = `ccpe:short_range_linker`。
+> 状态：**功能全部落地，待进游戏验证**（`./gradlew.bat classes` 通过）。已落地：`ShortRangeLinkerRegistry`（物理体作用域频道注册表）、`ShortRangeLinkerBlock` / `ShortRangeLinkerBlockEntity`（频道 + bodyLoad 共享开关 + ticket + 红石 + NBT/蓝图）、注册（方块/BE/菜单/创造标签/主入口 clear）、资源（blockstate 6 形态：地面 1 + 天花板 1 + 墙壁 4；**躺/竖共用一个模型** `models/block/short_range_link/short_range_link.json`（用户自建扁平小方块）+ 贴图 `textures/block/short_range_link/tex.png`；语言键 `block.ccpe.short_range_linker` + `gui.ccpe.short_range_linker.*`）、**选择框抄 static_port**（`VoxelShaper.forDirectional(Block.box(5,0,5,11,3,11), UP)`，FLOOR→UP / CEILING→DOWN / WALL→水平四向）、**音效对齐 static_port（SoundType.COPPER）**、GUI（Menu extraData 传频道/占用快照/bodyLoad；Screen 频道滚轮跳过同体占用 + 「加载物理体」ToggleButton + 非物理体提示 + tooltip 前景层）、payload（`ShortRangeLinkerConfigPayload` + `ShortRangeLinkerPacketHandlers`，经 `ModPackets` 注册）、Lua API（**并入 `ccpe.sensor_system`，原计划 `ccpe.link` 已删除**）、wiki 页面（`wiki/docs/sensor-system/short-range-linker.md` + `.zh.md`，已入 mkdocs 导航）。待做：第八节进游戏验证。
+> 已确认决策：API = `getPeripheral` + 红石输入/输出，**模块并入 `ccpe.sensor_system`（原计划 `ccpe.link` 已废弃）**；非物理体严格不链接；物理体 = Sable 约束链；物理体加载 = 链上共享开关；方块 ID = `ccpe:short_range_linker`。
 > 目标代码：`src/main/java/com/zzy205/myfirstmod` 下新增 block / compat/cc / screen / network 若干类（见文件清单）。
 
 ## 一、需求背景
@@ -13,11 +13,11 @@
 1. **频道只在一个物理体内寻址**：同一物理体（含约束链）上的链接器共享频道空间；不同物理体上的相同频道号互不干扰（互相查不到）。
 2. **非物理体严格不链接**：链接器不在任何 Sable 物理体上时**不注册频道**，Lua 查询一律返回 nil，GUI 显示「需放置在物理体上」。
 3. **同体频道唯一 + 冲突顺延**（详见第九节「频道唯一性语义」）。
-4. **Lua API（模块名 `ccpe.link`，全局 API，作用域 = 调用电脑所在物理体）**：
+4. **Lua API（全局 API，模块 = `ccpe.sensor_system`，作用域 = 调用电脑所在物理体；已落地，原计划 `ccpe.link` 废弃）**：
    - `getPeripheral(channel)` → 本体内频道 `channel` 的链接器附着方块外设（Capability 查询，mainThread=true）
    - `getRedstoneOutput(channel)` / `getRedstoneInput(channel)` → 目标链接器红石输出 / 输入（mainThread=false）
    - `setRedstoneOutput(channel, signal)` → 写目标链接器红石输出并更新方块 POWERED（mainThread=true）
-   - **作用域解析照抄 `SensorSystemAPI.resolveSubLevel()`**：`computer.getLevel()` + `computer.getPosition()` → `SableCompat.getContainingSubLevel` → `getConnectedChain` 得链 UUID 集合 → 在该链内查频道。
+   - **作用域解析照抄 `SensorSystemAPI.resolveSubLevel()`**：`computer.getLevel()` + `computer.getPosition()` → `SableCompat.getContainingSubLevel` → `getConnectedChain` 得链 UUID 集合 → 在该链内查频道。**实现 = 链 UUID 集合在 `SensorSystemAPI.update()`（服务端主线程）缓存进 volatile `chainUuids`，Lua 线程只读**（照 SensorSystemAPI 高频缓存模式；顺带避免红石读方法在电脑线程直接碰 Sable，最多滞后 1 tick）。
 5. **物理体加载 = 链上共享开关**（新增需求，见第四节）。
 6. **全局频道体系不动**：pe / Monitor / 控制台的 `GlobalChannelRegistry` 保持原样，向后兼容；新注册表完全独立。
 
@@ -58,12 +58,13 @@ ShortRangeLinkerRegistry
 | 文件 | 职责 |
 |---|---|
 | `compat/cc/ShortRangeLinkerRegistry.java` | 物理体作用域频道注册表（第三节设计，纯逻辑） |
-| `compat/cc/ShortRangeLinkerAPI.java` | `ccpe.link` Lua API（getPeripheral / 红石三件套），作用域 = 调用电脑所在链 |
-| `block/ShortRangeLinkerBlock.java` | 贴附式方块：**复制 `PeripheralExtenderBlock`**（FACE/FACING/POWERED、canSurvive、红石 getSignal/isSignalSource、右键开 GUI、扳手拆除、`getAttachedPos` 复用） |
+| ~~`compat/cc/ShortRangeLinkerAPI.java`~~（**已删除**） | 原 `ccpe.link` Lua API；四个方法已并入 `compat/cc/SensorSystemAPI.java`（见「修改（Java）」表） |
+| `block/ShortRangeLinkerBlock.java` | 贴附式方块：**复制 `PeripheralExtenderBlock`**（FACE/FACING/POWERED、canSurvive、红石 getSignal/isSignalSource、右键开 GUI、扳手拆除、`getAttachedPos` 复用；开菜单前 `refreshOccupiedChannels()` 保证占用快照最新） |
 | `block/ShortRangeLinkerBlockEntity.java` | BE：频道持久化、`bodyLoad` 共享开关 + ticket 管理、onLoad/setRemoved 注册注销、20 tick 链复核、红石输出/输入（照 pe BE）、体内占用快照、`PartialSafeNBT.writeSafe` |
 | `screen/ShortRangeLinkerMenu.java` | 服务端菜单：传 pos、当前频道、**体内**占用频道数组、当前 `bodyLoad` |
-| `screen/ShortRangeLinkerScreen.java` | 客户端 GUI：频道滚轮（跳过同体占用）+ 「加载物理体」ToggleButton + 非物理体提示（红石输入/输出状态显示可选） |
+| `screen/ShortRangeLinkerScreen.java` | 客户端 GUI：频道滚轮（跳过同体占用）+ 「加载物理体」ToggleButton + 非物理体提示 + **tooltip 前景层**（照 `AbstractMonitorScreen.renderWidgetTooltips`，否则 tooltip 被后渲染的「完成」按钮盖住） |
 | `network/ShortRangeLinkerConfigPayload.java` | 客户端→服务端：保存频道 + bodyLoad（照 `SensorFilterPayload` codec 模式） |
+| `network/ShortRangeLinkerPacketHandlers.java` | payload 服务端处理器：非物理体忽略 → 频道冲突顺延回写 → `setBodyLoad` 同步全链 → 刷新占用快照广播 |
 
 ### 新增（资源）
 
@@ -75,8 +76,8 @@ ShortRangeLinkerRegistry
 |---|---|
 | `block/MyModBlocks.java` | 注册 `short_range_linker` 方块 |
 | `block/MyModBlockEntities.java` | 注册 BE 类型并绑定 |
-| `compat/cc/CCPeripheralExtenderSetup.java` | `registerAPIFactory(computer -> new ShortRangeLinkerAPI())` |
-| `CCPeripheraExtender.java` | 注册 `ShortRangeLinkerConfigPayload` 及服务端处理器（保存频道 + bodyLoad → 重注册 / 同步共享开关 → 广播占用） |
+| `compat/cc/SensorSystemAPI.java` | **并入链接器四方法**（getPeripheral / 红石三件套）+ `chainUuids` 缓存（`update()` 主线程刷新）；`CCPeripheralExtenderSetup` 无需改动（SensorSystemAPI 本就已注册） |
+| `network/ModPackets.java` | 注册 `ShortRangeLinkerPacketHandlers`（payload 实际注册入口；原计划的 `CCPeripheraExtender.java` 未改动） |
 | `screen/MyModMenus.java` | 注册菜单类型 |
 | `item/MyModCreativeModeTabs.java` | 加入创造标签 |
 
@@ -86,7 +87,7 @@ ShortRangeLinkerRegistry
 
 ```mermaid
 flowchart LR
-    Lua["ccpe.link.getPeripheral(ch)<br/>（作用域=调用电脑所在链）"] --> Reg[ShortRangeLinkerRegistry]
+    Lua["ccpe.sensor_system.getPeripheral(ch)<br/>（作用域=调用电脑所在链）"] --> Reg[ShortRangeLinkerRegistry]
     Reg -->|"查调用方约束链内 ch"| Target[目标链接器 BE]
     Target -->|"附着方块 Capability"| Periph[IPeripheral]
     GUI[GUI 频道滚轮 + 加载开关] --> Payload[ShortRangeLinkerConfigPayload]
@@ -97,18 +98,18 @@ flowchart LR
     BE -->|"体内占用快照"| Menu[菜单/客户端滚轮跳过占用]
 ```
 
-## 七、实现步骤（按序执行）
+## 七、实现步骤（按序执行，状态已更新）
 
-1. **`ShortRangeLinkerRegistry`**：纯逻辑注册表（登记 / 体内顺延 / 链查询 / 注销 / 僵尸清理 / 体内占用快照 / 按链遍历链接器）——先行完成，后续全部依赖它。
-2. **Block + BE**：复制 pe 方块结构；BE 实现注册注销、20 tick 链复核、`bodyLoad` 共享同步 + ticket 管理、红石、NBT、`writeSafe`。
-3. **Lua API**：`ShortRangeLinkerAPI`（作用域解析照 `SensorSystemAPI.resolveSubLevel`）+ 注册到 `CCPeripheralExtenderSetup`。
-4. **GUI**：Menu + Screen（频道滚轮 + 加载开关）+ payload + 菜单与 payload 注册。
-5. **注册与资源**：方块/BE 注册、blockstate/模型/贴图/语言/创造标签。
-6. **编译**：`./gradlew.bat classes` 通过后进游戏验证（第八节清单）。
+1. **`ShortRangeLinkerRegistry`**：纯逻辑注册表（登记 / 体内顺延 / 链查询 / 注销 / 僵尸清理 / 体内占用快照 / 按链遍历链接器）——先行完成，后续全部依赖它。✅ 已落地
+2. **Block + BE**：复制 pe 方块结构；BE 实现注册注销、20 tick 链复核、`bodyLoad` 共享同步 + ticket 管理、红石、NBT、`writeSafe`。✅ 已落地
+3. **Lua API**：原计划 `ShortRangeLinkerAPI`（作用域解析照 `SensorSystemAPI.resolveSubLevel`）+ 注册到 `CCPeripheralExtenderSetup`。✅ 已落地，**但按用户要求改为并入 `SensorSystemAPI`（模块 `ccpe.sensor_system`），`ShortRangeLinkerAPI` / `ccpe.link` 已删除**，链 UUID 走 `update()` 缓存。
+4. **GUI**：Menu + Screen（频道滚轮 + 加载开关）+ payload + 菜单与 payload 注册。✅ 已落地（另加 tooltip 前景层修复按钮遮挡）
+5. **注册与资源**：方块/BE 注册、blockstate/模型/贴图/语言/创造标签。✅ 已落地
+6. **编译**：`./gradlew.bat classes` 通过。✅ 编译通过；⏳ 进游戏验证（第八节清单）
 
 ## 八、进游戏验证清单
 
-1. 同一架飞机（同一物理体）上：目标链接器设频道 1 → 电脑上 `ccpe.link.getPeripheral(1)` 能取到目标附着方块外设（如传感器 / NavTable）。
+1. 同一架飞机（同一物理体）上：目标链接器设频道 1 → 电脑上 `require("ccpe.sensor_system").getPeripheral(1)` 能取到目标附着方块外设（如传感器 / NavTable）。
 2. 两架飞机各用频道 1 → 互不干扰：A 机电脑查不到 B 机外设（返回 nil）。
 3. 轴承连接的螺旋桨与机身算同一体 → 可互查（验证约束链聚合）。
 4. 地面静态放置（非物理体）→ 不注册、查询返回 nil、GUI 显示「需放置在物理体上」。
@@ -125,7 +126,7 @@ flowchart LR
 **推荐语义（寻址模型，类比 monitor 模块 ID）**：
 
 - 频道号是链接器在物理体内的**地址**：每个链接器占一个频道号，同体内 1:1（频道 → 链接器），注册时冲突自动顺延到下一个空闲号。
-- **查询方（电脑）不需要自己的频道号**：`ccpe.link` 是全局 Lua API，作用域 = 调用电脑所在物理体；`getPeripheral(N)` 的 `N` 是**目标链接器的地址**，不是自己的频道。链接器只放在目标块上（像 pe 传感器），电脑侧零配置。
+- **查询方（电脑）不需要自己的频道号**：`ccpe.sensor_system` 是全局 Lua API，作用域 = 调用电脑所在物理体；`getPeripheral(N)` 的 `N` 是**目标链接器的地址**，不是自己的频道。链接器只放在目标块上（像 pe 传感器），电脑侧零配置。
 - 不同物理体频道号独立：A 机频道 1 和 B 机频道 1 各指各的，互不可见。
 - GUI 滚轮**跳过同体已占用**频道（不是全局占用），放置时若同体冲突自动顺延。
 
@@ -141,4 +142,4 @@ flowchart LR
 - **bodyLoad 是共享值（last-toggle-wins）**：后切换者覆盖全链；若想要「任一开启即加载」的 OR 开关语义需再讨论（当前 OR 只用于 onLoad 自愈）。
 - **冗余 ticket**：链上所有开启的链接器各自持有 ticket（与 pe 多传感器同体行为一致，Sable 按 (ticketType, key=pos) 去重，无害）。
 - **Sable 坐标投影**：本轮 API 不含 NBT 读取，无坐标投影需求；将来若加 `getAll` 再复用 `PeripheralExtenderBlock.tryAddRealWorldPos`。
-- **作用域 = 调用电脑所在物理体**：电脑不在任何物理体上时 `ccpe.link` 查询一律 nil（严格语义，与「非物理体不链接」一致）。
+- **作用域 = 调用电脑所在物理体**：电脑不在任何物理体上时 `ccpe.sensor_system` 查询一律 nil（严格语义，与「非物理体不链接」一致）。作用域解析由 `update()` 主线程缓存 `chainUuids`，Lua 侧最多滞后 1 tick。
