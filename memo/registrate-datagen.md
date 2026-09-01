@@ -13,11 +13,17 @@
 | 文件 | 说明 |
 |---|---|
 | `block/PositionLightBlock.java` | 方块类：6 向贴附、红石点亮（LIT）、右键反相（INVERTED）、水浸（vanilla `SimpleWaterloggedBlock`）、切换粒子；`codec()` 返回 null（对齐参考） |
-| `RegistrateBlocks.java` | Registrate 注册链（`block→properties→blockstate→tag→recipe→simpleItem→register`）+ blockstate/配方生成回调；**静态块里关掉自动创造标签挂接（见坑②）** |
+| `RegistrateBlocks.java` | Registrate 注册链（`block→properties→blockstate→tag→simpleItem→register`，三色灯共用参数化模板 `positionLight()`）+ blockstate 生成回调；**静态块里关掉自动创造标签挂接（见坑②）**。合成配方不走 datagen，手写维护（见下文「配方手写」） |
 | `CCPeripheralExtender.java` | `REGISTRATE = Registrate.create(MOD_ID)`（内部自动挂载注册/数据生成事件）+ 构造器 `RegistrateBlocks.init()` |
 | `item/MyModCreativeModeTabs.java` | `displayItems` 手动 `output.accept(RegistrateBlocks.RED_POSITION_LIGHT.get())` |
 | 模型/贴图 | `models/block/position_light/position_light.json`（Blockbench 几何，`#0`灯体/`#1`底座纹理槽）+ `textures/block/position_light/{base,red_on,red_off}.png` |
 | lang | `assets/ccpe/lang/en_us.json` / `zh_cn.json` 手写 `Red Position Light` / `红色航行灯` |
+
+## 配方手写（2026-09 起生效）
+
+- 航行灯三色（red/green/white_position_light）的配方**不再由 datagen 生成**，手写维护在 `src/main/resources/data/ccpe/recipe/`（与项目其它 23 个方块配方一致）。
+- 手写配方**不带配套 advancement**（`src/main/resources/data/ccpe/advancement` 不存在）——配方照常可合成，只是没有「解锁配方」弹窗/配方书提示；这是项目全体的既有行为。
+- 注册链里不要加 `.recipe(...)`；若已加，runData 会在 `src/generated/resources/data/ccpe/recipe/` 生成副本并与手写文件在 jar 里重复，记得删除。
 
 ## 完整流程
 

@@ -2,17 +2,11 @@ package com.zzy205.myfirstmod;
 
 import com.tterrag.registrate.providers.DataGenContext;
 import com.tterrag.registrate.providers.RegistrateBlockstateProvider;
-import com.tterrag.registrate.providers.RegistrateRecipeProvider;
 import com.tterrag.registrate.util.entry.BlockEntry;
 import com.zzy205.myfirstmod.block.PositionLightBlock;
-import net.minecraft.advancements.critereon.InventoryChangeTrigger;
-import net.minecraft.data.recipes.RecipeCategory;
-import net.minecraft.data.recipes.ShapedRecipeBuilder;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.item.CreativeModeTab;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.ItemLike;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -46,17 +40,19 @@ public class RegistrateBlocks {
 	/**
 	 * 三色航行灯（红/绿/白）。每条注册链同时产出：
 	 * blockstate（6 朝向 × 亮灭 + 旋转）、两个薄变体模型（亮/灭）、物品模型、掉落自身战利品表、
-	 * mineable/pickaxe 标签、合成配方。
+	 * mineable/pickaxe 标签。
+	 * <p>
+	 * 合成配方不走 datagen，手写维护在 src/main/resources/data/ccpe/recipe/（与其他方块一致）。
 	 * <p>
 	 * 注意：不用 Registrate 的 .tab() 挂创造标签（见上方 static 块的根因说明）；
 	 * 在 MyModCreativeModeTabs.displayItems 手动 accept（与其他方块一致，已验证安全）。
 	 */
 	public static final BlockEntry<PositionLightBlock> RED_POSITION_LIGHT =
-		positionLight("red_position_light", new Vector3f(1.0F, 0.0F, 0.0F), "red", Items.REDSTONE_TORCH);
+		positionLight("red_position_light", new Vector3f(1.0F, 0.0F, 0.0F), "red");
 	public static final BlockEntry<PositionLightBlock> GREEN_POSITION_LIGHT =
-		positionLight("green_position_light", new Vector3f(0.0F, 1.0F, 0.0F), "green", Items.GREEN_DYE);
+		positionLight("green_position_light", new Vector3f(0.0F, 1.0F, 0.0F), "green");
 	public static final BlockEntry<PositionLightBlock> WHITE_POSITION_LIGHT =
-		positionLight("white_position_light", new Vector3f(1.0F, 1.0F, 1.0F), "white", Items.WHITE_DYE);
+		positionLight("white_position_light", new Vector3f(1.0F, 1.0F, 1.0F), "white");
 
 	/** 在 mod 构造器中调用：触发本类静态初始化（执行上方注册链）。 */
 	public static void init() {
@@ -66,9 +62,9 @@ public class RegistrateBlocks {
 	/**
 	 * 单色航行灯注册链模板。
 	 * {@code color} 为切换粒子的颜色；{@code textureColor} 决定 blockstate/模型生成的贴图后缀
-	 * （如 "red" → red_on/red_off）；{@code dye} 为配方中间材料（红色用红石火把，绿/白用对应染料）。
+	 * （如 "red" → red_on/red_off）。
 	 */
-	private static BlockEntry<PositionLightBlock> positionLight(String name, Vector3f color, String textureColor, ItemLike dye) {
+	private static BlockEntry<PositionLightBlock> positionLight(String name, Vector3f color, String textureColor) {
 		return CCPeripheralExtender.REGISTRATE
 			.block(name, p -> new PositionLightBlock(p, color))
 			.properties(p -> p
@@ -78,7 +74,6 @@ public class RegistrateBlocks {
 				.lightLevel(state -> state.getValue(BlockStateProperties.LIT) ? 15 : 0))
 			.blockstate((ctx, prov) -> positionLightBlockstate(ctx, prov, textureColor))
 			.tag(BlockTags.MINEABLE_WITH_PICKAXE)
-			.recipe((ctx, prov) -> positionLightRecipe(ctx, prov, dye))
 			.simpleItem()
 			.register();
 	}
@@ -109,21 +104,5 @@ public class RegistrateBlocks {
 				.texture("particle", prov.modLoc("block/position_light/" + textureColor + "_off"));
 			return ConfiguredModel.builder().modelFile(model).rotationX(x).rotationY(y).build();
 		});
-	}
-
-	/**
-	 * 合成配方：铁粒 + 中间材料 + 铁锭（形状照搬 CreateDeco 笼灯的 n/t/p 三行；
-	 * 红色中间为红石火把，绿/白为对应染料）。
-	 */
-	private static void positionLightRecipe(DataGenContext<Block, PositionLightBlock> ctx, RegistrateRecipeProvider prov, ItemLike dye) {
-		ShapedRecipeBuilder.shaped(RecipeCategory.DECORATIONS, ctx.get())
-			.pattern("n")
-			.pattern("t")
-			.pattern("p")
-			.define('n', Items.IRON_NUGGET)
-			.define('t', dye)
-			.define('p', Items.IRON_INGOT)
-			.unlockedBy("has_iron", InventoryChangeTrigger.TriggerInstance.hasItems(Items.IRON_INGOT))
-			.save(prov);
 	}
 }
