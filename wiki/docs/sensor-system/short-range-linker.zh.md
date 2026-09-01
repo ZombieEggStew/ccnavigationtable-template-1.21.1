@@ -4,7 +4,9 @@
 
 ![short_range_linker](../img/short_range_link.png)
 
-**短程信号链接器**（Short-Range Signal Linker，`ccpe:short_range_linker`）是一个贴附式方块（地面 / 天花板 / 墙面，同微型外设扩展器）。装在物理体（Sable sub-level）上时，它会注册一个**频道**，该频道**只在当前物理体内**（含约束链）可寻址——同一物理体上的 CC:Tweaked 电脑可以通过 `ccpe.sensor_system` 取到链接器所附着方块的外设。
+**短程信号链接器**（`ccpe:short_range_linker`）是一个贴附式方块。装在物理体（Sable sub-level）上时，它会注册一个**频道**，该频道**只在当前物理体内**（含约束链）可寻址——同一物理体上的 CC:Tweaked 电脑可以通过 `ccpe.sensor_system` 取到链接器所附着方块的外设。
+
+用于解决批量制造的物理体之间的信号串连问题。
 
 与微型外设扩展器的全局频道不同，链接器频道是**按物理体隔离**的：两架飞机可以同时使用频道 `1` 而互不干扰。
 

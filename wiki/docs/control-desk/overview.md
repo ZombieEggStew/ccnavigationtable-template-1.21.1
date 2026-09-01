@@ -4,6 +4,13 @@
 
 **Designed to optimize space usage and maintain a clear field of view.**
 
+!!! warning "Channel"
+    Version 1.1.1 changed the global channel to a **physical-body-scoped** channel, reusing the [Short-Range Signal Linker](../sensor-system/short-range-linker.md)'s channel space, where channel numbers are only addressable within the physics body that the desk is part of.
+    
+    The purpose is to prevent interference between different physics bodies when deploying blueprints or mass-producing them.
+    
+    Two different physics bodies can use channel `1` simultaneously without interfering with each other.
+
 The Control Desk is a seat-driven control console. By default it has **no controls installed** — you install [Foot Pedals](pedal.md), a [Joystick](joystick.md) and/or a [Throttle](throttle.md) onto it yourself. Sit on a Create seat next to the desk and you automatically enter **operation mode**: your keyboard drives the installed controls of every linked desk, and the control states are exposed to CC:T via a Lua API.
 
 ## Installing / Removing Controls
