@@ -26,8 +26,8 @@ All four bindings are configurable **per-desk** in the module settings menu (ope
 ## Lua API
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local joy2 = desk.getModule("joystick_2")   -- nil if no joystick 2 installed
 ```
 
@@ -56,8 +56,8 @@ All methods are `mainThread = false` — safe to poll at high frequency.
 ## Example
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local joy2 = desk.getModule("joystick_2")
 
 while true do

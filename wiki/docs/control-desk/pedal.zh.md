@@ -23,8 +23,8 @@
 ## Lua API
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local pedal = desk.getModule("pedal")   -- 未安装脚踏板返回 nil
 ```
 
@@ -59,8 +59,8 @@ print(pedal.getPedalDifference())
 踏板对最经典的用法是差速油门：两踏板**平均值** = 整体油门，`getPedalDifference()` = 转向量。
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local pedal = desk.getModule("pedal")
 
 while true do

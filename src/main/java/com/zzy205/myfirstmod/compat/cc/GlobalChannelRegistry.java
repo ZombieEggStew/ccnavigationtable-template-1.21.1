@@ -1,6 +1,5 @@
 package com.zzy205.myfirstmod.compat.cc;
 
-import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
 import com.zzy205.myfirstmod.channel.ChannelRegistry;
@@ -12,6 +11,7 @@ import java.util.Set;
 
 /**
  * 全局频道注册表 —— 传感器与显示器共享同一频道命名空间，保证频道全局唯一。
+ * （控制台频道已迁出：复用短程信号链接器的物理体作用域频道空间，见 {@link ControlDeskRegistry}。）
  * <p>
  * 委托给通用 {@link ChannelRegistry}，复用分配/冲突顺延/注销/僵尸清理逻辑。
  */
@@ -33,9 +33,6 @@ public final class GlobalChannelRegistry {
             } else if (be instanceof MonitorBlockEntity monitor) {
                 try { monitor.refreshOccupiedChannels(); }
                 catch (Exception e) { LOGGER.debug("Failed to refresh monitor channel snapshot", e); }
-            } else if (be instanceof ControlDeskBlockEntity desk) {
-                try { desk.refreshOccupiedChannels(); }
-                catch (Exception e) { LOGGER.debug("Failed to refresh control desk channel snapshot", e); }
             }
         }
     }

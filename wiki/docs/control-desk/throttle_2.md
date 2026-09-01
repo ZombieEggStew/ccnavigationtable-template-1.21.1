@@ -26,8 +26,8 @@ Both bindings, the full-deflection time and the return switch/time are configura
 ## Lua API
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local th2 = desk.getModule("throttle_2")   -- nil if no throttle 2 installed
 ```
 
@@ -62,8 +62,8 @@ All read methods are `mainThread = false` — safe to poll at high frequency.
 ## Example
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local th2 = desk.getModule("throttle_2")
 
 while true do

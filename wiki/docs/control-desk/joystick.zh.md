@@ -23,8 +23,8 @@
 ## Lua API
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local joy = desk.getModule("joystick")   -- 未安装操纵杆返回 nil
 ```
 
@@ -53,8 +53,8 @@ print(joy.getAxisXSigned(), joy.getAxisYSigned())
 ## 示例
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local joy = desk.getModule("joystick")
 
 while true do

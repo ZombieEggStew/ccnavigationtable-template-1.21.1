@@ -26,8 +26,8 @@
 ## Lua API
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local th2 = desk.getModule("throttle_2")   -- 未安装油门杆 2 返回 nil
 ```
 
@@ -62,8 +62,8 @@ th2.setAngle(20)   -- 把手转到 20°
 ## 示例
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local th2 = desk.getModule("throttle_2")
 
 while true do

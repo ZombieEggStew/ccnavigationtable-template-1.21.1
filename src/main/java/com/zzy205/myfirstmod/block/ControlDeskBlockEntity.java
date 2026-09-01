@@ -4,7 +4,8 @@ import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
 import com.zzy205.myfirstmod.client.ControlDeskClientRegistry;
 import com.zzy205.myfirstmod.compat.cc.ControlDeskPeripheral;
 import com.zzy205.myfirstmod.compat.cc.ControlDeskRegistry;
-import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
+import com.zzy205.myfirstmod.compat.cc.ShortRangeLinkerRegistry;
+import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.monitor.MonitorModule;
@@ -28,6 +29,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -183,6 +185,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_THROTTLE_2_RETURN_TIME = "Throttle2ReturnTime";
     private static final String TAG_CHANNEL = "Channel";
     private static final String TAG_OCCUPIED_CHANNELS = "OccupiedChannels";
+    private static final String TAG_ON_PHYSICS_BODY = "OnPhysicsBody";
     private static final String TAG_MONITOR_2_GRID = "Monitor2Grid";
     private static final String TAG_DESK_TOP_GRID = "DeskTopGrid";
 
@@ -279,11 +282,13 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     /** 油门2 回正时间（tick，默认 2）：回正开关开启时，松开按键后从中位偏离处线性回到中位所需 tick 数（0 = 关闭回正） */
     private int throttle2ReturnTime = DEFAULT_THROTTLE_2_RETURN_TIME;
 
-    // ── 全局频道（与传感器/显示器共享 GlobalChannelRegistry 命名空间，频道全局唯一） ──
-    /** 全局频道号（-1 表示尚未注册，加载时自动分配） */
+    // ── 物理体作用域频道（复用短程信号链接器的频道空间，只在当前物理体（含约束链）内寻址） ──
+    /** 频道号（-1 表示尚未注册，加载时自动分配；非物理体上不注册，保持 -1/存档值） */
     private int channel = -1;
-    /** 所有已被占用的频道号快照（服务端设置，客户端通过 updateTag 同步，菜单用它跳过已占用频道） */
+    /** 所有已被占用的频道号快照（服务端设置，客户端通过 updateTag 同步，菜单用它跳过已占用频道；链内范围） */
     private int[] occupiedChannels = new int[0];
+    /** 是否在 Sable 物理体上（服务端判定，客户端经 updateTag 同步，GUI 据此显示「只在物理体上可用」提示） */
+    private boolean onPhysicsBody;
     /** CC:T 外设实例（懒加载），避免直接在 BE 上实现 IPeripheral 导致 getType() 冲突（对齐 MonitorBlockEntity） */
     @Nullable
     private IPeripheral peripheral;
@@ -300,12 +305,15 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             ControlDeskClientRegistry.add(this.getBlockPos());
         }
         if (this.level != null && !this.level.isClientSide) {
+            this.onPhysicsBody = isOnPhysicsBody();
             int assigned = ControlDeskRegistry.register(this.channel, this);
-            if (assigned != this.channel) {
+            if (assigned >= 0 && assigned != this.channel) {
                 this.channel = assigned;
                 this.setChanged();
             }
             refreshOccupiedChannels();
+            // 确保 onPhysicsBody 标志（GUI 提示依据）随 update 包立即同步到客户端
+            notifyChange();
         }
     }
 
@@ -328,12 +336,12 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         super.onChunkUnloaded();
     }
 
-    /** 全局频道号。 */
+    /** 物理体作用域频道号（仅本物理体（含约束链）内有效；非物理体上为 -1 或存档值）。 */
     public int getChannel() {
         return channel;
     }
 
-    /** 获取 CC:T 外设实例（懒加载；经 pe.getPeripheral(ch) / peripheral.wrap 获取，Lua API 待实施）。 */
+    /** 获取 CC:T 外设实例（懒加载；经 ss.getPeripheral(ch) / peripheral.wrap 获取，作用域 = 调用电脑所在物理体）。 */
     public IPeripheral getPeripheral() {
         if (peripheral == null) {
             peripheral = new ControlDeskPeripheral(this);
@@ -341,27 +349,58 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return peripheral;
     }
 
-    /** 获取已占用频道号数组（客户端配置菜单用它跳过已占用频道）。 */
+    /** 获取已占用频道号数组（客户端配置菜单用它跳过已占用频道；链内范围）。 */
     public int[] getOccupiedChannels() {
         return occupiedChannels;
     }
 
-    /** 更新全局频道号（服务端调用）：重新注册（冲突顺延）并同步客户端。 */
+    /** 更新物理体作用域频道号（服务端调用）：重新注册（链内冲突顺延）并同步客户端；非物理体上忽略。 */
     public void setChannel(int newChannel) {
         if (level == null || level.isClientSide) return;
         // -1 表示客户端尚未同步到真实频道，直接忽略，避免误触发自动重分配
         if (newChannel < 0) return;
         if (newChannel == this.channel) return;
+        // 非物理体不注册（register 返回 -1），频道改动一律忽略（与「非物理体不链接」语义一致）
         int assigned = ControlDeskRegistry.register(newChannel, this);
+        if (assigned < 0) return;
         this.channel = assigned;
+        refreshOccupiedChannels();
         notifyChange();
     }
 
-    /** 从全局注册表同步 occupiedChannels 快照到本 BE，并通知客户端。 */
+    /** 从物理体作用域注册表同步链内占用快照到本 BE，并通知客户端（占用集合变化时才广播）。 */
     public void refreshOccupiedChannels() {
         if (this.level == null || this.level.isClientSide) return;
-        this.occupiedChannels = GlobalChannelRegistry.occupiedChannelsArray();
+        var occ = ShortRangeLinkerRegistry.occupiedChannels(ShortRangeLinkerRegistry.chainUuidsOf(this));
+        int[] arr = occ.stream().mapToInt(Integer::intValue).toArray();
+        if (Arrays.equals(arr, this.occupiedChannels)) return;
+        this.occupiedChannels = arr;
         notifyChange();
+    }
+
+    /** 是否在 Sable 物理体上（服务端实时判定；客户端读经 updateTag 同步的标志） */
+    public boolean isOnPhysicsBody() {
+        if (level == null || level.isClientSide) return onPhysicsBody;
+        return SableCompat.getContainingSubLevel(this) != null;
+    }
+
+    /**
+     * 每 20 tick 复核（由 {@link #tickServer} 调用，照 {@code ShortRangeLinkerBlockEntity.revalidate}）：
+     * 频道同链冲突顺延 + onPhysicsBody 标志刷新——两个体经轴承连接后频道空间自动合并、断开后自动恢复，
+     * 同体冲突由复核 + 顺延兜底；非物理体上 register 返回 -1 不注册（频道保持存档值）。
+     */
+    private void revalidateChain() {
+        int actual = ControlDeskRegistry.register(this.channel, this);
+        if (actual >= 0 && actual != this.channel) {
+            this.channel = actual;
+            this.setChanged();
+        }
+        refreshOccupiedChannels();
+        boolean onBody = SableCompat.getContainingSubLevel(this) != null;
+        if (onBody != this.onPhysicsBody) {
+            this.onPhysicsBody = onBody;
+            notifyChange();
+        }
     }
 
     public boolean isInstalled(ControlType type) {
@@ -1495,6 +1534,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
      */
     public static void tickServer(Level level, BlockPos pos, BlockState state, ControlDeskBlockEntity be) {
         if (level == null || level.isClientSide) return;
+        // 每 20 tick 复核：频道同链冲突顺延 + onPhysicsBody 标志刷新（链动态变化兜底，照 ShortRangeLinkerBlockEntity）
+        if (level.getServer() != null && level.getServer().getTickCount() % 20 == 0) {
+            be.revalidateChain();
+        }
         boolean hasJoystick = be.joystickInstalled;
         boolean hasJoystick2 = be.joystick2Installed;
         boolean hasPedal = be.pedalInstalled;
@@ -2292,6 +2335,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_OCCUPIED_CHANNELS)) {
             occupiedChannels = tag.getIntArray(TAG_OCCUPIED_CHANNELS);
         }
+        if (tag.contains(TAG_ON_PHYSICS_BODY)) {
+            onPhysicsBody = tag.getBoolean(TAG_ON_PHYSICS_BODY);
+        }
         if (tag.contains(TAG_MONITOR_2_GRID)) {
             getMonitor2Grid().load(registries, tag.getCompound(TAG_MONITOR_2_GRID));
         }
@@ -2442,6 +2488,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putInt(TAG_THROTTLE_2_RETURN_TIME, throttle2ReturnTime);
         tag.putInt(TAG_CHANNEL, channel);
         tag.putIntArray(TAG_OCCUPIED_CHANNELS, occupiedChannels);
+        // 是否在物理体上（运行时标志，服务端判定；客户端 GUI 据此显示「只在物理体上可用」提示）
+        tag.putBoolean(TAG_ON_PHYSICS_BODY, onPhysicsBody);
         // monitor_2 表面网格：随 BE 更新包同步（客户端读取后即可渲染表面模块）
         if (monitor2Grid != null) {
             tag.put(TAG_MONITOR_2_GRID, monitor2Grid.save(registries));

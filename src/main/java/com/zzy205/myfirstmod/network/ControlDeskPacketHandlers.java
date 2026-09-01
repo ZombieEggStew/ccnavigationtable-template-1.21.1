@@ -22,15 +22,16 @@ public final class ControlDeskPacketHandlers {
     private ControlDeskPacketHandlers() {}
 
     public static void register(PayloadRegistrar registrar) {
-        // 客户端→服务端：保存 controlDesk 全局频道（服务端权威 + 落盘 + 蓝图兼容）
+        // 客户端→服务端：保存 controlDesk 物理体作用域频道（服务端权威 + 落盘 + 蓝图兼容；非物理体忽略）
         registrar.playToServer(
                 ControlDeskChannelPayload.TYPE,
                 ControlDeskChannelPayload.STREAM_CODEC,
                 (payload, ctx) -> {
                     var be = PacketHelper.findBE(ctx.player().level(), payload.pos(), ControlDeskBlockEntity.class);
-                    if (be != null) {
-                        be.setChannel(payload.channel());
-                    }
+                    if (be == null) return;
+                    // 非物理体严格不注册：忽略频道改动（与「非物理体不链接」语义一致，照 ShortRangeLinkerPacketHandlers）
+                    if (!be.isOnPhysicsBody()) return;
+                    be.setChannel(payload.channel());
                 }
         );
 

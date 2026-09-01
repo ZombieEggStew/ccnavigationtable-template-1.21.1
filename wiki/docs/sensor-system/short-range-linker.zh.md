@@ -42,7 +42,7 @@
 
 | 方法 | 返回 | 说明 |
 |---|---|---|
-| `getPeripheral(channel)` | peripheral / nil | 目标链接器所附着方块的外设（链接器需贴在目标方块上；Capability 查询，主线程执行） |
+| `getPeripheral(channel)` | peripheral / nil | 本体内频道 `channel` 对应设备的外设：频道被链接器占用 → 链接器所附着方块的外设；**频道被[控制台](../control-desk/overview.zh.md)占用 → 控制台自身外设**（同一物理体频道空间；Capability 查询，主线程执行） |
 | `getRedstoneOutput(channel)` | number | 目标链接器当前的红石输出信号（0-15） |
 | `getRedstoneInput(channel)` | number | 目标链接器位置当前接收到的最强红石信号（0-15） |
 | `setRedstoneOutput(channel, signal)` | - | 写目标链接器的红石输出（自动钳位 0-15），更新方块的充能状态与相邻红石 |

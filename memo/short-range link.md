@@ -14,7 +14,7 @@
 2. **非物理体严格不链接**：链接器不在任何 Sable 物理体上时**不注册频道**，Lua 查询一律返回 nil，GUI 显示「需放置在物理体上」。
 3. **同体频道唯一 + 冲突顺延**（详见第九节「频道唯一性语义」）。
 4. **Lua API（全局 API，模块 = `ccpe.sensor_system`，作用域 = 调用电脑所在物理体；已落地，原计划 `ccpe.link` 废弃）**：
-   - `getPeripheral(channel)` → 本体内频道 `channel` 的链接器附着方块外设（Capability 查询，mainThread=true）
+   - `getPeripheral(channel)` → 本体内频道 `channel` 的目标设备外设：链接器 → 附着方块外设；**控制台（controlDesk）也占用同一频道空间**（`ControlDeskRegistry` 委托本注册表）→ 返回控制台自身外设（Capability 查询，mainThread=true）
    - `getRedstoneOutput(channel)` / `getRedstoneInput(channel)` → 目标链接器红石输出 / 输入（mainThread=false）
    - `setRedstoneOutput(channel, signal)` → 写目标链接器红石输出并更新方块 POWERED（mainThread=true）
    - **作用域解析照抄 `SensorSystemAPI.resolveSubLevel()`**：`computer.getLevel()` + `computer.getPosition()` → `SableCompat.getContainingSubLevel` → `getConnectedChain` 得链 UUID 集合 → 在该链内查频道。**实现 = 链 UUID 集合在 `SensorSystemAPI.update()`（服务端主线程）缓存进 volatile `chainUuids`，Lua 线程只读**（照 SensorSystemAPI 高频缓存模式；顺带避免红石读方法在电脑线程直接碰 Sable，最多滞后 1 tick）。

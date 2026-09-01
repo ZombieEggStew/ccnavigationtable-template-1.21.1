@@ -29,7 +29,9 @@ import java.util.List;
  *   <li>频道滚轮条（第一条配置，逻辑对齐 {@link MonitorMenuScreen}：跳过已占用频道，关闭时经 {@link ControlDeskChannelPayload} 保存）</li>
  *   <li>已安装控件列表（物品栏图标 + 控件名称，{@link InstalledModulesList}，数据来自客户端 BE 安装状态；点击行打开对应模块配置菜单）</li>
  * </ol>
- * 频道复用 PE/Monitor 共享的全局频道注册表（{@code GlobalChannelRegistry}），频道全局唯一。
+ * 频道复用短程信号链接器的物理体作用域频道空间（{@code ShortRangeLinkerRegistry}）：只在控制台所在
+ * 物理体（含约束链）内寻址；控制台不在物理体上时不显示频道条、显示「只在物理体上可用」提示（照
+ * {@link ShortRangeLinkerScreen}）。
  */
 public class ControlDeskConfigScreen extends AbstractMonitorScreen {
 
@@ -74,18 +76,23 @@ public class ControlDeskConfigScreen extends AbstractMonitorScreen {
                 && this.minecraft.level.getBlockEntity(deskPos) instanceof ControlDeskBlockEntity be) {
             desk = be;
         }
+        boolean onBody = desk != null && desk.isOnPhysicsBody();
         int channel = desk != null ? desk.getChannel() : 0;
         int[] occupied = desk != null ? desk.getOccupiedChannels() : new int[0];
 
-        // 1. 频道滚轮条（与 MonitorMenuScreen 第一条配置完全相同：跳过已占用频道）
-        this.channelBar = new ScrollValueBar(
-                winLeft, winTop + CHANNEL_BAR_Y, BAR_TEX_W, BAR_TEX_H,
-                channel, channel, occupied)
-            .withIcon(MyIcons.CHANNEL)
-            .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.channel_title"))
-            .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"))
-            .addToolTipInstruction(Component.translatable("gui.ccpe.shift_scroll_faster"));
-        this.addRenderableWidget(this.channelBar);
+        // 1. 频道滚轮条（与 MonitorMenuScreen 第一条配置完全相同：跳过已占用频道）；
+        //    仅在物理体上显示（非物理体不注册频道，照 ShortRangeLinkerScreen 提示「只在物理体上可用」）
+        this.channelBar = null;
+        if (onBody) {
+            this.channelBar = new ScrollValueBar(
+                    winLeft, winTop + CHANNEL_BAR_Y, BAR_TEX_W, BAR_TEX_H,
+                    channel, channel, occupied)
+                .withIcon(MyIcons.CHANNEL)
+                .addToolTipTitle(Component.translatable("gui.ccpe.control_desk.channel_title"))
+                .addToolTipInstruction(Component.translatable("gui.ccpe.scroll_to_change"))
+                .addToolTipInstruction(Component.translatable("gui.ccpe.shift_scroll_faster"));
+            this.addRenderableWidget(this.channelBar);
+        }
 
         // 2. 已安装控件列表（物品栏图标 + 控件名称；按 ControlType 顺序列出已安装的控件，点击行打开对应模块配置菜单）
         //    拓展坞（DOCK）/ 挡板（BAFFLE）仅切换模型形态、无可配置项，不加入列表
@@ -138,8 +145,11 @@ public class ControlDeskConfigScreen extends AbstractMonitorScreen {
 
     @Override
     public void onClose() {
-        // 频道写回服务端 BE（服务端权威：注册到全局频道注册表 + saveAdditional 落盘 + getUpdatePacket 同步 + 蓝图兼容）
-        PacketDistributor.sendToServer(new ControlDeskChannelPayload(deskPos, channelBar.getValue()));
+        // 频道写回服务端 BE（服务端权威：注册到物理体作用域频道注册表 + saveAdditional 落盘 + getUpdatePacket 同步 + 蓝图兼容）；
+        // 非物理体没有频道条（不发送，服务端也拒绝处理，照 ShortRangeLinkerScreen）
+        if (this.channelBar != null) {
+            PacketDistributor.sendToServer(new ControlDeskChannelPayload(deskPos, channelBar.getValue()));
+        }
         super.onClose();
     }
 
@@ -153,5 +163,12 @@ public class ControlDeskConfigScreen extends AbstractMonitorScreen {
         // 标题：控制台
         g.drawString(this.font, Component.translatable("block.ccpe.my_control_desk"),
                 winLeft + TITLE_X, winTop + TITLE_Y, TITLE_COLOR, false);
+
+        // 非物理体：频道条位置显示「只在物理体上可用」提示（照 ShortRangeLinkerScreen）
+        if (this.channelBar == null) {
+            Component msg = Component.translatable("gui.ccpe.short_range_linker.require_body");
+            int tx = winLeft + (WIN_W - this.font.width(msg)) / 2;
+            g.drawString(this.font, msg, tx, winTop + CHANNEL_BAR_Y + 10, 0xFFFFFF, true);
+        }
     }
 }

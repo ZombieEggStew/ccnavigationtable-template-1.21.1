@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.compat.cc;
 
 import com.zzy205.myfirstmod.block.AicBlock;
+import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.FmcBlock;
 import com.zzy205.myfirstmod.block.PitotTubeBlock;
 import com.zzy205.myfirstmod.block.ShortRangeLinkerBlock;
@@ -88,7 +89,8 @@ import java.util.UUID;
  * -- {{type="static_port", pos={x,y,z}, pos_rel={x,y,z}, altitude=..., pressure=...},
  * --  {type="pitot_tube",  pos={x,y,z}, pos_rel={x,y,z}, speed=..., air_speed=...},
  * --  {type="ins",         pos={x,y,z}, pos_rel={x,y,z}}, ...}
- * local sensor = ss.getPeripheral(1)    -- 本机物理体（含约束链）上频道 1 的链接器附着的外设（寻址模型，频道 = 目标链接器地址）
+ * local sensor = ss.getPeripheral(1)    -- 本机物理体（含约束链）上频道 1 的设备外设（寻址模型，频道 = 目标设备地址；链接器 → 附着外设，控制台 → 控制台外设）
+ * local desk = ss.getPeripheral(2)      -- 频道 2 被控制台占用 → 返回控制台外设（ccpe:control_desk）
  * print(ss.getRedstoneInput(2))         -- 目标链接器位置的红石输入
  * ss.setRedstoneOutput(2, 15)           -- 写目标链接器红石输出（相邻红石线随之响应）
  * }</pre>
@@ -913,31 +915,42 @@ public class SensorSystemAPI implements ILuaAPI {
 
     // ═══════════════ 短程信号链接器（并入 sensor_system：原 ccpe.link 的四个方法） ═══════════════
     //
-    // 寻址模型：频道号是链接器在物理体内的「地址」（同体内 1:1，冲突自动顺延，见
+    // 寻址模型：频道号是设备在物理体内的「地址」（同体内 1:1，冲突自动顺延，见
     // ShortRangeLinkerRegistry），查询方（电脑）不需要自己的频道号；
     // 作用域 = 调用电脑所在物理体（含约束链），由 update() 主线程刷新的 chainUuids 缓存决定
     // （电脑不在物理体上 → 空集合 → 一律 nil，严格语义与「非物理体不链接」一致）。
+    // 频道空间同时容纳链接器与控制台：getPeripheral 先找链接器（返回附着方块外设），
+    // 频道被控制台占用时返回控制台自身外设（ControlDeskRegistry 委托同一注册表）。
 
     /**
-     * 本机物理体（含约束链）内频道 {@code channel} 的链接器所附着方块的外设（IPeripheral）。
-     * <p>
-     * 电脑不在任何物理体上 / 频道未被同体链接器占用 / 附着方块无 CC:T 外设时返回 nil。
+     * 本机物理体（含约束链）内频道 {@code channel} 对应设备的外设（IPeripheral）：
+     * <ul>
+     *   <li>频道被链接器占用 → 链接器所附着方块的外设；</li>
+     *   <li>频道被控制台占用 → 控制台自身外设（{@code ccpe:control_desk}）。</li>
+     * </ul>
+     * 电脑不在任何物理体上 / 频道未被同体设备占用 / 附着方块无 CC:T 外设时返回 nil。
      *
-     * @param channel 目标链接器的频道号
-     * @return 目标链接器附着方块的外设；未命中返回 nil
+     * @param channel 目标设备的频道号
+     * @return 目标设备外设；未命中返回 nil
      */
     @LuaFunction(mainThread = true)
     public final @Nullable Object getPeripheral(int channel) {
-        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.get(chainUuids, channel);
-        if (linker == null) return null;
-        Level level = linker.getLevel();
-        if (level == null) return null;
-        BlockState state = linker.getBlockState();
-        BlockPos attachedPos = ShortRangeLinkerBlock.getAttachedPos(state, linker.getBlockPos());
-        BlockEntity attached = level.getBlockEntity(attachedPos);
-        // 附着方块自身就是 CC:T 外设（如 Monitor）→ 直接返回；否则走 Capability 查询
-        if (attached instanceof IPeripheral p) return p;
-        return level.getCapability(PeripheralCapability.get(), attachedPos, sideFromAttachedView(state));
+        // 链接器：返回附着方块外设
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        if (linker != null) {
+            Level level = linker.getLevel();
+            if (level == null) return null;
+            BlockState state = linker.getBlockState();
+            BlockPos attachedPos = ShortRangeLinkerBlock.getAttachedPos(state, linker.getBlockPos());
+            BlockEntity attached = level.getBlockEntity(attachedPos);
+            // 附着方块自身就是 CC:T 外设（如 Monitor）→ 直接返回；否则走 Capability 查询
+            if (attached instanceof IPeripheral p) return p;
+            return level.getCapability(PeripheralCapability.get(), attachedPos, sideFromAttachedView(state));
+        }
+        // 控制台：返回控制台自身外设（与链接器共用同一物理体作用域频道空间）
+        ControlDeskBlockEntity desk = ControlDeskRegistry.get(chainUuids, channel);
+        if (desk != null) return desk.getPeripheral();
+        return null;
     }
 
     /**
@@ -946,7 +959,7 @@ public class SensorSystemAPI implements ILuaAPI {
      */
     @LuaFunction
     public final int getRedstoneOutput(int channel) {
-        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.get(chainUuids, channel);
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
         return linker != null ? linker.getRedstoneOutput() : 0;
     }
 
@@ -956,7 +969,7 @@ public class SensorSystemAPI implements ILuaAPI {
      */
     @LuaFunction
     public final int getRedstoneInput(int channel) {
-        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.get(chainUuids, channel);
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
         return linker != null ? linker.getRedstoneInput() : 0;
     }
 
@@ -966,7 +979,7 @@ public class SensorSystemAPI implements ILuaAPI {
      */
     @LuaFunction(mainThread = true)
     public final void setRedstoneOutput(int channel, int signal) {
-        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.get(chainUuids, channel);
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
         if (linker != null) linker.setRedstoneOutput(Math.clamp(signal, 0, 15));
     }
 

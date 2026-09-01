@@ -42,7 +42,7 @@ Computers on the same physics body (including constraint chains) use `require("c
 
 | Method | Returns | Description |
 |---|---|---|
-| `getPeripheral(channel)` | peripheral / nil | Peripheral of the block the target linker is attached to (the linker must be placed on the target block; capability query, runs on the main thread) |
+| `getPeripheral(channel)` | peripheral / nil | Peripheral of the device on channel `channel` within this body: if the channel is held by a linker → the peripheral of the block the linker is attached to; **if the channel is held by a [Control Desk](../control-desk/overview.md) → the desk's own peripheral** (same per-body channel space; capability query, runs on the main thread) |
 | `getRedstoneOutput(channel)` | number | Current redstone output signal (0-15) of the target linker |
 | `getRedstoneInput(channel)` | number | Strongest redstone signal (0-15) currently received at the target linker's position |
 | `setRedstoneOutput(channel, signal)` | - | Write the target linker's redstone output (automatically clamped to 0-15), updating the block's powered state and adjacent redstone |

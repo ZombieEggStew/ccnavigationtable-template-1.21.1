@@ -31,8 +31,8 @@
 从控制台外设经 `getModule("monitor")` 获取（外设类型 `"ccpe:monitor_2"`）；未安装监视器 2 时返回 `nil`：
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local m = desk.getModule("monitor")   -- 未安装监视器 2 返回 nil
 ```
 
@@ -61,8 +61,8 @@ local m = desk.getModule("monitor")   -- 未安装监视器 2 返回 nil
 ## 示例
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 
 -- 直接从 10×8 网格读取模块
 local mod = desk.getMonitor2CellModule(3, 4)
