@@ -141,9 +141,12 @@ public class SensorSystemAPI implements ILuaAPI {
     /** 重力常数：重力（pN）= 质量（kg）× {@value}（Sable 物理单位） */
     private static final double GRAVITY_CONSTANT = 11.0;
 
+    /** FMC 参考点 = 方块中心：BlockPos（角点）到方块单元中心的偏移（半格） */
+    private static final double BLOCK_CENTER_OFFSET = 0.5;
+
     // ── 物理数据缓存（门控：机体（含约束链）上有 ≥1 个 FMC 才计算，与传感器存在性相关） ──
 
-    /** 重心相对最后放置的 FMC（含 AIC）的局部坐标（plot 帧差值，机体局部系，不随旋转变化） */
+    /** 重心相对最后放置的 FMC（含 AIC）的方块中心的局部坐标（plot 帧差值，机体局部系，不随旋转变化） */
     private volatile boolean comRelAvailable = false;
     private volatile double comRelX = 0;
     private volatile double comRelY = 0;
@@ -156,6 +159,12 @@ public class SensorSystemAPI implements ILuaAPI {
     /** 所在物理体（含约束链）总质量（kg） */
     private volatile boolean chainMassAvailable = false;
     private volatile double chainMassKg = 0;
+
+    /** 所在物理体（含约束链）总质心相对最后放置的 FMC 方块中心的局部坐标（plot 帧差值，机体局部系） */
+    private volatile boolean chainComRelAvailable = false;
+    private volatile double chainComRelX = 0;
+    private volatile double chainComRelY = 0;
+    private volatile double chainComRelZ = 0;
 
     // ── 附着方块应力网络缓存（门控：机体（含约束链）上有 ≥1 个 FMC；读数 = 最后放置的 FMC 的附着面方块） ──
 
@@ -243,6 +252,8 @@ public class SensorSystemAPI implements ILuaAPI {
             massKg = 0;
             chainMassAvailable = false;
             chainMassKg = 0;
+            chainComRelAvailable = false;
+            chainComRelX = chainComRelY = chainComRelZ = 0;
             resetAttachedStress();
             propellerGateAvailable = false;
             return;
@@ -354,7 +365,7 @@ public class SensorSystemAPI implements ILuaAPI {
         if (physicsGate) {
             // 重心相对 FMC（最后放置的 FMC 传感器，AIC 等同 FMC）=
             //   重心相对物理体原点偏移（getCenterOfMassLocal 已做 plot−rotationPoint 转换）
-            //   − FMC 相对物理体原点偏移（lastFmcRel = toRelativePos），
+            //   − FMC 方块中心相对物理体原点偏移（lastFmcRel = toRelativePos + 0.5 半格），
             // 两者同为 plot 帧差值（机体局部系），不随物理体移动/旋转变化；参考点不依赖电脑位置。
             Vec3 comLocal = SableCompat.getCenterOfMassLocal(sub);
             Vec3 fmcRel = lastFmcRel(sub, entries);
@@ -386,6 +397,21 @@ public class SensorSystemAPI implements ILuaAPI {
                 chainMassKg = 0;
             }
 
+            // 链总质心相对 FMC（最后放置的 FMC 的方块中心，AIC 等同 FMC）=
+            //   链质心相对物理体原点偏移（getChainCenterOfMassLocal，世界系加权平均后转回 plot 帧）
+            //   − FMC 方块中心相对物理体原点偏移（fmcRel，与上方重心同一参考点），
+            // 两者同为 plot 帧差值（机体局部系），不随物理体移动/旋转变化。
+            Vec3 chainCom = SableCompat.getChainCenterOfMassLocal(sub);
+            if (chainCom != null && fmcRel != null) {
+                chainComRelAvailable = true;
+                chainComRelX = chainCom.x - fmcRel.x;
+                chainComRelY = chainCom.y - fmcRel.y;
+                chainComRelZ = chainCom.z - fmcRel.z;
+            } else {
+                chainComRelAvailable = false;
+                chainComRelX = chainComRelY = chainComRelZ = 0;
+            }
+
             // 附着方块应力网络（最后放置的 FMC 的附着面方块；与质量/重心同一 tick 快照）
             computeAttachedStress(sub, entries);
         } else {
@@ -395,6 +421,8 @@ public class SensorSystemAPI implements ILuaAPI {
             massKg = 0;
             chainMassAvailable = false;
             chainMassKg = 0;
+            chainComRelAvailable = false;
+            chainComRelX = chainComRelY = chainComRelZ = 0;
             resetAttachedStress();
         }
 
@@ -630,16 +658,16 @@ public class SensorSystemAPI implements ILuaAPI {
     // ═══════════════ 物理数据（门控：机体（含约束链）上有 ≥1 个 FMC 才有值） ═══════════════
 
     /**
-     * 物理体重心相对于<b>最后放置的 FMC</b>（含 AIC，AIC 等同 FMC）的机体局部系位置
-     * {@code {x, y, z}}。
+     * 物理体重心相对于<b>最后放置的 FMC</b>（含 AIC，AIC 等同 FMC）的<b>方块中心</b>
+     * 的机体局部系位置 {@code {x, y, z}}。
      * <p>
-     * = 重心相对物理体原点的偏移 − FMC 相对物理体原点的偏移（两者均经 Sable 的
+     * = 重心相对物理体原点的偏移 − FMC 方块中心相对物理体原点的偏移（两者均经 Sable 的
      * {@code plot − rotationPoint} 转换，plot 帧差值，与 {@link #getSensors()} 的
      * {@code pos} 同帧），<b>不随物理体移动/旋转变化</b>；参考点 = 所在物理体（含约束链）
-     * 上最后放置的 FMC 传感器（多个 FMC 时取最后）。
+     * 上最后放置的 FMC 的方块中心（BlockPos 角点 + 半格，多个 FMC 时取最后）。
      * <p>
      * 注：Sable 的物理体原点（rotationPoint）运行时与质心同步，因此该值 ≈
-     * FMC 相对物理体原点的偏移取反（重心在机体上相对 FMC 的方位）。
+     * FMC 方块中心相对物理体原点的偏移取反（重心在机体上相对 FMC 方块中心的方位）。
      * <p>
      * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
      * （FMC，ccpe:fmc），否则返回 nil；不在物理体上或质量数据不可用同样返回 nil。
@@ -696,6 +724,34 @@ public class SensorSystemAPI implements ILuaAPI {
     @LuaFunction
     public final @Nullable Double getPhysicsChainGravityForce() {
         return chainMassAvailable ? chainMassKg * GRAVITY_CONSTANT : null;
+    }
+
+    /**
+     * 电脑所在物理体（含全部约束链，轴承等）的<b>总质心</b>相对于<b>最后放置的 FMC</b>
+     * （含 AIC，AIC 等同 FMC）的<b>方块中心</b>的机体局部系位置 {@code {x, y, z}}
+     * （plot 帧差值，与 {@link #getPhysicsCenterOfMassRel()} 同一参考点，不随物理体
+     * 移动/旋转变化）。
+     * <p>
+     * = 链质心相对电脑所在物理体原点的偏移（{@link SableCompat#getChainCenterOfMassLocal}，
+     * 世界系按质量加权平均链上各 sub-level 的合并质心后转回 plot 帧）
+     * − FMC 方块中心相对物理体原点的偏移（与 {@link #getPhysicsCenterOfMassRel()} 相同）。
+     * <p>
+     * Sable 没有链级质心 API（各 sub-level 的 {@code MergedMassTracker} 只合并自身 + 其 plot
+     * 内 contraptions），本方法在世界系按质量加权平均链上各 sub-level 的合并质心，再经电脑所在
+     * 物理体的 pose 逆变换转回其 plot 帧并相对其原点（与 {@link #getPhysicsChainMass()} 对应）。
+     * <p>
+     * <b>门控（存在性）</b>：与其余 FMC 物理数据方法相同——所在物理体（含约束链）上必须有
+     * ≥1 个飞行管理计算机（FMC，ccpe:fmc），否则返回 nil；不在物理体上或底层物理数据不可用
+     * 同样返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getPhysicsChainCenterOfMassRel() {
+        if (!chainComRelAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("x", chainComRelX);
+        m.put("y", chainComRelY);
+        m.put("z", chainComRelZ);
+        return m;
     }
 
     /**
@@ -1054,16 +1110,19 @@ public class SensorSystemAPI implements ILuaAPI {
     }
 
     /**
-     * 最后放置（最新注册）的 FMC 传感器（AIC 等同 FMC，也登记 FMC 类型）相对物理体原点的
-     * 局部坐标（plot 帧，与 {@link SableCompat#getCenterOfMassLocal} 同帧，可直接相减）。
-     * 参考点语义：机体上无 FMC（门控）时返回 null。
+     * 最后放置（最新注册）的 FMC 传感器（AIC 等同 FMC，也登记 FMC 类型）的<b>方块中心</b>
+     * 相对物理体原点的局部坐标（plot 帧，与 {@link SableCompat#getCenterOfMassLocal} 同帧，
+     * 可直接相减）。参考点 = FMC 方块中心 = BlockPos（角点）+ {@link #BLOCK_CENTER_OFFSET}
+     * 半格偏移；机体上无 FMC（门控）时返回 null。
      */
     private @Nullable Vec3 lastFmcRel(SubLevel sub, List<SensorEntry> entries) {
         SensorEntry lastFmc = null;
         for (SensorEntry e : entries)
             if (e.type() == SensorType.FMC) lastFmc = e; // 注册顺序 = 放置顺序，取最后
         if (lastFmc == null) return null;
-        return SableCompat.toRelativePos(sub, lastFmc.pos());
+        Vec3 rel = SableCompat.toRelativePos(sub, lastFmc.pos());
+        if (rel == null) return null;
+        return new Vec3(rel.x + BLOCK_CENTER_OFFSET, rel.y + BLOCK_CENTER_OFFSET, rel.z + BLOCK_CENTER_OFFSET);
     }
 
     /**

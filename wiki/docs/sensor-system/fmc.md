@@ -8,7 +8,8 @@ The physics body must have **at least 1 FMC** (`ccpe:fmc`) installed, otherwise 
 
 | Method | Returns | Description |
 |---|---|---|
-| `getPhysicsCenterOfMassRel()` | table / nil | Center of mass **relative to the most recently placed FMC** (AIC counts as FMC), body-local `{x, y, z}` |
+| `getPhysicsCenterOfMassRel()` | table / nil | Center of mass **relative to the block center of the most recently placed FMC** (AIC counts as FMC), body-local `{x, y, z}` |
+| `getPhysicsChainCenterOfMassRel()` | table / nil | Total center of mass of the whole chain, body-local `{x, y, z}` **relative to the block center of the most recently placed FMC** (AIC counts as FMC) |
 | `getPhysicsMass()` | number / nil | Mass of the computer's physics body (kg) |
 | `getPhysicsChainMass()` | number / nil | Total mass of the body **including all constraint chains** (kg) |
 | `getPhysicsGravityForce()` | number / nil | Gravity force of the body (pN = mass × 11) |
@@ -18,18 +19,30 @@ The physics body must have **at least 1 FMC** (`ccpe:fmc`) installed, otherwise 
 
 ## Center of mass semantics
 
-`getPhysicsCenterOfMassRel()` returns the **body-local** (plot-frame) offset of the center of mass from the **most recently placed FMC** on the body (including constraint chains; with several FMCs/AICs, the last one placed wins):
+`getPhysicsCenterOfMassRel()` returns the **body-local** (plot-frame) offset of the center of mass from the **block center of the most recently placed FMC** on the body (including constraint chains; with several FMCs/AICs, the last one placed wins):
 
 ```
-COM relative to FMC = (COM relative to the physics body origin) − (FMC relative to the physics body origin)
+COM relative to FMC block center = (COM relative to the physics body origin) − (FMC block center relative to the physics body origin)
 ```
 
-Both offsets go through the Sable conversion `plot − rotationPoint` (same frame as the `pos` field in `getSensors()`), so the result **does not change** as the body moves or rotates — stable for identifying where the center of mass sits on the vehicle (e.g. how far forward/up it is from the FMC).
+The FMC reference point is its **`BlockPos` (corner) plus half a block (`+0.5`)**, i.e. the center of the block cell, not the block corner. Both offsets go through the Sable conversion `plot − rotationPoint` (same frame as the `pos` field in `getSensors()`), so the result **does not change** as the body moves or rotates — stable for identifying where the center of mass sits on the vehicle (e.g. how far forward/up it is from the FMC's center).
 
 !!! note "Body origin = center of mass"
-    Sable keeps the physics body origin (`rotationPoint`) in sync with the center of mass at runtime, so the first term above is ≈ 0 and this value is ≈ **the FMC's own offset from the body origin, negated** (i.e. where the COM sits relative to the FMC).
+    Sable keeps the physics body origin (`rotationPoint`) in sync with the center of mass at runtime, so the first term above is ≈ 0 and this value is ≈ **the FMC block center's own offset from the body origin, negated** (i.e. where the COM sits relative to the FMC's center).
 
 - Use `getOrientation()` to rotate this vector into the world frame if needed.
+
+### Chain center of mass
+
+`getPhysicsChainCenterOfMassRel()` returns the **total center of mass** of the whole physics chain (including constraint connections such as bearings; always including the computer's body), as a body-local offset **relative to the block center of the most recently placed FMC** on the body (including constraint chains; with several FMCs/AICs, the last one placed wins):
+
+```
+chain COM rel. to FMC block center = (chain COM rel. to the computer's body origin) − (FMC block center rel. to the computer's body origin)
+```
+
+The first term is the mass-weighted average of each body's COM in world Σ(mᵢ·comᵢ)/Σmᵢ, inverse-transformed into the computer's plot frame − rotationPoint; the second term uses the same reference point as `getPhysicsCenterOfMassRel()` (the FMC's `BlockPos` corner plus half a block). The result is in the same frame as `pos` in `getSensors()` and stable under body motion/rotation.
+
+Sable has no built-in chain COM API (`MergedMassTracker` only merges a single body itself plus the contraptions in its plot); this mod computes the value on the server every tick. Gated exactly like `getPhysicsChainMass()` (the body — including constraint chains — must have ≥ 1 FMC).
 
 ## Gravity
 

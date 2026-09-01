@@ -403,6 +403,44 @@ public final class SableCompat {
     }
 
     /**
+     * 获取约束链（含全部约束连接，轴承等；始终包含自身）的<b>总质心</b>在局部（plot）坐标系中
+     * 相对<b>参考物理体原点（质心枢轴）</b>的偏移。
+     * <p>
+     * Sable 没有链级质心 API：{@code MergedMassTracker} 只合并单个 sub-level 自身方块 +
+     * 其 plot 内 contraptions，约束链上其他 sub-level 各有独立的 MassTracker / pose。
+     * 因此这里在世界系按质量加权平均链上各 sub-level 的合并质心
+     * （{@code Σ(mᵢ·comᵢ)/Σmᵢ}，用 {@link #getMass} + {@link #getCenterOfMass}，后者已是世界系），
+     * 再经参考 sub-level 的 pose 逆变换转回其 plot 帧并减去 rotationPoint——与
+     * {@link #toRelativePos} / {@link #getCenterOfMassLocal} 同帧（plot 帧差值），
+     * 不随物理体移动/旋转变化。
+     *
+     * @return 链质心相对参考物理体原点的偏移（plot 帧）；失败或总质量非正时返回 null
+     */
+    public static Vec3 getChainCenterOfMassLocal(SubLevel subLevel) {
+        if (subLevel == null) return null;
+        try {
+            List<SubLevel> chain = getConnectedChain(subLevel);
+            double totalMass = 0.0;
+            Vector3d weighted = new Vector3d();
+            for (SubLevel sl : chain) {
+                Double m = getMass(sl);
+                Vec3 com = getCenterOfMass(sl); // 世界系合并质心
+                if (m == null || com == null) continue;
+                totalMass += m;
+                weighted.fma(m, new Vector3d(com.x, com.y, com.z));
+            }
+            if (totalMass <= 0.0) return null;
+            weighted.div(totalMass);
+            Pose3dc pose = subLevel.logicalPose();
+            Vector3d local = pose.transformPositionInverse(weighted, new Vector3d());
+            Vector3dc rp = pose.rotationPoint();
+            return new Vec3(local.x - rp.x(), local.y - rp.y(), local.z - rp.z());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * 获取 SubLevel 及其所有约束连接的物理结构的总质量。
      */
     public static Double getChainMass(SubLevel subLevel) {

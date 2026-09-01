@@ -47,7 +47,7 @@ Plus per-block methods (see each page):
 - **Static Port** — `getAltitude()`, `getPressure()`, `getAverageAltitude()`, `getAveragePressure()`, `getWeightedAltitude()`, `getWeightedPressure()`
 - **Pitot Tube** — `getSpeed()`, `getAirSpeed()`, `getAverageSpeed()`, `getAverageAirSpeed()`
 - **INS** — `getAngles()`, `getPosition()`, `getBodyPosition()`, `getOrientation()`, `getAngularVelocity()`
-- **FMC** — `getPhysicsCenterOfMassRel()`, `getPhysicsMass()`, `getPhysicsChainMass()`, `getPhysicsGravityForce()`, `getPhysicsChainGravityForce()`, `getStressRemaining()`, `getStressCapacity()`, `initPropeller(N, S)`, `getPropellerRPM(F, P, V, θ?)`
+- **FMC** — `getPhysicsCenterOfMassRel()`, `getPhysicsMass()`, `getPhysicsChainMass()`, `getPhysicsGravityForce()`, `getPhysicsChainGravityForce()`, `getPhysicsChainCenterOfMassRel()`, `getStressRemaining()`, `getStressCapacity()`, `initPropeller(N, S)`, `getPropellerRPM(F, P, V, θ?)`
 - **Short-Range Signal Linker** — `getPeripheral(channel)`, `getRedstoneOutput(channel)`, `getRedstoneInput(channel)`, `setRedstoneOutput(channel, signal)`
 
 ## Reading semantics

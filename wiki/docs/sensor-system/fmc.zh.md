@@ -7,7 +7,8 @@
 
 | 方法 | 返回 | 说明 |
 |---|---|---|
-| `getPhysicsCenterOfMassRel()` | table / nil | 重心**相对最后放置的 FMC**（AIC 等同 FMC）的机体局部系位置 `{x, y, z}` |
+| `getPhysicsCenterOfMassRel()` | table / nil | 重心**相对最后放置的 FMC 的方块中心**（AIC 等同 FMC）的机体局部系位置 `{x, y, z}` |
+| `getPhysicsChainCenterOfMassRel()` | table / nil | 整条物理体链的**总质心**相对**最后放置的 FMC 的方块中心**（AIC 等同 FMC）的机体局部系位置 `{x, y, z}` |
 | `getPhysicsMass()` | number / nil | 电脑所在物理体的质量（kg） |
 | `getPhysicsChainMass()` | number / nil | 物理体**含全部约束链**的总质量（kg） |
 | `getPhysicsGravityForce()` | number / nil | 所在物理体的重力（pN = 质量 × 11） |
@@ -17,18 +18,30 @@
 
 ## 重心语义
 
-`getPhysicsCenterOfMassRel()` 返回重心相对**机体上最后放置的 FMC**（含约束链；多个 FMC/AIC 时取最后放置的那个）的**机体局部系**（plot 帧）偏移：
+`getPhysicsCenterOfMassRel()` 返回重心相对**机体上最后放置的 FMC**（含约束链；多个 FMC/AIC 时取最后放置的那个）的**方块中心**的**机体局部系**（plot 帧）偏移：
 
 ```
-重心相对 FMC = (重心相对物理体原点的偏移) − (FMC 相对物理体原点的偏移)
+重心相对 FMC 方块中心 = (重心相对物理体原点的偏移) − (FMC 方块中心相对物理体原点的偏移)
 ```
 
-两个偏移都经过 Sable 转换 `plot − rotationPoint`（与 `getSensors()` 的 `pos` 同一坐标系）——结果**不随物理体移动/旋转变化**，适合稳定地识别重心装在机体的哪个位置（比如离 FMC 前后/上下多远）。
+FMC 参考点 = 其 **`BlockPos`（角点）加半格（`+0.5`）**，即方块单元中心，不是方块角点。两个偏移都经过 Sable 转换 `plot − rotationPoint`（与 `getSensors()` 的 `pos` 同一坐标系）——结果**不随物理体移动/旋转变化**，适合稳定地识别重心装在机体的哪个位置（比如离 FMC 中心前后/上下多远）。
 
 !!! note "物理体原点 = 质心"
-    Sable 运行时会把物理体原点（`rotationPoint`）与质心保持同步，因此上式第一项 ≈ 0，该值 ≈ **FMC 相对物理体原点的偏移取反**（即重心相对 FMC 的方位）。
+    Sable 运行时会把物理体原点（`rotationPoint`）与质心保持同步，因此上式第一项 ≈ 0，该值 ≈ **FMC 方块中心相对物理体原点的偏移取反**（即重心相对 FMC 方块中心的方位）。
 
 - 需要世界系时，用 `getOrientation()` 把该向量旋转到世界。
+
+### 链质心
+
+`getPhysicsChainCenterOfMassRel()` 返回整条物理体链（含约束连接，如轴承；始终含电脑所在物理体）的**总质心**相对**机体上最后放置的 FMC**（含约束链；多个 FMC/AIC 时取最后放置的那个）的**方块中心**的机体局部系偏移：
+
+```
+链质心相对 FMC 方块中心 = (链质心相对电脑所在物理体原点的偏移) − (FMC 方块中心相对电脑所在物理体原点的偏移)
+```
+
+其中第一项 = 世界系按质量加权平均链上各物理体质心 Σ(mᵢ·comᵢ)/Σmᵢ，再经电脑所在物理体的 pose 逆变换转回其 plot 帧 − rotationPoint；第二项与 `getPhysicsCenterOfMassRel()` 同一参考点（FMC 的 `BlockPos` 角点 + 半格）。结果与 `getSensors()` 的 `pos` 同帧，不随物理体移动/旋转变化。
+
+Sable 没有现成的链质心 API（`MergedMassTracker` 只合并单个物理体自身 + 其 plot 内 contraptions），该值由本 mod 在服务端每 tick 计算。门控与 `getPhysicsChainMass()` 相同（机体含约束链上 ≥1 个 FMC）。
 
 ## 重力
 
