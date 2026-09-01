@@ -114,6 +114,7 @@ nav:
   - Aero Bearing:
     - Overview: aero-bearing/overview.md
   - Sensor System:
+    - Overview: sensor-system/overview.md
     - Static Port: sensor-system/static-port.md
     - Pitot Tube: sensor-system/pitot-tube.md
     - Inertial Navigation System: sensor-system/ins.md

@@ -39,7 +39,7 @@ A rotation speed controller optimized for CC:T control, avoiding the network cas
 ### [🍌 Aero Bearing](aero-bearing/overview.md)
 A Sable-physics bearing with direct axial power input. In **Lua Control mode** the rotation angle is set directly via Lua, skipping the stress-network angle accumulation — position your sail/control surface exactly.
 
-### [🛰️ Sensor System](sensor-system/static-port.md)
+### [🛰️ Sensor System](sensor-system/overview.md)
 Aviation sensors for physics bodies (Sable sub-levels), all readable from Lua via `ccpe.sensor_system`:
 
 - **[Static Port](sensor-system/static-port.md)** — pressure & altitude readings at the port's own position

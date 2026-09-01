@@ -41,7 +41,7 @@
 ### [🍌 航空轴承](aero-bearing/overview.md)
 Sable 物理轴承，直接轴向动力输入。**Lua 控制模式**下旋转角度由 Lua 直接设定，跳过应力网络角度累计——精确控制你的风帆/舵面角度。
 
-### [🛰️ 传感器系统](sensor-system/static-port.md)
+### [🛰️ 传感器系统](sensor-system/overview.zh.md)
 为物理体（Sable 子次元）设计的航空传感器，全部可通过 `ccpe.sensor_system` Lua API 读取：
 
 - **[静压孔](sensor-system/static-port.md)** — 读取静压孔所在位置的气压与高度
