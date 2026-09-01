@@ -1,8 +1,6 @@
 # 传感器系统
 
-> 面向物理体的航空传感器——气压、速度、姿态等均可通过 Lua 读取
-
-![pitot_tube](../img/pitot_tube.png)
+> 面向物理体的航空传感器
 
 **传感器系统**是一组可安装在物理体（Sable sub-level）上的航电方块。装到物理体上之后，**同一物理体**（含约束链）上的 CC:Tweaked 电脑即可通过同一个 Lua 模块读取传感器数据：`require("ccpe.sensor_system")`。
 

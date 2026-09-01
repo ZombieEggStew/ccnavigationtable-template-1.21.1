@@ -1,8 +1,7 @@
 # Sensor System
 
-> Aviation sensors for physics bodies — read pressure, speed, attitude and more from Lua
+> Aviation sensors for physics bodies
 
-![pitot_tube](../img/pitot_tube.png)
 
 The **Sensor System** is a set of attachable avionics blocks for physics bodies (Sable sub-levels). Once installed on a body, CC:Tweaked computers **on the same body** (including constraint chains) can read the sensors through a single Lua module: `require("ccpe.sensor_system")`.
 
