@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "minecraft:iron_trapdoor"
+    },
+    "X": {
+      "item": "create:copper_sheet"
+    },
+    "Y": {
+      "item": "create:copper_casing"
+    }
+  },
+  "pattern": [
+    "   ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:fluid_port"
+  }
+}
