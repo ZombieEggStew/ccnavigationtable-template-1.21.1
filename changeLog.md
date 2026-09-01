@@ -67,6 +67,8 @@
 1.1.1
 - **IMPORTANT!!!** Control desk channels are now **physics-body-scoped**, Check the wiki for more details(https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/control-desk/overview/).
 - **!?NEWNEW?!** Added the Fluid Port
-- **!?NEWNEW?!** Added the Short Range Linker, Check the wiki for more details.
+- **!?NEWNEW?!** Added the Short Range Linker, Check the wiki for more 
 - Fixed aero bearing not adjusting its mass when assembled properly
 - Fixed crash "Not building!" when opening the Diagram screen (Aeronautics) with a control desk inside an assembled physics body (Sable sub-level). 
+- 现在互动不会穿透monitor了
+- 为screen.writeField添加可选的颜色参数

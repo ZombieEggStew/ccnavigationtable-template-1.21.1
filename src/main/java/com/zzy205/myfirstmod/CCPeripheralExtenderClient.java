@@ -18,6 +18,7 @@ import com.zzy205.myfirstmod.block.MonitorRenderer;
 import com.zzy205.myfirstmod.block.MyModPartialModels;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
 import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
+import com.zzy205.myfirstmod.client.MonitorUseInterceptor;
 import com.zzy205.myfirstmod.client.MonitorBackgrounds;
 import com.zzy205.myfirstmod.client.MonitorOutlineRenderer;
 import com.zzy205.myfirstmod.client.ControlDeskPlacementOverlay;
@@ -59,6 +60,7 @@ public class CCPeripheralExtenderClient {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         MonitorGridOverlay.register();
         Monitor2GridOverlay.register();
+        MonitorUseInterceptor.register();
         ControlDeskPlacementOverlay.register();
         DeskTopGridOverlay.register();
         ControlDeskGhostPreviewRenderer.register();

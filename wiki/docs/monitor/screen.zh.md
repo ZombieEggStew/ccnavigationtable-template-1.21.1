@@ -69,11 +69,11 @@ print(cols, rows)
 screen.write("Hello\nCCPE")
 ```
 
-### screen.writeField(col, row, width, text, align?)
+### screen.writeField(col, row, width, text, align?, colour?)
 
 **在固定区域内写入文本**（每帧刷新定宽字段用，如时钟/计数器）。以 `(col, row)` 为起点、`width` 格宽的**单行区域**内写入 `text`：
 
-- 区域内**未写入文本的格子自动清空为空格**（前景色用当前 `setTextColour` 设置的颜色）——比如第一帧写 `"15"`、第二帧写 `"6"`，十位格子自动清空；
+- 区域内**未写入文本的格子自动清空为空格**（前景色用 `colour` 或当前 `setTextColour` 设置的颜色）——比如第一帧写 `"15"`、第二帧写 `"6"`，十位格子自动清空；
 - 区域内格子**背景色保留**（`fill` 底色不被清掉）；
 - 区域外完全不动；光标位置不变。
 
@@ -83,12 +83,15 @@ screen.write("Hello\nCCPE")
 - `"right"`：靠区域右缘，左侧留空（数字/时钟常用）
 - `"center"`：区域居中
 
+`colour` 前景色（可选，`0xRRGGBB`）：传了就用该颜色渲染本区域字符（含清空格），不传则用 `setTextColour` 设置的颜色（默认白色）。
+
 文本超过区域宽度时截断：左/中保留开头，右对齐保留末尾（printf `%2s` 风格）。
 
 ```lua
-screen.writeField(1, 1, 2, "15", "right")   -- |15|
-screen.writeField(1, 1, 2, "6",  "right")   -- | 6|  ← 十位自动清空
-screen.writeField(1, 2, 10, "LOADING", "center")
+screen.writeField(1, 1, 2, "15", "right")          -- |15|
+screen.writeField(1, 1, 2, "6",  "right")          -- | 6|  ← 十位自动清空
+screen.writeField(1, 2, 10, "LOADING", "center")   -- 当前前景色
+screen.writeField(1, 3, 10, "ALERT", "center", 0xFF0000)  -- 红色
 ```
 
 > **提示**：`writeField` 只清区域内字符、保留背景，适合「数字/文字在固定位置刷新」；要整体替换整层（含图形）用 `draw(batch)`，只替换单层用 `drawCells`/`drawShapes`。
@@ -127,6 +130,21 @@ screen.setTextColour(0x00FF00)
 
 ```lua
 screen.setOverflowMode("ellipsis")
+```
+
+### screen.setVisible(visible) / screen.getVisible()
+
+设置/读取整个屏幕的**渲染开关**（默认 `true`）：
+
+- 传 `false`：整个屏幕（9 宫格边框 + 格子内容 + 图形层）**都不再绘制**，显示为空白面板；
+- 传 `true`：恢复渲染。
+
+格子内容与所有设置（`write`/`fill`/`draw` 的内容、`setTextColour` 等）都保留，开关只影响是否显示；适合「按下按钮时隐藏屏幕」之类的效果。
+
+```lua
+screen.setVisible(false)   -- 隐藏整个屏幕
+screen.setVisible(true)    -- 恢复显示
+print(screen.getVisible()) -- true
 ```
 
 

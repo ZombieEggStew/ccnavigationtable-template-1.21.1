@@ -1101,6 +1101,13 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     }
 
     @Override
+    public void screenSetVisible(int id, boolean visible) {
+        if (!canMutateMonitor2Screen(id)) return;
+        getMonitor2Grid().getOrCreateScreenText(id).setVisible(visible);
+        monitor2Changed();
+    }
+
+    @Override
     public void screenFill(int id, int col, int row, int w, int h, int colour) {
         if (!canMutateMonitor2Screen(id)) return;
         getMonitor2Grid().getOrCreateScreenText(id).fill(col, row, w, h, colour);
@@ -1108,10 +1115,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     }
 
     @Override
-    public void screenWriteField(int id, int col, int row, int width, String text, String align) {
+    public void screenWriteField(int id, int col, int row, int width, String text, String align, Integer colour) {
         if (!canMutateMonitor2Screen(id)) return;
         ScreenText t = getMonitor2Grid().getOrCreateScreenText(id);
-        t.writeField(col, row, width, text, ScreenText.Align.byName(align));
+        t.writeField(col, row, width, text, ScreenText.Align.byName(align),
+                colour != null ? colour : t.getTextColour());
         monitor2Changed();
     }
 

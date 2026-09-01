@@ -44,6 +44,9 @@ public final class Screen9GridRenderer {
                                     BakedModel corner, BakedModel edge, BakedModel center,
                                     GridState.ScreenRegion scr, ScreenText text, ScreenPlane plane,
                                     int light, int overlay) {
+        // 屏幕渲染开关关闭：整个屏幕（9 宫格 + 内容）不绘制
+        if (text != null && !text.isVisible()) return;
+
         float cellSize = plane.cellSize();
         float borderSize = cellSize;
 

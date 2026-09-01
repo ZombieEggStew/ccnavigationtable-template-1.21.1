@@ -169,8 +169,9 @@ Create / Flywheel 证据（工作区）：
 - **旧存档屏幕文本不迁移**：旧自由定位格式（无 `cols` 字段）加载时清空重置（破坏性变更，已确认接受）。
 - `setTextScale` 保留为 setGrid 别名（旧 Lua 程序调用不报错，语义变为重设格子数）；`write` 的 z 参数移除（格子无层级，z 仅图形层用）。
 - **`drawCells`/`drawShapes` 单层替换（2026-08-22 追加，方案三定稿后补充）**：`draw(batch)` 保留整屏替换语义不变；新增两个单层方法解决「静态一层 + 动态一层」场景（进度条每 tick 只 `drawShapes` 1 包，替代 clearShapes+drawRect 的 2 包，且不误伤文本层）。参数结构与 `draw` 的 cells/shapes 段一致（外层 `{cells=...}`/`{shapes=...}`），解析逻辑与 `draw` 共用（`ScreenModuleHandle.parseCells/parseShapes`）；`ScreenText.replaceAll` 拆为 `replaceCells`（清格子+光标，不动图形）+ `replaceShapes`（清图形，不动格子）。验证项同步新增第 4、5 条。
-- **`writeField` 定宽字段（2026-08-22 追加）**：`writeField(col, row, width, text, align?)` 在单行定宽区域内写文本，**未写到的格子自动清成空格（前景用当前色）、背景色保留、区域外不动、光标不变**；对齐 `"left"`/`"right"`/`"center"`（默认 left），超宽截断：左/中留头、右对齐留尾（printf `%2s` 风格）。用于每帧刷新时钟/计数器（第一帧 `"15"`、第二帧 `"6"` 十位自动清空）。链路：`ScreenModuleHandle.writeField`（Lua，Optional<String> align）→ `MonitorBlockEntity.screenWriteField`（Align.byName 解析）→ `ScreenText.writeField`（新枚举 `ScreenText.Align`）。验证项新增第 6 条。
+- **`writeField` 定宽字段（2026-08-22 追加；colour 参数 2026-08-22 后续追加）**：`writeField(col, row, width, text, align?, colour?)` 在单行定宽区域内写文本，**未写到的格子自动清成空格（前景用当前色或 `colour`）、背景色保留、区域外不动、光标不变**；对齐 `"left"`/`"right"`/`"center"`（默认 left），超宽截断：左/中留头、右对齐留尾（printf `%2s` 风格）。`colour` 可选（0xRRGGBB，只取低 24 位）：传了用该颜色渲染区域字符（含清空格），不传用 `setTextColour` 设置的颜色（默认 `DEFAULT_TEXT_COLOUR`）。用于每帧刷新时钟/计数器（第一帧 `"15"`、第二帧 `"6"` 十位自动清空）。链路：`ScreenModuleHandle.writeField`（Lua，`Optional<String> align, Optional<Integer> colour`）→ `MonitorGridHost.screenWriteField`（接口，`Integer colour` null=未传）→ `MonitorBlockEntity`/`ControlDeskBlockEntity.screenWriteField`（`colour != null ? colour : t.getTextColour()`）→ `ScreenText.writeField`（6 参重载；5 参版本委托给 6 参用当前 `textColour`；新枚举 `ScreenText.Align`）。验证项新增第 6 条。
 - **`fillField` 定宽填充（2026-08-22 追加）**：`fillField(col, row, width, count, colour, align?)` 在单行定宽区域内把前 `count` 格背景设为 `colour`，**区域内其余格子背景清透明**（进度减少时多余色块自动消失，根治 fill 只涂不擦的残留问题）、区域外与字符不动；`count` 钳制 [0,width]，传 0 即全清（顺带覆盖 fillClear 用途）；对齐复用 `ScreenText.Align`。链路：`ScreenModuleHandle.fillField` → `MonitorBlockEntity.screenFillField` → `ScreenText.fillField`。验证项新增第 7 条。
+- **`setVisible` 屏幕渲染开关（2026-08-22 追加）**：`screen.setVisible(bool)` / `getVisible()` 控制**整个屏幕是否渲染**（默认 true；false 时 9 宫格边框 + 格子内容 + 图形层全不绘制，显示空白面板；内容与设置保留，只影响显示）。状态存在 `ScreenText.visible`（NBT 持久化，旧存档缺字段默认 true，随 `SyncGridPayload` 同步客户端）；渲染拦截在共享入口 `Screen9GridRenderer.renderScreen` 顶部（`text != null && !text.isVisible()` 直接 return，Monitor 与 monitor_2 同时生效）。链路：`ScreenModuleHandle.setVisible`（Lua）→ `MonitorGridHost.screenSetVisible`（接口）→ `MonitorBlockEntity`/`ControlDeskBlockEntity.screenSetVisible`（`getOrCreateScreenText` + `monitor2Changed`/`syncGridToClients`）→ 渲染端 `Screen9GridRenderer` 门控。验证项新增第 13 条。
 
 ### 待游戏内验证
 
@@ -188,6 +189,7 @@ Create / Flywheel 证据（工作区）：
 10. z-fighting：斜视角/远处无闪烁（polygonOffset 生效）。
 11. 多屏幕并存、屏幕文本 NBT 持久化（重启世界后内容保留）。
 12. 旧 Lua 程序按新 API 改写后行为正确。
+13. `setVisible` 渲染开关：`setVisible(false)` 后整屏（9 宫格 + 内容）消失、显示空白面板；`setVisible(true)` 恢复；内容/设置不丢；重启世界后开关状态保留。
 
 > 建议验证方式：写一个 Lua 测试程序依次覆盖 1-10（`setGrid` → `write` 覆盖 → `draw(batch)` → `drawCells`/`drawShapes` 单层 → `writeField` 定宽字段 → `fillField` 定宽填充 → `fill` → 图形层 → 斜视角观察），完成后勾选以上条目并回填本 memo 与 `.TO DO.md`。
 >
