@@ -73,4 +73,4 @@
 - 现在互动不会穿透monitor了
 - 为screen.writeField添加可选的颜色参数
 - drawCells drawText setVisiable isVisiable
-- getPhysicsCenterOfMassRel 改为相对FMC的方块中心
+- getPhysicsCenterOfMassRel 改为相对FMC的方块中心 添加了getPhysicsChainCenterOfMassRel
