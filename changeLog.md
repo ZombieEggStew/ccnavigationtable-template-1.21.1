@@ -70,8 +70,8 @@
 - **!?NEWNEW?!** Added the Short Range Linker, Check the wiki for more 
 - Fixed aero bearing not adjusting its mass when assembled properly
 - Fixed crash "Not building!" when opening the Diagram screen (Aeronautics) with a control desk inside an assembled physics body (Sable sub-level). 
-- 现在互动不会穿透monitor了
-- 为screen.writeField添加可选的颜色参数
-- drawCells drawText setVisiable isVisiable
-- getPhysicsCenterOfMassRel 改为相对FMC的方块中心 添加了getPhysicsChainCenterOfMassRel
-- monitor_2 不会被水冲掉了。拆除带有带有模块的monitor_2的control_desk时，模块会掉落到地上
+- Interactions can no longer pass through the Monitor.
+- Added an optional color parameter to screen.writeField.
+- Added drawCells / drawText / setVisible / isVisible (Lua methods).
+- getPhysicsCenterOfMassRel is now relative to the FMC block center; added getPhysicsChainCenterOfMassRel.
+- monitor_2 can no longer be washed away by water. When dismantling a control desk carrying a monitor_2 with modules, the modules now drop to the ground.
