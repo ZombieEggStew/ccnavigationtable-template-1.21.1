@@ -190,7 +190,7 @@ screen.fillField(1, 2, 10, 3, 0x00FF00, "left")   -- 进度减少：第 4..10 �
 
 `batch` 为 Lua table，两段式结构：
 
-- **`cells`**：每格一个数组 `{col, row, char, fg?, bg?}`（col/row **1 起**；`fg` 省略沿用当前前景色，`bg` 省略为透明）
+- **`cells`**：每格一个数组 `{col, row, text, fg?, bg?, align?}`（col/row **1 起**；`fg` 省略沿用当前前景色，`bg` 省略为**透明**，显示屏幕面板底色）。`text` 为**字符串**，自动向右逐格铺开（不再一个字符一条），字符串内的 `\n` 换行（回到起点列、行 +1）。`align` 可选（默认 `"left"`）：文本在**区域 [col, 屏幕右缘]** 内对齐——`"left"` 靠起点 / `"right"` 右缘贴屏幕右缘 / `"center"` 区域内居中；字符串内每行独立对齐。超右缘截断：左/中留头、右留尾。**注意**：`align` 可用位置第 6 参（此时 `fg`/`bg` 必须都有值），也可用键名写法 `align = "right"`——Lua 数组遇 `nil` 会截断，跳过中间参数时请用键名写法
 - **`shapes`**（可选）：图形数组，每项为带 `type` 字段的 table：
   - `{type = "rect", x, y, w, h, colour, solid?, lineWidth?, z?}`
   - `{type = "line", x1, y1, x2, y2, colour, lineWidth?, z?}`
@@ -201,8 +201,8 @@ screen.fillField(1, 2, 10, 3, 0x00FF00, "left")   -- 进度减少：第 4..10 �
 ```lua
 screen.draw({
   cells = {
-    {1, 1, "A", 0xFFFFFF, 0x000000},   -- 第 1 行第 1 格：白字黑底
-    {2, 1, "B", 0xFF0000},             -- 第 2 格：红字，透明底
+    {1, 1, "LOADING", 0xFFFFFF, 0x000000},   -- 第 1 行：白字黑底，一次铺 7 格
+    {1, 2, "███████", 0xFF0000},             -- 第 2 行：红色进度条
   },
   shapes = {
     {type = "rect", x = 0, y = 0, w = 8, h = 8, colour = 0x00FF00, solid = true},
@@ -216,16 +216,36 @@ screen.draw({
 
 **只替换文本层（格子 + 光标）**，整层原子替换：服务端清空文本层后逐格写入传入的格子；**图形层（rect/line/circle）保持不变**。解析失败会抛 Lua 错误，文本层保持不变（不会部分应用）。
 
-参数结构与 `draw` 的 `cells` 段一致（外层仍是 `{cells = {...}}`）：每格一个数组 `{col, row, char, fg?, bg?}`（col/row **1 起**；`fg` 省略沿用当前前景色，`bg` 省略为透明）。
+参数结构与 `draw` 的 `cells` 段一致（外层仍是 `{cells = {...}}`）：每格一个数组 `{col, row, text, fg?, bg?, align?}`（col/row **1 起**；`fg` 省略沿用当前前景色，`bg` 省略为**透明**，显示屏幕面板底色）。`text` 为**字符串**，自动向右逐格铺开，`\n` 换行。`align` 可选（默认 `"left"`）：文本在**区域 [col, 屏幕右缘]** 内对齐（`"left"` / `"right"` / `"center"`），超右缘截断：左/中留头、右留尾。**注意**：`align` 可用位置第 6 参（`fg`/`bg` 必须都有值），也可用键名写法 `align = "right"`（Lua 数组遇 `nil` 截断，跳参时用键名）。
 
 替换会清空格子并把光标复位到 (1,1)，省略的格子为空白。
 
 ```lua
 screen.drawCells({
   cells = {
-    {1, 1, "A", 0xFFFFFF, 0x000000},
-    {2, 1, "B", 0xFF0000},
+    {1, 1, "LOADING", 0xFFFFFF, 0x000000},      -- 一次铺 7 格
+    {1, 2, "███████", 0xFF0000},                -- 进度条行
+    {1, 3, "12.5", 0x00FF00, align = "right"},  -- 右对齐到屏幕右缘
+    {1, 4, "TITLE", align = "center"},          -- 居中
   },
+})
+```
+
+### screen.drawText(rows)
+
+**按行整批替换文本层**（最省事的整屏传输）：外层数组下标即行号（1 起），列自动从 1 起，**不用写坐标**。每行可以是：
+
+- 字符串 `"text"`：用当前前景色、**透明背景**（显示屏幕面板底色）、左对齐；
+- 数组 `{text, fg?, bg?, align?}`：`fg` 省略用当前前景色，`bg` 省略为**透明**，`align` 省略为 `"left"`。
+
+文本自动向右逐格铺开（超右缘截断），字符串内 `\n` 换行（下一行从列 1 起）。`align`（`"left"` / `"right"` / `"center"`）决定文本在**整行区域 [1, 屏幕右缘]** 内的对齐，字符串内每行独立对齐。**注意**：`align` 可用位置第 4 参（`fg`/`bg` 必须都有值），也可用键名写法 `align = "right"`（Lua 数组遇 `nil` 截断，跳参时用键名）。语义同 `drawCells`：清空文本层后写入、光标复位 (1,1)、图形层不变。
+
+```lua
+screen.drawText({
+  {"LOADING", 0xFFFFFF},               -- 第 1 行
+  {"███████", 0xFF0000},                -- 第 2 行：红色进度条
+  {"12.5", 0x00FF00, align = "right"},  -- 第 3 行：右对齐到屏幕右缘
+  {"TITLE", align = "center"},          -- 第 4 行：居中
 })
 ```
 

@@ -72,3 +72,4 @@
 - Fixed crash "Not building!" when opening the Diagram screen (Aeronautics) with a control desk inside an assembled physics body (Sable sub-level). 
 - 现在互动不会穿透monitor了
 - 为screen.writeField添加可选的颜色参数
+- drawCells drawText setVisiable isVisiable

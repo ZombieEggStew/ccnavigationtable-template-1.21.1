@@ -190,7 +190,7 @@ On a parse failure a Lua error is raised and the screen stays unchanged (no part
 
 `batch` is a Lua table with two sections:
 
-- **`cells`**: one array per cell, `{col, row, char, fg?, bg?}` (col/row **1-based**; omitted `fg` uses the current foreground colour, omitted `bg` is transparent)
+- **`cells`**: one array per cell, `{col, row, text, fg?, bg?, align?}` (col/row **1-based**; omitted `fg` uses the current foreground colour, omitted `bg` is transparent, showing the screen panel underneath). `text` is a **string** that is spread cell by cell to the right (no longer one char per entry); `\n` inside the string moves to the next line (back to the start column). `align` (optional, default `"left"`) aligns the text within the **region [col, screen right edge]** — `"left"` flush to the start / `"right"` right edge at the screen's last column / `"center"` centred in the region; each line of the string is aligned independently. Overflow past the right edge is truncated (left/centre keep the head, right keeps the tail). **Note**: `align` can be the 6th positional argument (then both `fg` and `bg` must be present), or use the key form `align = "right"` — Lua arrays are truncated by `nil`, so use the key form when skipping arguments
 - **`shapes`** (optional): an array of shapes, each a table with a `type` field:
   - `{type = "rect", x, y, w, h, colour, solid?, lineWidth?, z?}`
   - `{type = "line", x1, y1, x2, y2, colour, lineWidth?, z?}`
@@ -201,8 +201,8 @@ On a parse failure a Lua error is raised and the screen stays unchanged (no part
 ```lua
 screen.draw({
   cells = {
-    {1, 1, "A", 0xFFFFFF, 0x000000},   -- cell (1,1): white text on black
-    {2, 1, "B", 0xFF0000},             -- cell (2,1): red text, transparent bg
+    {1, 1, "LOADING", 0xFFFFFF, 0x000000},   -- row 1: white text on black, 7 cells at once
+    {1, 2, "███████", 0xFF0000},             -- row 2: red progress bar
   },
   shapes = {
     {type = "rect", x = 0, y = 0, w = 8, h = 8, colour = 0x00FF00, solid = true},
@@ -216,16 +216,36 @@ Calling `draw` once per tick gives a "one frame per tick" full-screen refresh wi
 
 **Replaces only the text layer** (cells + cursor), with atomic replacement semantics: the server clears the text layer and writes the given cells; **the graphics layer (rect/line/circle) stays unchanged**. On a parse failure a Lua error is raised and the text layer stays unchanged (no partial application).
 
-The argument has the same shape as `draw`'s `cells` section (outer table is still `{cells = {...}}`): one array per cell, `{col, row, char, fg?, bg?}` (col/row **1-based**; omitted `fg` uses the current foreground colour, omitted `bg` is transparent).
+The argument has the same shape as `draw`'s `cells` section (outer table is still `{cells = {...}}`): one array per cell, `{col, row, text, fg?, bg?, align?}` (col/row **1-based**; omitted `fg` uses the current foreground colour, omitted `bg` is transparent, showing the screen panel underneath). `text` is a **string** spread cell by cell to the right; `\n` moves to the next line. `align` (optional, default `"left"`) aligns the text within the **region [col, screen right edge]** (`"left"` / `"right"` / `"center"`); overflow past the right edge is truncated (left/centre keep the head, right keeps the tail). **Note**: `align` can be the 6th positional argument (`fg`/`bg` must both be present) or the key form `align = "right"` (Lua arrays are truncated by `nil` — use the key form when skipping arguments).
 
 Replacing clears all cells and resets the cursor to (1,1); cells you omit are blank.
 
 ```lua
 screen.drawCells({
   cells = {
-    {1, 1, "A", 0xFFFFFF, 0x000000},
-    {2, 1, "B", 0xFF0000},
+    {1, 1, "LOADING", 0xFFFFFF, 0x000000},      -- 7 cells at once
+    {1, 2, "███████", 0xFF0000},                -- progress bar row
+    {1, 3, "12.5", 0x00FF00, align = "right"},  -- right-aligned to the screen's right edge
+    {1, 4, "TITLE", align = "center"},          -- centred
   },
+})
+```
+
+### screen.drawText(rows)
+
+**Replaces the text layer row by row** (the most convenient full-screen transfer): the outer array index is the row number (1-based) and columns start at 1 automatically — **no coordinates needed**. Each row can be:
+
+- a string `"text"`: uses the current foreground colour, a transparent background (showing the screen panel underneath), and left alignment;
+- an array `{text, fg?, bg?, align?}`: omitted `fg` uses the current foreground colour, omitted `bg` is transparent, omitted `align` is `"left"`.
+
+Text is spread cell by cell to the right (overflow past the right edge is truncated); `\n` inside a string moves to the next line (starting at column 1). `align` (`"left"` / `"right"` / `"center"`) aligns the text within the **full row [1, screen right edge]**, each line independently. **Note**: `align` can be the 4th positional argument (`fg`/`bg` must both be present) or the key form `align = "right"` (Lua arrays are truncated by `nil` — use the key form when skipping arguments). Semantics match `drawCells`: the text layer is cleared and rewritten, the cursor resets to (1,1), and the graphics layer stays unchanged.
+
+```lua
+screen.drawText({
+  {"LOADING", 0xFFFFFF},               -- row 1
+  {"███████", 0xFF0000},                -- row 2: red progress bar
+  {"12.5", 0x00FF00, align = "right"},  -- row 3: right-aligned to the screen's right edge
+  {"TITLE", align = "center"},          -- row 4: centred
 })
 ```
 

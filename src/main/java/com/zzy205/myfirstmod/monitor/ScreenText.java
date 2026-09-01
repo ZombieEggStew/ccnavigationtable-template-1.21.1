@@ -508,7 +508,8 @@ public class ScreenText {
     /**
      * 单层替换文本层（drawCells 的原子语义）：清空全部格子与光标（保留格子数），
      * 再逐格写入。**图形层（rect/line/circle）保持不变**。
-     * 光标复位到 (1,1)；省略 fg 的格子用当前前景色 {@link #textColour}，省略 bg 为透明。
+     * 光标复位到 (1,1)；省略 fg 的格子用当前前景色 {@link #textColour}，省略 bg 为透明
+     * （{@link #TRANSPARENT_BG}，不绘制背景 quad，显示屏幕面板底色）。
      *
      * @param newCells 每格一行：{col, row, char, fg, bg}（col/row 1 起；fg/bg 省略用默认值）
      */
@@ -521,7 +522,10 @@ public class ScreenText {
                 if (idx < 0) continue;
                 cells[idx] = (char) cell[2];
                 fg[idx] = cell.length > 3 ? (cell[3] & 0xFFFFFF) : textColour;
-                bg[idx] = cell.length > 4 ? (cell[4] & 0xFFFFFF) : TRANSPARENT_BG;
+                // 省略 bg 或显式 -1（TRANSPARENT_BG）都保持透明：不能直接 & 0xFFFFFF（-1 会变成白色）
+                bg[idx] = cell.length > 4
+                        ? (cell[4] == TRANSPARENT_BG ? TRANSPARENT_BG : cell[4] & 0xFFFFFF)
+                        : TRANSPARENT_BG;
             }
         }
     }
