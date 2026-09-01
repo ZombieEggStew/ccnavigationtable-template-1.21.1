@@ -74,3 +74,4 @@
 - 为screen.writeField添加可选的颜色参数
 - drawCells drawText setVisiable isVisiable
 - getPhysicsCenterOfMassRel 改为相对FMC的方块中心 添加了getPhysicsChainCenterOfMassRel
+- monitor_2 不会被水冲掉了。拆除带有带有模块的monitor_2的control_desk时，模块会掉落到地上

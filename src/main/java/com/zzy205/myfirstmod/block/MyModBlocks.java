@@ -54,6 +54,11 @@ public class MyModBlocks {
             registerBlocks("my_control_desk", () -> new ControlDeskBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.WOOD).
                     strength(1.5f, 6.0f).
+                    // forceSolidOn：桌体碰撞盒是半高块（16×8×8），默认 calculateSolid 判为“非实心”→ blocksMotion()=false
+                    // → FlowingFluid.canHoldFluid()=!blocksMotion() 为 true → 水流会把控制台冲掉（1.21.1 水破坏方块的判定）。
+                    // 强制实心只影响 isSolid/blocksMotion 标志（水不能流入该格），不改变碰撞盒，也不会新增窒息
+                    // （Entity.isInWall 仍需碰撞形状相交，对齐原版墙/栅栏/锁链的写法）。
+                    forceSolidOn().
                     noOcclusion()
             ));
 

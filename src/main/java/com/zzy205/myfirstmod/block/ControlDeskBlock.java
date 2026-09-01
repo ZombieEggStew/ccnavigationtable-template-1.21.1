@@ -5,6 +5,7 @@ import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import com.zzy205.myfirstmod.item.MyModItems;
+import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.createmod.catnip.math.VoxelShaper;
@@ -523,6 +524,28 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             }
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.BAFFLE)) {
                 drops.add(new ItemStack(AllBlocks.BRASS_CASING.get().asItem()));
+            }
+            // monitor_2 表面的模块/屏幕（10×8 网格）随破坏掉落（对齐 MonitorBlock.getDrops 的做法）
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)) {
+                GridState grid = desk.getMonitor2Grid();
+                for (var module : grid.getAllModules().values()) {
+                    ItemStack stack = MyModItems.monitorModuleStack(module.type());
+                    if (!stack.isEmpty()) drops.add(stack);
+                }
+                for (int ignored = 0; ignored < grid.getScreenRegions().size(); ignored++) {
+                    drops.add(new ItemStack(MyModItems.MODULE_SCREEN.get()));
+                }
+            }
+            // 桌顶小模块（monitor 模块：button / toggle_switch / knob，14×6 网格）随破坏掉落
+            GridState deskGrid = desk.getDeskTopGrid();
+            if (!deskGrid.isEmpty() || deskGrid.hasScreen()) {
+                for (var module : deskGrid.getAllModules().values()) {
+                    ItemStack stack = MyModItems.monitorModuleStack(module.type());
+                    if (!stack.isEmpty()) drops.add(stack);
+                }
+                for (int ignored = 0; ignored < deskGrid.getScreenRegions().size(); ignored++) {
+                    drops.add(new ItemStack(MyModItems.MODULE_SCREEN.get()));
+                }
             }
         }
         return drops;
