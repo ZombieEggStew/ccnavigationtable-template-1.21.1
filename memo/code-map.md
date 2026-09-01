@@ -46,6 +46,8 @@ com.zzy205.myfirstmod
 | 文件 | 职责 |
 |---|---|
 | `block/MyModBlocks.java` | DeferredRegister 中的方块注册；新增方块先看这里 |
+| `RegistrateBlocks.java` | **Registrate 注册的方块**（与 DeferredRegister 并存，链式注册）：`red_position_light` 红色航行灯；blockstate/薄模型/物品模型/配方/战利品表/标签由 `runData` 生成到 `src/generated/resources`；`REGISTRATE` 实例在 `CCPeripheralExtender` |
+| `block/PositionLightBlock.java` | 红色航行灯方块（参考 CreateDeco CageLampBlock）：6 向贴附、红石点亮、右键反相（INVERTED）、水浸；模型 `models/block/position_light/`（底座 base + 灯体 red_on/red_off 换贴图） |
 | `block/MyModBlockEntities.java` | 方块实体类型注册及方块实体与方块的绑定 |
 | `block/MyModPartialModels.java` | Create/Catnip 部分模型资源位置集中定义（传动外设、控制台控件踏板/操纵杆/底座、Monitor 部件、惯性导航系统 gimbal/compass/test 等） |
 

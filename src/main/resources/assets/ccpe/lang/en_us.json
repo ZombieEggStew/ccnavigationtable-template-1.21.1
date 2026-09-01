@@ -18,6 +18,7 @@
   "block.ccpe.ins": "Inertial Navigation System",
   "block.ccpe.fmc": "Flight Management Computer",
   "block.ccpe.aic": "Aviation Integrated Computer",
+  "block.ccpe.red_position_light": "Red Position Light",
   "block.ccpe.fluid_port": "Fluid Port",
   "block.ccpe.fluid_port.tooltip.summary": "Easily makes your fluid tanks interactable with fluid containers.",
   "block.ccpe.fluid_port.tooltip.condition1": "When R-Clicked",

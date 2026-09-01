@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod;
 
 import com.mojang.logging.LogUtils;
+import com.tterrag.registrate.Registrate;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralCapabilities;
@@ -33,6 +34,13 @@ public class CCPeripheralExtender {
     // Directly reference a slf4j logger
     public static final Logger LOGGER = LogUtils.getLogger();
 
+    /**
+     * Registrate 实例：{@link Registrate#create} 内部已挂载注册与数据生成事件
+     * （RegisterEvent / GatherDataEvent 等，见 Registrate.create → registerEventListeners），
+     * 无需手动 registerEventListeners。
+     */
+    public static final Registrate REGISTRATE = Registrate.create(MOD_ID);
+
     // The constructor for the mod class is the first code that is run when your mod is loaded.
     // FML will recognize some parameter types like IEventBus or ModContainer and pass them in automatically.
     public CCPeripheralExtender(IEventBus modEventBus, ModContainer modContainer) {
@@ -45,6 +53,9 @@ public class CCPeripheralExtender {
         MyModBlocks.register(modEventBus);
         MyModBlockEntities.register(modEventBus);
         MyModMenus.register(modEventBus);
+
+        // 触发 Registrate 条目构建（red_position_light 等）；实际入册由 Registrate 在 RegisterEvent 时完成
+        RegistrateBlocks.init();
 
         // 注册全部自定义网络包（按功能域拆分在 network 包内）
         modEventBus.addListener(RegisterPayloadHandlersEvent.class, ModPackets::register);
