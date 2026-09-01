@@ -1,6 +1,6 @@
 # 短程信号链接器（ccpe:short_range_linker）实现方案
 
-> 状态：**功能全部落地，待进游戏验证**（`./gradlew.bat classes` 通过）。已落地：`ShortRangeLinkerRegistry`（物理体作用域频道注册表）、`ShortRangeLinkerBlock` / `ShortRangeLinkerBlockEntity`（频道 + bodyLoad 共享开关 + ticket + 红石 + NBT/蓝图）、注册（方块/BE/菜单/创造标签/主入口 clear）、资源（blockstate 6 形态：地面 1 + 天花板 1 + 墙壁 4；**躺/竖共用一个模型** `models/block/short_range_link/short_range_link.json`（用户自建扁平小方块）+ 贴图 `textures/block/short_range_link/tex.png`；语言键 `block.ccpe.short_range_linker` + `gui.ccpe.short_range_linker.*`）、**选择框抄 static_port**（`VoxelShaper.forDirectional(Block.box(5,0,5,11,3,11), UP)`，FLOOR→UP / CEILING→DOWN / WALL→水平四向）、**音效对齐 static_port（SoundType.COPPER）**、GUI（Menu extraData 传频道/占用快照/bodyLoad；Screen 频道滚轮跳过同体占用 + 「加载物理体」ToggleButton + 非物理体提示 + tooltip 前景层）、payload（`ShortRangeLinkerConfigPayload` + `ShortRangeLinkerPacketHandlers`，经 `ModPackets` 注册）、Lua API（**并入 `ccpe.sensor_system`，原计划 `ccpe.link` 已删除**）、wiki 页面（`wiki/docs/sensor-system/short-range-linker.md` + `.zh.md`，已入 mkdocs 导航）。待做：第八节进游戏验证。
+> 状态：**功能全部落地，待进游戏验证**（`./gradlew.bat classes` 通过）。已落地：`ShortRangeLinkerRegistry`（物理体作用域频道注册表）、`ShortRangeLinkerBlock` / `ShortRangeLinkerBlockEntity`（频道 + bodyLoad 共享开关 + ticket + 红石 + **附着方块 NBT 缓存**（默认关，Lua `enableNbtCache` 开启并配置刷新间隔，默认 20 tick；`getNbt`/`getAllNbt` 直读缓存）+ NBT/蓝图）、注册（方块/BE/菜单/创造标签/主入口 clear）、资源（blockstate 6 形态：地面 1 + 天花板 1 + 墙壁 4；**躺/竖共用一个模型** `models/block/short_range_link/short_range_link.json`（用户自建扁平小方块）+ 贴图 `textures/block/short_range_link/tex.png`；语言键 `block.ccpe.short_range_linker` + `gui.ccpe.short_range_linker.*`）、**选择框抄 static_port**（`VoxelShaper.forDirectional(Block.box(5,0,5,11,3,11), UP)`，FLOOR→UP / CEILING→DOWN / WALL→水平四向）、**音效对齐 static_port（SoundType.COPPER）**、GUI（Menu extraData 传频道/占用快照/bodyLoad；Screen 频道滚轮跳过同体占用 + 「加载物理体」ToggleButton + 非物理体提示 + tooltip 前景层）、payload（`ShortRangeLinkerConfigPayload` + `ShortRangeLinkerPacketHandlers`，经 `ModPackets` 注册）、Lua API（**并入 `ccpe.sensor_system`，原计划 `ccpe.link` 已删除**）、wiki 页面（`wiki/docs/sensor-system/short-range-linker.md` + `.zh.md`，已入 mkdocs 导航）。待做：第八节进游戏验证。
 > 已确认决策：API = `getPeripheral` + 红石输入/输出，**模块并入 `ccpe.sensor_system`（原计划 `ccpe.link` 已废弃）**；非物理体严格不链接；物理体 = Sable 约束链；物理体加载 = 链上共享开关；方块 ID = `ccpe:short_range_linker`。
 > 目标代码：`src/main/java/com/zzy205/myfirstmod` 下新增 block / compat/cc / screen / network 若干类（见文件清单）。
 
@@ -17,6 +17,7 @@
    - `getPeripheral(channel)` → 本体内频道 `channel` 的目标设备外设：链接器 → 附着方块外设；**控制台（controlDesk）也占用同一频道空间**（`ControlDeskRegistry` 委托本注册表）→ 返回控制台自身外设（Capability 查询，mainThread=true）
    - `getRedstoneOutput(channel)` / `getRedstoneInput(channel)` → 目标链接器红石输出 / 输入（mainThread=false）
    - `setRedstoneOutput(channel, signal)` → 写目标链接器红石输出并更新方块 POWERED（mainThread=true）
+   - **NBT 缓存三方法（与 pe 不同：默认关闭，需显式开启）**：`enableNbtCache(channel, ticks?)`（mainThread=true；`ticks` 缺省 20，`<=0` 关闭；开启后服务端按间隔刷新附着方块 NBT 快照）→ `getNbt(channel, path)` / `getAllNbt(channel)`（mainThread=false 直读 volatile 缓存；路径语法与 `ccpe.pe.get` 相同，复用 `PeripheralExtenderAPI.resolvePath`/`convertCompoundToMap`）；开关 + 间隔随 NBT/蓝图持久化（BE 字段 `nbtCacheEnabled`/`nbtCacheInterval`，快照本身不落盘，onLoad 置脏首 tick 重建）
    - **作用域解析照抄 `SensorSystemAPI.resolveSubLevel()`**：`computer.getLevel()` + `computer.getPosition()` → `SableCompat.getContainingSubLevel` → `getConnectedChain` 得链 UUID 集合 → 在该链内查频道。**实现 = 链 UUID 集合在 `SensorSystemAPI.update()`（服务端主线程）缓存进 volatile `chainUuids`，Lua 线程只读**（照 SensorSystemAPI 高频缓存模式；顺带避免红石读方法在电脑线程直接碰 Sable，最多滞后 1 tick）。
 5. **物理体加载 = 链上共享开关**（新增需求，见第四节）。
 6. **全局频道体系不动**：pe / Monitor / 控制台的 `GlobalChannelRegistry` 保持原样，向后兼容；新注册表完全独立。
@@ -118,6 +119,7 @@ flowchart LR
 7. **共享加载开关**：链上链接器 A 开启「加载物理体」→ 链上全部链接器 GUI 开关都变开（A 关闭 → 全部变关）；远离后物理体仍被加载（force-load 生效）；pe 的加载模式不受影响。
 8. **蓝图**：Create 蓝图保存 / 部署后频道与 `bodyLoad` 不丢（`writeSafe`），部署后同链开关经 OR 自愈一致。
 9. 已有存档的 pe / Monitor / 控制台频道全部不受影响（回归验证）。
+10. **NBT 缓存**：默认不缓存（`getNbt`/`getAllNbt` 返回 nil/空表）→ `enableNbtCache(1)` 后 `getAllNbt(1)` 返回附着方块 NBT（首个 tick 即有快照）；改间隔 `enableNbtCache(1, 5)` 后刷新频率变化；`enableNbtCache(1, 0)` 关闭后读取返回 nil；重进存档 / 蓝图部署后开关与间隔保持、首个 tick 快照重建；附着方块 NBT 变化（如油箱油量）在间隔内反映。
 
 ## 九、频道唯一性语义（详细）
 

@@ -28,7 +28,9 @@ import java.util.UUID;
 /**
  * 短程信号链接器方块实体：物理体作用域频道（onLoad 注册 / setRemoved 注销 / 每 20 tick 复核
  * 冲突顺延）+ 链上共享「加载物理体」开关（bodyLoad，任一链接器切换 → 同步全链，Sable
- * force-load + PORTAL ticket 管理照抄 {@link PeripheralExtenderBlockEntity}）+ 红石输出/输入。
+ * force-load + PORTAL ticket 管理照抄 {@link PeripheralExtenderBlockEntity}）+ 红石输出/输入
+ * + 附着方块 NBT 缓存（与 pe 不同：默认关闭，需 Lua {@code enableNbtCache} 显式开启并配置
+ * 刷新间隔，默认 20 tick；开启后按间隔缓存附着方块 NBT，供 {@code getNbt/getAllNbt} 读取）。
  */
 public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialSafeNBT {
 
@@ -43,6 +45,23 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
 
     /** 红石输出信号 (0-15) */
     private int redstoneOutput = 0;
+
+    // ── 附着方块 NBT 缓存（与 pe 不同：默认关闭，需 Lua enableNbtCache 显式开启；开启后每 nbtCacheInterval tick 刷新） ──
+
+    /** NBT 缓存开关（默认关；持久化，随 NBT/蓝图保存） */
+    private boolean nbtCacheEnabled = false;
+
+    /** NBT 缓存刷新间隔（tick，默认 20；持久化；开启时 ≥ 1） */
+    private int nbtCacheInterval = 20;
+
+    /** 缓存的附着方块 NBT 快照（服务端主线程刷新，Lua 电脑线程只读；volatile 跨线程可见） */
+    private volatile CompoundTag cachedAttachedNBT = new CompoundTag();
+
+    /** 缓存需立即刷新（开启缓存 / 世界加载后置位，服务端 tick 消费一次，保证首个快照及时） */
+    private boolean cacheRefreshDirty = false;
+
+    /** 上次刷新缓存的游戏 tick（服务端；间隔自上次刷新起算） */
+    private long lastCacheRefreshTick = 0;
 
     // ── Sable 加载 ticket 状态（bodyLoad=true 时生效，不落盘，重载后重挂） ──
     private boolean sableTicketRegistered = false;
@@ -75,6 +94,10 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
             if (this.bodyLoad) {
                 tryRegisterSableTicket();
             }
+            // NBT 缓存：世界加载后若已开启（持久化恢复），置脏让首个 tick 立即刷新快照
+            if (this.nbtCacheEnabled) {
+                this.cacheRefreshDirty = true;
+            }
         }
     }
 
@@ -90,7 +113,7 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
 
     // ═══════════════ 服务端 tick ═══════════════
 
-    /** 由 {@link ShortRangeLinkerBlock#getTicker} 调用：20 tick 复核 + bodyLoad ticket 维持 */
+    /** 由 {@link ShortRangeLinkerBlock#getTicker} 调用：20 tick 复核 + bodyLoad ticket 维持 + NBT 缓存周期刷新 */
     public static void serverTick(Level level, BlockPos pos, BlockState state, ShortRangeLinkerBlockEntity be) {
         if (!(level instanceof ServerLevel serverLevel)) return;
         if (!level.isLoaded(pos)) return;
@@ -104,6 +127,16 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
                 be.tryRegisterSableTicket();
             } else {
                 be.refreshTickets(serverLevel);
+            }
+        }
+
+        // NBT 缓存：开启时按间隔刷新（间隔自上次刷新起算；开启/加载后首个 tick 立即刷一份）
+        if (be.nbtCacheEnabled) {
+            long tick = serverLevel.getServer().getTickCount();
+            if (be.cacheRefreshDirty || tick - be.lastCacheRefreshTick >= be.nbtCacheInterval) {
+                be.cacheRefreshDirty = false;
+                be.lastCacheRefreshTick = tick;
+                be.refreshNbtCache();
             }
         }
     }
@@ -340,6 +373,42 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
         return this.level.getBestNeighborSignal(this.worldPosition);
     }
 
+    // ═══════════════ 附着方块 NBT 缓存（Lua enableNbtCache / getNbt / getAllNbt） ═══════════════
+
+    /** NBT 缓存是否已开启（默认关；需 Lua {@code enableNbtCache} 显式开启） */
+    public boolean isNbtCacheEnabled() { return nbtCacheEnabled; }
+
+    /** NBT 缓存刷新间隔（tick，默认 20） */
+    public int getNbtCacheInterval() { return nbtCacheInterval; }
+
+    /**
+     * 开启 / 关闭 / 调整附着方块 NBT 缓存（服务端主线程调用，Lua mainThread=true）。
+     * <ul>
+     *   <li>{@code ticks <= 0} → 关闭缓存（保留已有快照，读取方法返回 nil/空表）；</li>
+     *   <li>{@code ticks >= 1} → 开启缓存并设置刷新间隔（缺省 20）；重复调用仅改间隔。</li>
+     * </ul>
+     */
+    public void setNbtCache(int ticks) {
+        if (ticks <= 0) {
+            if (!nbtCacheEnabled) return;
+            nbtCacheEnabled = false;
+        } else {
+            nbtCacheEnabled = true;
+            nbtCacheInterval = Math.max(1, ticks);
+            this.cacheRefreshDirty = true; // 开启后首个 tick 立即刷一份
+        }
+        this.setChanged();
+    }
+
+    /** 缓存的附着方块 NBT 快照（Lua 线程只读；缓存未开启时可能为空） */
+    public CompoundTag getCachedAttachedNBT() { return cachedAttachedNBT; }
+
+    /** 刷新附着方块 NBT 快照（必须在服务端主线程调用，由 serverTick 周期触发） */
+    private void refreshNbtCache() {
+        if (this.level == null || this.level.isClientSide) return;
+        this.cachedAttachedNBT = ShortRangeLinkerBlock.getAttachedBlockNBT(this.level, this.getBlockState(), this.worldPosition);
+    }
+
     // ═══════════════ NBT ═══════════════
 
     @Override
@@ -349,6 +418,8 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
         tag.putBoolean("BodyLoad", bodyLoad);
         tag.putInt("RedstoneOutput", redstoneOutput);
         tag.putIntArray("OccupiedChannels", occupiedChannels);
+        tag.putBoolean("NbtCacheEnabled", nbtCacheEnabled);
+        tag.putInt("NbtCacheInterval", nbtCacheInterval);
         return tag;
     }
 
@@ -365,6 +436,8 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
         if (tag.contains("BodyLoad")) bodyLoad = tag.getBoolean("BodyLoad");
         if (tag.contains("RedstoneOutput")) redstoneOutput = tag.getInt("RedstoneOutput");
         if (tag.contains("OccupiedChannels")) occupiedChannels = tag.getIntArray("OccupiedChannels");
+        if (tag.contains("NbtCacheEnabled")) nbtCacheEnabled = tag.getBoolean("NbtCacheEnabled");
+        if (tag.contains("NbtCacheInterval")) nbtCacheInterval = Math.max(1, tag.getInt("NbtCacheInterval"));
     }
 
     @Override
@@ -375,13 +448,18 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
         tag.putInt("ScrolledValue", scrolledValue);
         tag.putBoolean("BodyLoad", bodyLoad);
         tag.putInt("RedstoneOutput", redstoneOutput);
+        // NBT 缓存开关与间隔持久化（快照本身是运行时数据不落盘，重载后经 onLoad 置脏首个 tick 重建）
+        tag.putBoolean("NbtCacheEnabled", nbtCacheEnabled);
+        tag.putInt("NbtCacheInterval", nbtCacheInterval);
     }
 
-    /** Create 原理图 / 装置搬运的「安全 NBT」：只存频道与共享加载开关（蓝图兼容） */
+    /** Create 原理图 / 装置搬运的「安全 NBT」：只存频道、共享加载开关与 NBT 缓存设置（蓝图兼容） */
     @Override
     public void writeSafe(CompoundTag compound, HolderLookup.Provider registries) {
         compound.putInt("ScrolledValue", scrolledValue);
         compound.putBoolean("BodyLoad", bodyLoad);
+        compound.putBoolean("NbtCacheEnabled", nbtCacheEnabled);
+        compound.putInt("NbtCacheInterval", nbtCacheInterval);
     }
 
     /** 检测链接器是否在 Sable 物理体上（自身或其附着方块在子次元内，照 PeripheralExtenderBlockEntity） */

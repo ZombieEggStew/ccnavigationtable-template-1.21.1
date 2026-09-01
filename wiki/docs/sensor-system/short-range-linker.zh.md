@@ -48,10 +48,42 @@
 | `getRedstoneOutput(channel)` | number | 目标链接器当前的红石输出信号（0-15） |
 | `getRedstoneInput(channel)` | number | 目标链接器位置当前接收到的最强红石信号（0-15） |
 | `setRedstoneOutput(channel, signal)` | - | 写目标链接器的红石输出（自动钳位 0-15），更新方块的充能状态与相邻红石 |
+| `enableNbtCache(channel, ticks?)` | boolean | 开启 / 调整目标链接器的**附着方块 NBT 缓存**并设置刷新间隔（见下节） |
+| `getNbt(channel, path)` | any / nil | 读缓存中附着方块 NBT 路径 `path` 处的值（未开启缓存返回 nil） |
+| `getAllNbt(channel)` | table | 读缓存中附着方块 NBT 全量（转 Lua table；未开启缓存返回空表） |
 
-- **作用域 = 调用电脑所在物理体**（含约束链）：电脑不在任何物理体上时，`getPeripheral` 返回 `nil`，红石读方法返回 `0`。
+## NBT 缓存（默认关闭，Lua 手动开启）
+
+与微型外设扩展器（按需缓存、始终可用）不同，短程信号链接器**默认不缓存**附着方块的 NBT。需要时用 Lua 方法显式开启：
+
+- `enableNbtCache(channel, ticks?)`：开启频道 `channel` 的链接器的 NBT 缓存并设置刷新间隔。
+  - `ticks` 缺省 = **20**（每 20 tick 刷新一次缓存）；
+  - `ticks <= 0` → **关闭**缓存（保留已有快照，读取方法返回 nil / 空表）；
+  - 已开启时重复调用仅修改间隔；开启 / 修改后下一个服务端 tick 立即刷新一次快照。
+  - 返回 `true` 表示目标链接器存在并已应用；频道空闲 / 电脑不在物理体上返回 `false`。
+- 开启后服务端按间隔刷新附着方块 NBT 快照，`getNbt(channel, path)`（路径语法同 `ccpe.pe.get`，如 `"ForgeData.Items[0].Count"`）与 `getAllNbt(channel)` 直读该缓存（mainThread=false，零主线程调度）。
+- 开关与间隔随 NBT / Create 蓝图持久化：世界重载、蓝图部署后保持开启状态与间隔，首个 tick 自动重建快照。
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+-- 开启频道 1 的链接器的 NBT 缓存，默认每 20 tick 刷新
+ss.enableNbtCache(1)
+
+-- 改为每 5 tick 刷新一次
+ss.enableNbtCache(1, 5)
+
+-- 读缓存中附着方块的 NBT 字段
+local fuel = ss.getNbt(1, "Fuel")
+local items = ss.getAllNbt(1)  -- 全量 NBT
+
+-- 关闭缓存
+ss.enableNbtCache(1, 0)
+```
+
+- **作用域 = 调用电脑所在物理体**（含约束链）：电脑不在任何物理体上时，`getPeripheral` 返回 `nil`，红石读方法返回 `0`，`enableNbtCache` 返回 `false`，`getNbt` 返回 `nil`、`getAllNbt` 返回空表。
 - 目标未命中（频道空闲 / 链接器已卸载）→ 同上。
-- `getPeripheral` / `setRedstoneOutput` 调度到服务端主线程执行；红石读方法为缓存直读、零主线程调度（每 tick 刷新，最多滞后 1 tick）。
+- `getPeripheral` / `setRedstoneOutput` / `enableNbtCache` 调度到服务端主线程执行；红石读方法与 NBT 缓存读取（`getNbt` / `getAllNbt`）为缓存直读、零主线程调度（NBT 快照按配置的间隔刷新，最多滞后一个刷新周期）。
 
 ```lua
 local ss = require("ccpe.sensor_system")
@@ -72,5 +104,5 @@ print("input at channel 2:", ss.getRedstoneInput(2))
 ## 已知边界
 
 - **链动态变化**：两个物理体经轴承连接后频道空间自动合并（约束链），断开后恢复各自独立；链接器每 20 tick 复核并在冲突时顺延。
-- **蓝图兼容**：频道与共享加载开关随 Create 蓝图持久化；部署后共享开关按 OR 规则自愈一致。
+- **蓝图兼容**：频道、共享加载开关与 NBT 缓存设置（开关 + 刷新间隔）随 Create 蓝图持久化；部署后共享开关按 OR 规则自愈一致，NBT 缓存首个 tick 自动重建快照。
 - 不同物理体频道号相互独立——链接器只放在**目标**方块上即可，电脑侧无需任何配置。

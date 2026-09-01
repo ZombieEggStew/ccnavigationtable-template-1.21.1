@@ -414,7 +414,8 @@ public class PeripheralExtenderAPI implements ILuaAPI {
 
     // ═══════════════ NBT → Lua Table 转换 ═══════════════
 
-    private static Map<String, Object> convertCompoundToMap(CompoundTag nbt) {
+    /** NBT CompoundTag → Lua table（包可见，供 SensorSystemAPI.getAllNbt 复用） */
+    static Map<String, Object> convertCompoundToMap(CompoundTag nbt) {
         Map<String, Object> result = new LinkedHashMap<>();
         for (String key : nbt.getAllKeys()) {
             result.put(key, convertTag(nbt.get(key)));

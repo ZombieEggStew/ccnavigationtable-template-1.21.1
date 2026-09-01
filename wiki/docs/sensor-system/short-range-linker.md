@@ -48,10 +48,42 @@ Computers on the same physics body (including constraint chains) use `require("c
 | `getRedstoneOutput(channel)` | number | Current redstone output signal (0-15) of the target linker |
 | `getRedstoneInput(channel)` | number | Strongest redstone signal (0-15) currently received at the target linker's position |
 | `setRedstoneOutput(channel, signal)` | - | Write the target linker's redstone output (automatically clamped to 0-15), updating the block's powered state and adjacent redstone |
+| `enableNbtCache(channel, ticks?)` | boolean | Enable / adjust the target linker's **attached-block NBT cache** and set its refresh interval (see below) |
+| `getNbt(channel, path)` | any / nil | Read the value at NBT path `path` from the cached attached-block NBT (nil if the cache is not enabled) |
+| `getAllNbt(channel)` | table | Read the full cached attached-block NBT (converted to a Lua table; empty table if the cache is not enabled) |
 
-- **Scope = the calling computer's physics body** (incl. constraint chains): if the computer is not on any physics body, `getPeripheral` returns `nil` and the redstone reads return `0`.
+## NBT cache (off by default, enabled from Lua)
+
+Unlike the Micro Peripheral Extender (on-demand cache, always available), the Short-Range Signal Linker does **not** cache the attached block's NBT by default. Enable it explicitly from Lua:
+
+- `enableNbtCache(channel, ticks?)`: enables the NBT cache for the linker on `channel` and sets the refresh interval.
+  - `ticks` defaults to **20** (refresh the cache every 20 ticks);
+  - `ticks <= 0` → **disables** the cache (the existing snapshot is kept; read methods return nil / an empty table);
+  - calling it again while enabled only changes the interval; the snapshot is refreshed on the next server tick after enabling / changing.
+  - Returns `true` if the target linker exists and the setting was applied; `false` if the channel is free or the computer is not on a physics body.
+- While enabled, the server refreshes the attached-block NBT snapshot at the configured interval; `getNbt(channel, path)` (path syntax same as `ccpe.pe.get`, e.g. `"ForgeData.Items[0].Count"`) and `getAllNbt(channel)` read straight from that cache (`mainThread=false`, zero main-thread scheduling).
+- The toggle and interval persist through NBT / Create schematics: after a world reload or blueprint deployment the cache stays enabled with its interval, and the snapshot is rebuilt on the first tick.
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+-- enable the NBT cache for the linker on channel 1, refreshing every 20 ticks
+ss.enableNbtCache(1)
+
+-- switch to refreshing every 5 ticks
+ss.enableNbtCache(1, 5)
+
+-- read an NBT field of the attached block from the cache
+local fuel = ss.getNbt(1, "Fuel")
+local items = ss.getAllNbt(1)  -- full NBT
+
+-- disable the cache
+ss.enableNbtCache(1, 0)
+```
+
+- **Scope = the calling computer's physics body** (incl. constraint chains): if the computer is not on any physics body, `getPeripheral` returns `nil`, the redstone reads return `0`, `enableNbtCache` returns `false`, `getNbt` returns `nil` and `getAllNbt` returns an empty table.
 - Target not found (channel free, or linker unloaded) → same result.
-- `getPeripheral` / `setRedstoneOutput` are scheduled onto the server main thread; the redstone reads are cache-driven with zero main-thread scheduling (per-tick refresh, at most 1 tick stale).
+- `getPeripheral` / `setRedstoneOutput` / `enableNbtCache` are scheduled onto the server main thread; the redstone reads and the NBT cache reads (`getNbt` / `getAllNbt`) are cache-driven with zero main-thread scheduling (the NBT snapshot refreshes at the configured interval, at most one refresh cycle stale).
 
 ```lua
 local ss = require("ccpe.sensor_system")
@@ -72,5 +104,5 @@ print("input at channel 2:", ss.getRedstoneInput(2))
 ## Notes & boundaries
 
 - **Chains change over time**: two bodies joined by a bearing merge their channel spaces (constraint chain); breaking the bearing splits them again. The linker revalidates every 20 ticks and rolls over on conflicts.
-- **Blueprint compatibility**: the channel and the shared load switch persist through Create schematics; after deployment the shared switch self-heals via the OR rule.
+- **Blueprint compatibility**: the channel, the shared load switch and the NBT cache settings (toggle + refresh interval) persist through Create schematics; after deployment the shared switch self-heals via the OR rule and the NBT cache snapshot is rebuilt on the first tick.
 - Different bodies' channel numbers are independent — always place the linker on the *target* block; the computer side needs nothing.

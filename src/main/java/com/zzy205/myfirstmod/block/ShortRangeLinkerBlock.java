@@ -6,6 +6,7 @@ import com.zzy205.myfirstmod.screen.ShortRangeLinkerMenu;
 import net.createmod.catnip.math.VoxelShaper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
@@ -192,6 +193,31 @@ public class ShortRangeLinkerBlock extends BaseEntityBlock implements IWrenchabl
             case WALL -> state.getValue(FACING).getOpposite();
         };
         return linkerPos.relative(supportDir);
+    }
+
+    /**
+     * 读取链接器附着方块的完整 NBT 数据（NBT 缓存快照来源）。
+     * 逻辑照抄 {@link PeripheralExtenderBlock#getAttachedBlockNBT}：附着方块是 BE 时保存
+     * 全量元数据（{@code saveWithFullMetadata}）并尝试写入 Sable 真实世界坐标；无 BE 时
+     * 返回含方块描述 ID 的兜底标签。
+     */
+    public static CompoundTag getAttachedBlockNBT(Level level, BlockState state, BlockPos linkerPos) {
+        BlockPos attachedPos = getAttachedPos(state, linkerPos);
+        BlockEntity attachedBE = level.getBlockEntity(attachedPos);
+
+        if (attachedBE != null) {
+            CompoundTag nbt = attachedBE.saveWithFullMetadata(level.registryAccess());
+            // Sable 物理组装后的真实世界坐标（与 pe 同一来源）
+            PeripheralExtenderBlock.tryAddRealWorldPos(level, attachedBE, nbt);
+            return nbt;
+        }
+
+        // 没有 BlockEntity → 返回附着方块的状态信息（照抄 pe 兜底）
+        CompoundTag fallback = new CompoundTag();
+        BlockState attachedState = level.getBlockState(attachedPos);
+        fallback.putString("block", attachedState.getBlock().getDescriptionId());
+        fallback.putString("note", "This block has no NBT data (no BlockEntity)");
+        return fallback;
     }
 
     // ────────────────────────────────────────

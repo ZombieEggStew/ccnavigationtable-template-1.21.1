@@ -23,6 +23,7 @@ import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -31,6 +32,7 @@ import org.joml.Vector3d;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,7 +46,9 @@ import java.util.UUID;
  * <p>
  * 同时并入原 {@code ccpe.link} 的短程信号链接器寻址（作用域同为调用电脑所在物理体）：
  * {@link #getPeripheral(int)} / {@link #getRedstoneOutput(int)} /
- * {@link #getRedstoneInput(int)} / {@link #setRedstoneOutput(int, int)}。
+ * {@link #getRedstoneInput(int)} / {@link #setRedstoneOutput(int, int)}
+ * / {@link #enableNbtCache(int, java.util.Optional)} / {@link #getNbt(int, String)}
+ * / {@link #getAllNbt(int)}。
  * <p>
  * <b>高频缓存模式</b>（对齐 memo/my_sensor_system.md）：
  * <ul>
@@ -93,6 +97,11 @@ import java.util.UUID;
  * local desk = ss.getPeripheral(2)      -- 频道 2 被控制台占用 → 返回控制台外设（ccpe:control_desk）
  * print(ss.getRedstoneInput(2))         -- 目标链接器位置的红石输入
  * ss.setRedstoneOutput(2, 15)           -- 写目标链接器红石输出（相邻红石线随之响应）
+ * ss.enableNbtCache(1)                  -- 开启频道 1 链接器的附着方块 NBT 缓存（默认每 20 tick 刷新）
+ * ss.enableNbtCache(1, 5)               -- 改为每 5 tick 刷新一次
+ * local fuel = ss.getNbt(1, "Fuel")     -- 读缓存中附着方块 NBT 的路径值（未开启缓存返回 nil）
+ * local all = ss.getAllNbt(1)           -- 读全量 NBT（未开启缓存返回空表）
+ * ss.enableNbtCache(1, 0)               -- 关闭缓存
  * }</pre>
  */
 public class SensorSystemAPI implements ILuaAPI {
@@ -969,7 +978,7 @@ public class SensorSystemAPI implements ILuaAPI {
         return den > 0 ? num / den : null;
     }
 
-    // ═══════════════ 短程信号链接器（并入 sensor_system：原 ccpe.link 的四个方法） ═══════════════
+    // ═══════════════ 短程信号链接器（并入 sensor_system：原 ccpe.link 的四个方法 + NBT 缓存三方法） ═══════════════
     //
     // 寻址模型：频道号是设备在物理体内的「地址」（同体内 1:1，冲突自动顺延，见
     // ShortRangeLinkerRegistry），查询方（电脑）不需要自己的频道号；
@@ -977,6 +986,8 @@ public class SensorSystemAPI implements ILuaAPI {
     // （电脑不在物理体上 → 空集合 → 一律 nil，严格语义与「非物理体不链接」一致）。
     // 频道空间同时容纳链接器与控制台：getPeripheral 先找链接器（返回附着方块外设），
     // 频道被控制台占用时返回控制台自身外设（ControlDeskRegistry 委托同一注册表）。
+    // NBT 缓存与 pe 不同：默认关闭，需 enableNbtCache 显式开启并配置刷新间隔（默认 20 tick），
+    // 开启后服务端按间隔缓存附着方块 NBT，getNbt / getAllNbt 直读该缓存（mainThread=false）。
 
     /**
      * 本机物理体（含约束链）内频道 {@code channel} 对应设备的外设（IPeripheral）：
@@ -1037,6 +1048,74 @@ public class SensorSystemAPI implements ILuaAPI {
     public final void setRedstoneOutput(int channel, int signal) {
         ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
         if (linker != null) linker.setRedstoneOutput(Math.clamp(signal, 0, 15));
+    }
+
+    // ═══════════════ 附着方块 NBT 缓存（与 pe 不同：默认关闭，需 enableNbtCache 显式开启） ═══════════════
+
+    /**
+     * 开启 / 关闭 / 调整目标链接器的<b>附着方块 NBT 缓存</b>并设置刷新间隔。
+     * <p>
+     * 与 {@code ccpe.pe}（按需缓存、永远开启）不同，短程信号链接器<b>默认不缓存</b>NBT：
+     * 本方法显式开启后，服务端每 {@code ticks} tick 刷新一次附着方块的 NBT 快照（照
+     * {@link ShortRangeLinkerBlockEntity#setNbtCache}），随后 {@link #getNbt(int, String)} /
+     * {@link #getAllNbt(int)} 读取该缓存。
+     * <ul>
+     *   <li>{@code ticks} 缺省 = 20（默认刷新间隔）；</li>
+     *   <li>{@code ticks <= 0} → 关闭缓存（保留已有快照，读取方法返回 nil/空表）；</li>
+     *   <li>已开启时重复调用仅修改间隔；开启/修改后下一个服务端 tick 立即刷新一次快照。</li>
+     * </ul>
+     * 开关与间隔随 NBT / Create 蓝图持久化（世界重载、蓝图部署后保持）。
+     * <p>
+     * mainThread=true：写链接器 BE 状态并置脏。
+     *
+     * @param channel 目标链接器频道号（本机物理体内）
+     * @param ticks   刷新间隔（tick），可选，缺省 20；≤ 0 表示关闭缓存
+     * @return 是否成功（目标链接器存在；频道空闲 / 电脑不在物理体上返回 false）
+     */
+    @LuaFunction(mainThread = true)
+    public final boolean enableNbtCache(int channel, Optional<Double> ticks) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        if (linker == null) return false;
+        int interval = (int) Math.floor(ticks.orElse(20.0));
+        linker.setNbtCache(interval);
+        return true;
+    }
+
+    /**
+     * 读取目标链接器缓存的<b>附着方块 NBT</b>中路径 {@code path} 处的值
+     * （mainThread=false，直读 volatile 缓存，零主线程调度；路径语法与
+     * {@code ccpe.pe.get} 相同，如 {@code "ForgeData.Items[0].Count"}）。
+     * <p>
+     * 缓存未开启（默认）或快照为空 → 返回 nil。
+     *
+     * @param channel 目标链接器频道号（本机物理体内）
+     * @param path    NBT 路径（点号 / 下标语法）
+     * @return 路径处的值（标量 / table / 列表）；未开启缓存或路径不存在返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Object getNbt(int channel, String path) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        if (linker == null || !linker.isNbtCacheEnabled()) return null;
+        CompoundTag nbt = linker.getCachedAttachedNBT();
+        if (nbt == null || nbt.isEmpty()) return null;
+        return PeripheralExtenderAPI.resolvePath(nbt, path);
+    }
+
+    /**
+     * 读取目标链接器缓存的<b>附着方块 NBT</b>全量（转 Lua table，mainThread=false 直读缓存）。
+     * <p>
+     * 缓存未开启（默认）或快照为空 → 返回空表。
+     *
+     * @param channel 目标链接器频道号（本机物理体内）
+     * @return 全量 NBT 转换后的 table；未开启缓存返回空表
+     */
+    @LuaFunction
+    public final Map<String, Object> getAllNbt(int channel) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        if (linker == null || !linker.isNbtCacheEnabled()) return Collections.emptyMap();
+        CompoundTag nbt = linker.getCachedAttachedNBT();
+        if (nbt == null || nbt.isEmpty()) return Collections.emptyMap();
+        return PeripheralExtenderAPI.convertCompoundToMap(nbt);
     }
 
     // ═══════════════ 主线程辅助 ═══════════════
