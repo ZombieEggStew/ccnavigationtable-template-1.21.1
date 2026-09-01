@@ -4,6 +4,13 @@
 
 **Designed to optimize space usage and maintain a clear field of view.**
 
+!!! warning "Channel"
+    Version 1.1.1 changed the global channel to a **physical-body-scoped** channel, reusing the [Short-Range Signal Linker](../sensor-system/short-range-linker.md)'s channel space, where channel numbers are only addressable within the physics body that the desk is part of.
+    
+    The purpose is to prevent interference between different physics bodies when deploying blueprints or mass-producing them.
+    
+    Two different physics bodies can use channel `1` simultaneously without interfering with each other.
+
 The Control Desk is a seat-driven control console. By default it has **no controls installed** — you install [Foot Pedals](pedal.md), a [Joystick](joystick.md) and/or a [Throttle](throttle.md) onto it yourself. Sit on a Create seat next to the desk and you automatically enter **operation mode**: your keyboard drives the installed controls of every linked desk, and the control states are exposed to CC:T via a Lua API.
 
 ## Installing / Removing Controls
@@ -27,16 +34,6 @@ Linking is based on the seat's four neighbors, not on the desk's facing. While y
 !!! tip "Seat detection"
     The seat is detected by the **ridden entity**, not the block: operation mode triggers whenever your vehicle is Create's `SeatEntity` (or a subclass of it). Seats from other mods that ride Create's seat entity — such as **Create: Interiors** chairs — work out of the box.
 
-### Default Key Bindings
-
-| Control | Action | Default key |
-|---|---|---|
-| Joystick | Push forward / pull back / tilt left / tilt right | `W` / `S` / `A` / `D` |
-| Left pedal | Press down / lift up | `Q` / `E` |
-| Right pedal | Press down / lift up | `E` / `Q` |
-| Throttle | Shift up / shift down | `Space` / `Left Ctrl` |
-
-All key bindings are **per-desk** and configurable in the module settings menu (see below).
 
 ## Configuration Menu
 
@@ -47,7 +44,7 @@ Open the desk's configuration menu with:
 
 The menu contains:
 
-- **Channel** scroll bar — the desk's global channel number, shared with sensors / Monitors / Peripheral Extenders in one globally-unique namespace (occupied channels are skipped).
+- **Channel** scroll bar — the desk's **physical-body-scoped** channel number, sharing the [Short-Range Signal Linker](../sensor-system/short-range-linker.md)'s per-body channel space: the channel is only addressable **within the physics body (constraint chain) the desk sits on**, so two different aircraft can both use channel `1` without interfering. A desk **not** placed on any physics body cannot register a channel — the menu shows a "only usable on a physics body" hint instead of the channel bar (occupied channels within the body are skipped).
 - **Installed controls** list — click a row to open that control's module settings menu (key bindings, return time, gear mode, etc.).
 
 All settings are stored in the block's NBT and survive **Create schematics / contraption pick-up**, so you can mass-produce configured desks.
@@ -59,9 +56,9 @@ The desk's peripheral type is `"ccpe:control_desk"`.
 ### Getting the Peripheral
 
 ```lua
--- Method A: via a channel (works at any distance)
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)   -- 4 = the desk's channel number
+-- Method A: via a channel (works at any distance, but only within the same physics body)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)   -- 4 = the desk's channel number (scoped to the computer's physics body)
 
 -- Method B: direct CC:T peripheral (computer placed adjacent)
 local desk = peripheral.wrap("right")

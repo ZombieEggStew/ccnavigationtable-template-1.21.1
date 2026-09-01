@@ -2,6 +2,12 @@
   "itemGroup.ccpe.my_mod_tab": "电脑外设扩展",
 
   "block.ccpe.micro_peripheral_extender": "微型外设扩展器",
+  "block.ccpe.short_range_linker": "短程信号链接器",
+  "gui.ccpe.short_range_linker.require_body": "只在物理体上可用",
+  "gui.ccpe.short_range_linker.load_body": "加载物理体",
+  "gui.ccpe.short_range_linker.load_body_tip": "开启后整个物理体保持加载，远离也不会卸载",
+  "gui.ccpe.short_range_linker.on": "开启",
+  "gui.ccpe.short_range_linker.off": "关闭",
   "block.ccpe.redstone_transceiver": "红石收发器",
   "block.ccpe.transmission_peripheral": "电子变速箱",
   "block.ccpe.my_monitor": "监视器",
@@ -12,6 +18,10 @@
   "block.ccpe.ins": "惯性导航系统",
   "block.ccpe.fmc": "飞行管理计算机",
   "block.ccpe.aic": "航空集成计算机",
+  "block.ccpe.fluid_port": "流体端口",
+  "block.ccpe.fluid_port.tooltip.summary": "!?轻轻?!",
+  "block.ccpe.fluid_port.tooltip.condition1": "右键点击时",
+  "block.ccpe.fluid_port.tooltip.behaviour1": "将手持物品中的流体存入端口相邻的储罐（开口面以外的任意方向）。若物品无法清空，则改为从储罐灌满物品。",
 
   "tooltip.ccpe.transmission_peripheral.header": "电子变速箱",
   "tooltip.ccpe.transmission_peripheral.mode": "模式：",

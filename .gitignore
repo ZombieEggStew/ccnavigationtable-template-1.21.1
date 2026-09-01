@@ -61,3 +61,5 @@ wiki/site/
 wiki/.tmp/
 
 start-mkdocs.bat
+
+.env

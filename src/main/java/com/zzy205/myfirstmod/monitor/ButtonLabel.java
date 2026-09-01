@@ -8,6 +8,8 @@ package com.zzy205.myfirstmod.monitor;
  * （MC 像素，1px = 1/16 块，+x 右、+y 上，默认 0,0），{@link #scale()} 为字号缩放
  * （块/字体像素，默认与旋钮角度显示一致），{@link #color()} 为文字颜色（0xRRGGBB，默认白色），
  * {@link #dropShadow()} 为是否绘制投影（默认开启）。
+ * <p>
+ * （测试编辑标记：仅注释变更，无任何功能影响，可随时删除。）
  */
 public record ButtonLabel(String text, double x, double y, double scale, int color, boolean dropShadow) {
 

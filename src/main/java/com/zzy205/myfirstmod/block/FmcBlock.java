@@ -122,14 +122,18 @@ public class FmcBlock extends BaseEntityBlock implements IWrenchable {
         return RenderShape.MODEL;
     }
 
-    @Override
-    protected boolean canSurvive(@NotNull BlockState state, @NotNull LevelReader level, @NotNull BlockPos pos) {
-        Direction supportDirection = switch (state.getValue(FACE)) {
+    /** FMC 的支撑方块方向（FACE/FACING → 支撑方向）；附着方块 = {@code pos.relative(supportDirection)} */
+    public static Direction supportDirectionOf(BlockState state) {
+        return switch (state.getValue(FACE)) {
             case FLOOR -> Direction.DOWN;
             case CEILING -> Direction.UP;
             case WALL -> state.getValue(FACING).getOpposite();
         };
-        BlockPos supportPos = pos.relative(supportDirection);
+    }
+
+    @Override
+    protected boolean canSurvive(@NotNull BlockState state, @NotNull LevelReader level, @NotNull BlockPos pos) {
+        BlockPos supportPos = pos.relative(supportDirectionOf(state));
         return !level.getBlockState(supportPos).isAir();
     }
 

@@ -25,8 +25,8 @@
 ## Lua API
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local th = desk.getModule("throttle")   -- 未安装油门杆返回 nil
 ```
 
@@ -55,8 +55,8 @@ print(th.getAxis())   -- 0..1
 ## 示例
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local th = desk.getModule("throttle")
 
 while true do

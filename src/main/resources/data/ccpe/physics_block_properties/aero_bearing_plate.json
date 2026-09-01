@@ -1,0 +1,6 @@
+{
+  "selector": "ccpe:aero_bearing_plate",
+  "properties": {
+    "sable:mass": 0.125
+  }
+}

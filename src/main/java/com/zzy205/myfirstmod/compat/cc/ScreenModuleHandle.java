@@ -110,26 +110,32 @@ public final class ScreenModuleHandle extends ModuleHandle {
     /**
      * 在固定区域内写入文本（每帧刷新定宽字段用，如时钟/计数器）。
      * 以 (col,row) 为起点、{@code width} 格宽的**单行区域**内写入 {@code text}：
-     * 区域内**未写入文本的格子自动清空为空格**（前景色用当前 {@code setTextColour} 设置的颜色），
+     * 区域内**未写入文本的格子自动清空为空格**（前景色用 {@code colour} 或当前
+     * {@code setTextColour} 设置的颜色），
      * 区域内格子**背景色保留**（fill 底色不清）；区域外不动；光标不变。
      * <p>
      * {@code align} 为 {@code "left"}（默认）/ {@code "right"} / {@code "center"}；
      * 文本超过区域宽度时截断：左/中保留开头，右对齐保留末尾。
+     * <p>
+     * {@code colour} 可选（0xRRGGBB）：传了就用该颜色渲染本区域字符（含清空格），
+     * 不传则用 {@code setTextColour} 设置的颜色（默认白色）。
      *
      * <pre>{@code
-     * scr.writeField(1, 1, 2, "15", "right")   -- |15|
-     * scr.writeField(1, 1, 2, "6",  "right")   -- | 6|  ← 十位自动清空
+     * scr.writeField(1, 1, 2, "15", "right")        -- |15|
+     * scr.writeField(1, 1, 2, "6",  "right")        -- | 6|  ← 十位自动清空
+     * scr.writeField(1, 2, 10, "LOADING", "center", 0xFFAA00)
      * }</pre>
      *
-     * @param col   区域起始列（1 起）
-     * @param row   区域行（1 起）
-     * @param width 区域宽度（格，≤ 0 无操作）
-     * @param text  要写入的文本
-     * @param align 对齐方式（可选，默认 "left"）
+     * @param col    区域起始列（1 起）
+     * @param row    区域行（1 起）
+     * @param width  区域宽度（格，≤ 0 无操作）
+     * @param text   要写入的文本
+     * @param align  对齐方式（可选，默认 "left"）
+     * @param colour 前景色（可选，0xRRGGBB；不传用当前前景色）
      */
     @LuaFunction(mainThread = true)
-    public final void writeField(int col, int row, int width, String text, Optional<String> align) {
-        be.screenWriteField(id, col, row, width, text, align.orElse("left"));
+    public final void writeField(int col, int row, int width, String text, Optional<String> align, Optional<Integer> colour) {
+        be.screenWriteField(id, col, row, width, text, align.orElse("left"), colour.orElse(null));
     }
 
     /** 清空屏幕全部内容（格子 + 图形 + 光标），保留格子数。 */
@@ -204,6 +210,28 @@ public final class ScreenModuleHandle extends ModuleHandle {
         return t != null ? t.getOverflowMode().name : ScreenText.OverflowMode.WRAP.name;
     }
 
+    /**
+     * 设置整个屏幕的渲染开关（默认 {@code true}）：
+     * 传 {@code false} 后整个屏幕（9 宫格边框 + 格子内容 + 图形层）都不再绘制，
+     * 显示为空白面板；传 {@code true} 恢复渲染。格子内容与设置保留，开关只影响显示。
+     *
+     * <pre>{@code
+     * scr.setVisible(false)   -- 隐藏整个屏幕
+     * scr.setVisible(true)    -- 恢复显示
+     * }</pre>
+     */
+    @LuaFunction(mainThread = true)
+    public final void setVisible(boolean visible) {
+        be.screenSetVisible(id, visible);
+    }
+
+    /** 读取屏幕渲染开关（默认 {@code true}）。 */
+    @LuaFunction
+    public final boolean getVisible() {
+        ScreenText t = text();
+        return t == null || t.isVisible();
+    }
+
     // ═══════════════ 填充（背景色） ═══════════════
 
     /**
@@ -256,8 +284,10 @@ public final class ScreenModuleHandle extends ModuleHandle {
      * <p>
      * {@code batch} 为 Lua table，两段式结构：
      * <ul>
-     *   <li>{@code cells}：每格一个数组 {@code {col, row, char, fg?, bg?}}（col/row 1 起；
-     *       fg 省略沿用当前前景色，bg 省略为透明）</li>
+     *   <li>{@code cells}：每格一个数组 {@code {col, row, text, fg?, bg?, align?}}（col/row 1 起；
+     *       fg 省略沿用当前前景色，bg 省略为透明；{@code text} 为字符串，自动向右铺开，
+     *       {@code \n} 换行；{@code align} 可选 {@code "left"}/{@code "right"}/{@code "center"}
+     *       （默认 left），在区域 [col, 屏幕右缘] 内对齐，超右缘截断）</li>
      *   <li>{@code shapes}（可选）：图形数组，每项为带 {@code type} 字段的 table：
      *       {@code {type="rect", x, y, w, h, colour, solid?, lineWidth?, z?}} /
      *       {@code {type="line", x1, y1, x2, y2, colour, lineWidth?, z?}} /
@@ -268,8 +298,8 @@ public final class ScreenModuleHandle extends ModuleHandle {
      * <pre>{@code
      * scr.draw({
      *   cells = {
-     *     {1, 1, "A", 0xFFFFFF, 0x000000},
-     *     {2, 1, "B", 0xFF0000},
+     *     {1, 1, "HI", 0xFFFFFF, 0x000000},
+     *     {1, 2, "OK", 0xFF0000},
      *   },
      *   shapes = {
      *     {type = "rect", x = 0, y = 0, w = 8, h = 8, colour = 0x00FF00, solid = true},
@@ -295,14 +325,24 @@ public final class ScreenModuleHandle extends ModuleHandle {
      * 服务端清空文本层后逐格写入（原子替换）。**图形层（rect/line/circle）保持不变**。
      * <p>
      * 参数结构与 {@link #draw(LuaTable)} 的 {@code cells} 段一致（外层仍是
-     * {@code {cells = {...}}}）：每格一个数组 {@code {col, row, char, fg?, bg?}}
-     * （col/row 1 起；fg 省略沿用当前前景色，bg 省略为透明）。
+     * {@code {cells = {...}}}）：每格一个数组 {@code {col, row, text, fg?, bg?, align?}}
+     * （col/row 1 起；fg 省略沿用当前前景色，bg 省略为透明，显示屏幕面板底色）。
+     * {@code text} 为<b>字符串</b>，自动向右逐格铺开（不再是一个字符一条），
+     * 字符串内的 {@code \n} 换行（回到起点列、行 +1）。
+     * <p>
+     * {@code align} 可选（默认 {@code "left"}）：文本在<b>区域 = [col, 屏幕右缘]</b>内对齐——
+     * {@code "left"} 靠起点 / {@code "right"} 右缘贴屏幕右缘 / {@code "center"} 区域内居中；
+     * 字符串内每行独立对齐。超右缘截断：左/中留头、右留尾。
+     * 注意：align 可用位置第 6 参（此时 fg/bg 必须都有值，Lua 数组遇 {@code nil} 截断），
+     * 也可用键名写法 {@code align = "right"}（跳参时用它）。
      * 替换会清空格子并把光标复位到 (1,1)，省略的格子为空白。
      *
      * <pre>{@code
      * scr.drawCells({ cells = {
-     *   {1, 1, "A", 0xFFFFFF, 0x000000},
-     *   {2, 1, "B", 0xFF0000},
+     *   {1, 1, "LOADING", 0xFFFFFF, 0x000000},
+     *   {1, 2, "███████", 0xFF0000},
+     *   {1, 3, "12.5", 0x00FF00, align = "right"},   -- 右对齐到屏幕右缘
+     *   {1, 4, "TITLE", align = "center"},           -- 居中
      * }})
      * }</pre>
      *
@@ -311,6 +351,71 @@ public final class ScreenModuleHandle extends ModuleHandle {
     @LuaFunction(mainThread = true)
     public final void drawCells(LuaTable<?, ?> batch) throws LuaException {
         be.screenReplaceCells(id, parseCells(batch));
+    }
+
+    /**
+     * **按行整批替换文本层**（最省事的整屏传输）：外层数组下标即行号（1 起），
+     * 列自动从 1 起，不用写坐标。每行可以是：
+     * <ul>
+     *   <li>字符串 {@code "text"}：用当前前景色、透明背景（显示屏幕面板底色）、左对齐；</li>
+     *   <li>数组 {@code {text, fg?, bg?, align?}}：fg 省略用当前前景色，bg 省略为透明，
+     *       align 省略为 {@code "left"}。</li>
+     * </ul>
+     * 文本自动向右逐格铺开（超右缘截断），字符串内 {@code \n} 换行（下一行从列 1 起）。
+     * {@code align}（{@code "left"}/{@code "right"}/{@code "center"}）决定文本在
+     * <b>整行区域 [1, 屏幕右缘]</b>内的对齐，字符串内每行独立对齐。
+     * 注意：align 可用位置第 4 参（此时 fg/bg 必须都有值，Lua 数组遇 {@code nil} 截断），
+     * 也可用键名写法 {@code align = "right"}（跳参时用它）。
+     * 语义同 {@link #drawCells(LuaTable)}：清空文本层后写入、光标复位 (1,1)、图形层不变。
+     *
+     * <pre>{@code
+     * scr.drawText({
+     *   {"LOADING", 0xFFFFFF},
+     *   {"███████", 0xFF0000},
+     *   {"12.5", 0x00FF00, align = "right"},   -- 右对齐到屏幕右缘
+     *   {"TITLE", align = "center"},           -- 居中
+     * })
+     * }</pre>
+     *
+     * @throws LuaException 解析失败时抛出（文本层保持不变，不会部分应用）
+     */
+    @LuaFunction(mainThread = true)
+    public final void drawText(LuaTable<?, ?> rows) throws LuaException {
+        List<int[]> cells = new ArrayList<>();
+        int[] grid = be.getScreenGrid(id);
+        int maxCol = grid != null ? grid[0] : -1; // 屏幕右缘列（每行对齐区域右界）
+        for (int i = 1; i <= rows.length(); i++) {
+            // LuaTable 数字键统一为 Double（Cobalt 全数字转 double；get(int) 会装箱成 Integer 取不到）
+            Object row = rows.get((double) i);
+            String text;
+            int fg = currentTextColour();
+            int bg = ScreenText.TRANSPARENT_BG;
+            String align = "left";
+            if (row instanceof String str) {
+                text = str;
+            } else if (row instanceof Map<?, ?> rowMap) {
+                LuaTable<?, ?> rt = rowMap instanceof LuaTable<?, ?> lt ? lt : new ObjectLuaTable(rowMap);
+                // LuaTable 数字键统一为 Double（get(int) 会装箱成 Integer 取不到）
+                Object t = rt.get((double) 1);
+                if (!(t instanceof String s)) {
+                    throw new LuaException("drawText[" + i + "] must be a string or {text, fg?, bg?, align?}");
+                }
+                text = s;
+                if (rt.length() > 1) fg = rt.getInt(2);
+                if (rt.length() > 2) bg = rt.getInt(3);
+                // align 支持键名写法（{text, fg?, bg?, align = "..."}）：Lua 数组遇 nil 截断，
+                // 位置写法要求 fg/bg 都有值；键名走 hash 部分，跳参时也能传
+                align = rt.getString("align");
+                if (align == null && rt.length() > 3) align = rt.getString(4);
+                if (align == null) align = "left";
+            } else {
+                throw new LuaException("drawText[" + i + "] must be a string or {text, fg?, bg?, align?}");
+            }
+            if (!text.isEmpty()) {
+                addTextCells(cells, 1, i, text, fg, bg, align, maxCol);
+            }
+        }
+        be.screenReplaceCells(id, cells);
     }
 
     /**
@@ -338,28 +443,70 @@ public final class ScreenModuleHandle extends ModuleHandle {
         be.screenReplaceShapes(id, shapes.rects(), shapes.lines(), shapes.circles());
     }
 
-    /** draw/drawCells 共享：解析 cells 段（{cells = {{col,row,char,fg?,bg?}, ...}}）。 */
+    /** draw/drawCells 共享：解析 cells 段（{cells = {{col,row,text,fg?,bg?,align?}, ...}}）。 */
     private List<int[]> parseCells(LuaTable<?, ?> batch) throws LuaException {
         List<int[]> cells = new ArrayList<>();
         Object cellsObj = batch.get("cells");
         if (cellsObj instanceof Map<?, ?> cellsMap) {
             LuaTable<?, ?> cellsTable = cellsMap instanceof LuaTable<?, ?> lt ? lt : new ObjectLuaTable(cellsMap);
+            int[] grid = be.getScreenGrid(id);
+            int maxCol = grid != null ? grid[0] : -1; // 屏幕右缘列（对齐区域右界）
             for (int i = 1; i <= cellsTable.length(); i++) {
-                Object row = cellsTable.get(i);
+                // LuaTable 数字键统一为 Double（Cobalt 全数字转 double；get(int) 会装箱成 Integer 取不到）
+                Object row = cellsTable.get((double) i);
                 if (!(row instanceof Map<?, ?> rowMap)) {
-                    throw new LuaException("cells[" + i + "] must be a table {col, row, char, fg?, bg?}");
+                    throw new LuaException("cells[" + i + "] must be a table {col, row, text, fg?, bg?, align?}");
                 }
                 LuaTable<?, ?> rt = rowMap instanceof LuaTable<?, ?> lt2 ? lt2 : new ObjectLuaTable(rowMap);
                 int col = rt.getInt(1);
                 int rowIdx = rt.getInt(2);
                 String s = rt.getString(3);
-                char ch = s == null || s.isEmpty() ? ' ' : s.charAt(0);
                 int fg = rt.length() > 3 ? rt.getInt(4) : currentTextColour();
                 int bg = rt.length() > 4 ? rt.getInt(5) : ScreenText.TRANSPARENT_BG;
-                cells.add(new int[] { col, rowIdx, ch, fg, bg });
+                // align 支持键名写法（{..., align = "right"}）：Lua 数组遇 nil 截断，位置写法
+                // 要求 fg/bg 都有值；键名走 hash 部分，跳参时也能传
+                String align = rt.getString("align");
+                if (align == null && rt.length() > 5) align = rt.getString(6);
+                if (align == null) align = "left";
+                if (s != null && !s.isEmpty()) {
+                    addTextCells(cells, col, rowIdx, s, fg, bg, align, maxCol);
+                }
             }
         }
         return cells;
+    }
+
+    /**
+     * 把一段文本按对齐展开成格子追加到 {@code out}（drawCells/drawText 共享）。
+     * <p>
+     * 区域 = [startCol, maxCol]（maxCol = 屏幕右缘列）；文本自动向右逐格铺开，
+     * 字符串内 {@code \n} 换行（回到起点列、行 +1），**每行独立按 {@code align} 对齐**：
+     * left 靠起点 / right 右缘贴 maxCol / center 区域居中（默认 left，复用
+     * {@link ScreenText.Align#byName(String)} 解析，未知名称回退 left）。
+     * 超右缘截断：左/中留头、右留尾（printf {@code %2s} 风格，同 writeField）；
+     * 超下缘的格子由服务端 {@code replaceCells} 裁剪。区域无效（maxCol < startCol）时整段不写入。
+     */
+    private void addTextCells(List<int[]> out, int startCol, int startRow, String text,
+                              int fg, int bg, String align, int maxCol) {
+        if (maxCol < startCol) return; // 无有效区域（屏幕不存在或起点超界）
+        ScreenText.Align a = ScreenText.Align.byName(align);
+        int span = maxCol - startCol + 1;
+        int r = startRow;
+        for (String line : text.split("\n", -1)) {
+            int len = line.length();
+            if (len == 0) { r++; continue; }
+            int take = Math.min(len, span);
+            int srcStart = (a == ScreenText.Align.RIGHT && len > span) ? len - span : 0;
+            int dstStart = switch (a) {
+                case RIGHT -> startCol + span - take;
+                case CENTER -> startCol + (span - take) / 2;
+                default -> startCol;
+            };
+            for (int i = 0; i < take; i++) {
+                out.add(new int[] { dstStart + i, r, line.charAt(srcStart + i), fg, bg });
+            }
+            r++;
+        }
     }
 
     /** draw/drawShapes 共享：解析 shapes 段（{shapes = {{type="rect"|"line"|"circle"|"point", ...}, ...}}）。 */
@@ -371,7 +518,8 @@ public final class ScreenModuleHandle extends ModuleHandle {
         if (shapesObj instanceof Map<?, ?> shapesMap) {
             LuaTable<?, ?> shapesTable = shapesMap instanceof LuaTable<?, ?> lt ? lt : new ObjectLuaTable(shapesMap);
             for (int i = 1; i <= shapesTable.length(); i++) {
-                Object shape = shapesTable.get(i);
+                // LuaTable 数字键统一为 Double（Cobalt 全数字转 double；get(int) 会装箱成 Integer 取不到）
+                Object shape = shapesTable.get((double) i);
                 if (!(shape instanceof Map<?, ?> shapeMap)) {
                     throw new LuaException("shapes[" + i + "] must be a table");
                 }

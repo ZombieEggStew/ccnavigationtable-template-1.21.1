@@ -108,9 +108,13 @@ public interface MonitorGridHost {
 
     void screenSetOverflowMode(int id, String mode);
 
+    /** 设置屏幕渲染开关（false = 整个屏幕 9 宫格与内容都不绘制）。 */
+    void screenSetVisible(int id, boolean visible);
+
     void screenFill(int id, int col, int row, int w, int h, int colour);
 
-    void screenWriteField(int id, int col, int row, int width, String text, String align);
+    /** @param colour 可选，前景色（0xRRGGBB）；null 表示用屏幕当前前景色（setTextColour 设置） */
+    void screenWriteField(int id, int col, int row, int width, String text, String align, Integer colour);
 
     void screenFillField(int id, int col, int row, int width, int count, int colour, String align);
 

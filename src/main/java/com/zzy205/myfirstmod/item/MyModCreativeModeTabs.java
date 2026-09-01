@@ -21,6 +21,7 @@ public class MyModCreativeModeTabs {
             .icon(() -> new ItemStack(MyModBlocks.micro_peripheral_extender.get()))
             .displayItems((parameters, output) -> {
                 output.accept(MyModBlocks.micro_peripheral_extender);
+                output.accept(MyModBlocks.short_range_linker);
                 output.accept(MyModBlocks.redstone_transceiver);
                 output.accept(MyModBlocks.transmission_peripheral);
                 output.accept(MyModBlocks.monitor);
@@ -31,6 +32,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.ins);
                 output.accept(MyModBlocks.fmc);
                 output.accept(MyModBlocks.aic);
+                output.accept(MyModBlocks.fluid_port);
                 output.accept(MyModItems.CONTROL_PEDAL);
                 output.accept(MyModItems.CONTROL_JOYSTICK);
                 output.accept(MyModItems.CONTROL_MONITOR_2);

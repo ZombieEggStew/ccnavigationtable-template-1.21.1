@@ -65,6 +65,8 @@ public class ScreenText {
     private double zIndex = DEFAULT_Z;
     /** 文本超出单行宽度时的处理方式。 */
     private OverflowMode overflowMode = OverflowMode.WRAP;
+    /** 屏幕渲染开关（false = 整个屏幕 9 宫格与内容都不绘制）。 */
+    private boolean visible = true;
 
     private final List<Rect> rects = new ArrayList<>();
     private final List<Line> lines = new ArrayList<>();
@@ -187,6 +189,12 @@ public class ScreenText {
     public int getCursorRow() { return cursorRow; }
 
     public int getTextColour() { return textColour; }
+
+    /** 屏幕渲染开关（false = 整个屏幕 9 宫格与内容都不绘制）。 */
+    public boolean isVisible() { return visible; }
+
+    /** 设置屏幕渲染开关（setVisible 用）。 */
+    public void setVisible(boolean visible) { this.visible = visible; }
 
     public double getZIndex() { return zIndex; }
 
@@ -349,10 +357,26 @@ public class ScreenText {
     }
 
     /**
+     * 在固定区域内写入文本（每帧刷新定宽字段用），前景色用当前 {@link #textColour}。
+     * <p>
+     * 等价于 {@code writeField(col, row, width, text, align, textColour)}，
+     * 即未显式指定颜色时使用 {@code setTextColour} 设置的颜色（默认 {@link #DEFAULT_TEXT_COLOUR}）。
+     *
+     * @param col   区域起始列（1 起，自动钳制到格子范围）
+     * @param row   区域行（1 起，自动钳制到格子范围）
+     * @param width 区域宽度（格，≤ 0 时无操作；超出格子范围自动裁剪）
+     * @param text  要写入的文本（null 视为空字符串）
+     * @param align 对齐方式（null 回退 {@link Align#LEFT}）
+     */
+    public void writeField(int col, int row, int width, String text, Align align) {
+        writeField(col, row, width, text, align, textColour);
+    }
+
+    /**
      * 在固定区域内写入文本（每帧刷新定宽字段用）。
      * <p>
      * 以 (col,row) 为起点、{@code width} 格宽的**单行区域**内写入 {@code text}：
-     * 区域内**未写入文本的格子字符清空为空格**（前景色用当前 {@link #textColour}），
+     * 区域内**未写入文本的格子字符清空为空格**（前景色用 {@code colour}），
      * 区域内格子**背景色保留**（fill 底色不被清掉）；区域外的格子完全不动。
      * <p>
      * 对齐由 {@code align} 决定（{@link Align#LEFT} 靠左 / {@link Align#RIGHT} 靠右 /
@@ -365,8 +389,9 @@ public class ScreenText {
      * @param width 区域宽度（格，≤ 0 时无操作；超出格子范围自动裁剪）
      * @param text  要写入的文本（null 视为空字符串）
      * @param align 对齐方式（null 回退 {@link Align#LEFT}）
+     * @param colour 前景色（0xRRGGBB，只取低 24 位；决定本区域字符与清空格的颜色）
      */
-    public void writeField(int col, int row, int width, String text, Align align) {
+    public void writeField(int col, int row, int width, String text, Align align, int colour) {
         if (width <= 0) return;
         int r = clamp(row, 1, rows);
         int c0 = clamp(col, 1, cols);
@@ -374,12 +399,13 @@ public class ScreenText {
         if (c0 > c1) return;
         Align a = align != null ? align : Align.LEFT;
         String s = text != null ? text : "";
+        int col24 = colour & 0xFFFFFF;
 
-        // 区域内先全部清成空格（前景色用当前色，背景保留）
+        // 区域内先全部清成空格（前景色用指定色，背景保留）
         for (int c = c0; c <= c1; c++) {
             int idx = index(c, r);
             cells[idx] = ' ';
-            fg[idx] = textColour;
+            fg[idx] = col24;
         }
 
         int len = s.length();
@@ -398,7 +424,7 @@ public class ScreenText {
             int idx = index(dstStart + i, r);
             if (idx < 0) continue; // 理论上不会越界，防御
             cells[idx] = s.charAt(srcStart + i);
-            fg[idx] = textColour;
+            fg[idx] = col24;
         }
     }
 
@@ -482,7 +508,8 @@ public class ScreenText {
     /**
      * 单层替换文本层（drawCells 的原子语义）：清空全部格子与光标（保留格子数），
      * 再逐格写入。**图形层（rect/line/circle）保持不变**。
-     * 光标复位到 (1,1)；省略 fg 的格子用当前前景色 {@link #textColour}，省略 bg 为透明。
+     * 光标复位到 (1,1)；省略 fg 的格子用当前前景色 {@link #textColour}，省略 bg 为透明
+     * （{@link #TRANSPARENT_BG}，不绘制背景 quad，显示屏幕面板底色）。
      *
      * @param newCells 每格一行：{col, row, char, fg, bg}（col/row 1 起；fg/bg 省略用默认值）
      */
@@ -495,7 +522,10 @@ public class ScreenText {
                 if (idx < 0) continue;
                 cells[idx] = (char) cell[2];
                 fg[idx] = cell.length > 3 ? (cell[3] & 0xFFFFFF) : textColour;
-                bg[idx] = cell.length > 4 ? (cell[4] & 0xFFFFFF) : TRANSPARENT_BG;
+                // 省略 bg 或显式 -1（TRANSPARENT_BG）都保持透明：不能直接 & 0xFFFFFF（-1 会变成白色）
+                bg[idx] = cell.length > 4
+                        ? (cell[4] == TRANSPARENT_BG ? TRANSPARENT_BG : cell[4] & 0xFFFFFF)
+                        : TRANSPARENT_BG;
             }
         }
     }
@@ -566,6 +596,7 @@ public class ScreenText {
         tag.putInt("textColour", textColour);
         tag.putDouble("zIndex", zIndex);
         tag.putString("overflowMode", overflowMode.name);
+        tag.putBoolean("visible", visible);
 
         // 定长格子数组（紧凑编码：char[] / int[]，弃逐格 CompoundTag）
         int[] charArray = new int[cells.length];
@@ -644,6 +675,8 @@ public class ScreenText {
         textColour = tag.contains("textColour") ? tag.getInt("textColour") : DEFAULT_TEXT_COLOUR;
         zIndex = tag.contains("zIndex") ? tag.getDouble("zIndex") : DEFAULT_Z;
         overflowMode = OverflowMode.byName(tag.getString("overflowMode"));
+        // 旧存档无该字段：默认可见（true）
+        visible = !tag.contains("visible") || tag.getBoolean("visible");
 
         rects.clear();
         if (tag.contains("rects")) {

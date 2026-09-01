@@ -23,8 +23,8 @@ The four key bindings are configurable **per-desk** in the module settings menu 
 ## Lua API
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local pedal = desk.getModule("pedal")   -- nil if no pedal installed
 ```
 
@@ -59,8 +59,8 @@ All methods are `mainThread = false` — safe to poll in a loop on the computer.
 A classic use for a pedal pair is a differential throttle: the **average** of both pedals is the overall throttle, and `getPedalDifference()` is the turning amount.
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local pedal = desk.getModule("pedal")
 
 while true do

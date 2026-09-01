@@ -53,6 +53,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 | `servo-mode.md` | 传动外设舵机模式实现记录（TiltAdapter 段式状态机 + 段内同向重瞄 re-aim + flicker 门控） | 修改舵机角度定位、段推进、flicker 门控或 Lua 舵机 API 时 |
 | `my_bearing.md` | 自研风帆轴承方案设计（轴向应力输入 + RotaryConstraint 物理驱动，不贯通应力） | 实现/修改 my_bearing 方块时，先读方案再动手 |
 | `my_aero_sensor.md` | 惯性导航系统（ccpe:ins）实现记录（部件层级 test(Y)→gimbal(Z)→compass(X)、重力摆动画、逆变换链一致性、randomNudge 坑、PIVOT_DROP） | 修改 ccpe:ins 的动画/层级/渲染/扰动时，先读本文 |
+| `short-range link.md` | 短程信号链接器（ccpe:short_range_linker）实现方案（物理体作用域频道注册表、链上共享加载开关、Lua API ccpe.link、频道唯一性语义） | 实现/修改短程信号链接器时，先读本文 |
 | `pitot-selection-box.md` | 皮托管选择框调试记录（VoxelShaper 旋转坑：单位混用/基准朝向/end_rod 风格下 Catnip 与原版 X 旋转方向相反，水平四向绕 Y 180°；新增方块选择框的 checklist） | 新增或修改 6 向 FACING 方块的选择框/碰撞框，或排查选择框"不可见/差 90°/水平反了"时 |
 | `neoforge-debugging.md` | 本项目 F5 启动事实 | 调试启动配置或 classpath 时 |
 

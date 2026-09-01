@@ -25,8 +25,8 @@ Both bindings and the gear shift rate are configurable **per-desk** in the modul
 ## Lua API
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local th = desk.getModule("throttle")   -- nil if no throttle installed
 ```
 
@@ -55,8 +55,8 @@ All methods are `mainThread = false` — safe to poll at high frequency.
 ## Example
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local th = desk.getModule("throttle")
 
 while true do

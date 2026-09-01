@@ -69,11 +69,11 @@ print(cols, rows)
 screen.write("Hello\nCCPE")
 ```
 
-### screen.writeField(col, row, width, text, align?)
+### screen.writeField(col, row, width, text, align?, colour?)
 
 **在固定区域内写入文本**（每帧刷新定宽字段用，如时钟/计数器）。以 `(col, row)` 为起点、`width` 格宽的**单行区域**内写入 `text`：
 
-- 区域内**未写入文本的格子自动清空为空格**（前景色用当前 `setTextColour` 设置的颜色）——比如第一帧写 `"15"`、第二帧写 `"6"`，十位格子自动清空；
+- 区域内**未写入文本的格子自动清空为空格**（前景色用 `colour` 或当前 `setTextColour` 设置的颜色）——比如第一帧写 `"15"`、第二帧写 `"6"`，十位格子自动清空；
 - 区域内格子**背景色保留**（`fill` 底色不被清掉）；
 - 区域外完全不动；光标位置不变。
 
@@ -83,12 +83,15 @@ screen.write("Hello\nCCPE")
 - `"right"`：靠区域右缘，左侧留空（数字/时钟常用）
 - `"center"`：区域居中
 
+`colour` 前景色（可选，`0xRRGGBB`）：传了就用该颜色渲染本区域字符（含清空格），不传则用 `setTextColour` 设置的颜色（默认白色）。
+
 文本超过区域宽度时截断：左/中保留开头，右对齐保留末尾（printf `%2s` 风格）。
 
 ```lua
-screen.writeField(1, 1, 2, "15", "right")   -- |15|
-screen.writeField(1, 1, 2, "6",  "right")   -- | 6|  ← 十位自动清空
-screen.writeField(1, 2, 10, "LOADING", "center")
+screen.writeField(1, 1, 2, "15", "right")          -- |15|
+screen.writeField(1, 1, 2, "6",  "right")          -- | 6|  ← 十位自动清空
+screen.writeField(1, 2, 10, "LOADING", "center")   -- 当前前景色
+screen.writeField(1, 3, 10, "ALERT", "center", 0xFF0000)  -- 红色
 ```
 
 > **提示**：`writeField` 只清区域内字符、保留背景，适合「数字/文字在固定位置刷新」；要整体替换整层（含图形）用 `draw(batch)`，只替换单层用 `drawCells`/`drawShapes`。
@@ -127,6 +130,21 @@ screen.setTextColour(0x00FF00)
 
 ```lua
 screen.setOverflowMode("ellipsis")
+```
+
+### screen.setVisible(visible) / screen.getVisible()
+
+设置/读取整个屏幕的**渲染开关**（默认 `true`）：
+
+- 传 `false`：整个屏幕（9 宫格边框 + 格子内容 + 图形层）**都不再绘制**，显示为空白面板；
+- 传 `true`：恢复渲染。
+
+格子内容与所有设置（`write`/`fill`/`draw` 的内容、`setTextColour` 等）都保留，开关只影响是否显示；适合「按下按钮时隐藏屏幕」之类的效果。
+
+```lua
+screen.setVisible(false)   -- 隐藏整个屏幕
+screen.setVisible(true)    -- 恢复显示
+print(screen.getVisible()) -- true
 ```
 
 
@@ -172,7 +190,7 @@ screen.fillField(1, 2, 10, 3, 0x00FF00, "left")   -- 进度减少：第 4..10 �
 
 `batch` 为 Lua table，两段式结构：
 
-- **`cells`**：每格一个数组 `{col, row, char, fg?, bg?}`（col/row **1 起**；`fg` 省略沿用当前前景色，`bg` 省略为透明）
+- **`cells`**：每格一个数组 `{col, row, text, fg?, bg?, align?}`（col/row **1 起**；`fg` 省略沿用当前前景色，`bg` 省略为**透明**，显示屏幕面板底色）。`text` 为**字符串**，自动向右逐格铺开（不再一个字符一条），字符串内的 `\n` 换行（回到起点列、行 +1）。`align` 可选（默认 `"left"`）：文本在**区域 [col, 屏幕右缘]** 内对齐——`"left"` 靠起点 / `"right"` 右缘贴屏幕右缘 / `"center"` 区域内居中；字符串内每行独立对齐。超右缘截断：左/中留头、右留尾。**注意**：`align` 可用位置第 6 参（此时 `fg`/`bg` 必须都有值），也可用键名写法 `align = "right"`——Lua 数组遇 `nil` 会截断，跳过中间参数时请用键名写法
 - **`shapes`**（可选）：图形数组，每项为带 `type` 字段的 table：
   - `{type = "rect", x, y, w, h, colour, solid?, lineWidth?, z?}`
   - `{type = "line", x1, y1, x2, y2, colour, lineWidth?, z?}`
@@ -183,8 +201,8 @@ screen.fillField(1, 2, 10, 3, 0x00FF00, "left")   -- 进度减少：第 4..10 �
 ```lua
 screen.draw({
   cells = {
-    {1, 1, "A", 0xFFFFFF, 0x000000},   -- 第 1 行第 1 格：白字黑底
-    {2, 1, "B", 0xFF0000},             -- 第 2 格：红字，透明底
+    {1, 1, "LOADING", 0xFFFFFF, 0x000000},   -- 第 1 行：白字黑底，一次铺 7 格
+    {1, 2, "███████", 0xFF0000},             -- 第 2 行：红色进度条
   },
   shapes = {
     {type = "rect", x = 0, y = 0, w = 8, h = 8, colour = 0x00FF00, solid = true},
@@ -198,16 +216,36 @@ screen.draw({
 
 **只替换文本层（格子 + 光标）**，整层原子替换：服务端清空文本层后逐格写入传入的格子；**图形层（rect/line/circle）保持不变**。解析失败会抛 Lua 错误，文本层保持不变（不会部分应用）。
 
-参数结构与 `draw` 的 `cells` 段一致（外层仍是 `{cells = {...}}`）：每格一个数组 `{col, row, char, fg?, bg?}`（col/row **1 起**；`fg` 省略沿用当前前景色，`bg` 省略为透明）。
+参数结构与 `draw` 的 `cells` 段一致（外层仍是 `{cells = {...}}`）：每格一个数组 `{col, row, text, fg?, bg?, align?}`（col/row **1 起**；`fg` 省略沿用当前前景色，`bg` 省略为**透明**，显示屏幕面板底色）。`text` 为**字符串**，自动向右逐格铺开，`\n` 换行。`align` 可选（默认 `"left"`）：文本在**区域 [col, 屏幕右缘]** 内对齐（`"left"` / `"right"` / `"center"`），超右缘截断：左/中留头、右留尾。**注意**：`align` 可用位置第 6 参（`fg`/`bg` 必须都有值），也可用键名写法 `align = "right"`（Lua 数组遇 `nil` 截断，跳参时用键名）。
 
 替换会清空格子并把光标复位到 (1,1)，省略的格子为空白。
 
 ```lua
 screen.drawCells({
   cells = {
-    {1, 1, "A", 0xFFFFFF, 0x000000},
-    {2, 1, "B", 0xFF0000},
+    {1, 1, "LOADING", 0xFFFFFF, 0x000000},      -- 一次铺 7 格
+    {1, 2, "███████", 0xFF0000},                -- 进度条行
+    {1, 3, "12.5", 0x00FF00, align = "right"},  -- 右对齐到屏幕右缘
+    {1, 4, "TITLE", align = "center"},          -- 居中
   },
+})
+```
+
+### screen.drawText(rows)
+
+**按行整批替换文本层**（最省事的整屏传输）：外层数组下标即行号（1 起），列自动从 1 起，**不用写坐标**。每行可以是：
+
+- 字符串 `"text"`：用当前前景色、**透明背景**（显示屏幕面板底色）、左对齐；
+- 数组 `{text, fg?, bg?, align?}`：`fg` 省略用当前前景色，`bg` 省略为**透明**，`align` 省略为 `"left"`。
+
+文本自动向右逐格铺开（超右缘截断），字符串内 `\n` 换行（下一行从列 1 起）。`align`（`"left"` / `"right"` / `"center"`）决定文本在**整行区域 [1, 屏幕右缘]** 内的对齐，字符串内每行独立对齐。**注意**：`align` 可用位置第 4 参（`fg`/`bg` 必须都有值），也可用键名写法 `align = "right"`（Lua 数组遇 `nil` 截断，跳参时用键名）。语义同 `drawCells`：清空文本层后写入、光标复位 (1,1)、图形层不变。
+
+```lua
+screen.drawText({
+  {"LOADING", 0xFFFFFF},               -- 第 1 行
+  {"███████", 0xFF0000},                -- 第 2 行：红色进度条
+  {"12.5", 0x00FF00, align = "right"},  -- 第 3 行：右对齐到屏幕右缘
+  {"TITLE", align = "center"},          -- 第 4 行：居中
 })
 ```
 

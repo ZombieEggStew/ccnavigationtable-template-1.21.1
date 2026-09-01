@@ -1,12 +1,21 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.AicBlock;
+import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
+import com.zzy205.myfirstmod.block.FmcBlock;
 import com.zzy205.myfirstmod.block.PitotTubeBlock;
+import com.zzy205.myfirstmod.block.ShortRangeLinkerBlock;
+import com.zzy205.myfirstmod.block.ShortRangeLinkerBlockEntity;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorEntry;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorType;
+import com.zzy205.myfirstmod.compat.create.CreateStressReadout;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
+import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import dan200.computercraft.api.lua.IComputerSystem;
 import dan200.computercraft.api.lua.ILuaAPI;
 import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.peripheral.IPeripheral;
+import dan200.computercraft.api.peripheral.PeripheralCapability;
 import dev.eriksonn.aeronautics.config.AeroConfig;
 import dev.ryanhcode.sable.companion.math.JOMLConversion;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
@@ -14,20 +23,32 @@ import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * {@code ccpe.sensor_system}：所在物理体（Sable sub-level）的环境数据 Lua API。
+ * <p>
+ * 同时并入原 {@code ccpe.link} 的短程信号链接器寻址（作用域同为调用电脑所在物理体）：
+ * {@link #getPeripheral(int)} / {@link #getRedstoneOutput(int)} /
+ * {@link #getRedstoneInput(int)} / {@link #setRedstoneOutput(int, int)}
+ * / {@link #enableNbtCache(int, java.util.Optional)} / {@link #getNbt(int, String)}
+ * / {@link #getAllNbt(int)}。
  * <p>
  * <b>高频缓存模式</b>（对齐 memo/my_sensor_system.md）：
  * <ul>
@@ -66,10 +87,21 @@ import java.util.Optional;
  * print(ss.getPhysicsChainMass()) -- 所在物理体链总质量 kg（门控：机体上有 FMC）
  * print(ss.getPhysicsGravityForce()) -- 所在物理体重力 pN（门控：机体上有 FMC）
  * print(ss.getPhysicsChainGravityForce()) -- 所在物理体链总重力 pN（门控：机体上有 FMC）
+ * print(ss.getStressRemaining()) -- 最后放置的 FMC 的附着面方块所在 Create 应力网络的剩余应力 su（门控：机体上有 FMC 且附着面方块是动力方块）
+ * print(ss.getStressCapacity()) -- 同上，网络总容量 su（门控同上）
  * local sensors = ss.getSensors() -- 全部传感器快照
  * -- {{type="static_port", pos={x,y,z}, pos_rel={x,y,z}, altitude=..., pressure=...},
  * --  {type="pitot_tube",  pos={x,y,z}, pos_rel={x,y,z}, speed=..., air_speed=...},
  * --  {type="ins",         pos={x,y,z}, pos_rel={x,y,z}}, ...}
+ * local sensor = ss.getPeripheral(1)    -- 本机物理体（含约束链）上频道 1 的设备外设（寻址模型，频道 = 目标设备地址；链接器 → 附着外设，控制台 → 控制台外设）
+ * local desk = ss.getPeripheral(2)      -- 频道 2 被控制台占用 → 返回控制台外设（ccpe:control_desk）
+ * print(ss.getRedstoneInput(2))         -- 目标链接器位置的红石输入
+ * ss.setRedstoneOutput(2, 15)           -- 写目标链接器红石输出（相邻红石线随之响应）
+ * ss.enableNbtCache(1)                  -- 开启频道 1 链接器的附着方块 NBT 缓存（默认每 20 tick 刷新）
+ * ss.enableNbtCache(1, 5)               -- 改为每 5 tick 刷新一次
+ * local fuel = ss.getNbt(1, "Fuel")     -- 读缓存中附着方块 NBT 的路径值（未开启缓存返回 nil）
+ * local all = ss.getAllNbt(1)           -- 读全量 NBT（未开启缓存返回空表）
+ * ss.enableNbtCache(1, 0)               -- 关闭缓存
  * }</pre>
  */
 public class SensorSystemAPI implements ILuaAPI {
@@ -80,6 +112,8 @@ public class SensorSystemAPI implements ILuaAPI {
 
     private volatile boolean onBody = false;
     private volatile @Nullable String bodyId = null;
+    /** 所在物理体（含约束链）的全部子次元 UUID（主线程 update() 计算，Lua 线程只读缓存；不在物理体上为空集合） */
+    private volatile Set<UUID> chainUuids = Set.of();
     private volatile List<SensorSnapshot> sensors = List.of();
 
     /** 姿态缓存（度）：门控 = 所在物理体（含约束链）上有 ≥1 个 INS（ATTITUDE 传感器） */
@@ -116,9 +150,12 @@ public class SensorSystemAPI implements ILuaAPI {
     /** 重力常数：重力（pN）= 质量（kg）× {@value}（Sable 物理单位） */
     private static final double GRAVITY_CONSTANT = 11.0;
 
+    /** FMC 参考点 = 方块中心：BlockPos（角点）到方块单元中心的偏移（半格） */
+    private static final double BLOCK_CENTER_OFFSET = 0.5;
+
     // ── 物理数据缓存（门控：机体（含约束链）上有 ≥1 个 FMC 才计算，与传感器存在性相关） ──
 
-    /** 重心相对最后放置的 FMC（含 AIC）的局部坐标（plot 帧差值，机体局部系，不随旋转变化） */
+    /** 重心相对最后放置的 FMC（含 AIC）的方块中心的局部坐标（plot 帧差值，机体局部系，不随旋转变化） */
     private volatile boolean comRelAvailable = false;
     private volatile double comRelX = 0;
     private volatile double comRelY = 0;
@@ -131,6 +168,23 @@ public class SensorSystemAPI implements ILuaAPI {
     /** 所在物理体（含约束链）总质量（kg） */
     private volatile boolean chainMassAvailable = false;
     private volatile double chainMassKg = 0;
+
+    /** 所在物理体（含约束链）总质心相对最后放置的 FMC 方块中心的局部坐标（plot 帧差值，机体局部系） */
+    private volatile boolean chainComRelAvailable = false;
+    private volatile double chainComRelX = 0;
+    private volatile double chainComRelY = 0;
+    private volatile double chainComRelZ = 0;
+
+    // ── 附着方块应力网络缓存（门控：机体（含约束链）上有 ≥1 个 FMC；读数 = 最后放置的 FMC 的附着面方块） ──
+
+    /** 附着方块是否可读（机体上有 FMC 且其附着面方块是 Create 动力方块且读数成功） */
+    private volatile boolean attachedStressAvailable = false;
+
+    /** 附着方块所在应力网络的当前总应力（su） */
+    private volatile double attachedStress = 0;
+
+    /** 附着方块所在应力网络的总容量（su） */
+    private volatile double attachedCapacity = 0;
 
     // ── 螺旋桨转速工具缓存（门控：机体（含约束链）上有 ≥1 个 FMC；T/A 静态缓存，不每 tick 刷新） ──
 
@@ -188,6 +242,7 @@ public class SensorSystemAPI implements ILuaAPI {
         if (sub == null) {
             onBody = false;
             bodyId = null;
+            chainUuids = Set.of();
             sensors = List.of();
             attitudeAvailable = false;
             pitchDeg = rollDeg = yawDeg = 0;
@@ -206,11 +261,15 @@ public class SensorSystemAPI implements ILuaAPI {
             massKg = 0;
             chainMassAvailable = false;
             chainMassKg = 0;
+            chainComRelAvailable = false;
+            chainComRelX = chainComRelY = chainComRelZ = 0;
+            resetAttachedStress();
             propellerGateAvailable = false;
             return;
         }
         onBody = true;
         bodyId = SableCompat.getSubLevelId(sub);
+        chainUuids = chainUuidsOf(sub);
 
         // 电脑自身相对物理体原点的坐标（用于计算每个传感器的"相对电脑"坐标）
         Vec3 compRel = SableCompat.toRelativePos(sub, computer.getPosition());
@@ -224,7 +283,8 @@ public class SensorSystemAPI implements ILuaAPI {
         // ≥1 皮托管 且 ≥1 静压孔（皮托管-静压系统：空速 = 动压 − 静压，缺静态参考无法得空速）。
         // 不满足 → 速度读数为 null（getSpeed/getAirSpeed 返回 nil，getSensors 对应字段为 nil）。
         // 姿态类读数（getAngles）要求 ≥1 惯性导航系统（INS，ATTITUDE 传感器）。
-        // 物理数据类读数（getPhysics*）要求 ≥1 飞行管理计算机（FMC，ccpe:fmc）。
+        // 物理数据类读数（getPhysics*）与附着方块应力网络（getStressRemaining/getStressCapacity）
+        // 要求 ≥1 飞行管理计算机（FMC，ccpe:fmc）。
         boolean speedGate = false;
         boolean attitudeGate = false;
         boolean physicsGate = false;
@@ -314,7 +374,7 @@ public class SensorSystemAPI implements ILuaAPI {
         if (physicsGate) {
             // 重心相对 FMC（最后放置的 FMC 传感器，AIC 等同 FMC）=
             //   重心相对物理体原点偏移（getCenterOfMassLocal 已做 plot−rotationPoint 转换）
-            //   − FMC 相对物理体原点偏移（lastFmcRel = toRelativePos），
+            //   − FMC 方块中心相对物理体原点偏移（lastFmcRel = toRelativePos + 0.5 半格），
             // 两者同为 plot 帧差值（机体局部系），不随物理体移动/旋转变化；参考点不依赖电脑位置。
             Vec3 comLocal = SableCompat.getCenterOfMassLocal(sub);
             Vec3 fmcRel = lastFmcRel(sub, entries);
@@ -345,6 +405,24 @@ public class SensorSystemAPI implements ILuaAPI {
                 chainMassAvailable = false;
                 chainMassKg = 0;
             }
+
+            // 链总质心相对 FMC（最后放置的 FMC 的方块中心，AIC 等同 FMC）=
+            //   链质心相对物理体原点偏移（getChainCenterOfMassLocal，世界系加权平均后转回 plot 帧）
+            //   − FMC 方块中心相对物理体原点偏移（fmcRel，与上方重心同一参考点），
+            // 两者同为 plot 帧差值（机体局部系），不随物理体移动/旋转变化。
+            Vec3 chainCom = SableCompat.getChainCenterOfMassLocal(sub);
+            if (chainCom != null && fmcRel != null) {
+                chainComRelAvailable = true;
+                chainComRelX = chainCom.x - fmcRel.x;
+                chainComRelY = chainCom.y - fmcRel.y;
+                chainComRelZ = chainCom.z - fmcRel.z;
+            } else {
+                chainComRelAvailable = false;
+                chainComRelX = chainComRelY = chainComRelZ = 0;
+            }
+
+            // 附着方块应力网络（最后放置的 FMC 的附着面方块；与质量/重心同一 tick 快照）
+            computeAttachedStress(sub, entries);
         } else {
             comRelAvailable = false;
             comRelX = comRelY = comRelZ = 0;
@@ -352,6 +430,9 @@ public class SensorSystemAPI implements ILuaAPI {
             massKg = 0;
             chainMassAvailable = false;
             chainMassKg = 0;
+            chainComRelAvailable = false;
+            chainComRelX = chainComRelY = chainComRelZ = 0;
+            resetAttachedStress();
         }
 
         List<SensorSnapshot> list = new ArrayList<>();
@@ -586,16 +667,16 @@ public class SensorSystemAPI implements ILuaAPI {
     // ═══════════════ 物理数据（门控：机体（含约束链）上有 ≥1 个 FMC 才有值） ═══════════════
 
     /**
-     * 物理体重心相对于<b>最后放置的 FMC</b>（含 AIC，AIC 等同 FMC）的机体局部系位置
-     * {@code {x, y, z}}。
+     * 物理体重心相对于<b>最后放置的 FMC</b>（含 AIC，AIC 等同 FMC）的<b>方块中心</b>
+     * 的机体局部系位置 {@code {x, y, z}}。
      * <p>
-     * = 重心相对物理体原点的偏移 − FMC 相对物理体原点的偏移（两者均经 Sable 的
+     * = 重心相对物理体原点的偏移 − FMC 方块中心相对物理体原点的偏移（两者均经 Sable 的
      * {@code plot − rotationPoint} 转换，plot 帧差值，与 {@link #getSensors()} 的
      * {@code pos} 同帧），<b>不随物理体移动/旋转变化</b>；参考点 = 所在物理体（含约束链）
-     * 上最后放置的 FMC 传感器（多个 FMC 时取最后）。
+     * 上最后放置的 FMC 的方块中心（BlockPos 角点 + 半格，多个 FMC 时取最后）。
      * <p>
      * 注：Sable 的物理体原点（rotationPoint）运行时与质心同步，因此该值 ≈
-     * FMC 相对物理体原点的偏移取反（重心在机体上相对 FMC 的方位）。
+     * FMC 方块中心相对物理体原点的偏移取反（重心在机体上相对 FMC 方块中心的方位）。
      * <p>
      * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
      * （FMC，ccpe:fmc），否则返回 nil；不在物理体上或质量数据不可用同样返回 nil。
@@ -652,6 +733,64 @@ public class SensorSystemAPI implements ILuaAPI {
     @LuaFunction
     public final @Nullable Double getPhysicsChainGravityForce() {
         return chainMassAvailable ? chainMassKg * GRAVITY_CONSTANT : null;
+    }
+
+    /**
+     * 电脑所在物理体（含全部约束链，轴承等）的<b>总质心</b>相对于<b>最后放置的 FMC</b>
+     * （含 AIC，AIC 等同 FMC）的<b>方块中心</b>的机体局部系位置 {@code {x, y, z}}
+     * （plot 帧差值，与 {@link #getPhysicsCenterOfMassRel()} 同一参考点，不随物理体
+     * 移动/旋转变化）。
+     * <p>
+     * = 链质心相对电脑所在物理体原点的偏移（{@link SableCompat#getChainCenterOfMassLocal}，
+     * 世界系按质量加权平均链上各 sub-level 的合并质心后转回 plot 帧）
+     * − FMC 方块中心相对物理体原点的偏移（与 {@link #getPhysicsCenterOfMassRel()} 相同）。
+     * <p>
+     * Sable 没有链级质心 API（各 sub-level 的 {@code MergedMassTracker} 只合并自身 + 其 plot
+     * 内 contraptions），本方法在世界系按质量加权平均链上各 sub-level 的合并质心，再经电脑所在
+     * 物理体的 pose 逆变换转回其 plot 帧并相对其原点（与 {@link #getPhysicsChainMass()} 对应）。
+     * <p>
+     * <b>门控（存在性）</b>：与其余 FMC 物理数据方法相同——所在物理体（含约束链）上必须有
+     * ≥1 个飞行管理计算机（FMC，ccpe:fmc），否则返回 nil；不在物理体上或底层物理数据不可用
+     * 同样返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getPhysicsChainCenterOfMassRel() {
+        if (!chainComRelAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("x", chainComRelX);
+        m.put("y", chainComRelY);
+        m.put("z", chainComRelZ);
+        return m;
+    }
+
+    /**
+     * 最后放置的 FMC（含 AIC，AIC 等同 FMC）的<b>附着面方块</b>所在 Create 应力网络的
+     * <b>剩余应力</b>（su = 总容量 − 当前总应力，过载时为负）。
+     * <p>
+     * 附着面方块 = FMC 支撑方向上的方块（FMC：FACE/FACING 决定的支撑面；AIC：FACING 背面），
+     * 参考点语义与 {@link #getPhysicsCenterOfMassRel()} 相同（机体上多个 FMC 时取最后放置的）。
+     * <p>
+     * <b>门控（存在性）</b>：所在物理体（含约束链）上必须有 ≥1 个飞行管理计算机
+     * （FMC，ccpe:fmc），且最后放置的 FMC 的附着面方块必须是 Create 动力方块
+     * （{@link KineticBlockEntity}，如齿轮箱/传动轴/螺旋桨轴承）且读数成功，
+     * 否则返回 nil；不在物理体上同样返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Double getStressRemaining() {
+        return attachedStressAvailable ? attachedCapacity - attachedStress : null;
+    }
+
+    /**
+     * 最后放置的 FMC（含 AIC，AIC 等同 FMC）的<b>附着面方块</b>所在 Create 应力网络的
+     * <b>总容量</b>（su）。
+     * <p>
+     * 门控（存在性）与 {@link #getStressRemaining()} 相同：所在物理体（含约束链）上必须有
+     * ≥1 个飞行管理计算机（FMC，ccpe:fmc），且最后放置的 FMC 的附着面方块必须是 Create
+     * 动力方块（{@link KineticBlockEntity}）且读数成功，否则返回 nil；不在物理体上同样返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Double getStressCapacity() {
+        return attachedStressAvailable ? attachedCapacity : null;
     }
 
     // ═══════════════ 螺旋桨转速工具（门控：机体（含约束链）上有 ≥1 个 FMC） ═══════════════
@@ -839,6 +978,146 @@ public class SensorSystemAPI implements ILuaAPI {
         return den > 0 ? num / den : null;
     }
 
+    // ═══════════════ 短程信号链接器（并入 sensor_system：原 ccpe.link 的四个方法 + NBT 缓存三方法） ═══════════════
+    //
+    // 寻址模型：频道号是设备在物理体内的「地址」（同体内 1:1，冲突自动顺延，见
+    // ShortRangeLinkerRegistry），查询方（电脑）不需要自己的频道号；
+    // 作用域 = 调用电脑所在物理体（含约束链），由 update() 主线程刷新的 chainUuids 缓存决定
+    // （电脑不在物理体上 → 空集合 → 一律 nil，严格语义与「非物理体不链接」一致）。
+    // 频道空间同时容纳链接器与控制台：getPeripheral 先找链接器（返回附着方块外设），
+    // 频道被控制台占用时返回控制台自身外设（ControlDeskRegistry 委托同一注册表）。
+    // NBT 缓存与 pe 不同：默认关闭，需 enableNbtCache 显式开启并配置刷新间隔（默认 20 tick），
+    // 开启后服务端按间隔缓存附着方块 NBT，getNbt / getAllNbt 直读该缓存（mainThread=false）。
+
+    /**
+     * 本机物理体（含约束链）内频道 {@code channel} 对应设备的外设（IPeripheral）：
+     * <ul>
+     *   <li>频道被链接器占用 → 链接器所附着方块的外设；</li>
+     *   <li>频道被控制台占用 → 控制台自身外设（{@code ccpe:control_desk}）。</li>
+     * </ul>
+     * 电脑不在任何物理体上 / 频道未被同体设备占用 / 附着方块无 CC:T 外设时返回 nil。
+     *
+     * @param channel 目标设备的频道号
+     * @return 目标设备外设；未命中返回 nil
+     */
+    @LuaFunction(mainThread = true)
+    public final @Nullable Object getPeripheral(int channel) {
+        // 链接器：返回附着方块外设
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        if (linker != null) {
+            Level level = linker.getLevel();
+            if (level == null) return null;
+            BlockState state = linker.getBlockState();
+            BlockPos attachedPos = ShortRangeLinkerBlock.getAttachedPos(state, linker.getBlockPos());
+            BlockEntity attached = level.getBlockEntity(attachedPos);
+            // 附着方块自身就是 CC:T 外设（如 Monitor）→ 直接返回；否则走 Capability 查询
+            if (attached instanceof IPeripheral p) return p;
+            return level.getCapability(PeripheralCapability.get(), attachedPos, sideFromAttachedView(state));
+        }
+        // 控制台：返回控制台自身外设（与链接器共用同一物理体作用域频道空间）
+        ControlDeskBlockEntity desk = ControlDeskRegistry.get(chainUuids, channel);
+        if (desk != null) return desk.getPeripheral();
+        return null;
+    }
+
+    /**
+     * 目标链接器当前的红石输出信号（0-15，只读，mainThread=false）。
+     * 未命中（电脑不在物理体上 / 频道空闲）返回 0。
+     */
+    @LuaFunction
+    public final int getRedstoneOutput(int channel) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        return linker != null ? linker.getRedstoneOutput() : 0;
+    }
+
+    /**
+     * 目标链接器位置当前接收到的最强红石信号（0-15，只读，mainThread=false）。
+     * 未命中返回 0。
+     */
+    @LuaFunction
+    public final int getRedstoneInput(int channel) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        return linker != null ? linker.getRedstoneInput() : 0;
+    }
+
+    /**
+     * 写目标链接器的红石输出（0-15，越界自动钳位），并更新方块 POWERED 状态
+     * （相邻红石线 / 红石机械随之响应；mainThread=true）。
+     */
+    @LuaFunction(mainThread = true)
+    public final void setRedstoneOutput(int channel, int signal) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        if (linker != null) linker.setRedstoneOutput(Math.clamp(signal, 0, 15));
+    }
+
+    // ═══════════════ 附着方块 NBT 缓存（与 pe 不同：默认关闭，需 enableNbtCache 显式开启） ═══════════════
+
+    /**
+     * 开启 / 关闭 / 调整目标链接器的<b>附着方块 NBT 缓存</b>并设置刷新间隔。
+     * <p>
+     * 与 {@code ccpe.pe}（按需缓存、永远开启）不同，短程信号链接器<b>默认不缓存</b>NBT：
+     * 本方法显式开启后，服务端每 {@code ticks} tick 刷新一次附着方块的 NBT 快照（照
+     * {@link ShortRangeLinkerBlockEntity#setNbtCache}），随后 {@link #getNbt(int, String)} /
+     * {@link #getAllNbt(int)} 读取该缓存。
+     * <ul>
+     *   <li>{@code ticks} 缺省 = 20（默认刷新间隔）；</li>
+     *   <li>{@code ticks <= 0} → 关闭缓存（保留已有快照，读取方法返回 nil/空表）；</li>
+     *   <li>已开启时重复调用仅修改间隔；开启/修改后下一个服务端 tick 立即刷新一次快照。</li>
+     * </ul>
+     * 开关与间隔随 NBT / Create 蓝图持久化（世界重载、蓝图部署后保持）。
+     * <p>
+     * mainThread=true：写链接器 BE 状态并置脏。
+     *
+     * @param channel 目标链接器频道号（本机物理体内）
+     * @param ticks   刷新间隔（tick），可选，缺省 20；≤ 0 表示关闭缓存
+     * @return 是否成功（目标链接器存在；频道空闲 / 电脑不在物理体上返回 false）
+     */
+    @LuaFunction(mainThread = true)
+    public final boolean enableNbtCache(int channel, Optional<Double> ticks) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        if (linker == null) return false;
+        int interval = (int) Math.floor(ticks.orElse(20.0));
+        linker.setNbtCache(interval);
+        return true;
+    }
+
+    /**
+     * 读取目标链接器缓存的<b>附着方块 NBT</b>中路径 {@code path} 处的值
+     * （mainThread=false，直读 volatile 缓存，零主线程调度；路径语法与
+     * {@code ccpe.pe.get} 相同，如 {@code "ForgeData.Items[0].Count"}）。
+     * <p>
+     * 缓存未开启（默认）或快照为空 → 返回 nil。
+     *
+     * @param channel 目标链接器频道号（本机物理体内）
+     * @param path    NBT 路径（点号 / 下标语法）
+     * @return 路径处的值（标量 / table / 列表）；未开启缓存或路径不存在返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Object getNbt(int channel, String path) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        if (linker == null || !linker.isNbtCacheEnabled()) return null;
+        CompoundTag nbt = linker.getCachedAttachedNBT();
+        if (nbt == null || nbt.isEmpty()) return null;
+        return PeripheralExtenderAPI.resolvePath(nbt, path);
+    }
+
+    /**
+     * 读取目标链接器缓存的<b>附着方块 NBT</b>全量（转 Lua table，mainThread=false 直读缓存）。
+     * <p>
+     * 缓存未开启（默认）或快照为空 → 返回空表。
+     *
+     * @param channel 目标链接器频道号（本机物理体内）
+     * @return 全量 NBT 转换后的 table；未开启缓存返回空表
+     */
+    @LuaFunction
+    public final Map<String, Object> getAllNbt(int channel) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        if (linker == null || !linker.isNbtCacheEnabled()) return Collections.emptyMap();
+        CompoundTag nbt = linker.getCachedAttachedNBT();
+        if (nbt == null || nbt.isEmpty()) return Collections.emptyMap();
+        return PeripheralExtenderAPI.convertCompoundToMap(nbt);
+    }
+
     // ═══════════════ 主线程辅助 ═══════════════
 
     /** 最后注册的静压孔（注册顺序 = 放置顺序，LinkedHashSet 保序） */
@@ -910,16 +1189,68 @@ public class SensorSystemAPI implements ILuaAPI {
     }
 
     /**
-     * 最后放置（最新注册）的 FMC 传感器（AIC 等同 FMC，也登记 FMC 类型）相对物理体原点的
-     * 局部坐标（plot 帧，与 {@link SableCompat#getCenterOfMassLocal} 同帧，可直接相减）。
-     * 参考点语义：机体上无 FMC（门控）时返回 null。
+     * 最后放置（最新注册）的 FMC 传感器（AIC 等同 FMC，也登记 FMC 类型）的<b>方块中心</b>
+     * 相对物理体原点的局部坐标（plot 帧，与 {@link SableCompat#getCenterOfMassLocal} 同帧，
+     * 可直接相减）。参考点 = FMC 方块中心 = BlockPos（角点）+ {@link #BLOCK_CENTER_OFFSET}
+     * 半格偏移；机体上无 FMC（门控）时返回 null。
      */
     private @Nullable Vec3 lastFmcRel(SubLevel sub, List<SensorEntry> entries) {
         SensorEntry lastFmc = null;
         for (SensorEntry e : entries)
             if (e.type() == SensorType.FMC) lastFmc = e; // 注册顺序 = 放置顺序，取最后
         if (lastFmc == null) return null;
-        return SableCompat.toRelativePos(sub, lastFmc.pos());
+        Vec3 rel = SableCompat.toRelativePos(sub, lastFmc.pos());
+        if (rel == null) return null;
+        return new Vec3(rel.x + BLOCK_CENTER_OFFSET, rel.y + BLOCK_CENTER_OFFSET, rel.z + BLOCK_CENTER_OFFSET);
+    }
+
+    /**
+     * 刷新附着方块应力网络缓存：最后放置（最新注册）的 FMC 传感器（AIC 等同 FMC）的
+     * 附着面方块若为 Create 动力方块（{@link KineticBlockEntity}），读其所在应力网络的
+     * 总应力/总容量（{@link CreateStressReadout}，缓存值）与公开读数；任一环节失败 → 重置为空。
+     */
+    private void computeAttachedStress(SubLevel sub, List<SensorEntry> entries) {
+        SensorEntry lastFmc = null;
+        for (SensorEntry e : entries)
+            if (e.type() == SensorType.FMC) lastFmc = e; // 注册顺序 = 放置顺序，取最后
+        if (lastFmc == null) {
+            resetAttachedStress();
+            return;
+        }
+        Level level = sub.getLevel();
+        BlockState fmcState = level.getBlockState(lastFmc.pos());
+        BlockPos attachedPos = attachedBlockPos(fmcState, lastFmc.pos());
+        BlockEntity be = attachedPos != null ? level.getBlockEntity(attachedPos) : null;
+        if (!(be instanceof KineticBlockEntity kbe)) {
+            resetAttachedStress();
+            return;
+        }
+        CreateStressReadout.StressInfo info = CreateStressReadout.stressOf(kbe);
+        if (info == null) {
+            resetAttachedStress();
+            return;
+        }
+        attachedStressAvailable = true;
+        attachedStress = info.stress();
+        attachedCapacity = info.capacity();
+    }
+
+    /** 传感器方块（FMC/AIC）的附着面方块坐标；非 FMC/AIC 方块返回 null */
+    private @Nullable BlockPos attachedBlockPos(BlockState state, BlockPos pos) {
+        if (state.getBlock() instanceof FmcBlock) {
+            return pos.relative(FmcBlock.supportDirectionOf(state));
+        }
+        if (state.getBlock() instanceof AicBlock) {
+            return pos.relative(state.getValue(AicBlock.FACING).getOpposite());
+        }
+        return null;
+    }
+
+    /** 附着方块应力网络缓存重置为空（不可读） */
+    private void resetAttachedStress() {
+        attachedStressAvailable = false;
+        attachedStress = 0;
+        attachedCapacity = 0;
     }
 
     private @Nullable Double computePressure(Level level, Vec3 worldPos) {
@@ -969,5 +1300,24 @@ public class SensorSystemAPI implements ILuaAPI {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** 物理体（含约束链）的全部子次元 UUID 集合（主线程 update() 计算，供 Lua 线程只读缓存） */
+    private static Set<UUID> chainUuidsOf(SubLevel sub) {
+        Set<UUID> ids = new HashSet<>();
+        for (SubLevel s : SableCompat.getConnectedChain(sub)) {
+            UUID id = SableCompat.getSubLevelUUID(s);
+            if (id != null) ids.add(id);
+        }
+        return ids;
+    }
+
+    /** 从附着方块的视角看链接器所在的面（照 PeripheralExtenderAPI.getSensorSide） */
+    private static Direction sideFromAttachedView(BlockState state) {
+        return switch (state.getValue(ShortRangeLinkerBlock.FACE)) {
+            case FLOOR -> Direction.UP;      // 链接器在地面 → 附着方块在下方 → 从附着方块看是 UP
+            case CEILING -> Direction.DOWN;  // 链接器在天花板 → 附着方块在上方 → 从附着方块看是 DOWN
+            case WALL -> state.getValue(ShortRangeLinkerBlock.FACING);
+        };
     }
 }

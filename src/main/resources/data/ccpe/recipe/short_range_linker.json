@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:electron_tube"
+    },
+    "X": {
+      "item": "create:transmitter"
+    },
+    "Y": {
+      "item": "create:brass_casing"
+    }
+  },
+  "pattern": [
+    "   ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 4,
+    "id": "ccpe:short_range_linker"
+  }
+}

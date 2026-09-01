@@ -1,6 +1,5 @@
 package com.zzy205.myfirstmod.compat.cc;
 
-import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlock;
@@ -30,6 +29,9 @@ import java.util.*;
  * local data = pe.getAll(1)   -- 获取频道1的全量NBT
  * local x = data.x            -- 读取具体字段
  * }</pre>
+ * <p>
+ * 注意：控制台（controlDesk）不在本 API 中按频道查找，请改用
+ * {@code require("ccpe.sensor_system").getPeripheral(channel)}（物理体作用域）。
  */
 public class PeripheralExtenderAPI implements ILuaAPI {
 
@@ -320,10 +322,8 @@ public class PeripheralExtenderAPI implements ILuaAPI {
         MonitorBlockEntity monitor = MonitorRegistry.get(channel);
         if (monitor != null) return monitor.getPeripheral();
 
-        // 控制台频道 → 返回控制台自身的 CC:T 外设（与显示器共享同一频道命名空间，频道全局唯一）
-        ControlDeskBlockEntity desk = ControlDeskRegistry.get(channel);
-        if (desk != null) return desk.getPeripheral();
-
+        // 控制台已不在 pe 频道查找：控制台频道是物理体作用域（复用短程链接器频道空间），
+        // 请改用 require("ccpe.sensor_system").getPeripheral(channel) 获取（作用域 = 调用电脑所在物理体）
         return null;
     }
 
@@ -414,7 +414,8 @@ public class PeripheralExtenderAPI implements ILuaAPI {
 
     // ═══════════════ NBT → Lua Table 转换 ═══════════════
 
-    private static Map<String, Object> convertCompoundToMap(CompoundTag nbt) {
+    /** NBT CompoundTag → Lua table（包可见，供 SensorSystemAPI.getAllNbt 复用） */
+    static Map<String, Object> convertCompoundToMap(CompoundTag nbt) {
         Map<String, Object> result = new LinkedHashMap<>();
         for (String key : nbt.getAllKeys()) {
             result.put(key, convertTag(nbt.get(key)));

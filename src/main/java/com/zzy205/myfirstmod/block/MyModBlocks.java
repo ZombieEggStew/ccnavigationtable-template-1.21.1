@@ -28,6 +28,14 @@ public class MyModBlocks {
                     strength(1.0f , 6.0f)
             ));
 
+    /** 短程信号链接器：贴附式方块（结构照抄 micro_peripheral_extender），频道作用域 = 单个物理体（Sable 约束链）；选择框/音效对齐 static_port（SoundType.COPPER） */
+    public static final DeferredBlock<ShortRangeLinkerBlock> short_range_linker =
+            registerBlocks("short_range_linker" , () -> new ShortRangeLinkerBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.COPPER).
+                    strength(1.0f , 6.0f).
+                    noOcclusion()
+            ));
+
     public static final DeferredBlock<TransmissionPeripheralBlock> transmission_peripheral =
             registerBlocks("transmission_peripheral", () -> new TransmissionPeripheralBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.METAL).
@@ -46,6 +54,11 @@ public class MyModBlocks {
             registerBlocks("my_control_desk", () -> new ControlDeskBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.WOOD).
                     strength(1.5f, 6.0f).
+                    // forceSolidOn：桌体碰撞盒是半高块（16×8×8），默认 calculateSolid 判为“非实心”→ blocksMotion()=false
+                    // → FlowingFluid.canHoldFluid()=!blocksMotion() 为 true → 水流会把控制台冲掉（1.21.1 水破坏方块的判定）。
+                    // 强制实心只影响 isSolid/blocksMotion 标志（水不能流入该格），不改变碰撞盒，也不会新增窒息
+                    // （Entity.isInWall 仍需碰撞形状相交，对齐原版墙/栅栏/锁链的写法）。
+                    forceSolidOn().
                     noOcclusion()
             ));
 
@@ -92,6 +105,14 @@ public class MyModBlocks {
     /** 航空集成计算机（AIC）：6 向朝向方块（blockstate 旋转参考 create:display_link，见 AicBlock）；带 BE 注册进 BodySensorRegistry（ATTITUDE + FMC 双门控，等同 INS + FMC）；音效对齐 FMC（SoundType.COPPER） */
     public static final DeferredBlock<AicBlock> aic =
             registerBlocks("aic", () -> new AicBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.COPPER).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
+    /** 流体端口（fluid_port）：6 向附着式方块（blockstate 旋转参考 aic/display_link，见 FluidPortBlock）；当前为纯放置逻辑，无方块实体、无流体逻辑、无 OPEN 状态 */
+    public static final DeferredBlock<FluidPortBlock> fluid_port =
+            registerBlocks("fluid_port", () -> new FluidPortBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.COPPER).
                     strength(1.0f, 6.0f).
                     noOcclusion()

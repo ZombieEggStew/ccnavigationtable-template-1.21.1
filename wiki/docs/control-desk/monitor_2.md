@@ -31,8 +31,8 @@ Monitor 2's Lua API is **identical to the Monitor's** — there is nothing new t
 Get it from the control desk peripheral via `getModule("monitor")` (peripheral type `"ccpe:monitor_2"`); returns `nil` when Monitor 2 is not installed:
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 local m = desk.getModule("monitor")   -- nil if no Monitor 2 installed
 ```
 
@@ -61,8 +61,8 @@ Only the grid size differs (10×8 vs 12×10). Everything else behaves identicall
 ## Example
 
 ```lua
-local pe = require("ccpe.pe")
-local desk = pe.getPeripheral(4)
+local ss = require("ccpe.sensor_system")
+local desk = ss.getPeripheral(4)
 
 -- Read a module directly from the 10×8 grid
 local mod = desk.getMonitor2CellModule(3, 4)

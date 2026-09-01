@@ -38,8 +38,3 @@ Requires the pe to be attached to any block on a physics body.
 | `getPhysicsGravityForce(ch)` | `number` | Gravity of the physics body the pe is attached to (pN)|
 | `getPhysicsChainGravityForce(ch)` | `number` | Total gravity of the physics body chain (pN)|
 
-Testing has shown that a physics bearing assembled onto a physics body counts gravity twice.
-
-So the value of `getPhysicsChainGravityForce` may not match what you calculate manually.
-
-If you need gravity to participate in precise calculations, feel free to use `getPhysicsChainGravityForce`.

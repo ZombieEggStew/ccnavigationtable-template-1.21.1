@@ -535,6 +535,14 @@ public class MonitorBlockEntity extends BlockEntity implements MonitorGridHost {
         syncGridToClients();
     }
 
+    /** 设置屏幕渲染开关（false = 整个屏幕 9 宫格与内容都不绘制）。 */
+    public void screenSetVisible(int id, boolean visible) {
+        if (!canMutateScreen(id)) return;
+        gridState.getOrCreateScreenText(id).setVisible(visible);
+        setChanged();
+        syncGridToClients();
+    }
+
     /** 批量设置格子背景色（纯色填充，分段进度条用），字符与前景色不变。 */
     public void screenFill(int id, int col, int row, int w, int h, int colour) {
         if (!canMutateScreen(id)) return;
@@ -545,12 +553,15 @@ public class MonitorBlockEntity extends BlockEntity implements MonitorGridHost {
 
     /**
      * 定宽字段写入（writeField 用）：在 (col,row) 起 width 格宽的单行区域内写文本，
-     * 未写入部分清成空格（前景色用当前色），背景色保留，区域外不动。光标不变。
+     * 未写入部分清成空格（前景色用当前色或 {@code colour}），背景色保留，区域外不动。光标不变。
+     *
+     * @param colour 可选，前景色（0xRRGGBB）；null 表示用屏幕当前前景色
      */
-    public void screenWriteField(int id, int col, int row, int width, String text, String align) {
+    public void screenWriteField(int id, int col, int row, int width, String text, String align, Integer colour) {
         if (!canMutateScreen(id)) return;
         ScreenText t = gridState.getOrCreateScreenText(id);
-        t.writeField(col, row, width, text, ScreenText.Align.byName(align));
+        t.writeField(col, row, width, text, ScreenText.Align.byName(align),
+                colour != null ? colour : t.getTextColour());
         setChanged();
         syncGridToClients();
     }

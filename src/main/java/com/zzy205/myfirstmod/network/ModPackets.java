@@ -22,5 +22,6 @@ public final class ModPackets {
         SensorPacketHandlers.register(registrar);
         ReceiverPacketHandlers.register(registrar);
         ControlDeskPacketHandlers.register(registrar);
+        ShortRangeLinkerPacketHandlers.register(registrar);
     }
 }
