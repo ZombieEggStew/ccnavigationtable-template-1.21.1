@@ -23,6 +23,42 @@ BlockEntitySubLevelPropellerActor.java（references\sable-main\common\src\main\j
 
 ---
 
+# 对称帆（symmetric sail）的阻力：大小和方向怎么算
+Simulated 的 SymmetricSailBlock 本身不算力——它只是 Sable `BlockSubLevelLiftProvider` 接口的实现，计算全在 Sable 的默认方法里（Simulated 运行时依赖 sable 2.0.4-37）：
+
+- 参数来源：SymmetricSailBlock.java（references\Simulated-Project-main\simulated\common\src\main\java\dev\simulated_team\simulated\content\blocks\symmetric_sail\SymmetricSailBlock.java）
+- 计算公式：BlockSubLevelLiftProvider.java 的 `sable$contributeLiftAndDrag()` 默认方法（references\sable-main\common\src\main\java\dev\ryanhcode\sable\api\block\BlockSubLevelLiftProvider.java）
+- 调用时机：ServerSubLevel.prePhysicsTick()，每个物理子步对整机/contraption 上每一块帆各算一次，结果记入该子步的 linearImpulse / angularImpulse
+
+对称帆覆写的参数 vs Create 普通帆（Sable 默认值，SailBlockMixin 注入）：
+
+| 参数 | 对称帆 | 普通帆（默认） | 含义 |
+|---|---|---|---|
+| sable$getLiftScalar() | 0 | 0.475 | 升力系数 k3：对称帆不产生升力 |
+| sable$getParallelDragScalar() | 1.75 | 0.75 | 法向阻力系数 k1（垂直帆面的阻力） |
+| sable$getDirectionlessDragScalar() | 0.06888202261（未覆写） | 0.06888202261 | 无方向阻力系数 k2（线性阻尼） |
+| sable$getNormal() | AXIS 正方向 | FACING 反方向 | 帆面法线 n |
+
+每个物理子步 Δt、每块帆的算法：
+
+1. 法线 n = 该帆 AXIS 的正方向；帆在 contraption 里时先经 localPose 旋转到子层级坐标系
+2. 帆方块中心处的局部气流速度 v = R⁻¹( 整机线速度 V + 角速度 ω × (方块中心 − 子层级原点) )——与 n 同一个坐标系
+3. 该处气压 P = DimensionPhysicsData.getAirPressure(...) = 维度 basePressure × 按高度(y)的压力曲线
+4. 法向阻力（对称帆的主力）：大小 = |n·v| · 1.75 · P · Δt
+   方向：沿法线 n、符号跟随 (n·v) → 施加到机体时取负，效果永远是"抵消速度在帆面法线上的分量"
+   → n·v = 0（气流顺着帆面，即帆面与运动方向平行）时此项为 0，帆"没有效果"；转出角度后才有阻力
+5. 无方向阻力（阻尼）：与 v 反向，大小 = |v| · 0.06888 · P · Δt（恒抵消线速度）
+6. 升力 = 0 → 对称帆只产生阻力（这正是它名字的由来）
+7. 施力点 = 帆方块中心（pos+0.5），力矩 = (施力点 − 重心) × 力 → 帆离重心越远，同样阻力产生的力矩越大
+
+对设计的直接含义：
+
+- 阻力方向沿帆面法线而不是沿速度反方向 → 帆只"吃掉"速度中垂直于帆面的分量。帆面与气流平行时几乎无阻力，偏转出角度阻力才出现——舵面/安定面因此能产生控制力矩
+- 1.75 是普通帆法向系数(0.75)的 2.3 倍，且升力为 0 → 对称帆是纯阻力/阻尼面：尾翼越大、离重心越远，俯仰/偏航阻尼越强、飞机越"稳"，但也会更迟钝
+- 整个阻力受 P 缩放：改维度 dimension_physics 数据包的气压/高度曲线，会整体缩放所有帆的阻力（和普通帆的升力）
+
+---
+
 # 重心 / 升力中心 / 推力线的位置规则
 由公式 τ = r × F 直接推出（r = 力施加点到重心的向量）：
 
@@ -40,7 +76,7 @@ BlockEntitySubLevelPropellerActor.java（references\sable-main\common\src\main\j
 # 控制面（俯仰/滚转/偏航）怎么布置
 重要事实：这个 mod 没有传统意义上的"副翼/升降舵/方向舵"方块。可用的控制手段是（源码里能看到官方用法）：
 
-1. 对称帆 + 旋转轴承 = mod 的"舵面"（官方 ponder 教程 SymmetricSailScenes.java 明确演示：尾部对称帆 + 轴承旋转 30° 就是"rudder"方向舵，用方向盘控制）。对称帆 sable$getLiftScalar()=0、parallelDragScalar=1.75——只产生阻力不产生升力，偏转后阻力方向改变 → 产生控制力矩。
+1. 对称帆 + 旋转轴承 = mod 的"舵面"（官方 ponder 教程 SymmetricSailScenes.java 明确演示：尾部对称帆 + 轴承旋转 30° 就是"rudder"方向舵，用方向盘控制）。对称帆 sable$getLiftScalar()=0、parallelDragScalar=1.75——只产生阻力不产生升力，偏转后阻力方向改变 → 产生控制力矩（阻力怎么算见上文"对称帆的阻力：大小和方向怎么算"一节）。
 
 2. 陀螺仪螺旋桨轴承：矢量推力，±12° 偏转 → 俯仰/偏航控制。
 
@@ -68,3 +104,5 @@ BlockEntitySubLevelPropellerActor.java（references\sable-main\common\src\main\j
 上单翼 high-wing 好飞 摆锤稳定，适合新手 （塞斯纳 172、很多运输机）
 中单翼 mid-wing
 下单翼 low-wing 敏捷 灵敏但爱翻滚 （Bf 109、喷火、P-51）
+
+
