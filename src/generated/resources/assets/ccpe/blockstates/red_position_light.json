@@ -1,209 +1,105 @@
 {
   "variants": {
-    "facing=down,inverted=false,lit=false,waterlogged=false": {
+    "facing=down,lit=false,waterlogged=false": {
       "model": "ccpe:block/red_position_light_off",
       "x": 180
     },
-    "facing=down,inverted=false,lit=false,waterlogged=true": {
+    "facing=down,lit=false,waterlogged=true": {
       "model": "ccpe:block/red_position_light_off",
       "x": 180
     },
-    "facing=down,inverted=false,lit=true,waterlogged=false": {
+    "facing=down,lit=true,waterlogged=false": {
       "model": "ccpe:block/red_position_light",
       "x": 180
     },
-    "facing=down,inverted=false,lit=true,waterlogged=true": {
+    "facing=down,lit=true,waterlogged=true": {
       "model": "ccpe:block/red_position_light",
       "x": 180
     },
-    "facing=down,inverted=true,lit=false,waterlogged=false": {
-      "model": "ccpe:block/red_position_light_off",
-      "x": 180
-    },
-    "facing=down,inverted=true,lit=false,waterlogged=true": {
-      "model": "ccpe:block/red_position_light_off",
-      "x": 180
-    },
-    "facing=down,inverted=true,lit=true,waterlogged=false": {
-      "model": "ccpe:block/red_position_light",
-      "x": 180
-    },
-    "facing=down,inverted=true,lit=true,waterlogged=true": {
-      "model": "ccpe:block/red_position_light",
-      "x": 180
-    },
-    "facing=east,inverted=false,lit=false,waterlogged=false": {
+    "facing=east,lit=false,waterlogged=false": {
       "model": "ccpe:block/red_position_light_off",
       "x": 90,
       "y": 90
     },
-    "facing=east,inverted=false,lit=false,waterlogged=true": {
+    "facing=east,lit=false,waterlogged=true": {
       "model": "ccpe:block/red_position_light_off",
       "x": 90,
       "y": 90
     },
-    "facing=east,inverted=false,lit=true,waterlogged=false": {
+    "facing=east,lit=true,waterlogged=false": {
       "model": "ccpe:block/red_position_light",
       "x": 90,
       "y": 90
     },
-    "facing=east,inverted=false,lit=true,waterlogged=true": {
+    "facing=east,lit=true,waterlogged=true": {
       "model": "ccpe:block/red_position_light",
       "x": 90,
       "y": 90
     },
-    "facing=east,inverted=true,lit=false,waterlogged=false": {
-      "model": "ccpe:block/red_position_light_off",
-      "x": 90,
-      "y": 90
-    },
-    "facing=east,inverted=true,lit=false,waterlogged=true": {
-      "model": "ccpe:block/red_position_light_off",
-      "x": 90,
-      "y": 90
-    },
-    "facing=east,inverted=true,lit=true,waterlogged=false": {
-      "model": "ccpe:block/red_position_light",
-      "x": 90,
-      "y": 90
-    },
-    "facing=east,inverted=true,lit=true,waterlogged=true": {
-      "model": "ccpe:block/red_position_light",
-      "x": 90,
-      "y": 90
-    },
-    "facing=north,inverted=false,lit=false,waterlogged=false": {
+    "facing=north,lit=false,waterlogged=false": {
       "model": "ccpe:block/red_position_light_off",
       "x": 90
     },
-    "facing=north,inverted=false,lit=false,waterlogged=true": {
+    "facing=north,lit=false,waterlogged=true": {
       "model": "ccpe:block/red_position_light_off",
       "x": 90
     },
-    "facing=north,inverted=false,lit=true,waterlogged=false": {
+    "facing=north,lit=true,waterlogged=false": {
       "model": "ccpe:block/red_position_light",
       "x": 90
     },
-    "facing=north,inverted=false,lit=true,waterlogged=true": {
+    "facing=north,lit=true,waterlogged=true": {
       "model": "ccpe:block/red_position_light",
       "x": 90
     },
-    "facing=north,inverted=true,lit=false,waterlogged=false": {
-      "model": "ccpe:block/red_position_light_off",
-      "x": 90
-    },
-    "facing=north,inverted=true,lit=false,waterlogged=true": {
-      "model": "ccpe:block/red_position_light_off",
-      "x": 90
-    },
-    "facing=north,inverted=true,lit=true,waterlogged=false": {
-      "model": "ccpe:block/red_position_light",
-      "x": 90
-    },
-    "facing=north,inverted=true,lit=true,waterlogged=true": {
-      "model": "ccpe:block/red_position_light",
-      "x": 90
-    },
-    "facing=south,inverted=false,lit=false,waterlogged=false": {
+    "facing=south,lit=false,waterlogged=false": {
       "model": "ccpe:block/red_position_light_off",
       "x": 90,
       "y": 180
     },
-    "facing=south,inverted=false,lit=false,waterlogged=true": {
+    "facing=south,lit=false,waterlogged=true": {
       "model": "ccpe:block/red_position_light_off",
       "x": 90,
       "y": 180
     },
-    "facing=south,inverted=false,lit=true,waterlogged=false": {
+    "facing=south,lit=true,waterlogged=false": {
       "model": "ccpe:block/red_position_light",
       "x": 90,
       "y": 180
     },
-    "facing=south,inverted=false,lit=true,waterlogged=true": {
+    "facing=south,lit=true,waterlogged=true": {
       "model": "ccpe:block/red_position_light",
       "x": 90,
       "y": 180
     },
-    "facing=south,inverted=true,lit=false,waterlogged=false": {
-      "model": "ccpe:block/red_position_light_off",
-      "x": 90,
-      "y": 180
-    },
-    "facing=south,inverted=true,lit=false,waterlogged=true": {
-      "model": "ccpe:block/red_position_light_off",
-      "x": 90,
-      "y": 180
-    },
-    "facing=south,inverted=true,lit=true,waterlogged=false": {
-      "model": "ccpe:block/red_position_light",
-      "x": 90,
-      "y": 180
-    },
-    "facing=south,inverted=true,lit=true,waterlogged=true": {
-      "model": "ccpe:block/red_position_light",
-      "x": 90,
-      "y": 180
-    },
-    "facing=up,inverted=false,lit=false,waterlogged=false": {
+    "facing=up,lit=false,waterlogged=false": {
       "model": "ccpe:block/red_position_light_off"
     },
-    "facing=up,inverted=false,lit=false,waterlogged=true": {
+    "facing=up,lit=false,waterlogged=true": {
       "model": "ccpe:block/red_position_light_off"
     },
-    "facing=up,inverted=false,lit=true,waterlogged=false": {
+    "facing=up,lit=true,waterlogged=false": {
       "model": "ccpe:block/red_position_light"
     },
-    "facing=up,inverted=false,lit=true,waterlogged=true": {
+    "facing=up,lit=true,waterlogged=true": {
       "model": "ccpe:block/red_position_light"
     },
-    "facing=up,inverted=true,lit=false,waterlogged=false": {
-      "model": "ccpe:block/red_position_light_off"
-    },
-    "facing=up,inverted=true,lit=false,waterlogged=true": {
-      "model": "ccpe:block/red_position_light_off"
-    },
-    "facing=up,inverted=true,lit=true,waterlogged=false": {
-      "model": "ccpe:block/red_position_light"
-    },
-    "facing=up,inverted=true,lit=true,waterlogged=true": {
-      "model": "ccpe:block/red_position_light"
-    },
-    "facing=west,inverted=false,lit=false,waterlogged=false": {
+    "facing=west,lit=false,waterlogged=false": {
       "model": "ccpe:block/red_position_light_off",
       "x": 90,
       "y": -90
     },
-    "facing=west,inverted=false,lit=false,waterlogged=true": {
+    "facing=west,lit=false,waterlogged=true": {
       "model": "ccpe:block/red_position_light_off",
       "x": 90,
       "y": -90
     },
-    "facing=west,inverted=false,lit=true,waterlogged=false": {
+    "facing=west,lit=true,waterlogged=false": {
       "model": "ccpe:block/red_position_light",
       "x": 90,
       "y": -90
     },
-    "facing=west,inverted=false,lit=true,waterlogged=true": {
-      "model": "ccpe:block/red_position_light",
-      "x": 90,
-      "y": -90
-    },
-    "facing=west,inverted=true,lit=false,waterlogged=false": {
-      "model": "ccpe:block/red_position_light_off",
-      "x": 90,
-      "y": -90
-    },
-    "facing=west,inverted=true,lit=false,waterlogged=true": {
-      "model": "ccpe:block/red_position_light_off",
-      "x": 90,
-      "y": -90
-    },
-    "facing=west,inverted=true,lit=true,waterlogged=false": {
-      "model": "ccpe:block/red_position_light",
-      "x": 90,
-      "y": -90
-    },
-    "facing=west,inverted=true,lit=true,waterlogged=true": {
+    "facing=west,lit=true,waterlogged=true": {
       "model": "ccpe:block/red_position_light",
       "x": 90,
       "y": -90

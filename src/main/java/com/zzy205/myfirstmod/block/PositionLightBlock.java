@@ -31,11 +31,14 @@ import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 
 /**
- * 航行灯（红色 position light）。
+ * 航行灯（红/绿/白 position light）。
  * <p>
  * 参考实现：CreateDeco 的 {@code CageLampBlock}
  * （references/CreateDeco-1.21-neo/src/main/java/com/github/talrey/createdeco/blocks/CageLampBlock.java）。
- * 行为对齐：6 向贴附、红石点亮（{@code INVERTED} 反相开关）、右键切换反相、切换时播放粒子与音效。
+ * 行为：6 向贴附、水浸；亮灭（{@code LIT}）只由<b>玩家右键</b>与 Lua
+ * （{@code ccpe.sensor_system.setLights}，FMC 门控）控制，<b>不响应红石</b>——
+ * 原「红石信号 XOR INVERTED 反相」逻辑与 {@code INVERTED} 属性已移除
+ * （LIT 成为直接可写状态，右键/ Lua 切换）；切换时播放粒子与音效。
  * 差异：仅用原版 API（{@link SimpleWaterloggedBlock} 替代 Create 的 ProperWaterloggedBlock，不实现 IWrenchable）；
  * 模型为自建 position_light（底座 + 灯体），整体高 5px；亮灭状态只换灯体贴图，几何不变。
  */
@@ -57,7 +60,6 @@ public class PositionLightBlock extends DirectionalBlock implements SimpleWaterl
 		registerDefaultState(defaultBlockState()
 			.setValue(FACING, Direction.UP)
 			.setValue(BlockStateProperties.LIT, false)
-			.setValue(BlockStateProperties.INVERTED, false)
 			.setValue(BlockStateProperties.WATERLOGGED, false));
 	}
 
@@ -66,8 +68,6 @@ public class PositionLightBlock extends DirectionalBlock implements SimpleWaterl
 	public BlockState getStateForPlacement(BlockPlaceContext ctx) {
 		return defaultBlockState()
 			.setValue(FACING, ctx.getClickedFace())
-			.setValue(BlockStateProperties.LIT,
-				ctx.getLevel().hasSignal(ctx.getClickedPos(), ctx.getClickedFace()))
 			.setValue(BlockStateProperties.WATERLOGGED,
 				ctx.getLevel().getFluidState(ctx.getClickedPos()).getType() == Fluids.WATER);
 	}
@@ -104,31 +104,16 @@ public class PositionLightBlock extends DirectionalBlock implements SimpleWaterl
 			: Fluids.EMPTY.defaultFluidState();
 	}
 
-	/** 亮灭 = 附着面红石信号 XOR 反相开关（对齐 CreateDeco {@code shouldBeLit}）。 */
-	public static boolean shouldBeLit(BlockState state, Level level, BlockPos pos) {
-		Direction attach = state.getValue(FACING).getOpposite();
-		return state.getValue(BlockStateProperties.INVERTED) ^ level.hasSignal(pos.relative(attach), attach);
-	}
-
-	@Override
-	public void neighborChanged(BlockState state, Level level, BlockPos pos, Block neighbor, BlockPos neighborPos, boolean moved) {
-		// 任意邻居变化都重算亮灭（比 CreateDeco 只在附着块变化时重算更稳健：附着块被红石线远程供电也能更新）
-		boolean lit = shouldBeLit(state, level, pos);
-		if (state.getValue(BlockStateProperties.LIT) != lit) {
-			level.setBlock(pos, state.setValue(BlockStateProperties.LIT, lit), 3);
-		}
-	}
-
 	@Override
 	protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
-		BlockState next = state.cycle(BlockStateProperties.INVERTED);
 		if (level.isClientSide) {
 			makeParticle(state, level, pos);
 			return InteractionResult.SUCCESS;
 		}
-		next = next.setValue(BlockStateProperties.LIT, shouldBeLit(next, level, pos));
+		// 右键直接切换亮灭（不响应红石；亮灭仅由右键 / Lua setLights 控制）
+		BlockState next = state.cycle(BlockStateProperties.LIT);
 		level.setBlock(pos, next, 3);
-		float pitch = next.getValue(BlockStateProperties.INVERTED) ? 0.6F : 0.5F;
+		float pitch = next.getValue(BlockStateProperties.LIT) ? 0.7F : 0.5F;
 		level.playSound(null, pos, SoundEvents.COMPARATOR_CLICK, SoundSource.BLOCKS, 0.3F, pitch);
 		return InteractionResult.CONSUME;
 	}
@@ -145,7 +130,7 @@ public class PositionLightBlock extends DirectionalBlock implements SimpleWaterl
 	protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
 		// 不调用 super：DirectionalBlock 的 createBlockStateDefinition 也会加 FACING，重复添加会抛异常。
 		// 与参考 CageLampBlock 一致，自行把全部属性一次加齐。
-		builder.add(FACING, BlockStateProperties.LIT, BlockStateProperties.INVERTED, BlockStateProperties.WATERLOGGED);
+		builder.add(FACING, BlockStateProperties.LIT, BlockStateProperties.WATERLOGGED);
 	}
 
 	@Override

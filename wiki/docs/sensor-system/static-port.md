@@ -1,8 +1,10 @@
 # Static Port
 
-> A lightweight and intelligent way to read aviation data
-
 ![static_port](../img/static_port.png)
+
+> A Static Port is an opening that measures ambient static air pressure. It is usually placed on a flat area of the fuselage, away from airflow disturbances — it feels only the atmospheric pressure, not the ram pressure of the oncoming air.
+
+> The static port and the pitot tube together form the "pitot-static system" — icing or blockage of this system has been a factor in several aviation accidents, which is why modern airliners treat its redundancy and anti-icing design so seriously.
 
 The **Static Port** (`ccpe:static_port`) is an attachable pressure-sensor block. When installed on a physics body (Sable sub-level), CC:Tweaked computers on that body can read the pressure and altitude at the static port's own position via `ccpe.sensor_system`.
 

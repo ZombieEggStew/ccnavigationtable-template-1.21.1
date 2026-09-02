@@ -42,6 +42,10 @@ public class RegistrateBlocks {
 	 * blockstate（6 朝向 × 亮灭 + 旋转）、两个薄变体模型（亮/灭）、物品模型、掉落自身战利品表、
 	 * mineable/pickaxe 标签。
 	 * <p>
+	 * 亮灭（LIT）只由玩家右键与 Lua（{@code ccpe.sensor_system.setLights}，FMC 门控）控制，
+	 * 不响应红石（2026-xx 起移除原红石 XOR INVERTED 逻辑与 INVERTED 属性，
+	 * 见 {@code PositionLightBlock}；blockstate 变体随之缩减为 FACING × LIT × WATERLOGGED）。
+	 * <p>
 	 * 合成配方不走 datagen，手写维护在 src/main/resources/data/ccpe/recipe/（与其他方块一致）。
 	 * <p>
 	 * 注意：不用 Registrate 的 .tab() 挂创造标签（见上方 static 块的根因说明）；

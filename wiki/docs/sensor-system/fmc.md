@@ -2,6 +2,14 @@
 
 ![fmc](../img/fmc_item.png)
 
+> A core capability of the Flight Management System (FMS) is estimating the aircraft's current **mass and centre of gravity in real time from flight data**, rather than relying only on numbers the crew entered beforehand.
+
+>- **Mass estimation**: in level flight, lift must equal weight. The FMS infers the current mass from the actual flight response — angle of attack, pitch trim and thrust: the heavier the aircraft, the more angle of attack or thrust is needed to hold the same flight path.
+>- **CG estimation**: the centre of gravity determines the required trim state, so the FMS can infer it from the elevator/stabilizer trim position; combining both yields an estimate of the aircraft's mass and CG.
+>- **Continuous correction**: before takeoff the crew enters the takeoff weight (fuel + payload); in flight the FMS keeps refining the estimate using fuel flow and measured flight characteristics.
+
+> Airbus displays the real-time estimated gross weight (GW) and centre of gravity (CG) on the MCDU performance page, dynamically updating the optimum cruise altitude, fuel predictions and approach speeds without the pilot having to enter an exact weight; Boeing's FMS has a similar weight-estimation mechanism.
+
 ## FMC gate
 
 The physics body must have **at least 1 FMC** (`ccpe:fmc`) installed, otherwise all the methods below return `nil`. They also return `nil` when the computer is not on a body, or the underlying physics data is unavailable.

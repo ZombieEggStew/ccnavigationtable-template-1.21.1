@@ -1,8 +1,10 @@
 # Pitot Tube
 
-> A lightweight and intelligent way to read aviation data
-
 ![pitot_tube](../img/pitot_tube.png)
+
+> The Pitot Tube was invented by the French engineer Henri Pitot in 1732 to measure water flow speed. Today it is one of the most common speed-measuring devices, used in aviation, Formula 1, drones and weather stations.
+
+> A pitot tube measures **total pressure** (the ram pressure of the oncoming air = dynamic + static). Its mouth must face the airflow; subtracting the static pressure (from a static port) and applying Bernoulli's equation yields airspeed: v = √(2·(total − static)/ρ).
 
 The **Pitot Tube** (`ccpe:pitot_tube`) is an attachable, **directional** speed-sensor block. When installed on a physics body (Sable sub-level), CC:Tweaked computers on that body can read the **velocity component along the tube's mouth axis** — both ground speed and airspeed — via `ccpe.sensor_system`.
 

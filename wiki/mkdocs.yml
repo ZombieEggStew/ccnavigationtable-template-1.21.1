@@ -78,6 +78,7 @@ plugins:
             Inertial Navigation System: 惯性导航系统
             Flight Management Computer: 飞行管理计算机
             Aviation Integrated Computer: 航空集成计算机
+            Position Light: 航行灯
             Short-Range Signal Linker: 短程信号链接器
             Lua API Reference: Lua API 参考
             FAQ: 常见问题
@@ -121,6 +122,7 @@ nav:
     - Flight Management Computer: sensor-system/fmc.md
     - Aviation Integrated Computer: sensor-system/aic.md
     - Short-Range Signal Linker: sensor-system/short-range-linker.md
+    - Position Light: sensor-system/position-light.md
   - Modular Monitor:
     - Overview: monitor/overview.md
     - Monitor: monitor/monitor.md
