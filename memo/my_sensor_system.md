@@ -54,7 +54,7 @@ Lua 模块 `ccpe.sensor_system` **直接**获取所在物理体的物理信息�
 |---|---|---|
 | 位置/高度 | `SableCompat.getSubLevelWorldPos(sub)` = `subLevel.logicalPose().position()` | 物理体原点世界坐标；高度 = `.y` |
 | 线速度 | 优先 `physicsSystem.getPhysicsHandle(serverSubLevel).getLinearVelocity()`（刚体原语，实现时确认方法名）；fallback `SableCompat.getVelocity` | 世界系 m/s |
-| 角速度 | `SableCompat.getAngularVelocity(level, sub)`（已有） | 世界系 rad/s |
+| 角速度 | `SableCompat.getAngularVelocity(level, sub)`（已有） | 机体局部系角速率 rad/s（世界系刚体角速度经姿态四元数 `logicalPose().orientation()` 逆旋转到机体自身 X/Y/Z 轴；姿态恒等时 = 世界系） |
 | 姿态 | `subLevel.logicalPose().orientation()` 或参考 mod 的 `LevelPoseProviderExtension.sable$getPose(sub).orientation()`（插值姿态） | 四元数 x/y/z/w |
 | 质量/质心/链质量 | `SableCompat.getMass / getCenterOfMass / getChainMass`（已有） | kg |
 | 气压 | `pressure = exp(-0.004 × (y − seaLevel))` | 参考 CreateAvionics：海平面 1.0，约每 250 格降 1/e；海平面下 clamp 最大 1.5；逻辑高度顶为 0；`seaLevel = level.getSeaLevel()` |
@@ -75,7 +75,7 @@ ss.getPosition()         -- {x, y, z} 物理体原点世界坐标
 ss.getVelocity()         -- {x, y, z} 物理体线速度 m/s（门控：速度传感器）
 ss.getSpeed()            -- 标量速度 m/s（门控）
 ss.getVerticalSpeed()    -- 垂直速度 m/s，正=上升（门控）
-ss.getAngularVelocity()  -- {x, y, z} rad/s（门控）
+ss.getAngularVelocity()  -- {x, y, z} rad/s 机体局部系角速率（绕机体自身轴；门控）
 ss.getOrientation()      -- {x, y, z, w} 姿态四元数
 ss.getAltitude()         -- 物理体原点世界 Y（门控：气压传感器）
 ss.getPressure()         -- 气压，海平面=1.0（门控）

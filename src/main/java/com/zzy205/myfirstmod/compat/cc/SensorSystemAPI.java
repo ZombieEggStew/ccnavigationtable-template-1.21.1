@@ -33,6 +33,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaterniond;
 import org.joml.Vector3d;
 import org.jspecify.annotations.Nullable;
 
@@ -86,7 +87,7 @@ import java.util.UUID;
  * print(ss.getAngles())           -- {pitch=, roll=, yaw=}（度；门控：机体上必须有 INS）
  * print(ss.getPosition())         -- 最后放置的 INS 的世界坐标 {x, y, z}（门控：机体上必须有 INS）
  * print(ss.getOrientation())      -- 机体姿态四元数 {x, y, z, w}（门控：机体上必须有 INS）
- * print(ss.getAngularVelocity())  -- 机体世界系角速度 {x, y, z} rad/s（门控：机体上必须有 INS）
+ * print(ss.getAngularVelocity())  -- 机体局部系角速率 {x, y, z} rad/s（绕机体自身 X/Y/Z 轴，姿态恒等时=世界系；门控：机体上必须有 INS）
  * print(ss.getBodyPosition())     -- 物理体原点世界坐标 {x, y, z}（门控：机体上必须有 INS）
  * print(ss.getPhysicsCenterOfMassRel()) -- 重心相对最后放置的 FMC 的机体局部系位置 {x, y, z}（门控：机体上有 FMC）
  * print(ss.getPhysicsMass())      -- 所在物理体质量 kg（门控：机体上有 FMC）
@@ -143,7 +144,7 @@ public class SensorSystemAPI implements ILuaAPI {
     private volatile double orientZ = 0;
     private volatile double orientW = 1;
 
-    /** 角速度缓存（世界系 rad/s）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
+    /** 角速度缓存（机体局部系 rad/s，绕机体自身 X/Y/Z 轴的角速率）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
     private volatile boolean angularVelocityAvailable = false;
     private volatile double angVelX = 0;
     private volatile double angVelY = 0;
@@ -354,13 +355,18 @@ public class SensorSystemAPI implements ILuaAPI {
             orientW = 1;
         }
 
-        // 角速度缓存（世界系 rad/s；门控：机体上有 INS 才计算）
+        // 角速度缓存（机体局部系 rad/s；门控：机体上有 INS 才计算，与姿态同一 tick 快照）。
+        // SableCompat.getAngularVelocity 返回刚体世界系角速度；机体局部系 = 用同一 tick 的姿态
+        // 四元数（orient，与 getOrientation() 同一基准，logicalPose().orientation()）做逆旋转：
+        // ω_body = q⁻¹·ω_world（JOML transformInverse），分量即绕机体自身 X/Y/Z 轴的角速率。
         Vec3 angVel = attitudeGate ? SableCompat.getAngularVelocity(sub.getLevel(), sub) : null;
-        if (angVel != null) {
+        if (angVel != null && orient != null) {
+            Vector3d bodyAngVel = new Vector3d(angVel.x, angVel.y, angVel.z);
+            new Quaterniond(orient[0], orient[1], orient[2], orient[3]).transformInverse(bodyAngVel);
             angularVelocityAvailable = true;
-            angVelX = angVel.x;
-            angVelY = angVel.y;
-            angVelZ = angVel.z;
+            angVelX = bodyAngVel.x;
+            angVelY = bodyAngVel.y;
+            angVelZ = bodyAngVel.z;
         } else {
             angularVelocityAvailable = false;
             angVelX = angVelY = angVelZ = 0;
@@ -638,8 +644,12 @@ public class SensorSystemAPI implements ILuaAPI {
     }
 
     /**
-     * 所在物理体（含约束链）的世界系角速度 {@code {x, y, z}}（rad/s，
-     * {@link SableCompat#getAngularVelocity}，刚体角速度）。
+     * 所在物理体（含约束链）的机体局部系角速率 {@code {x, y, z}}（rad/s，绕机体自身 X/Y/Z 轴
+     * 的角速率分量）。数据源为世界系刚体角速度（{@link SableCompat#getAngularVelocity}），
+     * 缓存时用与 {@link #getOrientation()} 同一 tick 的姿态四元数
+     * （{@code subLevel.logicalPose().orientation()}）做逆旋转得到机体系
+     * （姿态恒等时与世界系一致）。需要世界系角速度时可用 {@link #getOrientation()} 的
+     * 四元数对本结果做正向旋转（q·ω_body）。
      * <p>
      * <b>门控（存在性）</b>：与 {@link #getAngles()} 相同——所在物理体上必须有 ≥1 个
      * 惯性导航系统（ccpe:ins），否则返回 nil。
