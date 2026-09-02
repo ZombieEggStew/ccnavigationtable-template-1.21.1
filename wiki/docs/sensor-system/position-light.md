@@ -1,4 +1,4 @@
-# Position Light
+# Position Light (1.1.2 added)
 
 ![Position Light](../img/position_light.png)
 

@@ -6,10 +6,6 @@
 
 > Because it needs no external reference, inertial navigation cannot be jammed or spoofed — it is the core navigation of nuclear submarines, missiles and spacecraft; the IMU in your smartphone works on the same principle (step counting, gesture recognition).
 
-> The cost is **error accumulation** (gyro drift, accelerometer bias): position error grows without bound, so an airliner INS must be aligned before takeoff and is regularly corrected by GPS/radio navigation in flight.
-
-> On Boeing and Airbus aircraft the INS works together with the Flight Management Computer: the FMC uses the INS attitude and position for route guidance, while the FMC continuously corrects INS drift with GPS and other external information.
-
 The **Inertial Navigation System** (`ccpe:ins`) is an attitude indicator block for physics bodies (Sable sub-levels). The center block's red end always points north.
 
 ## Attitude readings gate
