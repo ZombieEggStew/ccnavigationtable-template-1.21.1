@@ -59,6 +59,40 @@ Simulated 的 SymmetricSailBlock 本身不算力——它只是 Sable `BlockSubL
 
 ---
 
+# Create 普通帆（regular sail）的升力与阻力：大小和方向怎么算
+"普通帆" = Create 的 SailBlock（Simulated ponder 里的 Regular Sail；Simulated 自己只有对称帆方块）。它的升力/阻力与对称帆共用同一个 Sable 公式，区别只是由 Create 兼容 mixin 注入接口、参数全用默认值（升力开启、法向阻力较弱）：
+
+- 注入代码：SailBlockMixin.java（references\sable-main\neoforge\src\main\java\dev\ryanhcode\sable\neoforge\mixin\compatibility\create\sails_providing_lift\SailBlockMixin.java，已注册于 sable-neoforge.mixins.json）——只覆写法线 sable$getNormal() = FACING 反方向，其余全默认
+- 计算公式：与对称帆同一个 `sable$contributeLiftAndDrag()`（references\sable-main\common\src\main\java\dev\ryanhcode\sable\api\block\BlockSubLevelLiftProvider.java）
+- 调用时机：同上，ServerSubLevel.prePhysicsTick() 每个物理子步每块帆一次
+
+| 参数 | Create 普通帆（全默认） | 对称帆（Simulated） | 含义 |
+|---|---|---|---|
+| 法线 n（sable$getNormal()） | FACING 反方向 | AXIS 正方向 | 升力/法向阻力的轴向 |
+| 升力系数 k3（sable$getLiftScalar()） | 0.475 | 0（覆写） | 普通帆才产生升力 |
+| 法向阻力系数 k1（sable$getParallelDragScalar()） | 0.75 | 1.75（覆写） | 垂直帆面的阻力 |
+| 无方向阻力系数 k2（sable$getDirectionlessDragScalar()） | 0.06888202261 | 0.06888202261 | 线性阻尼 |
+
+每个物理子步 Δt、每块帆的算法（n、v、P 的定义与对称帆一节相同）：
+
+1. 法向阻力（k1 = 0.75）：F_par = n·(n·v)·0.75·P·Δt，施加到机体取负 → 抵消速度在法线上的分量；大小 = |n·v|·0.75·P·Δt
+2. 无方向阻力（k2）：与 v 反向，大小 = |v|·0.06888·P·Δt
+3. 升力（普通帆核心输出，k3 = 0.475）：
+   - 先从速度里扣掉已被法向阻力吃掉的部分：TEMP = v − F_par矢量
+   - 大小 = |TEMP|·0.475·P·Δt（≈ 随该处局部气流速度增长）
+   - 方向 = 恒沿 n（FACING 反方向），没有 (n·v) 那样的符号翻转——帆永远被往 n 那一侧推
+4. 施力点 = 帆方块中心（pos+0.5），力矩 = (施力点 − 重心) × 力 → 与对称帆完全相同的"点力"模型
+
+为什么默认值长这样（接口注释）：三系数需满足 k2 ≥ (−k1+√(k1²+k3²))/2 才不产生速度指数增长；默认 k2 = (−0.75+√(0.75²+0.475²))/2 = 0.06888202261，恰好取等号 = "升力 0.475 + 刚好压住发散的最小阻尼"。
+
+对设计的直接含义：
+
+- 普通帆 = "升力为主"的升力面（对称帆 = 纯阻力面）。升力方向固定在帆自身坐标系（n 侧），随机体一起转动，不会像真实翼型那样自动反向：机体倒扣时 n 朝下 → 升力也朝下（压向地面）；只有姿态摆正、n 侧朝上时才是可靠升力
+- 升力/阻力大小都 ∝ 该处局部气流速度 |v|（线速度 + 角速度×力臂）→ 帆离重心越远，同样的机体运动产生更大的力与力矩（阻尼、配平、控制都靠这个）
+- 全部力受 P（维度气压 basePressure × 高度曲线）整体缩放
+
+---
+
 # 重心 / 升力中心 / 推力线的位置规则
 由公式 τ = r × F 直接推出（r = 力施加点到重心的向量）：
 
@@ -105,4 +139,64 @@ Simulated 的 SymmetricSailBlock 本身不算力——它只是 Sable `BlockSubL
 中单翼 mid-wing
 下单翼 low-wing 敏捷 灵敏但爱翻滚 （Bf 109、喷火、P-51）
 
+---
 
+# 机动型设计清单（与"稳定性清单"对照：可操纵 > 安定）
+目标：响应快、动作干脆、全速域可控。代价是安定性下降——两条清单本质是同一根轴的两端，机动飞机就是把上面那套"稳定化设计"反向调。核心机制回顾：控制力矩 τ = r×F（r = 力臂），角加速度 = τ / 转动惯量 I；气动力大小 ∝ 该处局部气流速度。
+
+1. 控制权威：舵面 = 对称帆 + 旋转轴承。面积大、离重心远（力臂大）、偏角尽量大 → 力矩才够。低速段气动力 ∝ 气流速度会失效，必须配"不靠气流"的控制：矢量推力（陀螺仪螺旋桨轴承 ±12°）、反作用轮、差速螺旋桨——全速域可控才是高可操纵。
+2. 三轴分工、严格对称：垂尾方向舵（偏航）/ 平尾升降舵（俯仰）/ 翼尖差动副翼（滚转，力臂 = 半翼展）。左右不对称 = 永久耦合的偏航/滚转力矩，直接毁掉操纵。
+3. 质量贴重心、机身紧凑：角加速度 = τ / I。重物远离重心、机身加长 → 惯量 I 与阻尼同时涨 → 响应钝。短机身 + 大舵面通常比长机身 + 小舵面灵。
+4. 力臂别无限加长：控制力矩随力臂线性涨，转动惯量随长度平方涨——加长到一定程度只剩"更稳、更钝"，与机动性冲突。
+5. 降低静稳定裕度：重心从"偏前"向升力中心后移（现实叫放宽静稳定）→ 俯仰更灵敏；但别越过临界，留一点裕度让平尾配平兜底，否则一抬头就发散救不回来。
+6. 砍掉过度稳定化设计：无/小上反角、重心别放太低、下单翼——上反角和摆锤效应都在对抗滚转/俯仰指令，每一点稳定余量都吃掉一分机动性。
+7. 阻尼调到"收敛不振荡"：对称帆天然是阻尼面（离重心越远阻尼越强）。阻尼太小 → 动作后姿态来回晃；太大 → 发闷迟钝。可操纵 = 阻尼刚好压住震荡、又不吞掉控制力矩。
+8. 推力线穿重心（或略低）：加减油门不产生俯仰力矩、不改变配平 → 机动中油门随意收放，姿态不抖。
+9. 推重比留足：爬升、改出俯冲、拉大迎角都靠多余推力；低速/失速段再由推力矢量接管控制。
+10. 记住普通帆升力方向固定在机体上（恒沿帆的 n 侧，随机体转）：倒扣时机翼升力变成"往下压"——设计特技动作前先想清楚姿态与升力方向的关系。
+
+验证：用 Contraption Diagram（图纸）检查重心/升力中心/力箭头，再按动作清单实测：滚转 360° 是否流畅干脆、急转弯是否掉头/侧滑、失速后能否改出、倒飞是否还能控制。
+
+
+
+// 1. 外环：角度环 (通常运行在 100-200Hz)
+angle_error = target_angle - current_angle; // 计算角度误差
+target_angular_rate = Kp_angle * angle_error; // 外环输出 = 目标角速度
+
+// 对目标角速度进行限幅，防止指令过于激进
+target_angular_rate = constrain(target_angular_rate, -max_rate, max_rate);
+
+// 2. 内环：角速度环 (通常运行在 500Hz-1kHz)
+rate_error = target_angular_rate - current_angular_rate; // 计算角速度误差
+// 内环进行完整的PID计算，输出最终的电机控制量
+control_output = Kp_rate * rate_error + Ki_rate * integral(rate_error) + Kd_rate * derivative(rate_error);
+
+// 3. 将控制量输出到执行器（电机/舵机）
+set_actuator(control_output);
+
+
+
+
+
+// 飞控配置
+const float DT = 0.05;          // 20Hz 采样间隔
+const float CUTOFF_FREQ = 6.0f; // 截止频率 6Hz (黄金值)
+
+// 计算滤波系数 alpha (只需计算一次，放在初始化函数里)
+float alpha = 1.0f / (1.0f + 1.0f / (2.0f * 3.14159f * CUTOFF_FREQ * DT));
+
+// ---- 每帧飞控循环 (20Hz) ----
+float current_error = 0.0f - current_roll_angle; // 假设目标滚转角为0
+
+// 1. 计算原始微分 (角度变化率)
+float raw_derivative = (current_error - last_error) / DT;
+
+// 2. 应用截止频率公式进行低通滤波
+float filtered_derivative = alpha * raw_derivative + (1.0f - alpha) * last_filtered_derivative;
+
+// 3. PD 控制输出
+float output = Kp * current_error + Kd * filtered_derivative;
+
+// 4. 更新历史值
+last_error = current_error;
+last_filtered_derivative = filtered_derivative;
