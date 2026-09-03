@@ -29,6 +29,16 @@ public class Config {
             .comment("Stress coefficient for the Transmission Peripheral in servo mode: actual stress = value × |real output RPM| (the output speed may be overridden/accelerated by setServoSpeed).")
             .defineInRange("servoModeStressImpact", 2.0, 0.0, 1024.0);
 
+    // ── 调试：飞行数据记录器（方案 B）──
+    public static final ModConfigSpec.BooleanValue FLIGHT_RECORDER_ENABLED = BUILDER
+            .comment("Flight data recorder (debug): log per-tick body data for every FMC-registered aircraft into <gameDir>/flight_logs/*.csv "
+                    + "(see compat/cc/FlightDataRecorder.java). Only active while at least one FMC/AIC is on a Sable physics body. Disable before release.")
+            .define("flightDataRecorderEnabled", true);
+
+    public static final ModConfigSpec.IntValue FLIGHT_RECORDER_INTERVAL_TICKS = BUILDER
+            .comment("Flight data recorder sampling interval in ticks (1 = every tick / 20 Hz).")
+            .defineInRange("flightDataRecorderIntervalTicks", 1, 1, 200);
+
     // ── 客户端：Monitor 模块渲染 ──
     private static final ModConfigSpec.Builder CLIENT_BUILDER = new ModConfigSpec.Builder();
 

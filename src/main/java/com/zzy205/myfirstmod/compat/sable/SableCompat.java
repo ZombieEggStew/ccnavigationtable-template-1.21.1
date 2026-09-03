@@ -327,6 +327,30 @@ public final class SableCompat {
     }
 
     /**
+     * 获取 SubLevel 物理刚体的线速度（世界系，m/s）。
+     * 镜像 {@link #getAngularVelocity}（调试/数据记录用）。
+     *
+     * @return 线速度 Vec3，失败返回 null
+     */
+    public static Vec3 getLinearVelocity(Level level, SubLevel subLevel) {
+        if (!(level instanceof ServerLevel) || subLevel == null) return null;
+        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
+        try {
+            SubLevelContainer container = SubLevelContainer.getContainer(level);
+            if (!(container instanceof ServerSubLevelContainer serverContainer)) return null;
+
+            SubLevelPhysicsSystem physicsSystem = serverContainer.physicsSystem();
+            RigidBodyHandle handle = physicsSystem.getPhysicsHandle(serverSubLevel);
+            if (handle == null) return null;
+
+            Vector3dc linVel = handle.getLinearVelocity(new Vector3d());
+            return new Vec3(linVel.x(), linVel.y(), linVel.z());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * 获取 SubLevel 物理刚体的总质量。
      *
      * @return 质量（kg），失败返回 null
@@ -351,6 +375,27 @@ public final class SableCompat {
         if (level == null || pos == null) return null;
         try {
             return Sable.HELPER.getVelocityRelativeToAir(level, pos.getCenter());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取 SubLevel 物理刚体在 plot（方块）坐标系中的<b>绝对</b>质心坐标
+     * （{@code MassTracker.getCenterOfMass()} 原值，未做 rotationPoint 归零）。
+     * 与 Sable 力组的点力（{@code QueuedForceGroup.PointForce.point()}）同一坐标系，
+     * 供力矩计算 {@code Σ (point − comPlot) × force} 使用。
+     *
+     * @return 质心 plot 坐标；失败或不存在时返回 null
+     */
+    public static Vec3 getCenterOfMassPlot(SubLevel subLevel) {
+        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
+        try {
+            MassData massTracker = serverSubLevel.getMassTracker();
+            if (massTracker == null) return null;
+            Vector3dc com = massTracker.getCenterOfMass();
+            if (com == null) return null;
+            return new Vec3(com.x(), com.y(), com.z());
         } catch (Exception e) {
             return null;
         }

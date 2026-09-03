@@ -5,8 +5,10 @@ import com.tterrag.registrate.Registrate;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.block.TrailingWheelMountBlockEntity;
+import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralCapabilities;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralExtenderSetup;
+import com.zzy205.myfirstmod.compat.cc.FlightDataRecorder;
 import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
 import com.zzy205.myfirstmod.compat.cc.SensorSystemAPI;
 import com.zzy205.myfirstmod.compat.cc.ShortRangeLinkerRegistry;
@@ -25,6 +27,7 @@ import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import org.slf4j.Logger;
 
@@ -69,6 +72,10 @@ public class CCPeripheralExtender {
         NeoForge.EVENT_BUS.addListener(CCPeripheralExtender::onServerStarting);
         NeoForge.EVENT_BUS.addListener(CCPeripheralExtender::onServerStopping);
 
+        // 飞行数据记录器（调试工具，见 compat/cc/FlightDataRecorder.java）：每个 ServerTick 对
+        // FMC 注册的物理体采样写 CSV（<gameDir>/flight_logs/），开关/间隔见 Config
+        NeoForge.EVENT_BUS.addListener(FlightDataRecorder::onServerTick);
+
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
         modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
@@ -98,5 +105,7 @@ public class CCPeripheralExtender {
     private static void onServerStopping(ServerStoppingEvent event) {
         GlobalChannelRegistry.clear();
         ShortRangeLinkerRegistry.clear();
+        BodySensorRegistry.clear();
+        FlightDataRecorder.closeAll();
     }
 }
