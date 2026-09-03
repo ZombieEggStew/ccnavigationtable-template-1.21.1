@@ -4,7 +4,7 @@
 
 > **What's the difference from create:RotationSpeedController?**
 
-> When using Create's rotation speed controller as a peripheral and calling `getTargetSpeed()`, it triggers `RotationPropagator.handleRemoved()` which cascades and clears the source of the entire downstream sub-network, leading to unexpected results (e.g. using aeroworks' stepper_servo downstream of the speed controller — changing the speed while activating the stepper motor makes the motor spin erratically).
+> When using Create's rotation speed controller as a peripheral and calling `setTargetSpeed()`, it triggers `RotationPropagator.handleRemoved()` which cascades and clears the source of the entire downstream sub-network, leading to unexpected results (e.g. using aeroworks' stepper_servo downstream of the speed controller — changing the speed while activating the stepper motor makes the motor spin erratically).
 > Meanwhile, simulated's analog_transmission is hard to fine-tune.
 
 !!! info "Note"
