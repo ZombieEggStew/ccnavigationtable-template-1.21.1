@@ -26,6 +26,7 @@
   "block.ccpe.fluid_port.tooltip.summary": "!?轻轻?!",
   "block.ccpe.fluid_port.tooltip.condition1": "右键点击时",
   "block.ccpe.fluid_port.tooltip.behaviour1": "将手持物品中的流体存入端口相邻的储罐（开口面以外的任意方向）。若物品无法清空，则改为从储罐灌满物品。",
+  "block.ccpe.trailing_wheel_mount.tooltip.summary": "不含动力与转向机构，但是质量比较轻",
 
   "tooltip.ccpe.transmission_peripheral.header": "电子变速箱",
   "tooltip.ccpe.transmission_peripheral.mode": "模式：",

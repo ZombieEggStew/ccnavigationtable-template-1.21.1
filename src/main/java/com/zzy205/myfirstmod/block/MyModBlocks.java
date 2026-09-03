@@ -132,11 +132,11 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
-    /** 从动轮悬架（trailing_wheel_mount）：单轮无动力输入（完全从动），模型直接复用 offroad wheel_mount 资产；结构/物理参考 offroad，见 memo/wheel-axle-design.md */
+    /** 从动轮悬架（trailing_wheel_mount）：单轮无动力输入（完全从动），模型直接复用 offroad wheel_mount 资产；结构/物理参考 offroad，见 memo/wheel-axle-design.md；IWrenchable 扳手旋转/拆除见 TrailingWheelMountBlock，硬度 1.5 对齐 offroad wheel_mount（stone 级，便于拆装） */
     public static final DeferredBlock<TrailingWheelMountBlock> trailing_wheel_mount =
             registerBlocks("trailing_wheel_mount", () -> new TrailingWheelMountBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(5.0f, 6.0f).
+                    strength(1.5f, 6.0f).
                     noOcclusion()
             ));
 

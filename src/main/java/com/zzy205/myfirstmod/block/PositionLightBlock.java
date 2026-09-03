@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
+import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -39,10 +40,13 @@ import org.joml.Vector3f;
  * （{@code ccpe.sensor_system.setLights}，FMC 门控）控制，<b>不响应红石</b>——
  * 原「红石信号 XOR INVERTED 反相」逻辑与 {@code INVERTED} 属性已移除
  * （LIT 成为直接可写状态，右键/ Lua 切换）；切换时播放粒子与音效。
- * 差异：仅用原版 API（{@link SimpleWaterloggedBlock} 替代 Create 的 ProperWaterloggedBlock，不实现 IWrenchable）；
+ * 差异：仅用原版 API（{@link SimpleWaterloggedBlock} 替代 Create 的 ProperWaterloggedBlock）；
+ * 实现 {@link IWrenchable} 默认行为：普通右键扳手旋转朝向（FACING，6 向贴附，
+ * 旋转后 {@code canSurvive} 校验不通过则不转），蹲下 + 右键扳手快速拆除（掉落进背包）；
+ * 亮灭仍只由空手右键 / Lua 切换（扳手右键不再落入切换逻辑，见 WrenchItem 分发）。
  * 模型为自建 position_light（底座 + 灯体），整体高 5px；亮灭状态只换灯体贴图，几何不变。
  */
-public class PositionLightBlock extends DirectionalBlock implements SimpleWaterloggedBlock {
+public class PositionLightBlock extends DirectionalBlock implements SimpleWaterloggedBlock, IWrenchable {
 
 	protected static final VoxelShape AABB_UP = Block.box(5, 0, 5, 11, 5, 11);
 	protected static final VoxelShape AABB_DOWN = Block.box(5, 11, 5, 11, 16, 11);

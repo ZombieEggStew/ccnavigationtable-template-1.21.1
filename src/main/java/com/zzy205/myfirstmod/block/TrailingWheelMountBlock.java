@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
+import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import dev.ryanhcode.offroad.index.OffroadDataComponents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -45,8 +46,12 @@ import org.jetbrains.annotations.NotNull;
  * <p>
  * 首版极简：无红石转向 / 无驻车刹车 / 无悬挂强度滚轮 UI（强度用常量，见
  * {@code TrailingWheelMountBlockEntity.SUSPENSION_STRENGTH}）。
+ * <p>
+ * 扳手（{@link IWrenchable} 默认实现，对齐 offroad wheel_mount 的 kinetic 继承语义）：
+ * 普通右键旋转 {@link #HORIZONTAL_FACING}（轮子伸出方向），蹲下 + 右键快速拆除
+ * （方块掉落进背包；槽内轮胎由 {@link #onRemove} 掉到场地上，与手动破坏一致）。
  */
-public class TrailingWheelMountBlock extends BaseEntityBlock {
+public class TrailingWheelMountBlock extends BaseEntityBlock implements IWrenchable {
 
     public static final MapCodec<TrailingWheelMountBlock> CODEC = simpleCodec(TrailingWheelMountBlock::new);
 

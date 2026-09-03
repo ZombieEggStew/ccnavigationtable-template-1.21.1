@@ -84,6 +84,12 @@ public class CCPeripheralExtenderClient {
         TooltipModifier.REGISTRY.register(fluidPortItem,
                 new ItemDescription.Modifier(fluidPortItem, FontHelper.Palette.STANDARD_CREATE));
 
+        // 从动轮悬架物品 tooltip（同 fluid_port 模式：ItemDescription，平时只显示"按住 SHIFT 查看"提示，
+        // 按住 SHIFT 展开 summary + 从动/转向/重量说明；Create ClientEvents 自动应用）。
+        Item trailingWheelMountItem = MyModBlocks.trailing_wheel_mount.get().asItem();
+        TooltipModifier.REGISTRY.register(trailingWheelMountItem,
+                new ItemDescription.Modifier(trailingWheelMountItem, FontHelper.Palette.STANDARD_CREATE));
+
         // 注册 Flywheel Visual（shaft 渲染）
         SimpleBlockEntityVisualizer.builder(MyModBlockEntities.transmission_peripheral_entity.get())
                 .factory(TransmissionPeripheralVisual::new)
