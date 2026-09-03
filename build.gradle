@@ -184,6 +184,10 @@ dependencies {
     // At compile time the outer JAR doesn't expose nested classes, so we need
     // the extracted simulated-neoforge JAR explicitly on the compile classpath.
     compileOnly files("libs/simulated-neoforge-1.21.1-1.3.0.jar")
+    // Offroad（wheel_mount 从动悬架参考的轮胎体系）：同上，offroad 也被 jarJar 进
+    // create-aeronautics-bundled（META-INF/jarjar/），运行时必在；这里抽 jar 仅供编译期
+    // 引用 dev.ryanhcode.offroad 的 TireLike / OffroadDataComponents.TIRE（trailing_wheel 复用其轮胎）。
+    compileOnly files("libs/offroad-neoforge-1.21.1-1.3.2.jar")
 
     // ---- Aeronautics (required — propeller bearing thrust/airflow config) ----
     // Create Aeronautics is a REQUIRED runtime dependency (declared in

@@ -10,6 +10,7 @@ import com.zzy205.myfirstmod.block.InsRenderer;
 import com.zzy205.myfirstmod.block.InsVisual;
 import com.zzy205.myfirstmod.block.AicRenderer;
 import com.zzy205.myfirstmod.block.AicVisual;
+import com.zzy205.myfirstmod.block.TrailingWheelRenderer;
 import com.zzy205.myfirstmod.block.ControlDeskVisual;
 import com.zzy205.myfirstmod.block.ControlDeskRenderer;
 import com.zzy205.myfirstmod.block.MonitorVisual;
@@ -157,6 +158,9 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.aic_entity.get(),
                 AicRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.trailing_wheel_entity.get(),
+                TrailingWheelRenderer::new);
     }
 
     @SubscribeEvent

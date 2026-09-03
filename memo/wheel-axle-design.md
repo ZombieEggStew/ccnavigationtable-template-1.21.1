@@ -1,11 +1,19 @@
-# 从动轮车轴（双胎位轴式）— 方案设计（存档）
+# 从动轮悬架（trailing_wheel）— 设计与实现
 
-> 状态：**设计存档，未开始实现**。先复读文末「参考来源」再动手。
-> 需求口径（2026-08 与用户确认）：
-> 1. **单方块双胎位（轴式）**：一个方块 = 一根横轴，左右两侧各一个轮胎槽位 + 各一套悬挂几何（渲染/射线/施力点 ×2，左右镜像）；
-> 2. **完全从动（无 Create 动力）**：不接受任何旋转输入，轮子只随车身地面运动自由滚转（无 KineticBlockEntity / 轴 / 应力）；
-> 3. **真实 Sable 悬挂物理**：弹簧支撑 / 地形检测 / 施力，与 offroad wheel_mount 行为一致；
-> 4. **轮胎体系复用 offroad**（编译期抽 offroad jar 进 libs/，运行时 bundled 已带）。
+> 状态：**单轮版已落地（2026-08）**：方块 `ccpe:trailing_wheel`（单轮无动力、完全从动、模型直接复用 offroad wheel_mount 资产），
+> `./gradlew.bat classes` 通过；**待进游戏验证**（见文末「进游戏验证清单」）。
+> 双轮轴式（两侧各一套悬挂）为后续扩展，本文件同时保留其设计。
+> 实现前先复读文末「参考来源」。
+
+## 需求口径（2026-08 与用户确认）
+
+1. **先做单轮版**：单轮悬架、无 Create 动力输入、完全从动（轮子被车身推着滚，不推车）；
+2. **模型直接用 offroad 的**：不拷资产，blockstate / partial / item 模型全部跨 namespace 引用 `offroad:block/wheel_mount/...`；
+3. 轮胎体系**复用 offroad**（编译期抽 offroad jar 进 libs/，运行时 bundled 已带）；
+4. 真实 Sable 悬挂物理（弹簧支撑 / 地形检测 / 施力），照 offroad WheelMount 移植并**删驱动项**；
+5. 首版极简：无红石转向 / 无驻车刹车 / 无悬挂强度滚轮 UI（刚度常量 10）；
+6. 轮胎槽 = 单槽（照 offroad 原版），朝向面/底面右键装卸；
+7. **双轮轴式（后续）**：单方块 = 一根横轴，左右各一个轮胎槽位 + 各一套悬挂几何（渲染/射线/施力点 ×2，左右镜像）。
 
 ## 参考实现机制速览（offroad wheel_mount）
 
@@ -33,66 +41,54 @@
 - **批处理**：BE 加入静态 `queuedWheelMounts`；`Offroad.java` 用 `SableEventPlatform.INSTANCE.onPhysicsTick(...)` 注册 `OffroadCommonEvents::physicsTick` → 每物理 tick 后 `applyAllBatchedForces`（`RigidBodyHandle.applyForcesAndReset`）。
 - 转向：facing CW/CCW 红石差速 → `computeYaw`；悬挂强度 `SuspensionStrengthValueBehaviour`（5~180 滚轮）。
 
-## 与参考的差异（本设计）
+## 已实现（单轮版，ccpe）
 
-| 维度 | offroad wheel_mount | 本设计（从动轮车轴） |
+| 文件 | 说明 |
+|---|---|
+| `block/TrailingWheelBlock.java` | 方块：`BaseEntityBlock` + `HORIZONTAL_FACING`（非 kinetic），放置 facing=点击面水平方向；朝向面/底面右键装卸轮胎（客户端预判 + 服务端 `switchStacks`，音效）；拆除掉胎。`getTicker` → `TrailingWheelBlockEntity::tick` |
+| `block/TrailingWheelBlockEntity.java` | 核心：vanilla `BlockEntity` + `BlockEntitySubLevelActor` + `Clearable`。客户端 tick = extension 射线 + 从动滚动角（贴地按车身平移/周长，离地停转）；`sable$physicsTick` = offroad 移植（弹簧/阻尼/侧滑 + **删 `kineticSpeed` 驱动项**，滚动阻力保留 0.075 基础项）；静态 `queuedWheelMounts` + `onPhysicsTick` 批处理；NBT `CurrentStack`（saveAdditional/loadAdditional + update packet） |
+| `block/TrailingWheelRenderer.java` | 纯 BER（`SafeBlockEntityRenderer`）：tele/spring/mount + 轮胎渲染照 offroad，**去掉** SHAFT_HALF / FilteringRenderer / 转向 yaw / diode；partial 跨 namespace `offroad:block/wheel_mount/...`；`getViewDistance` 512、`getRenderBoundingBox` 按 `radius+1` 膨胀 |
+| `build.gradle` | `compileOnly files("libs/offroad-neoforge-1.21.1-1.3.2.jar")`（从 create-aeronautics-bundled 抽出） |
+| `CCPeripheralExtender.java` | 构造器注册 `SableEventPlatform.INSTANCE.onPhysicsTick(TrailingWheelBlockEntity::onPhysicsTick)`（照 offroad `Offroad.java:62`） |
+| `MyModBlocks` / `MyModBlockEntities` / `CCPeripheralExtenderClient` / `MyModCreativeModeTabs` | 注册 `trailing_wheel` 方块/BE/BER/创造标签 |
+| `assets/ccpe/blockstates/trailing_wheel.json` | facing 4 向 → 模型 `offroad:block/wheel_mount/block`（y 旋转照 offroad wheel_mount.json） |
+| `assets/ccpe/models/item/trailing_wheel.json` | parent `offroad:block/wheel_mount/item`（物品展示=offroad 全套） |
+| `data/ccpe/loot_table/blocks/trailing_wheel.json` | 掉自己 |
+| `assets/ccpe/lang/zh_cn.json` / `en_us.json` | `block.ccpe.trailing_wheel` = 从动轮悬架 / Trailing Wheel Suspension |
+
+**关键设计决策**：
+- 模型零拷贝：blockstate / item / partial 全部跨 namespace 引用 offroad 资产 → 依赖运行时 offroad（bundled 必带），无资产维护成本；
+- 无 Create：不继承 `HorizontalKineticBlock`/`KineticBlockEntity`，无轴/应力/`getSpeed`；
+- 从动：物理删除驱动项（`getSpeed` 相关 fma），仅保留弹簧+阻尼+侧滑+基础滚动阻力；客户端轮子贴地滚动角由车身平移推导，离地无动力自然停转；
+- 批处理沿用 offroad（静态队列 + physics tick 事件统一 `applyForcesAndReset`），`CCPeripheralExtender` 注册一次。
+
+## 双轮轴式（后续扩展设计）
+
+| 维度 | 单轮版（已实现） | 双轮轴式（后续） |
 |---|---|---|
-| 方块继承 | `HorizontalKineticBlock`（facing 单轮 + 背轴输入） | 普通 `Block` + `IBE`（**无动力**，删除 `hasShaftTowards`/`getRotationAxis`/应力） |
+| 方块继承 | `BaseEntityBlock` + `HORIZONTAL_FACING`（无动力） | 同左，facing=车轴方向 |
 | 轮胎槽位 | 1 格（单侧） | **2 格（左右镜像，各侧一个）** |
 | 渲染 | BER 单侧几何 | BER **两侧镜像**几何（tele/spring/轮 ×2，自转符号相反） |
-| 物理 | 弹簧 + 驱动 + 刹车 + 侧滑（转速→推力） | 弹簧 + 阻尼 + 侧滑（**删驱动项**），刹车可选保留（红石驻车） |
-| 作用点 | 1 个（`pos.relative(facing)` 轮心） | **2 个**（`pos.relative(facing)` 与 `pos.relative(opposite)` 轮心，独立三线射线/extension/施力） |
-| 状态字段 | extension/angle/yaw 单组 | extension/angle **×2 组**（左右独立，镜像符号） |
+| 物理作用点 | 1 个（`pos.relative(facing)` 轮心） | **2 个**（`pos.relative(facing)` 与 `pos.relative(facing.getOpposite())` 轮心，独立三线射线/extension/施力） |
+| 状态字段 | extension/angle 单组 | extension/angle **×2 组**（左右独立，镜像符号） |
 
-## 准备清单（落到 ccpe 项目）
-
-### 决策点 0：依赖（已定 = 复用 offroad 轮胎体系）
-- 从 `libs/create-aeronautics-bundled-1.21.1-1.3.2.jar` 抽出
-  `META-INF/jarjar/dev.ryanhcode.offroad.offroad-neoforge-1.21.1-1.3.2.jar` 放 `libs/`，
-  `build.gradle` 加 `compileOnly files("libs/offroad-neoforge-1.21.1-1.3.2.jar")`（仿 simulated 的写法，transitive 无需）。
-- 代码直接引用 `dev.ryanhcode.offroad.content.components.TireLike` + `index.OffroadDataComponents.TIRE`
-  → offroad 全部轮胎 + Create 轮子（offroad 已批量挂 TIRE）直接可装，无需自建轮胎资产。
-- 运行时依赖：offroad 已 jarJar 在 create-aeronautics-bundled 内，**无新增运行时依赖**。
-
-### 1. 方块
-- `block/<name>Block.java` extends `Block implements IBE<BE>`：不继承 kinetic；BlockState `HORIZONTAL_FACING` 表达**车轴方向**（双胎在 facing 与 opposite 两端）。
-- 交互：两个侧面分别右键装/取对应侧轮胎（仿 `WheelMountBlock.useItemOn`，hit face = 该侧槽位）。
-- 拆除：两胎分别掉落；`getShape` 静态。
-
-### 2. BlockEntity（核心）
-- extends 普通 `BlockEntity`（不必 `KineticBlockEntity`）+ 实现 `BlockEntitySubLevelActor`；客户端同步用项目既有 `getUpdatePacket` 模式（照 Monitor 系）。
-- 左右两组状态：`extension/lastExtension`、`angle/lastAngle`、轮胎栈（2 格或 2 槽容器，仿 `WheelMountInventory` 过滤 `TIRE`）。
-- NBT：两胎栈分别 `write/read` + 更新包。
-- `createRenderBoundingBox` 按两侧最大 `radius + 1` 膨胀。
-- **物理钩子（唯一新增基础设施）**：项目目前没有 `SableEventPlatform.onPhysicsTick` 挂钩 → 在 `CCPeripheralExtender` 构造里加一次
-  `SableEventPlatform.INSTANCE.onPhysicsTick(<CommonEvents>::physicsTick)`（照 `Offroad.java:62`），事件里静态批处理施力（照 `OffroadCommonEvents.java:28-31` + `applyAllBatchedForces`）。
-
-### 3. 物理
-- `sable$physicsTick`：照抄结构，**删含 `kineticSpeed` 的驱动 fma**（从动不推车）；保留弹簧/阻尼/侧滑；刹车项可选（红石驻车）。
-- 两侧各算：两个轮心（`pos.relative(facing)` 与 `pos.relative(facing.getOpposite())` 中心）分别三线射线、分别 extension、分别 `applyImpulseAtPoint`（两作用点 → 车体俯仰/滚转支撑，仿真车轴）。
-
-### 4. 渲染
-- `block/<name>Renderer.java` extends `BlockEntityRenderer<BE>`（**纯 BER**，无 SHAFT_HALF、不继承 kinetic 渲染器）。
-- 左右两套 tele/spring/轮 partial：镜像可通过建模镜像模型，或渲染沿 axle `scale(-1,1,1)`；左右自转 `signMultiplier` 相反（照 offroad 符号处理）。
-- 轮胎 partial / 物品渲染回退逻辑照抄；`getViewDistance()` 512。
-
-### 5. 注册与资产
-- 方块/BE：`block/MyModBlocks.java` / `MyModBlockEntities.java` 加条目（或按需走 RegistrateBlocks）。
-- 渲染注册：客户端 `CCPeripheralExtenderClient` 的 `EntityRenderersEvent.RegisterRenderers`（仿 monitor 写法）。
-- partial model：加进 `block/MyModPartialModels.java`。
-- assets：blockstates（facing 4 变体）、`models/block/<name>/`（轴壳静态模型 + 左右 tele/spring/mount partial）、models/item、贴图、`zh_cn`/`en_us` lang、loot table。
-- 可选后续：CC 外设（轮速/行程/刹车读数），参考 Simulated-CC-Compat / CreateAvionics 的 WheelMountPeripheral。
-
-## 建议落地顺序（每步可进游戏验证）
+## 建议落地顺序（双轮版，每步可进游戏验证）
 
 1. 静态轴壳方块 + 双格轮胎槽 + 装/卸交互（不接物理）→ 验证两胎位装拆、NBT、渲染位置。
 2. 接入 Sable `onPhysicsTick` 批处理 + 单侧悬挂支撑力（另一侧先关）→ 验证车能"坐"在轮子上起伏。
 3. 双侧对称化（镜像几何/独立射线/两作用点）→ 验证不平地形车体俯仰/滚转自然。
-4. 删驱动项调从动手感（滚动阻力/刹车可选）→ 验证被推着走时轮子纯滚动不打滑。
+4. 调从动手感（滚动阻力/刹车可选）→ 验证被推着走时轮子纯滚动不打滑。
+
+## 进游戏验证清单（单轮版）
+
+1. `/give @p ccpe:trailing_wheel`（创造标签「电脑外设扩展」也有），手持轮胎（offroad 的 tire / Create 的 crushing wheel 等带 `offroad:TIRE` 的物品）右键**朝向面/底面** → 轮胎装上/取下，客户端渲染正确（无轮胎时悬架缩回）。
+2. 把 `trailing_wheel` 装进车辆结构并装配成 Sable 物理体（同 INS/bearing 前提）→ 车体能被轮子撑住、随地形起伏；推车时轮子贴地滚动、离地停转。
+3. 观察：模型朝向与 offroad wheel_mount 是否一致（facing 旋转）；大轮胎（monster tire radius=2）渲染盒是否被剔除。
+4. 观察：无动力时是否真的不推车（车身前进完全靠其它驱动轮/外力）。
 
 ## 待确认问题
 
-- [ ] 从动轮是否需要**驻车/刹车**（红石输入）？默认：可选保留 offroad 刹车项（不做则删净）。
+- [ ] 从动轮是否需要**驻车/刹车**（红石输入）？默认：不做（首版已删净）。
 - [ ] 是否需要 **CC 外设**（读轮速/行程/刹车）？（默认先不做，后续按需，参考 Simulated-CC-Compat `WheelMountPeripheral`）
 - [ ] 是否要做悬挂强度滚轮 UI？（参考 `SuspensionStrengthValueBehaviour`；不做则常量）
 
@@ -100,10 +96,10 @@
 
 | 参考 | 位置 | 借鉴点 |
 |---|---|---|
-| WheelMountBlockEntity | `references/Simulated-Project-main/offroad/common/.../wheel_mount/WheelMountBlockEntity.java` | extension 双模（空中按转速 / 贴地从平移）、`computeMaxExtensionToTerrain` 三线射线、`sable$physicsTick` 弹簧+驱动+刹车、`queuedWheelMounts` 批处理 |
-| WheelMountBlock / WheelMountInventory / WheelMountRenderer | 同目录 | 交互装/取、单格容器过滤 `TIRE`、BER 手摆 tele/spring + yaw/自转符号 |
+| WheelMountBlockEntity | `references/Simulated-Project-main/offroad/common/.../wheel_mount/WheelMountBlockEntity.java` | extension 双模（空中按转速 / 贴地从平移）、`computeMaxExtensionToTerrain` 三线射线、`sable$physicsTick` 弹簧+驱动+刹车、`queuedWheelMounts` 批处理（本项目删驱动/刹车/转向） |
+| WheelMountBlock / WheelMountInventory / WheelMountRenderer | 同目录 | 交互装/取、单格容器过滤 `TIRE`、BER 手摆 tele/spring + 自转符号（本项目删 SHAFT/Filtering/yaw/diode） |
 | OffroadBlocks / OffroadItems / OffroadDataComponents / OffroadPartialModels | `.../index/` | 注册形态：物品挂 `TIRE`、partial 声明 |
-| Offroad.java:62 + OffroadCommonEvents.java:28-31 | `.../events/` | `SableEventPlatform.INSTANCE.onPhysicsTick` 挂钩 + 批量施力（ccpe 目前缺此） |
+| Offroad.java:62 + OffroadCommonEvents.java:28-31 | `.../events/` | `SableEventPlatform.INSTANCE.onPhysicsTick` 挂钩 + 批量施力（ccpe 的 `CCPeripheralExtender` 已照此注册） |
 | ServerSubLevel.prePhysicsTick | `api/sable-common-1.21.1-2.0.3-sources/.../ServerSubLevel.java:297-301` | actor 每 substep 被自动调 `sable$physicsTick` 的调度点 |
-| MyBearingPlateBlockEntity | `src/main/java/com/zzy205/myfirstmod/block/` | 项目已有 `BlockEntitySubLevelActor` 接入先例 |
+| MyBearingPlateBlockEntity / InsBlockEntity | `src/main/java/com/zzy205/myfirstmod/block/` | 项目已有 `BlockEntitySubLevelActor` / vanilla BE + ticker 接入先例 |
 | WheelMountPeripheral | `references/Simulated-CC-Compat-master` / `CreateAvionics-main` | 集成 offroad wheel_mount 的 CC 外设范例（可选后续） |
