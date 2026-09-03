@@ -2,6 +2,10 @@
 
 ![ins](../img/ins_item.png)
 
+> Inertial navigation is fully self-contained — it needs no GPS, ground stations or any external signal. Gyroscopes sense attitude and angular rate, accelerometers sense acceleration, and the system integrates acceleration into velocity, then into position.
+
+> Because it needs no external reference, inertial navigation cannot be jammed or spoofed — it is the core navigation of nuclear submarines, missiles and spacecraft; the IMU in your smartphone works on the same principle (step counting, gesture recognition).
+
 The **Inertial Navigation System** (`ccpe:ins`) is an attitude indicator block for physics bodies (Sable sub-levels). The center block's red end always points north.
 
 ## Attitude readings gate
@@ -14,9 +18,12 @@ All INS-gated methods require the physics body (including constraint chains) to 
 | `getPosition()` | table / nil | World position `{x, y, z}` of the **most recently placed** INS block |
 | `getBodyPosition()` | table / nil | World position `{x, y, z}` of the **physics body origin** (its pivot / center-of-mass axis) |
 | `getOrientation()` | table / nil | Body orientation quaternion `{x, y, z, w}` (world frame) |
-| `getAngularVelocity()` | table / nil | World-frame angular velocity `{x, y, z}` (rad/s) |
+| `getAngularVelocity()` | table / nil | **Body-frame** angular rate `{x, y, z}` (rad/s) around the body's own X/Y/Z axes (equals the world frame when the body attitude is identity) |
 
 The INS also appears in `getSensors()` as `{type="ins", pos={x,y,z}, pos_rel={x,y,z}}` (no per-sensor readings — use the dedicated methods above).
+
+!!! note "Angular velocity frame"
+    `getAngularVelocity()` returns the rotation rate around the **body's own axes** (roll/pitch/yaw-rate style components): the physics engine's world-frame angular velocity rotated into the body frame with the same-tick orientation quaternion exposed by `getOrientation()`. To recover the world-frame angular velocity, rotate the result by that quaternion (`q * ω_body`).
 
 ## Angle convention
 
@@ -54,7 +61,7 @@ print("body origin:", textutils.serialize(ss.getBodyPosition()))
 -- Orientation quaternion {x,y,z,w}
 print("quaternion:", textutils.serialize(ss.getOrientation()))
 
--- Angular velocity (rad/s, world frame)
+-- Angular rate (rad/s, body frame; see note above)
 print("ang vel:   ", textutils.serialize(ss.getAngularVelocity()))
 ```
 

@@ -24,6 +24,8 @@ public final class MyModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FmcBlockEntity>> fmc_entity = BLOCK_ENTITY_TYPES.register("fmc", () -> BlockEntityType.Builder.of(FmcBlockEntity::new, MyModBlocks.fmc.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AicBlockEntity>> aic_entity = BLOCK_ENTITY_TYPES.register("aic", () -> BlockEntityType.Builder.of(AicBlockEntity::new, MyModBlocks.aic.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FluidPortBlockEntity>> fluid_port_entity = BLOCK_ENTITY_TYPES.register("fluid_port", () -> BlockEntityType.Builder.of(FluidPortBlockEntity::new, MyModBlocks.fluid_port.get()).build(null));
+    /** 从动轮悬架 BE：Sable BlockEntitySubLevelActor（装配进物理体后每 physics substep 施加弹簧支撑力） */
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TrailingWheelMountBlockEntity>> trailing_wheel_mount_entity = BLOCK_ENTITY_TYPES.register("trailing_wheel_mount", () -> BlockEntityType.Builder.of(TrailingWheelMountBlockEntity::new, MyModBlocks.trailing_wheel_mount.get()).build(null));
 
     public static void register(IEventBus bus) {
         BLOCK_ENTITY_TYPES.register(bus);

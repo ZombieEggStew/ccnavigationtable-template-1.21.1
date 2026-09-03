@@ -2,6 +2,10 @@
 
 ![ins](../img/ins_item.png)
 
+>惯性导航（Inertial Navigation）完全自主——不依赖 GPS、地面站或任何外部信号：陀螺仪感知姿态与角速度，加速度计感知加速度，系统对加速度积分得到速度、再积分得到位置。
+
+>正因为无需外部参考，惯导无法被干扰或欺骗，是核潜艇、导弹与航天器的核心导航手段；智能手机里的计步、手势识别用的也是同一原理（IMU）。
+
 **惯性导航系统**（`ccpe:ins`）是装在物理体（Sable sub-level）上的姿态指示器方块。中心方块的红色一端永远指向北方。
 
 ## 姿态读数门控
@@ -14,9 +18,12 @@
 | `getPosition()` | table / nil | **最后放置的 INS 方块**的世界坐标 `{x, y, z}` |
 | `getBodyPosition()` | table / nil | **物理体原点**（枢轴/质心轴）的世界坐标 `{x, y, z}` |
 | `getOrientation()` | table / nil | 机体姿态四元数 `{x, y, z, w}`（世界系） |
-| `getAngularVelocity()` | table / nil | 世界系角速度 `{x, y, z}`（rad/s） |
+| `getAngularVelocity()` | table / nil | **机体局部系**角速率 `{x, y, z}`（rad/s，绕机体自身 X/Y/Z 轴；机体姿态恒等时 = 世界系） |
 
 INS 也会出现在 `getSensors()` 中，条目为 `{type="ins", pos={x,y,z}, pos_rel={x,y,z}}`（无逐传感器读数——姿态用上面的专用方法读取）。
+
+!!! note "角速度参考系"
+    `getAngularVelocity()` 返回绕**机体自身轴**的角速率分量（滚转/俯仰/偏航率风格）：物理引擎的世界系角速度经与 `getOrientation()` 同一 tick 的姿态四元数旋转到机体系得到。需要世界系角速度时，用该四元数对本结果做正向旋转（`q * ω_body`）即可恢复。
 
 ## 角度约定
 
@@ -54,7 +61,7 @@ print("body origin:", textutils.serialize(ss.getBodyPosition()))
 -- 姿态四元数 {x,y,z,w}
 print("quaternion:", textutils.serialize(ss.getOrientation()))
 
--- 角速度（rad/s，世界系）
+-- 角速率（rad/s，机体局部系，见上方说明）
 print("ang vel:   ", textutils.serialize(ss.getAngularVelocity()))
 ```
 

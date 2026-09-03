@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "X": {
+      "item": "minecraft:iron_nugget"
+    },
+    "Y": {
+      "item": "minecraft:iron_ingot"
+    },
+    "Z": {
+      "item": "minecraft:torch"
+    },
+    "#": {
+      "item": "minecraft:white_dye"
+    }
+  },
+  "pattern": [
+    " # ",
+    " Z " ,
+    "XYX"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:white_position_light"
+  }
+}

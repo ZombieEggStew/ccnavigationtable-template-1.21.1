@@ -75,3 +75,8 @@
 - Added drawCells / drawText / setVisible / isVisible (Lua methods).
 - getPhysicsCenterOfMassRel is now relative to the FMC block center; added getPhysicsChainCenterOfMassRel.
 - monitor_2 can no longer be washed away by water. When dismantling a control desk carrying a monitor_2 with modules, the modules now drop to the ground.
+
+1.1.2
+- Added the position light.
+- ccpe.sensor_system.getAngularVelocity()：world frame → Body-frame
+- Added the trailing wheel mount

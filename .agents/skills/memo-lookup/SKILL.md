@@ -56,6 +56,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 | `short-range link.md` | 短程信号链接器（ccpe:short_range_linker）实现方案（物理体作用域频道注册表、链上共享加载开关、Lua API ccpe.link、频道唯一性语义） | 实现/修改短程信号链接器时，先读本文 |
 | `pitot-selection-box.md` | 皮托管选择框调试记录（VoxelShaper 旋转坑：单位混用/基准朝向/end_rod 风格下 Catnip 与原版 X 旋转方向相反，水平四向绕 Y 180°；新增方块选择框的 checklist） | 新增或修改 6 向 FACING 方块的选择框/碰撞框，或排查选择框"不可见/差 90°/水平反了"时 |
 | `neoforge-debugging.md` | 本项目 F5 启动事实 | 调试启动配置或 classpath 时 |
+| `registrate-datagen.md` | **Registrate + datagen 新增方块完整流程**（红色航行灯实战；含三个坑：datagen 生成 lang 会盖手写文件、Registrate 自动 .tab(SEARCH) 导致服务器启动崩溃及修复、datagen 环境需最小化 mod） | 用 Registrate 注册新方块/跑 runData/排查创造标签崩溃时 |
 
 ## 最小上下文原则
 

@@ -110,8 +110,11 @@ compass  = Y·Z·X          (applyCompass→applyPrimary→applySecondary, euler
 - [x] `getPosition()` 已实现（2026-08）：最后放置的 INS 的**世界坐标** {x, y, z}（plot 坐标经
       `SableCompat.projectOutOfSubLevel` 投影到世界，与静压孔高度同源；随物理体移动/旋转实时变化；
       门控与 getAngles 相同 = 机体上有 ≥1 INS）。
-- [x] `getOrientation()` / `getAngularVelocity()` 已实现（2026-08）：机体姿态四元数 {x, y, z, w} 与
-      世界系角速度 {x, y, z} rad/s（分别复用 `SableCompat.getSubLevelOrientation` / `getAngularVelocity`，
-      均为刚体属性直接读取）；门控与 getAngles/getPosition 相同 = 机体上有 ≥1 INS。
+- [x] `getOrientation()` / `getAngularVelocity()` 已实现（2026-08）：机体姿态四元数 {x, y, z, w}（世界系）
+      与**机体局部系角速率** {x, y, z} rad/s（绕机体自身 X/Y/Z 轴；姿态恒等时 = 世界系。
+      `SableCompat.getAngularVelocity` 返回的是刚体世界系角速度，SensorSystemAPI 缓存时用同一 tick 的
+      姿态四元数（`logicalPose().orientation()`，与 `getOrientation()` 同一基准）做 `q⁻¹·ω` 逆旋转得到，
+      参考 Simulated-Project `SimDebugThingCommands` 同款做法）；门控与 getAngles/getPosition 相同 =
+      机体上有 ≥1 INS。
 - Create 护目镜 tooltip 显示俯仰/滚转/航向读数。
 - 非自然维度指北行为开关（当前随机乱转）。

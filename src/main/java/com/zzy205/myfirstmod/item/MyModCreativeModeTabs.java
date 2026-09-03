@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.item;
 
 import com.zzy205.myfirstmod.CCPeripheralExtender;
+import com.zzy205.myfirstmod.RegistrateBlocks;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -33,6 +34,10 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.fmc);
                 output.accept(MyModBlocks.aic);
                 output.accept(MyModBlocks.fluid_port);
+                output.accept(MyModBlocks.trailing_wheel_mount); // 从动轮悬架（单轮无动力）
+                output.accept(RegistrateBlocks.RED_POSITION_LIGHT.get()); // 红色航行灯（Registrate 注册，手动挂标签）
+                output.accept(RegistrateBlocks.GREEN_POSITION_LIGHT.get()); // 绿色航行灯
+                output.accept(RegistrateBlocks.WHITE_POSITION_LIGHT.get()); // 白色航行灯
                 output.accept(MyModItems.CONTROL_PEDAL);
                 output.accept(MyModItems.CONTROL_JOYSTICK);
                 output.accept(MyModItems.CONTROL_MONITOR_2);

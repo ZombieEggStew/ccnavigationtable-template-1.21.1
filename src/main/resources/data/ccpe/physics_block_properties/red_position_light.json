@@ -1,0 +1,7 @@
+{
+  "selector": "ccpe:red_position_light",
+  "properties": {
+    "sable:mass": 0.0,
+    "sable:volume": 0.0
+  }
+}

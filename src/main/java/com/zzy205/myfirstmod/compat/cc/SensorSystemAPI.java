@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.RegistrateBlocks;
 import com.zzy205.myfirstmod.block.AicBlock;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.FmcBlock;
@@ -17,17 +18,22 @@ import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.peripheral.PeripheralCapability;
 import dev.eriksonn.aeronautics.config.AeroConfig;
+import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
 import dev.ryanhcode.sable.companion.math.JOMLConversion;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
 import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.SubLevel;
+import dev.ryanhcode.sable.sublevel.plot.LevelPlot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaterniond;
 import org.joml.Vector3d;
 import org.jspecify.annotations.Nullable;
 
@@ -36,6 +42,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -80,7 +87,7 @@ import java.util.UUID;
  * print(ss.getAngles())           -- {pitch=, roll=, yaw=}（度；门控：机体上必须有 INS）
  * print(ss.getPosition())         -- 最后放置的 INS 的世界坐标 {x, y, z}（门控：机体上必须有 INS）
  * print(ss.getOrientation())      -- 机体姿态四元数 {x, y, z, w}（门控：机体上必须有 INS）
- * print(ss.getAngularVelocity())  -- 机体世界系角速度 {x, y, z} rad/s（门控：机体上必须有 INS）
+ * print(ss.getAngularVelocity())  -- 机体局部系角速率 {x, y, z} rad/s（绕机体自身 X/Y/Z 轴，姿态恒等时=世界系；门控：机体上必须有 INS）
  * print(ss.getBodyPosition())     -- 物理体原点世界坐标 {x, y, z}（门控：机体上必须有 INS）
  * print(ss.getPhysicsCenterOfMassRel()) -- 重心相对最后放置的 FMC 的机体局部系位置 {x, y, z}（门控：机体上有 FMC）
  * print(ss.getPhysicsMass())      -- 所在物理体质量 kg（门控：机体上有 FMC）
@@ -89,6 +96,8 @@ import java.util.UUID;
  * print(ss.getPhysicsChainGravityForce()) -- 所在物理体链总重力 pN（门控：机体上有 FMC）
  * print(ss.getStressRemaining()) -- 最后放置的 FMC 的附着面方块所在 Create 应力网络的剩余应力 su（门控：机体上有 FMC 且附着面方块是动力方块）
  * print(ss.getStressCapacity()) -- 同上，网络总容量 su（门控同上）
+ * local n = ss.setLights("red", true) -- 开机体（含约束链）上全部红色航行灯，返回实际设置的灯数（门控：机体上有 FMC；color 还支持 "green"/"white"/"all"）
+ * local m = ss.setAllLights(true)     -- 开机体上全部颜色（红/绿/白）的航行灯，返回实际设置的灯数（等价于 setLights("all", true)）
  * local sensors = ss.getSensors() -- 全部传感器快照
  * -- {{type="static_port", pos={x,y,z}, pos_rel={x,y,z}, altitude=..., pressure=...},
  * --  {type="pitot_tube",  pos={x,y,z}, pos_rel={x,y,z}, speed=..., air_speed=...},
@@ -135,7 +144,7 @@ public class SensorSystemAPI implements ILuaAPI {
     private volatile double orientZ = 0;
     private volatile double orientW = 1;
 
-    /** 角速度缓存（世界系 rad/s）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
+    /** 角速度缓存（机体局部系 rad/s，绕机体自身 X/Y/Z 轴的角速率）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
     private volatile boolean angularVelocityAvailable = false;
     private volatile double angVelX = 0;
     private volatile double angVelY = 0;
@@ -346,13 +355,18 @@ public class SensorSystemAPI implements ILuaAPI {
             orientW = 1;
         }
 
-        // 角速度缓存（世界系 rad/s；门控：机体上有 INS 才计算）
+        // 角速度缓存（机体局部系 rad/s；门控：机体上有 INS 才计算，与姿态同一 tick 快照）。
+        // SableCompat.getAngularVelocity 返回刚体世界系角速度；机体局部系 = 用同一 tick 的姿态
+        // 四元数（orient，与 getOrientation() 同一基准，logicalPose().orientation()）做逆旋转：
+        // ω_body = q⁻¹·ω_world（JOML transformInverse），分量即绕机体自身 X/Y/Z 轴的角速率。
         Vec3 angVel = attitudeGate ? SableCompat.getAngularVelocity(sub.getLevel(), sub) : null;
-        if (angVel != null) {
+        if (angVel != null && orient != null) {
+            Vector3d bodyAngVel = new Vector3d(angVel.x, angVel.y, angVel.z);
+            new Quaterniond(orient[0], orient[1], orient[2], orient[3]).transformInverse(bodyAngVel);
             angularVelocityAvailable = true;
-            angVelX = angVel.x;
-            angVelY = angVel.y;
-            angVelZ = angVel.z;
+            angVelX = bodyAngVel.x;
+            angVelY = bodyAngVel.y;
+            angVelZ = bodyAngVel.z;
         } else {
             angularVelocityAvailable = false;
             angVelX = angVelY = angVelZ = 0;
@@ -630,8 +644,12 @@ public class SensorSystemAPI implements ILuaAPI {
     }
 
     /**
-     * 所在物理体（含约束链）的世界系角速度 {@code {x, y, z}}（rad/s，
-     * {@link SableCompat#getAngularVelocity}，刚体角速度）。
+     * 所在物理体（含约束链）的机体局部系角速率 {@code {x, y, z}}（rad/s，绕机体自身 X/Y/Z 轴
+     * 的角速率分量）。数据源为世界系刚体角速度（{@link SableCompat#getAngularVelocity}），
+     * 缓存时用与 {@link #getOrientation()} 同一 tick 的姿态四元数
+     * （{@code subLevel.logicalPose().orientation()}）做逆旋转得到机体系
+     * （姿态恒等时与世界系一致）。需要世界系角速度时可用 {@link #getOrientation()} 的
+     * 四元数对本结果做正向旋转（q·ω_body）。
      * <p>
      * <b>门控（存在性）</b>：与 {@link #getAngles()} 相同——所在物理体上必须有 ≥1 个
      * 惯性导航系统（ccpe:ins），否则返回 nil。
@@ -880,6 +898,86 @@ public class SensorSystemAPI implements ILuaAPI {
         } catch (Exception ignored) {
             // aeronautics 配置不可用时保留默认值（0.2 / 0.05）
         }
+    }
+
+    // ═══════════════ 航行灯控制（门控：机体（含约束链）上有 ≥1 个 FMC） ═══════════════
+
+    /**
+     * 按颜色开关所在物理体（含约束链）上的全部航行灯（红/绿/白 position light）。
+     * <p>
+     * 调用时即时扫描约束链上各 sub-level 的 plot 包围盒收集航行灯（不依赖缓存，无陈旧数据）；
+     * 对每个匹配灯直接写服务端方块状态 {@code LIT}（{@code mainThread=true}，与
+     * {@link #setRedstoneOutput(int, int)} 同款服务端写模式）。航行灯不响应红石，
+     * 亮灭只由本方法与玩家右键控制。
+     * <p>
+     * <b>门控（存在性）</b>：电脑必须在物理体上，且所在物理体（含约束链）上有 ≥1 个
+     * 飞行管理计算机（FMC，ccpe:fmc），否则返回 0（一盏都不设置）。
+     *
+     * @param color 颜色："red" / "green" / "white" / "all"（全部颜色）；大小写不敏感
+     * @param on    目标亮灭（true = 亮）
+     * @return 实际写入（状态发生变化）的灯数量；门控不满足或颜色非法返回 0
+     */
+    @LuaFunction(mainThread = true)
+    public final int setLights(String color, boolean on) {
+        SubLevel sub = resolveSubLevel();
+        if (sub == null) return 0;
+        if (!hasFmcOnBody(sub)) return 0;
+        String want = color.trim().toLowerCase(Locale.ROOT);
+        if (!want.equals("all") && !want.equals("red") && !want.equals("green") && !want.equals("white")) {
+            return 0;
+        }
+        int count = 0;
+        for (SubLevel s : SableCompat.getConnectedChain(sub)) {
+            LevelPlot plot = s.getPlot();
+            if (plot == null) continue;
+            BoundingBox3ic bb = plot.getBoundingBox();
+            if (bb.maxX() < bb.minX()) continue; // 空包围盒（BoundingBox3i.EMPTY）
+            Level level = s.getLevel();
+            for (BlockPos p : BlockPos.betweenClosed(bb.minX(), bb.minY(), bb.minZ(), bb.maxX(), bb.maxY(), bb.maxZ())) {
+                BlockState st = level.getBlockState(p);
+                String lightColor = lightColorOf(st.getBlock());
+                if (lightColor == null) continue;
+                if (!want.equals("all") && !want.equals(lightColor)) continue;
+                if (st.getValue(BlockStateProperties.LIT) != on) {
+                    level.setBlock(p, st.setValue(BlockStateProperties.LIT, on), 3);
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    /** 航行灯方块 → 颜色名（"red"/"green"/"white"）；非航行灯方块返回 null */
+    private static @Nullable String lightColorOf(Block block) {
+        if (block == RegistrateBlocks.RED_POSITION_LIGHT.get()) return "red";
+        if (block == RegistrateBlocks.GREEN_POSITION_LIGHT.get()) return "green";
+        if (block == RegistrateBlocks.WHITE_POSITION_LIGHT.get()) return "white";
+        return null;
+    }
+
+    /**
+     * 开关所在物理体（含约束链）上的<b>全部</b>航行灯（所有颜色）。
+     * <p>
+     * 等价于 {@link #setLights(String, boolean)} 传 {@code "all"}：调用时即时扫描
+     * 约束链各 sub-level 的 plot 包围盒，对每个航行灯写服务端方块状态 {@code LIT}。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #setLights(String, boolean)} 相同——电脑必须在
+     * 物理体上，且所在物理体（含约束链）上有 ≥1 个飞行管理计算机（FMC，ccpe:fmc），
+     * 否则返回 0（一盏都不设置）。
+     *
+     * @param on 目标亮灭（true = 亮）
+     * @return 实际写入（状态发生变化）的灯数量；门控不满足返回 0
+     */
+    @LuaFunction(mainThread = true)
+    public final int setAllLights(boolean on) {
+        return setLights("all", on);
+    }
+
+    /** 所在物理体（含约束链）上是否有 ≥1 个 FMC（航行灯控制门控，与物理数据门控同源） */
+    private static boolean hasFmcOnBody(SubLevel sub) {
+        for (SensorEntry e : BodySensorRegistry.sensorsOnBody(sub))
+            if (e.type() == SensorType.FMC) return true;
+        return false;
     }
 
     /** 全部静压孔高度的简单平均值；无静压孔返回 nil */

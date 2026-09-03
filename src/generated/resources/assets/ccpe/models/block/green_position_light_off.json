@@ -1,0 +1,8 @@
+{
+  "parent": "ccpe:block/position_light/position_light",
+  "textures": {
+    "0": "ccpe:block/position_light/green_off",
+    "1": "ccpe:block/position_light/base",
+    "particle": "ccpe:block/position_light/green_off"
+  }
+}
