@@ -79,3 +79,4 @@
 1.1.2
 - Added the position light.
 - ccpe.sensor_system.getAngularVelocity()：世界系角速度 → 机体局部系角速率
+- Added the trailing wheel mount
