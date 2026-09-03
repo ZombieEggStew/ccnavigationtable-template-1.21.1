@@ -32,17 +32,17 @@ import org.joml.Vector2d;
  * 参考来源：{@code references/Simulated-Project-main/offroad/.../wheel_mount/WheelMountRenderer.java}。
  * 模型<b>直接复用 offroad 资产</b>（零拷贝）：tele/弹簧/mount 部件 = 跨 namespace 引用
  * {@code offroad:block/wheel_mount/...} 的 partial model；静态底盘由 blockstate 模型渲染
- * （{@code blockstates/trailing_wheel.json} → {@code offroad:block/wheel_mount/block}）。
+ * （{@code blockstates/trailing_wheel_mount.json} → {@code offroad:block/wheel_mount/block}）。
  * <p>
  * 与 offroad 渲染器的差异（见 {@code memo/wheel-axle-design.md}）：
  * <ul>
  * <li>无 SHAFT_HALF（无传动轴）；</li>
  * <li>无 FilteringRenderer（无悬挂强度滚轮 UI）；</li>
  * <li>无红石转向 yaw 旋转与 diode（首版无转向）；</li>
- * <li>轮子自转 = 从动滚动角 {@link TrailingWheelBlockEntity#getLerpedAngle}。</li>
+ * <li>轮子自转 = 从动滚动角 {@link TrailingWheelMountBlockEntity#getLerpedAngle}。</li>
  * </ul>
  */
-public class TrailingWheelRenderer extends SafeBlockEntityRenderer<TrailingWheelBlockEntity> {
+public class TrailingWheelMountRenderer extends SafeBlockEntityRenderer<TrailingWheelMountBlockEntity> {
 
     // ── offroad wheel_mount 动态部件（跨 namespace 直接引用，运行时 bundled 必带 offroad） ──
     private static final PartialModel TELE_OUTER = PartialModel.of(ResourceLocation.fromNamespaceAndPath("offroad", "block/wheel_mount/tele_outer"));
@@ -52,11 +52,11 @@ public class TrailingWheelRenderer extends SafeBlockEntityRenderer<TrailingWheel
     private static final PartialModel SPRING_MIDDLE = PartialModel.of(ResourceLocation.fromNamespaceAndPath("offroad", "block/wheel_mount/spring_middle"));
     private static final PartialModel SPRING_LOWER = PartialModel.of(ResourceLocation.fromNamespaceAndPath("offroad", "block/wheel_mount/spring_lower"));
 
-    public TrailingWheelRenderer(final BlockEntityRendererProvider.Context context) {
+    public TrailingWheelMountRenderer(final BlockEntityRendererProvider.Context context) {
     }
 
     @Override
-    protected void renderSafe(final TrailingWheelBlockEntity be, final float partialTicks, final PoseStack ms,
+    protected void renderSafe(final TrailingWheelMountBlockEntity be, final float partialTicks, final PoseStack ms,
                               final MultiBufferSource buffer, final int light, final int overlay) {
         final VertexConsumer vb = buffer.getBuffer(RenderType.cutoutMipped());
 
@@ -187,7 +187,7 @@ public class TrailingWheelRenderer extends SafeBlockEntityRenderer<TrailingWheel
 
     /** 大轮胎（radius 可达 2 块）会伸出安装块很远，膨胀渲染盒防视锥剔除 */
     @Override
-    public @NotNull AABB getRenderBoundingBox(@NotNull TrailingWheelBlockEntity blockEntity) {
+    public @NotNull AABB getRenderBoundingBox(@NotNull TrailingWheelMountBlockEntity blockEntity) {
         AABB aabb = new AABB(blockEntity.getBlockPos());
         final ItemStack heldItem = blockEntity.getHeldItem();
         final TireLike tireLike = heldItem != null ? heldItem.get(OffroadDataComponents.TIRE) : null;

@@ -11,11 +11,11 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "ccpe:trailing_wheel"
+          "name": "ccpe:trailing_wheel_mount"
         }
       ],
       "rolls": 1.0
     }
   ],
-  "random_sequence": "ccpe:blocks/trailing_wheel"
+  "random_sequence": "ccpe:blocks/trailing_wheel_mount"
 }

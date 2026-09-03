@@ -1,0 +1,7 @@
+{
+  "selector": "ccpe:trailing_wheel_mount",
+  "properties": {
+    "sable:mass": 0.5,
+    "sable:volume": 1
+  }
+}

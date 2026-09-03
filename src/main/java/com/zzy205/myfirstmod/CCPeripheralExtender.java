@@ -4,7 +4,7 @@ import com.mojang.logging.LogUtils;
 import com.tterrag.registrate.Registrate;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
-import com.zzy205.myfirstmod.block.TrailingWheelBlockEntity;
+import com.zzy205.myfirstmod.block.TrailingWheelMountBlockEntity;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralCapabilities;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralExtenderSetup;
 import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
@@ -73,10 +73,10 @@ public class CCPeripheralExtender {
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
         modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC);
 
-        // 从动轮悬架（trailing_wheel）：Sable 物理 tick 事件挂钩，每物理 substep 后把排队轮子的
+        // 从动轮悬架（trailing_wheel_mount）：Sable 物理 tick 事件挂钩，每物理 substep 后把排队轮子的
         // 弹簧冲量统一施加（照 offroad Offroad.java:62 → OffroadCommonEvents.physicsTick 的批处理模式）。
         // Sable 为必需依赖且 ordering AFTER，此处注册时已加载，安全。
-        SableEventPlatform.INSTANCE.onPhysicsTick(TrailingWheelBlockEntity::onPhysicsTick);
+        SableEventPlatform.INSTANCE.onPhysicsTick(TrailingWheelMountBlockEntity::onPhysicsTick);
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {

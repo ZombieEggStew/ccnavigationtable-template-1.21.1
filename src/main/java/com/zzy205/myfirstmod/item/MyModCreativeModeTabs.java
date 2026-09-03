@@ -34,7 +34,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.fmc);
                 output.accept(MyModBlocks.aic);
                 output.accept(MyModBlocks.fluid_port);
-                output.accept(MyModBlocks.trailing_wheel); // 从动轮悬架（单轮无动力）
+                output.accept(MyModBlocks.trailing_wheel_mount); // 从动轮悬架（单轮无动力）
                 output.accept(RegistrateBlocks.RED_POSITION_LIGHT.get()); // 红色航行灯（Registrate 注册，手动挂标签）
                 output.accept(RegistrateBlocks.GREEN_POSITION_LIGHT.get()); // 绿色航行灯
                 output.accept(RegistrateBlocks.WHITE_POSITION_LIGHT.get()); // 白色航行灯

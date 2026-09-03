@@ -132,9 +132,9 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
-    /** 从动轮悬架（trailing_wheel）：单轮无动力输入（完全从动），模型直接复用 offroad wheel_mount 资产；结构/物理参考 offroad，见 memo/wheel-axle-design.md */
-    public static final DeferredBlock<TrailingWheelBlock> trailing_wheel =
-            registerBlocks("trailing_wheel", () -> new TrailingWheelBlock(BlockBehaviour.Properties.of().
+    /** 从动轮悬架（trailing_wheel_mount）：单轮无动力输入（完全从动），模型直接复用 offroad wheel_mount 资产；结构/物理参考 offroad，见 memo/wheel-axle-design.md */
+    public static final DeferredBlock<TrailingWheelMountBlock> trailing_wheel_mount =
+            registerBlocks("trailing_wheel_mount", () -> new TrailingWheelMountBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
                     strength(5.0f, 6.0f).
                     noOcclusion()

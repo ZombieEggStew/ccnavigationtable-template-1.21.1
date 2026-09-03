@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=east": {
+      "model": "ccpe:block/trailing_wheel_mount/block",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "ccpe:block/trailing_wheel_mount/block"
+    },
+    "facing=south": {
+      "model": "ccpe:block/trailing_wheel_mount/block",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "ccpe:block/trailing_wheel_mount/block",
+      "y": 270
+    }
+  }
+}

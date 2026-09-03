@@ -27,7 +27,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * 从动轮悬架（Trailing Wheel）——单轮、无动力输入（完全从动）。
+ * 从动轮悬架（Trailing Wheel Mount）——单轮、无动力输入（完全从动）。
  * <p>
  * 结构/模型/物理参考 offroad 的 {@code wheel_mount}
  * （{@code references/Simulated-Project-main/offroad/.../wheel_mount/}），但<b>不是 Create 动力方块</b>：
@@ -44,16 +44,16 @@ import org.jetbrains.annotations.NotNull;
  * 后，Sable 才会调用其 {@code sable$physicsTick} 施加弹簧力；未装配时仅作静态方块。
  * <p>
  * 首版极简：无红石转向 / 无驻车刹车 / 无悬挂强度滚轮 UI（强度用常量，见
- * {@code TrailingWheelBlockEntity.SUSPENSION_STRENGTH}）。
+ * {@code TrailingWheelMountBlockEntity.SUSPENSION_STRENGTH}）。
  */
-public class TrailingWheelBlock extends BaseEntityBlock {
+public class TrailingWheelMountBlock extends BaseEntityBlock {
 
-    public static final MapCodec<TrailingWheelBlock> CODEC = simpleCodec(TrailingWheelBlock::new);
+    public static final MapCodec<TrailingWheelMountBlock> CODEC = simpleCodec(TrailingWheelMountBlock::new);
 
     /** 轮子伸出方向（facing = 轮胎所在侧，facing 的下一格是轮心） */
     public static final DirectionProperty HORIZONTAL_FACING = BlockStateProperties.HORIZONTAL_FACING;
 
-    public TrailingWheelBlock(Properties properties) {
+    public TrailingWheelMountBlock(Properties properties) {
         super(properties);
         registerDefaultState(stateDefinition.any().setValue(HORIZONTAL_FACING, Direction.NORTH));
     }
@@ -76,7 +76,7 @@ public class TrailingWheelBlock extends BaseEntityBlock {
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
         if (state.hasBlockEntity() && state.getBlock() != newState.getBlock()) {
-            if (level.getBlockEntity(pos) instanceof final TrailingWheelBlockEntity be
+            if (level.getBlockEntity(pos) instanceof final TrailingWheelMountBlockEntity be
                     && !be.getHeldItem().isEmpty()) {
                 Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), be.getHeldItem());
             }
@@ -98,7 +98,7 @@ public class TrailingWheelBlock extends BaseEntityBlock {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
 
-        if (!(level.getBlockEntity(pos) instanceof final TrailingWheelBlockEntity be)) {
+        if (!(level.getBlockEntity(pos) instanceof final TrailingWheelMountBlockEntity be)) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
 
@@ -120,7 +120,7 @@ public class TrailingWheelBlock extends BaseEntityBlock {
     }
 
     /** 与槽位对换手中物品：空手取回、带 TIRE 组件物品装入/替换；返回是否发生了交换 */
-    private boolean switchStacks(Level level, BlockPos pos, Player player, InteractionHand hand, TrailingWheelBlockEntity be) {
+    private boolean switchStacks(Level level, BlockPos pos, Player player, InteractionHand hand, TrailingWheelMountBlockEntity be) {
         final ItemStack heldItem = player.getItemInHand(hand);
         final boolean canTake = heldItem.isEmpty() && !be.getHeldItem().isEmpty();
         final boolean canPut = heldItem.has(OffroadDataComponents.TIRE) && be.getHeldItem().isEmpty();
@@ -158,16 +158,16 @@ public class TrailingWheelBlock extends BaseEntityBlock {
 
     @Override
     public BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
-        return new TrailingWheelBlockEntity(pos, state);
+        return new TrailingWheelMountBlockEntity(pos, state);
     }
 
-    private static final BlockEntityTicker<TrailingWheelBlockEntity> TICKER =
-            TrailingWheelBlockEntity::tick;
+    private static final BlockEntityTicker<TrailingWheelMountBlockEntity> TICKER =
+            TrailingWheelMountBlockEntity::tick;
 
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state,
                                                                   @NotNull BlockEntityType<T> type) {
-        if (type == MyModBlockEntities.trailing_wheel_entity.get()) {
+        if (type == MyModBlockEntities.trailing_wheel_mount_entity.get()) {
             @SuppressWarnings("unchecked")
             BlockEntityTicker<T> ticker = (BlockEntityTicker<T>) (BlockEntityTicker<?>) TICKER;
             return ticker;

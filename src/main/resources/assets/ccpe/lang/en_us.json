@@ -22,7 +22,7 @@
   "block.ccpe.green_position_light": "Green Position Light",
   "block.ccpe.white_position_light": "White Position Light",
   "block.ccpe.fluid_port": "Fluid Port",
-  "block.ccpe.trailing_wheel": "Trailing Wheel Suspension",
+  "block.ccpe.trailing_wheel_mount": "Trailing Wheel Mount",
   "block.ccpe.fluid_port.tooltip.summary": "Easily makes your fluid tanks interactable with fluid containers.",
   "block.ccpe.fluid_port.tooltip.condition1": "When R-Clicked",
   "block.ccpe.fluid_port.tooltip.behaviour1": "Deposits contained fluid from your held item into a tank next to the port (any side except the opening). If the held item cannot be emptied, it fills the item from a tank instead.",

@@ -62,7 +62,7 @@ import java.util.Collection;
  * {@link #queuedWheelMounts}，由 {@link #onPhysicsTick}（Sable 物理 tick 事件，
  * 见 {@code CCPeripheralExtender} 注册）统一 {@code applyForcesAndReset}。
  */
-public class TrailingWheelBlockEntity extends BlockEntity implements BlockEntitySubLevelActor, Clearable {
+public class TrailingWheelMountBlockEntity extends BlockEntity implements BlockEntitySubLevelActor, Clearable {
 
     /** 悬挂强度（offroad ScrollValueBehaviour 默认值 10；首版不做滚轮 UI，用常量） */
     public static final int SUSPENSION_STRENGTH = 10;
@@ -70,7 +70,7 @@ public class TrailingWheelBlockEntity extends BlockEntity implements BlockEntity
     private static final double MAX_ALLOWED_EXTENSION = 0.65;
     private static final double NO_WHEEL_EXTENSION = 0.5;
 
-    private static final Collection<TrailingWheelBlockEntity> queuedWheelMounts = new ObjectOpenHashSet<>();
+    private static final Collection<TrailingWheelMountBlockEntity> queuedWheelMounts = new ObjectOpenHashSet<>();
 
     private ItemStack heldItem = ItemStack.EMPTY;
     private double extension = NO_WHEEL_EXTENSION, lastExtension = this.extension;
@@ -83,13 +83,13 @@ public class TrailingWheelBlockEntity extends BlockEntity implements BlockEntity
     private final Vector3d queuedForce = new Vector3d();
     private final ForceTotal forceTotal = new ForceTotal();
 
-    public TrailingWheelBlockEntity(BlockPos pos, BlockState state) {
-        super(MyModBlockEntities.trailing_wheel_entity.get(), pos, state);
+    public TrailingWheelMountBlockEntity(BlockPos pos, BlockState state) {
+        super(MyModBlockEntities.trailing_wheel_mount_entity.get(), pos, state);
     }
 
     // ── 客户端动画 / 服务端静态 tick ──
 
-    public static void tick(Level level, BlockPos pos, BlockState state, TrailingWheelBlockEntity be) {
+    public static void tick(Level level, BlockPos pos, BlockState state, TrailingWheelMountBlockEntity be) {
         if (!level.isClientSide) {
             return; // 服务端物理由 Sable 的 sable$physicsTick 驱动，无需 vanilla tick
         }
@@ -130,7 +130,7 @@ public class TrailingWheelBlockEntity extends BlockEntity implements BlockEntity
             return;
         }
 
-        final Direction facing = this.getBlockState().getValue(TrailingWheelBlock.HORIZONTAL_FACING);
+        final Direction facing = this.getBlockState().getValue(TrailingWheelMountBlock.HORIZONTAL_FACING);
         final Vector3d velocity = Sable.HELPER.getVelocity(this.level, JOMLConversion.atCenterOf(this.getBlockPos().relative(facing)));
         final Vector3d localVelocity = subLevel.logicalPose().transformNormalInverse(velocity).div(20.0);
         final Direction.Axis axis = facing.getAxis();
@@ -159,7 +159,7 @@ public class TrailingWheelBlockEntity extends BlockEntity implements BlockEntity
             return MAX_ALLOWED_EXTENSION;
         }
 
-        final Direction facing = this.getBlockState().getValue(TrailingWheelBlock.HORIZONTAL_FACING);
+        final Direction facing = this.getBlockState().getValue(TrailingWheelMountBlock.HORIZONTAL_FACING);
         final Pose3dc pose = subLevel.logicalPose();
 
         final Direction.Axis axis = facing.getAxis();
@@ -192,7 +192,7 @@ public class TrailingWheelBlockEntity extends BlockEntity implements BlockEntity
                                      @Nullable SubLevel subLevel, @Nullable BlockPos minInteractingBlock) {}
 
     private TerrainCastResult computeMaxExtensionToTerrain(final Vector3dc normalD, final Pose3dc pose) {
-        final Direction facing = this.getBlockState().getValue(TrailingWheelBlock.HORIZONTAL_FACING);
+        final Direction facing = this.getBlockState().getValue(TrailingWheelMountBlock.HORIZONTAL_FACING);
         final Vec3 wheelPosCenter = this.getBlockPos().relative(facing).getCenter();
         double minExtension = 5.0;
         Direction minNormal = Direction.UP;
@@ -268,7 +268,7 @@ public class TrailingWheelBlockEntity extends BlockEntity implements BlockEntity
         final float radius = tire.radius();
         final double suspensionRestDistance = MAX_ALLOWED_EXTENSION;
 
-        final Direction facing = this.getBlockState().getValue(TrailingWheelBlock.HORIZONTAL_FACING);
+        final Direction facing = this.getBlockState().getValue(TrailingWheelMountBlock.HORIZONTAL_FACING);
         final Vec3 localPos = blockPos.relative(facing).getCenter();
         this.queuedForcePos.set(localPos.x, localPos.y, localPos.z);
         final double normalMass = 1.0 / subLevel.getMassTracker().getInverseNormalMass(this.queuedForcePos, OrientedBoundingBox3d.UP);
@@ -345,7 +345,7 @@ public class TrailingWheelBlockEntity extends BlockEntity implements BlockEntity
 
     /** Sable 物理 tick 事件入口：每个物理 substep 后把排队轮子的冲量统一施加（由 CCPeripheralExtender 注册） */
     public static void onPhysicsTick(final SubLevelPhysicsSystem physicsSystem, final double timeStep) {
-        for (final TrailingWheelBlockEntity blockEntity : queuedWheelMounts) {
+        for (final TrailingWheelMountBlockEntity blockEntity : queuedWheelMounts) {
             if (blockEntity.isRemoved()) {
                 continue;
             }
