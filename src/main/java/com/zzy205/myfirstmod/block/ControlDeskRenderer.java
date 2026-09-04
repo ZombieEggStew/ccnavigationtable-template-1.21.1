@@ -130,7 +130,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
                     be.getThrottlePlaceX(), be.getThrottlePlaceZ(),
                     ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, backRot);
             indicator.light(light)
-                    .color(ThrottleMotion.indicatorColor(be.getThrottleGear()))
+                    .color(ThrottleMotion.indicatorColor(be.getThrottleAxis()))
                     .renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
         } else {
             smoothThrottles.remove(be.getBlockPos());
@@ -211,28 +211,36 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         stick.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 
-    /** 油门手柄：放置变换（平移到放置位 + 安装朝向旋转绕放置中心）+ 沿模型空间 x 轴平移（档位位置 + 操作者本地张力蠕动，步进突然快速到位）。 */
+    /** 油门手柄：放置变换（平移到放置位 + 安装朝向旋转绕放置中心）+ 沿模型空间 x 轴平移。
+     *  档位模式：位置 + 操作者本地张力蠕动（步进突然快速到位）；自由模式（Lua setFreeMode，无 GUI）：无张力，平滑指数逼近连续位置。 */
     private void renderThrottleHandle(ControlDeskBlockEntity be, BlockState state, Direction facing,
                                       PoseStack ms, MultiBufferSource bufferSource, int light, int backRot) {
         float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
         float gearPx = ThrottleMotion.targetPx(be);
-        // 张力充电进度 {progress, lastDir, lastGearPx}：帧时间平滑推进（避免游戏时间整 tick 跳变卡顿）
-        float[] charge = throttleCharge.computeIfAbsent(be.getBlockPos(), k -> new float[3]);
-        if (gearPx != charge[2]) {
-            charge[2] = gearPx;
-            charge[0] = 0f; // 档位步进：张力清零
+        float smooth;
+        if (be.isThrottleFreeMode()) {
+            // 自由模式：无卡位张力，平滑指数逼近追逐连续位置（对齐油门2 滑行）
+            smooth = smoothThrottles.computeIfAbsent(be.getBlockPos(), k -> 0f);
+            smooth = JoystickTilt.approach(smooth, gearPx, frameTicks);
+        } else {
+            // 档位模式：张力充电进度 {progress, lastDir, lastGearPx}：帧时间平滑推进（避免游戏时间整 tick 跳变卡顿）
+            float[] charge = throttleCharge.computeIfAbsent(be.getBlockPos(), k -> new float[3]);
+            if (gearPx != charge[2]) {
+                charge[2] = gearPx;
+                charge[0] = 0f; // 档位步进：张力清零
+            }
+            int dir = SeatControlState.isLinkedDesk(be.getBlockPos()) ? SeatControlState.getThrottleDir() : 0;
+            if (dir != (int) charge[1]) {
+                charge[1] = dir;
+                charge[0] = 0f; // 按键按下/松开边沿：张力清零
+            }
+            if (dir != 0) {
+                charge[0] = Math.min(1f, charge[0] + frameTicks / be.getThrottleTicksPerGear());
+            }
+            float target = gearPx + ThrottleMotion.tensionPx(dir, charge[0], gearPx);
+            smooth = smoothThrottles.computeIfAbsent(be.getBlockPos(), k -> 0f);
+            smooth = ThrottleMotion.approachStep(smooth, target, frameTicks);
         }
-        int dir = SeatControlState.isLinkedDesk(be.getBlockPos()) ? SeatControlState.getThrottleDir() : 0;
-        if (dir != (int) charge[1]) {
-            charge[1] = dir;
-            charge[0] = 0f; // 按键按下/松开边沿：张力清零
-        }
-        if (dir != 0) {
-            charge[0] = Math.min(1f, charge[0] + frameTicks / be.getThrottleTicksPerGear());
-        }
-        float target = gearPx + ThrottleMotion.tensionPx(dir, charge[0], gearPx);
-        float smooth = smoothThrottles.computeIfAbsent(be.getBlockPos(), k -> 0f);
-        smooth = ThrottleMotion.approachStep(smooth, target, frameTicks);
         smoothThrottles.put(be.getBlockPos(), smooth);
 
         SuperByteBuffer handle = placedBuffer(MyModPartialModels.CONTROL_DESK_THROTTLE_HANDLE, state, facing,

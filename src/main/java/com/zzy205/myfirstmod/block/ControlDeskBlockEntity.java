@@ -178,6 +178,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private static final String TAG_THROTTLE_KEY_FORWARD = "ThrottleKeyForward";
     private static final String TAG_THROTTLE_KEY_BACK = "ThrottleKeyBack";
     private static final String TAG_THROTTLE_TICKS_PER_GEAR = "ThrottleTicksPerGear";
+    private static final String TAG_THROTTLE_FREE_MODE = "ThrottleFreeMode";
     private static final String TAG_THROTTLE_2_KEY_UP = "Throttle2KeyUp";
     private static final String TAG_THROTTLE_2_KEY_DOWN = "Throttle2KeyDown";
     private static final String TAG_THROTTLE_2_FREE_SPEED = "Throttle2FreeSpeed";
@@ -245,8 +246,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private float joystick2AxisY;  // 摇杆2 轴 Y（-1..1）：+1 = 前推，-1 = 后拉
     private float pedalLeftAxis;   // 左踏板轴（-1..1，运行时）：+1 = 踩下（+z 1px）/ -1 = 抬起（-z 1px），见 PedalMotion
     private float pedalRightAxis;  // 右踏板轴（-1..1，运行时）
-    private int throttleGear;          // 油门档位（0..MAX_TRAVEL_PX，运行时）：0 = 最低档（底端，-x 端），1px = 1 档，锁存不回正
-    private int throttleChargeTicks;   // 档位切换充电（0..throttleTicksPerGear，按住满 N tick 进/退一档，N 可配置）
+    private float throttlePx;          // 油门位置（0..MAX_TRAVEL_PX px，运行时）：0 = 底端（-x 端），MAX = 满前进；档位模式下恒为整数（1px = 1 档），自由模式下连续；锁存不回正
+    private int throttleChargeTicks;   // 档位切换充电（0..throttleTicksPerGear，按住满 N tick 进/退一档，N 可配置；仅档位模式使用）
     /** 油门2 角度（0..Throttle2Motion.MAX_DEG，运行时）：0 = 最底端（放置默认），+MAX = 上抬满偏（总距杆单边行程）；锁存不回正 */
     private float throttle2Angle;
     // 输入租约：最近一次操作输入（玩家 + 坐垫 + 操纵杆四方向 + 踏板四键 + 油门两键按住态）；服务端每 tick 校验租约并模拟动力学
@@ -273,7 +274,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private String pedalKeyRightDown = DEFAULT_PEDAL_KEY_RIGHT_DOWN; // 右踏板 踩下键
     private String throttleKeyForward = DEFAULT_THROTTLE_KEY_FORWARD; // 油门杆 前进键（模型空间 +x，空串 = 未绑定）
     private String throttleKeyBack = DEFAULT_THROTTLE_KEY_BACK;      // 油门杆 后退键（模型空间 -x，空串 = 未绑定）
-    private int throttleTicksPerGear = DEFAULT_THROTTLE_TICKS_PER_GEAR; // 档位切换节奏（tick）：按住满 N tick 进/退一档
+    private int throttleTicksPerGear = DEFAULT_THROTTLE_TICKS_PER_GEAR; // 档位切换节奏（tick）：按住满 N tick 进/退一档（自由模式兼作连续移动速度：每 tick 位移 = 1/N px，满行程 = MAX × N tick）
+    /** 油门自由模式开关（默认关 = 档位模式/卡位）：开启后按住前进/后退平滑连续移动（无卡位音效/段落感），松开锁存；无 GUI，由 Lua {@code setFreeMode} 控制 */
+    private boolean throttleFreeMode;
     private String throttle2KeyUp = DEFAULT_THROTTLE_2_KEY_UP;       // 油门2 上抬键（角度 +，空串 = 未绑定）
     private String throttle2KeyDown = DEFAULT_THROTTLE_2_KEY_DOWN;   // 油门2 下拉键（角度 -，空串 = 未绑定）
     private int throttle2FreeSpeed = DEFAULT_THROTTLE_2_FREE_SPEED;   // 油门2 满偏时间（tick）：按住满 N tick 从底端到满偏 +30°
@@ -604,10 +607,10 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             }
             case THROTTLE -> {
                 throttleInstalled = false;
-                // 卸下油门杆：放置位复位到唯一合法位置 (8,12)，运行时档位与充电清零（重新安装后从最低档开始）
+                // 卸下油门杆：放置位复位到唯一合法位置 (8,12)，运行时位置与充电清零（重新安装后从最低档开始）
                 throttlePlaceX = THROTTLE_PLACE_X;
                 throttlePlaceZ = THROTTLE_PLACE_Z;
-                throttleGear = 0;
+                throttlePx = 0f;
                 throttleChargeTicks = 0;
                 clearInput();
             }
@@ -1437,14 +1440,41 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         return pedalRightAxis;
     }
 
-    /** 油门轴（0..1，运行时）：档位 / MAX_TRAVEL_PX（0 = 最低档/底端，1 = 满前进），见 {@link ThrottleMotion}。 */
+    /** 油门轴（0..1，运行时）：位置 / MAX_TRAVEL_PX（0 = 底端，1 = 满前进）。档位模式下 = 档位/MAX（离散值），自由模式下连续，见 {@link ThrottleMotion}。 */
     public float getThrottleAxis() {
-        return throttleGear / (float) ThrottleMotion.MAX_TRAVEL_PX;
+        return throttlePx / ThrottleMotion.MAX_TRAVEL_PX;
     }
 
-    /** 油门档位（0..MAX_TRAVEL_PX，运行时）：渲染层指示灯/动画直接读它。 */
+    /** 油门档位（0..MAX_TRAVEL_PX，运行时）：档位模式下 = 当前档位；自由模式下 = 就近档位（最近整数位置，保持旧脚本/指示灯兼容）。 */
     public int getThrottleGear() {
-        return throttleGear;
+        return Math.round(throttlePx);
+    }
+
+    /** 油门自由模式开关（true = 自由模式：连续移动无卡位；false = 档位模式：卡位）。默认档位模式；无 GUI 入口，由 Lua {@code setFreeMode} 控制。 */
+    public boolean isThrottleFreeMode() {
+        return throttleFreeMode;
+    }
+
+    /** 设置油门自由模式开关（服务端调用，Lua {@code setFreeMode}）：切回档位模式时位置吸附到最近档位（卡位物理，自由位置不能停在档位之间）。 */
+    public void setThrottleFreeMode(boolean free) {
+        if (throttleFreeMode == free) return;
+        throttleFreeMode = free;
+        throttleChargeTicks = 0;
+        if (!free) {
+            throttlePx = Math.round(throttlePx);
+        }
+        notifyChange();
+    }
+
+    /** 直接设置油门位置（轴值 0..1，服务端权威，越界钳位）：自由模式下连续写；档位模式吸附到最近档位。Lua {@code setAxis} 走这里（对齐 {@code Throttle2ModuleHandle#setAngle} 语义：玩家坐垫输入有效时每 tick 模拟覆盖）。 */
+    public void setThrottleAxis(float axis) {
+        float px = Math.max(0f, Math.min(1f, axis)) * ThrottleMotion.MAX_TRAVEL_PX;
+        if (!throttleFreeMode) {
+            px = Math.round(px);
+        }
+        if (throttlePx == px) return;
+        throttlePx = px;
+        notifyChange();
     }
 
     /** 油门杆前进键是否有按键动作（原始值，服务端输入租约）。 */
@@ -1681,23 +1711,40 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     }
 
     /**
-     * 油门档位推进（数值层，档位 0..{@link ThrottleMotion#MAX_TRAVEL_PX}）：前进键按住充电，
-     * 满 {@link #throttleTicksPerGear}（默认 4）tick 进一档（+1px）；后退键按住同样充电后退一档（-1px）；
-     * 无输入（或同时按）**锁存**保持当前档位并清零充电；已到顶/底时充电清零不动作。
-     * 每个档位切换播放一次 {@code LEVER_CLICK} 音效——音调随档位位置单调上升
-     * （前进从低到高、后退从高到低，见 {@link ThrottleMotion#pitchForGear}），最低档不响。
-     * 档位变化时广播。
+     * 油门推进（数值层，位置 0..{@link ThrottleMotion#MAX_TRAVEL_PX} px）：
+     * <ul>
+     *   <li><b>档位模式</b>（{@link #isThrottleFreeMode()} 关，默认）：前进键按住充电，
+     *       满 {@link #throttleTicksPerGear}（默认 4）tick 进一档（+1px）；后退键按住同样充电后退一档（-1px）；
+     *       无输入（或同时按）**锁存**保持当前位置并清零充电；已到顶/底时充电清零不动作。
+     *       每个档位切换播放一次 {@code LEVER_CLICK} 音效——音调随位置单调上升
+     *       （前进从低到高、后退从高到低，见 {@link ThrottleMotion#pitchForGear}），最低档不响。</li>
+     *   <li><b>自由模式</b>（Lua {@code setFreeMode} 开启，无 GUI）：按住前进/后退<b>平滑连续移动</b>，
+     *       每 tick 位移 = 1/档位切换节奏 px（满行程 = MAX × ticksPerGear tick，默认 4 → 44 tick，
+     *       复用同一节奏配置）；无卡位音效、无段落感；松开**锁存**。</li>
+     * </ul>
+     * 位置变化时广播。
      */
     private static void simulateThrottle(ControlDeskBlockEntity be) {
         boolean forward = be.inputThrottleForward;
         boolean back = be.inputThrottleBack;
-        if (forward == back) { // 无输入或同时按：锁存（保持档位），充电清零
+        if (forward == back) { // 无输入或同时按：锁存（保持位置），充电清零
             be.throttleChargeTicks = 0;
             return;
         }
         int dir = forward ? 1 : -1;
-        if ((dir > 0 && be.throttleGear >= ThrottleMotion.MAX_TRAVEL_PX)
-                || (dir < 0 && be.throttleGear <= 0)) {
+        if (be.throttleFreeMode) {
+            // 自由模式：连续移动，每 tick 位移 = 1/档位切换节奏 px（满行程 = MAX × N tick）
+            float step = 1f / Math.max(1, be.throttleTicksPerGear);
+            float newPx = Math.max(0f, Math.min(ThrottleMotion.MAX_TRAVEL_PX, be.throttlePx + dir * step));
+            if (newPx != be.throttlePx) {
+                be.throttlePx = newPx;
+                be.notifyChange();
+            }
+            return;
+        }
+        // 档位模式：充电满 ticksPerGear tick 进/退一档（1px）
+        if ((dir > 0 && be.throttlePx >= ThrottleMotion.MAX_TRAVEL_PX)
+                || (dir < 0 && be.throttlePx <= 0)) {
             be.throttleChargeTicks = 0; // 已到顶/底：充电清零，按住不动作
             return;
         }
@@ -1706,11 +1753,11 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             return; // 充电中（未满配置的 tick 数不步进）
         }
         be.throttleChargeTicks = 0;
-        be.throttleGear += dir;
+        be.throttlePx += dir;
         be.notifyChange();
-        if (be.throttleGear >= 1 && be.getLevel() != null) {
+        if (be.throttlePx >= 1 && be.getLevel() != null) {
             be.getLevel().playSound(null, be.getBlockPos(), SoundEvents.LEVER_CLICK,
-                    SoundSource.BLOCKS, ThrottleMotion.SOUND_VOLUME, ThrottleMotion.pitchForGear(be.throttleGear));
+                    SoundSource.BLOCKS, ThrottleMotion.SOUND_VOLUME, ThrottleMotion.pitchForGear(Math.round(be.throttlePx)));
         }
     }
 
@@ -2137,6 +2184,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_THROTTLE_KEY_FORWARD, throttleKeyForward);
         tag.putString(TAG_THROTTLE_KEY_BACK, throttleKeyBack);
         tag.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
+        tag.putBoolean(TAG_THROTTLE_FREE_MODE, throttleFreeMode);
         tag.putString(TAG_THROTTLE_2_KEY_UP, throttle2KeyUp);
         tag.putString(TAG_THROTTLE_2_KEY_DOWN, throttle2KeyDown);
         tag.putInt(TAG_THROTTLE_2_FREE_SPEED, throttle2FreeSpeed);
@@ -2237,8 +2285,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
             pedalRightAxis = tag.getFloat(TAG_PEDAL_RIGHT_AXIS);
         }
         if (tag.contains(TAG_THROTTLE_AXIS)) {
-            throttleGear = Math.max(0, Math.min(ThrottleMotion.MAX_TRAVEL_PX,
-                    Math.round(tag.getFloat(TAG_THROTTLE_AXIS) * ThrottleMotion.MAX_TRAVEL_PX)));
+            // 连续位置直接读（档位模式下服务端恒为整数值，自由模式下为连续值——客户端渲染不取整，动画不跳格）
+            throttlePx = Math.max(0f, Math.min(ThrottleMotion.MAX_TRAVEL_PX,
+                    tag.getFloat(TAG_THROTTLE_AXIS) * ThrottleMotion.MAX_TRAVEL_PX));
         }
         if (tag.contains(TAG_THROTTLE_2_ANGLE)) {
             throttle2Angle = Math.max(0f, Math.min(Throttle2Motion.MAX_DEG, tag.getFloat(TAG_THROTTLE_2_ANGLE)));
@@ -2319,6 +2368,9 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_THROTTLE_TICKS_PER_GEAR)) {
             throttleTicksPerGear = Math.max(MIN_THROTTLE_TICKS_PER_GEAR,
                     Math.min(MAX_THROTTLE_TICKS_PER_GEAR, tag.getInt(TAG_THROTTLE_TICKS_PER_GEAR)));
+        }
+        if (tag.contains(TAG_THROTTLE_FREE_MODE)) {
+            throttleFreeMode = tag.getBoolean(TAG_THROTTLE_FREE_MODE);
         }
         if (tag.contains(TAG_THROTTLE_2_KEY_UP)) {
             throttle2KeyUp = tag.getString(TAG_THROTTLE_2_KEY_UP);
@@ -2407,6 +2459,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         compound.putString(TAG_THROTTLE_KEY_FORWARD, throttleKeyForward);
         compound.putString(TAG_THROTTLE_KEY_BACK, throttleKeyBack);
         compound.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
+        compound.putBoolean(TAG_THROTTLE_FREE_MODE, throttleFreeMode);
         compound.putString(TAG_THROTTLE_2_KEY_UP, throttle2KeyUp);
         compound.putString(TAG_THROTTLE_2_KEY_DOWN, throttle2KeyDown);
         compound.putInt(TAG_THROTTLE_2_FREE_SPEED, throttle2FreeSpeed);
@@ -2489,6 +2542,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         tag.putString(TAG_THROTTLE_KEY_FORWARD, throttleKeyForward);
         tag.putString(TAG_THROTTLE_KEY_BACK, throttleKeyBack);
         tag.putInt(TAG_THROTTLE_TICKS_PER_GEAR, throttleTicksPerGear);
+        tag.putBoolean(TAG_THROTTLE_FREE_MODE, throttleFreeMode);
         tag.putString(TAG_THROTTLE_2_KEY_UP, throttle2KeyUp);
         tag.putString(TAG_THROTTLE_2_KEY_DOWN, throttle2KeyDown);
         tag.putInt(TAG_THROTTLE_2_FREE_SPEED, throttle2FreeSpeed);

@@ -62,11 +62,11 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     /** 踏板动画平移量（块单位）：指数逼近追逐 {@link PedalMotion#targetPx}（左/右） */
     private float smoothPedalLeft;
     private float smoothPedalRight;
-    /** 油门动画平移量（块单位）：档位切换快速逼近追逐 {@link ThrottleMotion#targetPx}（沿模型空间 x 轴，段落感） */
+    /** 油门动画平移量（块单位）：档位模式 = 卡位快速逼近（段落感）；自由模式 = 平滑指数逼近追逐 {@link ThrottleMotion#targetPx}（沿模型空间 x 轴） */
     private float smoothThrottle;
     /** 油门2 动画角度（度）：指数逼近追逐 {@link Throttle2Motion#targetDeg}（绕枢轴 (4,2,8) 旋转，总距杆） */
     private float smoothThrottle2;
-    /** 油门张力状态：客户端观察到的上一档位位置（块单位）、张力充电进度（0..1，帧时间平滑推进）、上一操作方向 */
+    /** 油门张力状态（仅档位模式用）：客户端观察到的上一档位位置（块单位）、张力充电进度（0..1，帧时间平滑推进）、上一操作方向 */
     private float lastThrottleGearPx;
     private float throttleChargeProgress;
     private int lastThrottleDir;
@@ -162,26 +162,31 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         this.throttleBase = syncInstance(this.throttleBase, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_BASE, facing,
                 inst -> applyThrottlePlacement(inst, be));
 
-        // 油门手柄：档位位置（服务端权威）+ 操作者本地"张力蠕动"（按住向下一档稍微移动，
-        // 满 TICKS_PER_GEAR tick 档位步进后张力清零 → 突然快速到位，参考 knob 卡位）。
-        // 张力充电进度用帧时间平滑推进（避免游戏时间按整 tick 跳变导致渲染卡顿）
+        // 油门手柄：数值 = 服务端权威位置（档位模式离散 / 自由模式连续，均锁存不回正）。
+        // 档位模式：位置 + 操作者本地"张力蠕动"（按住向下一档稍微移动，满 TICKS_PER_GEAR tick
+        // 档位步进后张力清零 → 突然快速到位，参考 knob 卡位），张力充电用帧时间平滑推进；
+        // 自由模式（Lua setFreeMode 开启，无 GUI）：无卡位张力，平滑指数逼近连续位置（对齐油门2 滑行）
         float gearPx = ThrottleMotion.targetPx(be);
-        if (gearPx != this.lastThrottleGearPx) {
-            this.lastThrottleGearPx = gearPx;
-            this.throttleChargeProgress = 0f; // 档位步进：张力清零
+        if (be.isThrottleFreeMode()) {
+            this.smoothThrottle = JoystickTilt.approach(this.smoothThrottle, gearPx, frameTicks);
+        } else {
+            if (gearPx != this.lastThrottleGearPx) {
+                this.lastThrottleGearPx = gearPx;
+                this.throttleChargeProgress = 0f; // 档位步进：张力清零
+            }
+            int throttleDir = SeatControlState.isLinkedDesk(be.getBlockPos())
+                    ? SeatControlState.getThrottleDir() : 0;
+            if (throttleDir != this.lastThrottleDir) {
+                this.lastThrottleDir = throttleDir;
+                this.throttleChargeProgress = 0f; // 按键按下/松开边沿：张力清零
+            }
+            if (throttleDir != 0) {
+                this.throttleChargeProgress = Math.min(1f,
+                        this.throttleChargeProgress + frameTicks / be.getThrottleTicksPerGear());
+            }
+            float throttleTarget = gearPx + ThrottleMotion.tensionPx(throttleDir, this.throttleChargeProgress, gearPx);
+            this.smoothThrottle = ThrottleMotion.approachStep(this.smoothThrottle, throttleTarget, frameTicks);
         }
-        int throttleDir = SeatControlState.isLinkedDesk(be.getBlockPos())
-                ? SeatControlState.getThrottleDir() : 0;
-        if (throttleDir != this.lastThrottleDir) {
-            this.lastThrottleDir = throttleDir;
-            this.throttleChargeProgress = 0f; // 按键按下/松开边沿：张力清零
-        }
-        if (throttleDir != 0) {
-            this.throttleChargeProgress = Math.min(1f,
-                    this.throttleChargeProgress + frameTicks / be.getThrottleTicksPerGear());
-        }
-        float throttleTarget = gearPx + ThrottleMotion.tensionPx(throttleDir, this.throttleChargeProgress, gearPx);
-        this.smoothThrottle = ThrottleMotion.approachStep(this.smoothThrottle, throttleTarget, frameTicks);
         final float throttlePx = this.smoothThrottle;
         this.throttleHandle = syncInstance(this.throttleHandle, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_HANDLE, facing,
                 inst -> {
@@ -189,11 +194,11 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
                     // 档位平移（模型空间 x 轴，最后调用 = 最内层，先于 facing/放置旋转作用于模型）
                     inst.translate(throttlePx, 0f, 0f);
                 });
-        // 指示灯：随油门档位大小从暗红（熄灭）→ 亮红（满油门）着色（参考 Create analog lever / Simulated diode）
+        // 指示灯：随油门轴值从暗红（熄灭）→ 亮红（满油门）着色（档位模式 = 档位/MAX，自由模式 = 连续轴值）
         this.throttleIndicator = syncInstance(this.throttleIndicator, throttleWanted, MyModPartialModels.CONTROL_DESK_THROTTLE_INDICATOR, facing,
                 inst -> applyThrottlePlacement(inst, be));
         if (this.throttleIndicator != null) {
-            this.throttleIndicator.colorArgb(ThrottleMotion.indicatorColor(be.getThrottleGear()));
+            this.throttleIndicator.colorArgb(ThrottleMotion.indicatorColor(be.getThrottleAxis()));
             this.throttleIndicator.setChanged();
         }
 

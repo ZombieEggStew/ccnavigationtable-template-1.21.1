@@ -80,3 +80,6 @@
 - Added the position light.
 - ccpe.sensor_system.getAngularVelocity()：world frame → Body-frame
 - Added the trailing wheel mount
+
+1.1.3
+- 油门 自由模式

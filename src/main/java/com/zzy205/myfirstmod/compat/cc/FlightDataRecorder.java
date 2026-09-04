@@ -57,6 +57,8 @@ import java.util.UUID;
  * + 静压孔平均气压/高度 + 皮托管沿管口对地速度/空速 + 质量/链质量/重心（世界 + 相对原点）/
  * 链质心（相对原点）+ <b>受力</b>（LIFT/DRAG/PROPULSION 力组：合力 F 与绕质心合力矩 M，
  * 均机体局部系，由 Sable {@code QueuedForceGroup} 点力重算：F=Σf、M=Σ(point−comPlot)×f）
+ * ——整链力矩参考点为<b>链质心</b>（{@link SableCompat#getChainCenterOfMass}，memo §11：
+ * 主机质心不含尾部子体，会引入虚假恒定俯仰力矩）
  * + <b>控制输入</b>（摇杆2 ch7、油门 ch8、脚踏板 ch6，按本机座舱接线，
  * 见 {@link #CHANNEL_CONTROL_DESK} / {@link #CHANNEL_JOYSTICK} / {@link #CHANNEL_THROTTLE}；
  * 频道在物理体链内寻址 = Lua {@code ss.getPeripheral(ch)} 同源，控制台 BE 服务端直读，
@@ -287,9 +289,11 @@ public final class FlightDataRecorder {
             // ── 受力（Sable 力组点力重算：机体局部系合力 F + 绕 plot 质心合力矩 M）──
             Vec3 comPlot = SableCompat.getCenterOfMassPlot(sub);
             appendForces(f, sub, comPlot);
-            // ── 整链受力（方案 A：链上全部 sub-level 的力组合并，绕主机世界质心求矩后转回主机局部系）──
-            Vec3 mainComWorld = SableCompat.getCenterOfMass(sub);
-            appendChainForces(f, sub, mainComWorld);
+            // ── 整链受力（方案 A：链上全部 sub-level 的力组合并，绕【链质心】求矩后转回主机局部系）──
+            // memo §11：主机质心不含尾部子体（链质心偏移 ~0.95m），绕它求矩会引入 ∝升力 的虚假
+            // 恒定俯仰力矩（假"残余抬头力矩"）——参考点必须用链质心（Sable 动力学/风洞多物理体重心）。
+            Vec3 chainComWorld = SableCompat.getChainCenterOfMass(sub);
+            appendChainForces(f, sub, chainComWorld);
 
             // ── 控制输入（控制台频道寻址，BE 服务端直读，同模块句柄数据源）──
             appendControls(f, sub);
@@ -363,17 +367,23 @@ public final class FlightDataRecorder {
 
     /**
      * 整链力组聚合（方案 A）：遍历约束链上每个 ServerSubLevel 的 LIFT/DRAG/PROPULSION 点力，
-     * 各自转到世界系后求和；力矩绕<b>主机的世界质心</b>计算；最后整体转回主机局部系。
+     * 各自转到世界系后求和；力矩绕<b>链质心（世界坐标）</b>计算——链质心 = 链上全部 sub-level
+     * 质量加权质心（{@link SableCompat#getChainCenterOfMass}，含尾部舵面子体），是整机真实
+     * 动力学/配平参考点；最后整体转回主机局部系。
      * 适用于尾翼/副翼在 aero_bearing 从动 sub-level 上的布局——主机自己的力组只有机身面，
      * 链级列才包含全部控制面（近似把约束链当刚体：aero bearing PD 锁定刚度高）。
+     * ⚠ 力矩参考点必须用链质心而非主机质心：主机质心不含尾部子体，会引入
+     * 虚假恒定俯仰力矩（memo §11：+0.95m 偏移 × 升力 ≈ +13，且 ∝P 伪装成"低空抬头"）。
+     *
+     * @param chainComWorld 链质心世界坐标；为 null 时只记合力、力矩列 nan
      */
-    private static void appendChainForces(List<String> f, ServerSubLevel main, Vec3 mainComWorld) {
+    private static void appendChainForces(List<String> f, ServerSubLevel main, Vec3 chainComWorld) {
         double[][] acc = new double[3][6];   // 世界系累计 [Fx,Fy,Fz,Mx,My,Mz]
         boolean[] any = new boolean[3];
-        boolean comOk = mainComWorld != null;
-        double ccx = comOk ? mainComWorld.x : 0;
-        double ccy = comOk ? mainComWorld.y : 0;
-        double ccz = comOk ? mainComWorld.z : 0;
+        boolean comOk = chainComWorld != null;
+        double ccx = comOk ? chainComWorld.x : 0;
+        double ccy = comOk ? chainComWorld.y : 0;
+        double ccz = comOk ? chainComWorld.z : 0;
         try {
             Registry<ForceGroup> registry = forceGroupRegistry(main);
             for (SubLevel member : SableCompat.getConnectedChain(main)) {

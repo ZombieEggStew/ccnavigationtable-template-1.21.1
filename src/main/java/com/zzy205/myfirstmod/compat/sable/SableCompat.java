@@ -486,6 +486,40 @@ public final class SableCompat {
     }
 
     /**
+     * 获取约束链（含全部约束连接，轴承等；始终包含自身）的<b>总质心（世界坐标）</b>。
+     * <p>
+     * 与 {@link #getChainCenterOfMassLocal} 同源：世界系按质量加权平均链上各 sub-level 的
+     * 合并质心（{@code Σ(mᵢ·comᵢ)/Σmᵢ}，用 {@link #getMass} + {@link #getCenterOfMass}，
+     * 后者已是世界系），但<b>不转回局部系</b>，直接返回世界坐标。
+     * <p>
+     * 用途：整链受力/力矩应以链质心为参考点（真实动力学与 Sable 约束求解、风洞多物理体
+     * 重心一致），而非主机自身质心——主机质心不含尾部子体，会引入虚假的恒定俯仰力矩
+     * （= 链质心偏移 × 升力，见 memo §11）。
+     *
+     * @return 链质心（世界空间）；失败或总质量非正时返回 null
+     */
+    public static Vec3 getChainCenterOfMass(SubLevel subLevel) {
+        if (subLevel == null) return null;
+        try {
+            List<SubLevel> chain = getConnectedChain(subLevel);
+            double totalMass = 0.0;
+            Vector3d weighted = new Vector3d();
+            for (SubLevel sl : chain) {
+                Double m = getMass(sl);
+                Vec3 com = getCenterOfMass(sl); // 世界系合并质心
+                if (m == null || com == null) continue;
+                totalMass += m;
+                weighted.fma(m, new Vector3d(com.x, com.y, com.z));
+            }
+            if (totalMass <= 0.0) return null;
+            weighted.div(totalMass);
+            return new Vec3(weighted.x, weighted.y, weighted.z);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * 获取 SubLevel 及其所有约束连接的物理结构的总质量。
      */
     public static Double getChainMass(SubLevel subLevel) {

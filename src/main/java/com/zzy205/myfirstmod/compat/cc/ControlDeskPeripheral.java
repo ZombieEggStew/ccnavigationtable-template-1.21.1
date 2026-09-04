@@ -28,6 +28,7 @@ import org.jetbrains.annotations.Nullable;
  * print(joy2.getAxisXSigned())
  * local th = d.getModule("throttle")
  * print(th.getThrottleGear())
+ * th.setFreeMode(true)  -- 油门切自由模式（不卡位）：开关无 GUI，由 Lua 控制（th.setAxis 可直接写位置）
  * }</pre>
  * <p>
  * monitor_2 表面小 Monitor（已安装 monitor_2 时可用）：{@link #getMonitor2Module(int)} /

@@ -7,16 +7,20 @@ import net.createmod.catnip.theme.Color;
  * <p>
  * 前进/后退 = <b>手柄沿模型空间 <b>x</b> 轴平移</b>（BlockBench 中取的方向）：
  * <b>默认模型的 handle 在最底端（-x 端，即 0px）</b>，最多向 <b>+x</b> 平移
- * {@link #MAX_TRAVEL_PX}（11px）；<b>档位模式</b>：1px = 1 档，共 12 档（0..11），
- * 默认在最低档（0）——前进（空格，档位 +1）向 +x、后退（左Ctrl，档位 -1）向 -x 回底端；
+ * {@link #MAX_TRAVEL_PX}（11px）；<b>档位模式</b>（默认，Lua {@code setFreeMode(false)}）：
+ * 1px = 1 档，共 12 档（0..11），默认在最低档（0）——前进（空格，档位 +1）向 +x、
+ * 后退（左Ctrl，档位 -1）向 -x 回底端；<b>自由模式</b>（Lua {@code setFreeMode(true)} 开启，
+ * 无 GUI）：位置连续（可停在档位之间），按住前进/后退平滑移动，无卡位音效/段落感；
  * 随 FACING 旋转后仍沿桌面方向。
  * <p>
- * 档位切换：按键按住需满配置的档位切换节奏（{@link ControlDeskBlockEntity#getThrottleTicksPerGear}，
- * 默认 {@link #TICKS_PER_GEAR} tick）才进/退一档（每档 = 1px），
- * 连续按住每满该 tick 数步进一档；无输入**锁存**（保持当前档位，不回正）。
- * **数值**（{@link ControlDeskBlockEntity#getThrottleAxis()} = 档位 / MAX_TRAVEL_PX，
- * 服务端权威）= 离散档位；**动画**（渲染层）= 各渲染端用 {@link #approachStep}
- * 快速逼近追逐档位位置（段落感，参考 Monitor knob 卡位模式，帧时间修正）。
+ * <b>档位模式</b>推进：按键按住需满配置的档位切换节奏（{@link ControlDeskBlockEntity#getThrottleTicksPerGear}，
+ * 默认 {@link #TICKS_PER_GEAR} tick）才进/退一档（每档 = 1px），连续按住每满该 tick 数步进一档；
+ * <b>自由模式</b>推进：按住每 tick 位移 = 1/档位切换节奏 px（满行程 = MAX × N tick，复用同一配置）；
+ * 两模式无输入都**锁存**（保持当前位置，不回正）。
+ * **数值**（{@link ControlDeskBlockEntity#getThrottleAxis()} = 位置 / MAX_TRAVEL_PX，
+ * 服务端权威）：档位模式 = 离散档位值、自由模式 = 连续值；
+ * **动画**（渲染层）= 各渲染端追逐位置——档位模式用 {@link #approachStep} 快速逼近
+ * （段落感，参考 Monitor knob 卡位模式，帧时间修正）；自由模式用平滑指数逼近（见 ControlDeskVisual / ControlDeskRenderer）。
  * <p>
  * 音效（服务端 BE 模拟触发）：每个档位切换播放一次 {@code LEVER_CLICK}，
  * 音调随档位位置单调上升（{@link #pitchForGear}）——前进（档位递增）从低到高、
@@ -89,13 +93,13 @@ public final class ThrottleMotion {
     }
 
     /**
-     * 指示灯颜色（ARGB）：随油门档位大小从暗红（熄灭，档位 0）→ 亮红（满油门，档位 MAX）线性过渡。
+     * 指示灯颜色（ARGB）：随油门轴值（0..1，档位模式下 = 档位/MAX，自由模式下 = 连续轴值）从暗红（熄灭，0）→ 亮红（满油门，1）线性过渡。
      * 渲染参考 Create analog lever 指示灯（{@code Color.mixColors} 暗红→亮红）/
      * Simulated throttle_lever 的 diode（SimColors.redstone 同款映射）；
      * BER 用 {@code SuperByteBuffer.color()}、Flywheel 用 {@code TransformedInstance.colorArgb()}。
      */
-    public static int indicatorColor(int gear) {
-        float frac = Math.max(0f, Math.min(1f, gear / (float) MAX_TRAVEL_PX));
+    public static int indicatorColor(float axis) {
+        float frac = Math.max(0f, Math.min(1f, axis));
         // SimColors.REDSTONE_OFF(86,1,1) → REDSTONE_ON(205,0,0)，带 0xFF alpha
         return Color.mixColors(0xFF560101, 0xFFCD0000, frac);
     }
