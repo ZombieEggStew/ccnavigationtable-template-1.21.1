@@ -45,6 +45,18 @@ public class ThrottleModuleHandle {
     }
 
     /**
+     * 是否有人在操作这台油门（前进或后退任一键按住，读服务端输入租约）。
+     *
+     * <pre>{@code
+     * print(th.isActive())  -- true / false
+     * }</pre>
+     */
+    @LuaFunction
+    public final boolean isActive() {
+        return be.isThrottleForwardActive() || be.isThrottleBackActive();
+    }
+
+    /**
      * 当前档位（0..11 整数，锁存不回正）：档位模式下 = 当前档位；自由模式下 = 就近档位（位置四舍五入，精确值用 {@link #getAxis()}）。
      *
      * <pre>{@code
