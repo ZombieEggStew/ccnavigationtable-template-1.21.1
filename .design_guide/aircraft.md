@@ -19,7 +19,9 @@ BlockEntitySubLevelPropellerActor.java（references\sable-main\common\src\main\j
 
 4. 重力施加在重心上（DiagramEntity.java 第 186 行）→ 重力不产生力矩。
 
-5. 游戏内可视化工具：Simulated 的 Contraption Diagram（图纸） 可以显示重心图标 + 升力/阻力/推力/重力的力箭头（DiagramScreen.java，LIFT=浅蓝、PROPULSION=蓝、GRAVITY=绿）。这是你调试飞机的核心工具。
+5. 通用阻力（universal drag）：Rapier 给每个 sublevel 刚体的恒定线/角速度阻尼（默认 d=0.09），直接衰减刚体速度、不经过力组 → 图纸和记录器都看不到。等效力 F = −m·d·v，在巡航速度下是最大的阻力项（详见下文"通用阻力"一节）。
+
+6. 游戏内可视化工具：Simulated 的 Contraption Diagram（图纸） 可以显示重心图标 + 升力/阻力/推力/重力的力箭头（DiagramScreen.java，LIFT=浅蓝、PROPULSION=蓝、GRAVITY=绿）。这是你调试飞机的核心工具。⚠ 图纸只画力组，**通用阻力不在其中**——用图纸算净力时必须补上 F = −m·d·v。
 
 ---
 
@@ -91,6 +93,30 @@ Simulated 的 SymmetricSailBlock 本身不算力——它只是 Sable `BlockSubL
 - 普通帆 = "升力为主"的升力面（对称帆 = 纯阻力面）。升力方向固定在帆自身坐标系（n 侧），随机体一起转动，不会像真实翼型那样自动反向：机体倒扣时 n 朝下 → 升力也朝下（压向地面）；只有姿态摆正、n 侧朝上时才是可靠升力
 - 升力/阻力大小都 ∝ 该处局部气流速度 |v|（线速度 + 角速度×力臂）→ 帆离重心越远，同样的机体运动产生更大的力与力矩（阻尼、配平、控制都靠这个）
 - 全部力受 P（维度气压 basePressure × 高度曲线）整体缩放
+
+---
+
+# 通用阻力（universal drag）：Rapier 刚体的速度阻尼（图纸/记录器都看不到的力）
+
+> 发现经过：图纸显示推力 ~400、帆阻力 ~112，若按"只有这两个力"推断净推力 +288 应持续加速，但 flight_overworld_00b1000b_19.csv 巡航段空速稳在 62、dv/dt ≈ +0.014 m/s²——缺失的向后力就是通用阻力，约 255，比帆阻力还大近一倍。
+
+- 参数来源：`DimensionPhysics.universalDrag`，**默认 0.09**（`DimensionPhysics.java` 的 `DEFAULT_UNIVERSAL_DRAG`）；可被维度数据包 `data/<命名空间>/dimension_physics/*.json` 的 `"universal_drag"` 字段覆盖
+- 施加位置（与帆力完全不同的通道）：
+  `SubLevelPhysicsSystem.initialize()`（第 168–172 行）→ `pipeline.init(gravity, universalDrag)` → Rapier 引擎在**每个 sublevel 刚体创建时**调用 `set_linear_damping(0.09)` + `set_angular_damping(0.09)`（`sable_rapier\src\main\rust\rapier\src\lib.rs` 第 677–678 行；rope 同样，`rope.rs` 第 235–236 行）
+- 它**直接衰减刚体速度，不经过力组**（QueuedForceGroup）→ 图纸（DiagramEntity 读力组）和飞行记录器 CSV 都看不到。这就是"图纸净力 ≠ 实际净力"的根本原因
+- 公式（Rapier 线性阻尼，每物理子步 Δt）：
+  - 线速度：v ← v / (1 + d·Δt)
+  - 角速度：ω ← ω / (1 + d·Δt)
+  - 连续近似：dv/dt = −d·v → **等效力 F = −m·d·v**（与速度成正比、与**质量成正比**、**不乘气压 P**）
+- 定量实例（flight_overworld_00b1000b_19.csv 巡航段；图纸标度 = 冲量×60，即该游戏 substepsPerTick=3）：
+  - m ≈ 45.25（整链）、v ≈ 62.6 → F = m·d·v = 45.25 × 0.09 × 62.6 ≈ **255**（图纸单位 ≈ 牛顿）
+  - 平衡账：推力 ≈ 407，帆阻力 ≈ −137，通用阻力 ≈ −255 → 净 ≈ +8 ≈ 0；实测 dv/dt = +0.014 m/s² 稳速成立
+  - 通用阻力是巡航时**最大的阻力项**（约为帆阻力的 2 倍）
+- 对设计的直接含义：
+  - **极速公式**：平衡时 T(推力) = v·(0.09·m + 帆阻力系数·P) → 极速 ∝ 推力 / (0.09·m + c·P)
+  - **减重直接提速**：通用阻力 ∝ m，同一推力下轻飞机极速更高、爬升更快（比调帆更直接）
+  - **不乘 P**：帆阻力、推力都 ∝ P，通用阻力只 ∝ m·v → 高空时推力/帆阻力同衰而通用阻力不衰 → 高空极速上限下降，与"高空需更快空速才够升力"叠加，加剧高空掉速掉高（见 memo\.current_mission.md §13）
+  - 角速度阻尼 0.09 同样恒定存在 → 姿态天然被阻尼（"稳重"）；做 phugoid/姿态阻尼分析时它已在物理里，别把它当成"无阻尼基线"
 
 ---
 
