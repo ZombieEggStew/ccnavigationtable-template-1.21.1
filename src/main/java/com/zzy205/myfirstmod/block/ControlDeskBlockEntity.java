@@ -275,7 +275,7 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
     private String throttleKeyForward = DEFAULT_THROTTLE_KEY_FORWARD; // 油门杆 前进键（模型空间 +x，空串 = 未绑定）
     private String throttleKeyBack = DEFAULT_THROTTLE_KEY_BACK;      // 油门杆 后退键（模型空间 -x，空串 = 未绑定）
     private int throttleTicksPerGear = DEFAULT_THROTTLE_TICKS_PER_GEAR; // 档位切换节奏（tick）：按住满 N tick 进/退一档（自由模式兼作连续移动速度：每 tick 位移 = 1/N px，满行程 = MAX × N tick）
-    /** 油门自由模式开关（默认关 = 档位模式/卡位）：开启后按住前进/后退平滑连续移动（无卡位音效/段落感），松开锁存；无 GUI，由 Lua {@code setFreeMode} 控制 */
+    /** 油门自由模式开关（默认关 = 档位模式/卡位）：开启后按住前进/后退平滑连续移动（每跨过一个档位刻度 1px 播放一次卡位音效、无段落感），松开锁存；无 GUI，由 Lua {@code setFreeMode} 控制 */
     private boolean throttleFreeMode;
     private String throttle2KeyUp = DEFAULT_THROTTLE_2_KEY_UP;       // 油门2 上抬键（角度 +，空串 = 未绑定）
     private String throttle2KeyDown = DEFAULT_THROTTLE_2_KEY_DOWN;   // 油门2 下拉键（角度 -，空串 = 未绑定）
@@ -1720,7 +1720,8 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
      *       （前进从低到高、后退从高到低，见 {@link ThrottleMotion#pitchForGear}），最低档不响。</li>
      *   <li><b>自由模式</b>（Lua {@code setFreeMode} 开启，无 GUI）：按住前进/后退<b>平滑连续移动</b>，
      *       每 tick 位移 = 1/档位切换节奏 px（满行程 = MAX × ticksPerGear tick，默认 4 → 44 tick，
-     *       复用同一节奏配置）；无卡位音效、无段落感；松开**锁存**。</li>
+     *       复用同一节奏配置）；每跨过一个整数档位刻度（1px）播放一次 {@code LEVER_CLICK} 卡位音效
+     *       （音调随刻度上升、最低档 0 不响，与档位模式一致）；无段落感；松开**锁存**。</li>
      * </ul>
      * 位置变化时广播。
      */
@@ -1735,10 +1736,19 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (be.throttleFreeMode) {
             // 自由模式：连续移动，每 tick 位移 = 1/档位切换节奏 px（满行程 = MAX × N tick）
             float step = 1f / Math.max(1, be.throttleTicksPerGear);
-            float newPx = Math.max(0f, Math.min(ThrottleMotion.MAX_TRAVEL_PX, be.throttlePx + dir * step));
-            if (newPx != be.throttlePx) {
+            float oldPx = be.throttlePx;
+            float newPx = Math.max(0f, Math.min(ThrottleMotion.MAX_TRAVEL_PX, oldPx + dir * step));
+            if (newPx != oldPx) {
                 be.throttlePx = newPx;
                 be.notifyChange();
+                // 每跨过一个整数档位刻度（1px = 1 档）播放一次卡位音效（与档位模式一致：音调随刻度上升、
+                // 最低档 0 不响）；前进跨过 floor(newPx)，后退到达 ceil(newPx)，跨过时两值差 1
+                int crossed = dir > 0 ? (int) Math.floor(newPx) : (int) Math.ceil(newPx);
+                int prevBound = dir > 0 ? (int) Math.floor(oldPx) : (int) Math.ceil(oldPx);
+                if (crossed != prevBound && crossed >= 1 && be.getLevel() != null) {
+                    be.getLevel().playSound(null, be.getBlockPos(), SoundEvents.LEVER_CLICK,
+                            SoundSource.BLOCKS, ThrottleMotion.SOUND_VOLUME, ThrottleMotion.pitchForGear(crossed));
+                }
             }
             return;
         }

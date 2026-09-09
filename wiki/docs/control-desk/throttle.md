@@ -28,6 +28,7 @@ By default the throttle is in **gear mode** — it notches into 12 discrete gear
 
 - Free mode has **no GUI** — it is controlled entirely from Lua (`setFreeMode`, see [Lua API](#lua-api)).
 - While in free mode, holding a key moves the handle by `1/rate` px per tick, where `rate` is the gear-shift-rate setting — a full travel (11 px) takes `11 × rate` ticks.
+- The lever click still plays **once every 1 px** the handle travels (each time it crosses a gear mark), with the pitch rising with the position — the bottom mark (0) does not click, just like gear mode.
 - Switching back to gear mode snaps the position to the nearest gear.
 - The mode is persisted with the desk (saved in the world, kept in Create schematics).
 
@@ -82,7 +83,7 @@ print(th.isFreeMode())   -- false (default gear mode)
 
 Switches between **free mode** (`true`) and **gear mode** (`false`).
 
-- `true` (free, no notches): holding forward/back moves the handle smoothly and continuously (no click sounds), latching on release.
+- `true` (free travel): holding forward/back moves the handle smoothly and continuously, playing a lever click **each time it crosses a 1 px (one gear) mark**, and latching on release.
 - `false` (gear, default): holding a key charges for the gear-shift rate then shifts one gear, with a lever click per shift.
 
 Switching back to gear mode snaps the position to the nearest gear.

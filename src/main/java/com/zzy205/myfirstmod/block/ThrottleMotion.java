@@ -10,7 +10,8 @@ import net.createmod.catnip.theme.Color;
  * {@link #MAX_TRAVEL_PX}（11px）；<b>档位模式</b>（默认，Lua {@code setFreeMode(false)}）：
  * 1px = 1 档，共 12 档（0..11），默认在最低档（0）——前进（空格，档位 +1）向 +x、
  * 后退（左Ctrl，档位 -1）向 -x 回底端；<b>自由模式</b>（Lua {@code setFreeMode(true)} 开启，
- * 无 GUI）：位置连续（可停在档位之间），按住前进/后退平滑移动，无卡位音效/段落感；
+ * 无 GUI）：位置连续（可停在档位之间），按住前进/后退平滑移动，每跨过一个档位刻度（1px）
+ * 播放一次卡位音效（无段落感）；
  * 随 FACING 旋转后仍沿桌面方向。
  * <p>
  * <b>档位模式</b>推进：按键按住需满配置的档位切换节奏（{@link ControlDeskBlockEntity#getThrottleTicksPerGear}，
@@ -22,9 +23,9 @@ import net.createmod.catnip.theme.Color;
  * **动画**（渲染层）= 各渲染端追逐位置——档位模式用 {@link #approachStep} 快速逼近
  * （段落感，参考 Monitor knob 卡位模式，帧时间修正）；自由模式用平滑指数逼近（见 ControlDeskVisual / ControlDeskRenderer）。
  * <p>
- * 音效（服务端 BE 模拟触发）：每个档位切换播放一次 {@code LEVER_CLICK}，
- * 音调随档位位置单调上升（{@link #pitchForGear}）——前进（档位递增）从低到高、
- * 后退（档位递减）从高到低，最低档（0）不响。
+ * 音效（服务端 BE 模拟触发）：档位模式每个档位切换播放一次、自由模式每跨过一个档位刻度
+ * （1px）播放一次 {@code LEVER_CLICK}，音调随档位位置单调上升（{@link #pitchForGear}）——
+ * 前进（档位递增）从低到高、后退（档位递减）从高到低，最低档（0）不响。
  */
 public final class ThrottleMotion {
 
