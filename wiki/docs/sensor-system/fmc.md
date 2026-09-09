@@ -189,40 +189,65 @@ The snapshot is refreshed **once** — at server start (using the overworld) and
 
 ## Sail aero tools
 
-Also FMC-gated (and therefore also available with an AIC), the sensor system provides two pure-math utilities that compute the **lift** and **directionless drag** a sail block produces under the game's aero model for a given air pressure and speed — handy for sizing wings/tails and for design math (trim, cruise-speed estimates) without needing live flight data.
+Also FMC-gated (and therefore also available with an AIC), the sensor system provides two pure-math utilities built around the two equations of the game's aero model — **lift** and **directionless drag** — for design math (trim, cruise-speed estimates, stall / minimum-pressure analysis) without needing live flight data:
+
+```
+Lift:             L = k3 × P × |V| = 0.475 × P × |V|          (regular sail only)
+Directionless drag: D = k2 × P × |V| = 0.06888202261 × P × |V|  (regular & symmetric sails)
+```
 
 The formulas mirror Sable's `BlockSubLevelLiftProvider.sable$contributeLiftAndDrag()` (evaluated once per physics substep, per sail block). Both tools assume **n·v = 0** — the airflow is perpendicular to the sail normal, i.e. **no normal velocity component** (level flight). Under this condition the normal (parallel) drag is zero, so the outputs reduce to lift + directionless drag only:
 
 | Method | Returns | Description |
 |---|---|---|
-| `getSailLift(P, V)` | number / nil | Regular sail (Create `SailBlock`): **lift scalar** (the symmetric sail produces no lift) |
-| `getSailDirectionlessDrag(P, V)` | number / nil | **Directionless drag scalar** shared by the regular and symmetric sails (same k2) |
+| `solveSailLift(P, V, L?)` | number / nil | Lift equation (Create `SailBlock`): pass any two of the three values, `nil` for the missing one, returns the third |
+| `solveSailDirectionlessDrag(P, V, D?)` | number / nil | Directionless drag equation (regular & symmetric sails): same pattern |
 
-Arguments and conventions:
+### Argument convention: pass any two, `nil` for the unknown
 
+Each method is a unified solver for "given any two of the equation's quantities, return the third". The three parameters are air pressure P, speed V, and the output quantity (lift L / drag D). **Pass any two, `nil` for the missing one**, and the method returns the missing value:
+
+```lua
+-- Lift equation L = 0.475 × P × |V|
+ss.solveSailLift(P, V, nil)   -- → lift L (forward)
+ss.solveSailLift(P, nil, L)   -- → speed V = L/(0.475·P)     (level flight: L = weight → required airspeed)
+ss.solveSailLift(nil, V, L)   -- → pressure P = L/(0.475·|V|) (minimum pressure for that lift → max usable altitude)
+
+-- Directionless drag equation D = 0.06888202261 × P × |V| (same for both sail types)
+ss.solveSailDirectionlessDrag(P, V, nil)   -- → drag D (forward)
+ss.solveSailDirectionlessDrag(P, nil, D)   -- → speed V = D/(0.06888202261·P)
+ss.solveSailDirectionlessDrag(nil, V, D)   -- → pressure P = D/(0.06888202261·|V|)
+```
+
+- Passing only 1 value, or all 3 → `nil` (under-determined / over-determined).
 - **`P`** — air pressure (fraction of sea level, sea level = 1.0, same semantics as `getPressure()`); `P ≤ 0` → `nil`.
-- **`V`** — speed magnitude (m/s, same units as `getSpeed()`); negative values are taken as `|V|`.
+- **`V`** — speed magnitude (m/s, same units as `getSpeed()`); negative values are taken as `|V|`; when solving for P, `|V| = 0` (division by zero) → `nil`.
+- **`L` / `D`** — force scalar; negative has no solution → `nil`.
 - Gated exactly like the other FMC tools (the body — including constraint chains — must have ≥ 1 FMC, AIC counting as FMC; the computer must be on a body), otherwise `nil`. Pure math (`mainThread = false`), zero main-thread scheduling.
 
 ### Returned values
 
-Both methods return a **per-second equivalent force scalar** = `k·P·|V|` — substep-independent, same scale as the in-game diagram (impulse × 60), comparable to thrust readings. They no longer return per-substep impulses.
+The methods return the missing quantity as a **per-second equivalent force scalar** (force / m/s / pressure fraction) — substep-independent, same scale as the in-game diagram (impulse × 60), comparable to thrust readings. They no longer return per-substep impulses.
 
 ### Formulas
 
 Regular sail (Create `SailBlock`, all Sable defaults):
 
 ```
-getSailLift(P, V) = k3 × P × |V| = 0.475 × P × |V|
+L = k3 × P × |V| = 0.475 × P × |V|
+V = L / (0.475 × P)
+P = L / (0.475 × |V|)
 ```
 
 Directionless drag (shared by the regular and symmetric sails, `k2` not overridden):
 
 ```
-getSailDirectionlessDrag(P, V) = k2 × P × |V| = 0.06888202261 × P × |V|
+D = k2 × P × |V| = 0.06888202261 × P × |V|
+V = D / (0.06888202261 × P)
+P = D / (0.06888202261 × |V|)
 ```
 
-The symmetric sail (Simulated `SymmetricSailBlock`: `k3 = 0`, `k1 = 1.75`) produces no lift — only directionless drag, computed by the same `getSailDirectionlessDrag` (k2 identical to the regular sail).
+The symmetric sail (Simulated `SymmetricSailBlock`: `k3 = 0`, `k1 = 1.75`) produces no lift — only directionless drag, computed by the same `solveSailDirectionlessDrag` (k2 identical to the regular sail).
 
 **k2 = 0.06888202261** (Sable's default, `(−0.75 + √(0.75² + 0.475²)) / 2` — exactly the minimum damping that keeps the default lift from diverging). The normal-drag coefficient **k1** (0.75 regular / 1.75 symmetric) never appears here because it multiplies `(n·v)`, which is 0 by the tool's condition. With n·v = 0 the lift also takes its **maximum** for the given speed (`|V − parallel drag| = |V|`); any incidence/yaw component would only reduce it.
 
@@ -235,18 +260,26 @@ The coefficients (k2, k3) are hard-coded constants in the mod — there is no st
 ```lua
 local ss = require("ccpe.sensor_system")
 
--- Regular sail (wing): lift + directionless drag at P = 0.47, 60 m/s (per-second force scalars)
-local lift = ss.getSailLift(0.47, 60)
-local drag = ss.getSailDirectionlessDrag(0.47, 60)
+-- Forward: regular-sail lift + directionless drag at P = 0.47, 60 m/s (per-second force scalars)
+local lift = ss.solveSailLift(0.47, 60, nil)
+local drag = ss.solveSailDirectionlessDrag(0.47, 60, nil)
 print("lift (N): ", lift)   -- 0.475 × P × V
 print("drag (N): ", drag)   -- 0.06888202261 × P × V
 
--- Symmetric sail (tail / rudder): same directionless drag (shared k2), same function
-local sym = ss.getSailDirectionlessDrag(0.47, 60)
-print("sym drag (N): ", sym)  -- 0.06888202261 × P × V
+-- Inverse: wing needs 13.3 N of lift (≈ a small plane's weight) at P = 0.47 → required airspeed
+local v = ss.solveSailLift(0.47, nil, 13.3)
+print("required speed (m/s): ", v)  -- 13.3 / (0.475 × 0.47)
 ```
 
-> Feed `getPressure()` as `P` and `getSpeed()` (or `getAverageSpeed()`) as `V` to evaluate the sails at the current flight state; multiply by the number of sail blocks to size a whole wing/tail.
+### Total lift of multiple sails: linear accumulation
+
+Sable evaluates the **same lift formula independently for every sail block** and accumulates them into the total impulse (`ServerSubLevel.prePhysicsTick()` loops over each sail; the `LiftProviderGroup` grouping only affects how the Diagram / recorder draws force arrows, it does not change the per-sail force) — there is **no "more sails, weaker per-sail lift" attenuation**. So in level flight with **no rotation (pure translation), identical sail orientation and height**, the total lift is exactly `sail count × per-sail lift`, and multiplying the tool output by the sail count holds.
+
+The deviations all come from "each sail uses its own local quantities", not from sail-to-sail interference:
+
+- **Angular velocity**: each sail uses the local airflow at its own position, `v_local = V + ω×r`; when rotating, sails farther from the centre of mass feel more airflow and produce more lift, so the total ≠ count × (per-sail lift at body speed).
+- **Mixed orientations** (dihedral, control-surface deflection): lift is a vector along each sail's normal; different directions make the vector sum smaller than the scalar sum, and n·v ≠ 0 lowers per-sail lift below its maximum.
+- **Per-sail pressure**: P is sampled at each sail's own block centre; a wing spanning a large height range sees slightly different P (usually negligible).
 
 ## Universal drag tool
 

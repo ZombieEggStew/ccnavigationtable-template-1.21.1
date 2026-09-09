@@ -48,7 +48,7 @@ Plus per-block methods (see each page):
 - **Static Port** — `getAltitude()`, `getPressure()`, `getAverageAltitude()`, `getAveragePressure()`, `getWeightedAltitude()`, `getWeightedPressure()`
 - **Pitot Tube** — `getSpeed()`, `getAirSpeed()`, `getAverageSpeed()`, `getAverageAirSpeed()`
 - **INS** — `getAngles()`, `getPosition()`, `getBodyPosition()`, `getOrientation()`, `getAngularVelocity()`
-- **FMC** — `getPhysicsCenterOfMassRel()`, `getPhysicsMass()`, `getPhysicsChainMass()`, `getPhysicsGravityForce()`, `getPhysicsChainGravityForce()`, `getPhysicsChainCenterOfMassRel()`, `getStressRemaining()`, `getStressCapacity()`, `initPropeller(N, S)`, `getPropellerRPM(F, P, V, θ?)`, `getPressureFromAltitude(Y)`, `getAltitudeFromPressure(P)`, `getSailLift(P, V)`, `getSailDirectionlessDrag(P, V)`, `getUniversalDragForce(m, V)`
+- **FMC** — `getPhysicsCenterOfMassRel()`, `getPhysicsMass()`, `getPhysicsChainMass()`, `getPhysicsGravityForce()`, `getPhysicsChainGravityForce()`, `getPhysicsChainCenterOfMassRel()`, `getStressRemaining()`, `getStressCapacity()`, `initPropeller(N, S)`, `getPropellerRPM(F, P, V, θ?)`, `getPressureFromAltitude(Y)`, `getAltitudeFromPressure(P)`, `solveSailLift(P, V, L?)`, `solveSailDirectionlessDrag(P, V, D?)`, `getUniversalDragForce(m, V)`
 - **Short-Range Signal Linker** — `getPeripheral(channel)`, `getRedstoneOutput(channel)`, `getRedstoneInput(channel)`, `setRedstoneOutput(channel, signal)`
 - **Position Light** — `setLights(color, on)`, `setAllLights(on)`
 

@@ -190,40 +190,65 @@ getAltitudeFromPressure(P) = 在 [维度 minY, minY+logicalHeight] 上二分  �
 
 ## 风帆气动工具
 
-同为 FMC 门控（因此装 AIC 也满足），传感器系统提供两个纯数学工具：给定气压与速度，按游戏气动模型计算每块帆产生的**升力**与**无方向阻力**——适合做机翼/尾翼选型与设计计算（配平、巡航速度估算），无需实时飞行数据。
+同为 FMC 门控（因此装 AIC 也满足），传感器系统提供两个纯数学工具，围绕游戏气动模型的两条方程——**升力**方程与**无方向阻力**方程——做设计计算（配平、巡航速度估算、失速/最低气压分析），无需实时飞行数据：
+
+```
+升力：      L = k3 × P × |V| = 0.475 × P × |V|          （仅 Create 普通帆）
+无方向阻力： D = k2 × P × |V| = 0.06888202261 × P × |V|  （普通帆与对称帆共用）
+```
 
 公式镜像 Sable 的 `BlockSubLevelLiftProvider.sable$contributeLiftAndDrag()`（每个物理子步、每块帆计算一次）。两个工具都固定 **n·v = 0** 条件——气流速度与帆面法向垂直，即**无法向速度分量**（平飞）。该条件下法向阻力恒为 0，输出只剩升力 + 无方向阻力：
 
 | 方法 | 返回 | 说明 |
 |---|---|---|
-| `getSailLift(P, V)` | number / nil | Create 普通帆（`SailBlock`）的**升力标量**（对称帆不产生升力） |
-| `getSailDirectionlessDrag(P, V)` | number / nil | 普通帆 / 对称帆共同的**无方向阻力标量**（k2 两种帆共享） |
+| `solveSailLift(P, V, L?)` | number / nil | 升力方程（Create `SailBlock`）：三个量传任意两个、缺失的传 `nil`，返回第三个 |
+| `solveSailDirectionlessDrag(P, V, D?)` | number / nil | 无方向阻力方程（普通帆 / 对称帆通用）：同上 |
 
-参数与约定：
+### 参数约定：三个量传任意两个，缺失的传 nil
 
+两个方法都是「已知方程中任意两个量、求解剩下一个」的统一求解器。三个参数分别对应方程里的气压 P、速度 V 与输出量（升力 L / 阻力 D），**传任意两个，缺失的那个传 `nil`**，返回缺失量：
+
+```lua
+-- 升力方程 L = 0.475 × P × |V|
+ss.solveSailLift(P, V, nil)   -- → 升力 L（正向）
+ss.solveSailLift(P, nil, L)   -- → 速度 V = L/(0.475·P)     （平飞时 L = 重力 → 所需空速）
+ss.solveSailLift(nil, V, L)   -- → 气压 P = L/(0.475·|V|)   （维持该升力的最低气压 → 最高可用高度）
+
+-- 无方向阻力方程 D = 0.06888202261 × P × |V|（两种帆相同）
+ss.solveSailDirectionlessDrag(P, V, nil)   -- → 阻力 D（正向）
+ss.solveSailDirectionlessDrag(P, nil, D)   -- → 速度 V = D/(0.06888202261·P)
+ss.solveSailDirectionlessDrag(nil, V, D)   -- → 气压 P = D/(0.06888202261·|V|)
+```
+
+- 只传 1 个量或 3 个量都传 → `nil`（欠定/超定）。
 - **`P`** — 气压（大气压分数，海平面 = 1.0，与 `getPressure()` 同语义）；`P ≤ 0` → `nil`。
-- **`V`** — 速度大小（m/s，与 `getSpeed()` 同单位）；负数按绝对值 `|V|` 处理。
+- **`V`** — 速度大小（m/s，与 `getSpeed()` 同单位）；负数按绝对值 `|V|` 处理；求解 P 时 `|V| = 0`（除零）→ `nil`。
+- **`L` / `D`** — 力标量；负值无解 → `nil`。
 - 门控与其余 FMC 工具相同（机体含约束链上必须有 ≥1 个 FMC，AIC 等同 FMC；电脑必须在物理体上），否则返回 `nil`。纯数学（`mainThread = false`），零主线程调度。
 
 ### 返回值
 
-两个方法都返回**每秒等效力标量** = `k·P·|V|`——与 substepsPerTick 配置无关，与游戏内图纸（冲量×60）同量纲，可与推力读数对比。不再返回每物理子步冲量。
+返回缺失的那个量，都是**每秒等效力标量**（力 / 速度 m/s / 气压分数）——与 substepsPerTick 配置无关，与游戏内图纸（冲量×60）同量纲，可与推力读数对比。不再返回每物理子步冲量。
 
 ### 计算公式
 
 Create 普通帆（`SailBlock`，全默认参数）：
 
 ```
-getSailLift(P, V) = k3 × P × |V| = 0.475 × P × |V|
+L = k3 × P × |V| = 0.475 × P × |V|
+V = L / (0.475 × P)
+P = L / (0.475 × |V|)
 ```
 
 无方向阻力（普通帆与对称帆共用，k2 都未覆写）：
 
 ```
-getSailDirectionlessDrag(P, V) = k2 × P × |V| = 0.06888202261 × P × |V|
+D = k2 × P × |V| = 0.06888202261 × P × |V|
+V = D / (0.06888202261 × P)
+P = D / (0.06888202261 × |V|)
 ```
 
-Simulated 对称帆（`SymmetricSailBlock`：`k3 = 0`、`k1 = 1.75`）不产生升力，只有无方向阻力——由同一个 `getSailDirectionlessDrag` 计算（k2 与普通帆相同）。
+Simulated 对称帆（`SymmetricSailBlock`：`k3 = 0`、`k1 = 1.75`）不产生升力，只有无方向阻力——由同一个 `solveSailDirectionlessDrag` 计算（k2 与普通帆相同）。
 
 **k2 = 0.06888202261**（Sable 默认值，`(−0.75 + √(0.75² + 0.475²)) / 2`——恰好压住默认升力发散的最小阻尼）。法向阻力系数 **k1**（普通帆 0.75 / 对称帆 1.75）在本工具中不出现：它乘的是 `(n·v)`，而该工具条件 n·v = 0。n·v = 0 时升力也取该速度下的**最大值**（`|V − 法向阻力| = |V|`）；任何迎角/偏航分量都只会让它变小。
 
@@ -236,18 +261,26 @@ Simulated 对称帆（`SymmetricSailBlock`：`k3 = 0`、`k1 = 1.75`）不产生�
 ```lua
 local ss = require("ccpe.sensor_system")
 
--- 普通帆（机翼）：P = 0.47、60 m/s 时的升力 + 无方向阻力（每秒力标量）
-local lift = ss.getSailLift(0.47, 60)
-local drag = ss.getSailDirectionlessDrag(0.47, 60)
+-- 正向：P = 0.47、60 m/s 时普通帆的升力 + 无方向阻力（每秒力标量）
+local lift = ss.solveSailLift(0.47, 60, nil)
+local drag = ss.solveSailDirectionlessDrag(0.47, 60, nil)
 print("lift (N): ", lift)   -- 0.475 × P × V
 print("drag (N): ", drag)   -- 0.06888202261 × P × V
 
--- 对称帆（尾翼/方向舵）：无方向阻力相同（k2 共享），同样用 getSailDirectionlessDrag
-local sym = ss.getSailDirectionlessDrag(0.47, 60)
-print("sym drag (N): ", sym)  -- 0.06888202261 × P × V
+-- 反解：机翼需要 13.3 N 升力（≈ 一架小飞机的重力），P = 0.47 时所需空速
+local v = ss.solveSailLift(0.47, nil, 13.3)
+print("required speed (m/s): ", v)  -- 13.3 / (0.475 × 0.47)
 ```
 
-> `P` 可代入 `getPressure()`（静压孔读数）、`V` 代入 `getSpeed()`（或 `getAverageSpeed()`）来评估当前飞行状态下的帆；估算整片机翼/尾翼时乘以帆的数量即可。
+### 多块帆的总升力：线性累加
+
+Sable 对**每一块帆独立**计算同一条升力公式，逐帆累加进总冲量（`ServerSubLevel.prePhysicsTick()` 循环每块帆；`LiftProviderGroup` 分组只影响图纸/记录器的力箭头显示，不改变逐帆力）——**没有"帆越多、单帆越弱"的衰减**。因此在**无旋转（纯平移）、所有帆同朝向、同高度**的平飞下，总升力严格 = 帆数 × 单帆升力，工具乘以帆数成立。
+
+偏离项（都来自"每块帆用自己的局部量"，而非帆间干扰）：
+
+- **角速度**：每块帆用自己位置的局部气流 `v_local = V + ω×r`；旋转时离重心越远的帆局部气流越大、单帆升力越大，总升力 ≠ 帆数 ×（机体速度对应的单帆升力）。
+- **帆朝向不一致**（上反角、舵面偏转）：升力是沿各自法线的矢量，方向不同则总矢量和 < 标量和；且 n·v ≠ 0 使单帆升力低于最大值。
+- **气压逐帆取点**：P 在每块帆自己的方块中心取值，跨大高度差时略有差异（通常可忽略）。
 
 ## 通用阻力工具
 
