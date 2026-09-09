@@ -190,15 +190,14 @@ getAltitudeFromPressure(P) = 在 [维度 minY, minY+logicalHeight] 上二分  �
 
 ## 风帆气动工具
 
-同为 FMC 门控（因此装 AIC 也满足），传感器系统提供三个纯数学工具：给定气压与速度，按游戏气动模型计算每块帆产生的**升力**与**无方向阻力**——适合做机翼/尾翼选型与设计计算（配平、巡航速度估算），无需实时飞行数据。
+同为 FMC 门控（因此装 AIC 也满足），传感器系统提供两个纯数学工具：给定气压与速度，按游戏气动模型计算每块帆产生的**升力**与**无方向阻力**——适合做机翼/尾翼选型与设计计算（配平、巡航速度估算），无需实时飞行数据。
 
-公式镜像 Sable 的 `BlockSubLevelLiftProvider.sable$contributeLiftAndDrag()`（每个物理子步、每块帆计算一次）。三个工具都固定 **n·v = 0** 条件——气流速度与帆面法向垂直，即**无法向速度分量**（平飞）。该条件下法向阻力恒为 0，输出只剩升力 + 无方向阻力：
+公式镜像 Sable 的 `BlockSubLevelLiftProvider.sable$contributeLiftAndDrag()`（每个物理子步、每块帆计算一次）。两个工具都固定 **n·v = 0** 条件——气流速度与帆面法向垂直，即**无法向速度分量**（平飞）。该条件下法向阻力恒为 0，输出只剩升力 + 无方向阻力：
 
 | 方法 | 返回 | 说明 |
 |---|---|---|
-| `getSailLift(P, V)` | number / nil | Create 普通帆（`SailBlock`）的**升力标量** |
-| `getSailDrag(P, V)` | number / nil | Create 普通帆（`SailBlock`）的**无方向阻力标量** |
-| `getSymmetricSailDrag(P, V)` | number / nil | Simulated 对称帆（`SymmetricSailBlock`）的**无方向阻力标量** |
+| `getSailLift(P, V)` | number / nil | Create 普通帆（`SailBlock`）的**升力标量**（对称帆不产生升力） |
+| `getSailDirectionlessDrag(P, V)` | number / nil | 普通帆 / 对称帆共同的**无方向阻力标量**（k2 两种帆共享） |
 
 参数与约定：
 
@@ -208,7 +207,7 @@ getAltitudeFromPressure(P) = 在 [维度 minY, minY+logicalHeight] 上二分  �
 
 ### 返回值
 
-三个方法都返回**每秒等效力标量** = `k·P·|V|`——与 substepsPerTick 配置无关，与游戏内图纸（冲量×60）同量纲，可与推力读数对比。不再返回每物理子步冲量。
+两个方法都返回**每秒等效力标量** = `k·P·|V|`——与 substepsPerTick 配置无关，与游戏内图纸（冲量×60）同量纲，可与推力读数对比。不再返回每物理子步冲量。
 
 ### 计算公式
 
@@ -216,16 +215,17 @@ Create 普通帆（`SailBlock`，全默认参数）：
 
 ```
 getSailLift(P, V) = k3 × P × |V| = 0.475 × P × |V|
-getSailDrag(P, V) = k2 × P × |V| = 0.06888202261 × P × |V|
 ```
 
-Simulated 对称帆（`SymmetricSailBlock`：`k3 = 0`、`k1 = 1.75`；`k2` 未覆写）：
+无方向阻力（普通帆与对称帆共用，k2 都未覆写）：
 
 ```
-getSymmetricSailDrag(P, V) = k2 × P × |V| = 0.06888202261 × P × |V|
+getSailDirectionlessDrag(P, V) = k2 × P × |V| = 0.06888202261 × P × |V|
 ```
 
-两种帆共用 **k2 = 0.06888202261**（Sable 默认值，`(−0.75 + √(0.75² + 0.475²)) / 2`——恰好压住默认升力发散的最小阻尼）。法向阻力系数 **k1**（普通帆 0.75 / 对称帆 1.75）在本工具中不出现：它乘的是 `(n·v)`，而该工具条件 n·v = 0。n·v = 0 时升力也取该速度下的**最大值**（`|V − 法向阻力| = |V|`）；任何迎角/偏航分量都只会让它变小。
+Simulated 对称帆（`SymmetricSailBlock`：`k3 = 0`、`k1 = 1.75`）不产生升力，只有无方向阻力——由同一个 `getSailDirectionlessDrag` 计算（k2 与普通帆相同）。
+
+**k2 = 0.06888202261**（Sable 默认值，`(−0.75 + √(0.75² + 0.475²)) / 2`——恰好压住默认升力发散的最小阻尼）。法向阻力系数 **k1**（普通帆 0.75 / 对称帆 1.75）在本工具中不出现：它乘的是 `(n·v)`，而该工具条件 n·v = 0。n·v = 0 时升力也取该速度下的**最大值**（`|V − 法向阻力| = |V|`）；任何迎角/偏航分量都只会让它变小。
 
 ### 缓存了什么
 
@@ -238,12 +238,12 @@ local ss = require("ccpe.sensor_system")
 
 -- 普通帆（机翼）：P = 0.47、60 m/s 时的升力 + 无方向阻力（每秒力标量）
 local lift = ss.getSailLift(0.47, 60)
-local drag = ss.getSailDrag(0.47, 60)
+local drag = ss.getSailDirectionlessDrag(0.47, 60)
 print("lift (N): ", lift)   -- 0.475 × P × V
 print("drag (N): ", drag)   -- 0.06888202261 × P × V
 
--- 对称帆（尾翼/方向舵）：纯阻力（每秒力标量）
-local sym = ss.getSymmetricSailDrag(0.47, 60)
+-- 对称帆（尾翼/方向舵）：无方向阻力相同（k2 共享），同样用 getSailDirectionlessDrag
+local sym = ss.getSailDirectionlessDrag(0.47, 60)
 print("sym drag (N): ", sym)  -- 0.06888202261 × P × V
 ```
 

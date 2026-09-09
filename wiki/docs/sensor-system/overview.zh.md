@@ -47,7 +47,7 @@ local ss = require("ccpe.sensor_system")
 - **静压孔** — `getAltitude()`、`getPressure()`、`getAverageAltitude()`、`getAveragePressure()`、`getWeightedAltitude()`、`getWeightedPressure()`
 - **皮托管** — `getSpeed()`、`getAirSpeed()`、`getAverageSpeed()`、`getAverageAirSpeed()`
 - **INS** — `getAngles()`、`getPosition()`、`getBodyPosition()`、`getOrientation()`、`getAngularVelocity()`
-- **FMC** — `getPhysicsCenterOfMassRel()`、`getPhysicsMass()`、`getPhysicsChainMass()`、`getPhysicsGravityForce()`、`getPhysicsChainGravityForce()`、`getPhysicsChainCenterOfMassRel()`、`getStressRemaining()`、`getStressCapacity()`、`initPropeller(N, S)`、`getPropellerRPM(F, P, V, θ?)`、`getPressureFromAltitude(Y)`、`getAltitudeFromPressure(P)`、`getSailLift(P, V)`、`getSailDrag(P, V)`、`getSymmetricSailDrag(P, V)`、`getUniversalDragForce(m, V)`
+- **FMC** — `getPhysicsCenterOfMassRel()`、`getPhysicsMass()`、`getPhysicsChainMass()`、`getPhysicsGravityForce()`、`getPhysicsChainGravityForce()`、`getPhysicsChainCenterOfMassRel()`、`getStressRemaining()`、`getStressCapacity()`、`initPropeller(N, S)`、`getPropellerRPM(F, P, V, θ?)`、`getPressureFromAltitude(Y)`、`getAltitudeFromPressure(P)`、`getSailLift(P, V)`、`getSailDirectionlessDrag(P, V)`、`getUniversalDragForce(m, V)`
 - **短程信号链接器** — `getPeripheral(channel)`、`getRedstoneOutput(channel)`、`getRedstoneInput(channel)`、`setRedstoneOutput(channel, signal)`
 - **航行灯** — `setLights(color, on)`、`setAllLights(on)`
 

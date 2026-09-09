@@ -88,8 +88,7 @@ import java.util.UUID;
  * print(ss.getPressureFromAltitude(252.1)) -- 世界高度 Y → 气压（同 getPressure() 同源公式；门控：机体上有 FMC/AIC）
  * print(ss.getAltitudeFromPressure(0.47))  -- 气压 → 世界高度 Y（数值反解，与上者互逆；门控：机体上有 FMC/AIC）
  * local lift = ss.getSailLift(0.47, 60) -- Create 普通帆（风帆，n·v=0）升力标量 = 0.475·P·|V|（每秒力；门控：机体上有 FMC/AIC）
- * local drag = ss.getSailDrag(0.47, 60) -- Create 普通帆（风帆，n·v=0）无方向阻力标量 = 0.06888202261·P·|V|（每秒力；门控同上）
- * local sym = ss.getSymmetricSailDrag(0.47, 60) -- Simulated 对称帆无方向阻力标量 = 0.06888202261·P·|V|（每秒力；门控同上）
+ * local drag = ss.getSailDirectionlessDrag(0.47, 60) -- 普通帆/对称帆无方向阻力标量 = 0.06888202261·P·|V|（k2 两种帆共享；每秒力；门控同上）
  * local udrag = ss.getUniversalDragForce(45.25, 60) -- 通用阻力等效力标量 = m × d × |v|（d 默认 0.09，维度数据包可覆盖；门控同上）
  * print(ss.getSpeed())            -- 最后放置的皮托管沿管口朝向的对地速度（m/s，便捷方法）
  * print(ss.getAirSpeed())         -- 最后放置的皮托管沿管口朝向的空速（m/s，便捷方法）
@@ -1113,9 +1112,11 @@ public class SensorSystemAPI implements ILuaAPI {
     //   法向阻力   F_par = n·(n·v)·k1·P·Δt          → n·v = 0（速度 ⊥ 帆面法向、无法向速度）时为 0
     //   无方向阻力 F_dir = v·k2·P·Δt                → 大小 |v|·k2·P·Δt
     //   升力       F_lift = n·|v − F_par|·k3·P·Δt   → n·v = 0 时 = n·|v|·k3·P·Δt（该速度下取最大）
-    // 三个工具固定 n·v = 0 条件（平飞时气流沿帆面、无法向速度分量），故只出现升力 + 无方向阻力：
+    // 两个工具固定 n·v = 0 条件（平飞时气流沿帆面、无法向速度分量），故只出现升力 + 无方向阻力：
     //   · Create 普通帆（SailBlockMixin 全默认）：k1 = 0.75、k2 = 0.06888202261、k3 = 0.475
     //   · Simulated 对称帆（SymmetricSailBlock 覆写）：k1 = 1.75、k2 = 0.06888202261（未覆写）、k3 = 0
+    // 无方向阻力系数 k2 两种帆共享（都未覆写），故阻力工具对两种帆通用，只需一个方法
+    // （getSailDirectionlessDrag）；对称帆 k3 = 0 不产生升力，升力工具仅适用于 Create 普通帆。
     // 每个方法都返回「每秒等效力」标量 = k·P·|v|（与 substepsPerTick 配置无关，与图纸「冲量×60」
     // 同量纲、可与推力读数对比），不再返回每子步冲量（已从本工具移除，Δt 缓存随之删除）。
     // 单位约定：pressure = 大气压分数（海平面 = 1.0，与 getPressure() 同语义）；velocity = |v|（m/s，
@@ -1159,11 +1160,16 @@ public class SensorSystemAPI implements ILuaAPI {
     }
 
     /**
-     * Create 普通帆（风帆）在 <b>n·v = 0</b>（气流速度与帆面法向垂直、无法向速度）条件下
-     * 每块帆受到的<b>无方向阻力标量</b>（法向阻力在此条件下恒为 0，总阻力 = 无方向阻力）。
+     * Create 普通帆（风帆）与 Simulated <b>对称帆</b>在 <b>n·v = 0</b>（气流速度与帆面法向垂直、
+     * 无法向速度）条件下每块帆受到的<b>无方向阻力标量</b>（法向阻力在此条件下恒为 0，
+     * 总阻力 = 无方向阻力）。
      * <p>
      * 公式（Sable {@code BlockSubLevelLiftProvider.sable$contributeLiftAndDrag}）：
      * <b>drag</b>（每秒力）= {@code k2·P·|v|} = 0.06888202261 × pressure × |velocity|。
+     * <p>
+     * 两种帆（Create 普通帆 {@code SailBlock} 与 Simulated 对称帆 {@code SymmetricSailBlock}）
+     * 都未覆写 {@code sable$getDirectionlessDragScalar()}，共享同一个 <b>k2</b>——本工具对两种帆通用；
+     * 对称帆（{@code k3 = 0}）不产生升力，其阻力同样用本方法计算。
      * <p>
      * 单位约定与 {@link #getSailLift(double, double)} 相同。
      * <p>
@@ -1177,35 +1183,7 @@ public class SensorSystemAPI implements ILuaAPI {
      * @return 无方向阻力标量（每秒力）；门控不满足或参数非法返回 nil
      */
     @LuaFunction
-    public final @Nullable Double getSailDrag(double pressure, double velocity) {
-        if (!sailToolsAvailable) return null;
-        if (pressure <= 0) return null;
-        double v = Math.abs(velocity);
-        return SAIL_DIRECTIONLESS_DRAG_SCALAR * pressure * v;
-    }
-
-    /**
-     * Simulated <b>对称帆</b>（纯阻力面）在 <b>n·v = 0</b>（气流速度与帆面法向垂直、无法向速度）
-     * 条件下每块帆受到的<b>无方向阻力标量</b>（法向阻力在此条件下恒为 0，总阻力 = 无方向阻力）。
-     * <p>
-     * 公式（Sable {@code BlockSubLevelLiftProvider.sable$contributeLiftAndDrag}；
-     * SymmetricSailBlock 覆写 {@code sable$getLiftScalar()=0}、{@code sable$getParallelDragScalar()=1.75}，
-     * k2 未覆写；k3 = 0 故不产生升力，本工具只给阻力）：
-     * <b>drag</b>（每秒力）= {@code k2·P·|v|} = 0.06888202261 × pressure × |velocity|。
-     * <p>
-     * 单位约定与 {@link #getSailDrag(double, double)} 相同。
-     * <p>
-     * <b>门控（存在性）</b>：与其余 FMC 工具相同——电脑必须在物理体上，且所在物理体（含约束链）上
-     * 有 ≥1 个飞行管理计算机（FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
-     * <p>
-     * mainThread=false：直读 volatile 缓存做纯数学计算，零主线程调度。
-     *
-     * @param pressure 气压 P（必须 &gt; 0）
-     * @param velocity 速度大小（m/s）
-     * @return 无方向阻力标量（每秒力）；门控不满足或参数非法返回 nil
-     */
-    @LuaFunction
-    public final @Nullable Double getSymmetricSailDrag(double pressure, double velocity) {
+    public final @Nullable Double getSailDirectionlessDrag(double pressure, double velocity) {
         if (!sailToolsAvailable) return null;
         if (pressure <= 0) return null;
         double v = Math.abs(velocity);

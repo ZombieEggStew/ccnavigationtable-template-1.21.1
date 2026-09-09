@@ -189,15 +189,14 @@ The snapshot is refreshed **once** — at server start (using the overworld) and
 
 ## Sail aero tools
 
-Also FMC-gated (and therefore also available with an AIC), the sensor system provides three pure-math utilities that compute the **lift** and **directionless drag** a sail block produces under the game's aero model for a given air pressure and speed — handy for sizing wings/tails and for design math (trim, cruise-speed estimates) without needing live flight data.
+Also FMC-gated (and therefore also available with an AIC), the sensor system provides two pure-math utilities that compute the **lift** and **directionless drag** a sail block produces under the game's aero model for a given air pressure and speed — handy for sizing wings/tails and for design math (trim, cruise-speed estimates) without needing live flight data.
 
-The formulas mirror Sable's `BlockSubLevelLiftProvider.sable$contributeLiftAndDrag()` (evaluated once per physics substep, per sail block). All three tools assume **n·v = 0** — the airflow is perpendicular to the sail normal, i.e. **no normal velocity component** (level flight). Under this condition the normal (parallel) drag is zero, so the outputs reduce to lift + directionless drag only:
+The formulas mirror Sable's `BlockSubLevelLiftProvider.sable$contributeLiftAndDrag()` (evaluated once per physics substep, per sail block). Both tools assume **n·v = 0** — the airflow is perpendicular to the sail normal, i.e. **no normal velocity component** (level flight). Under this condition the normal (parallel) drag is zero, so the outputs reduce to lift + directionless drag only:
 
 | Method | Returns | Description |
 |---|---|---|
-| `getSailLift(P, V)` | number / nil | Regular sail (Create `SailBlock`): **lift scalar** |
-| `getSailDrag(P, V)` | number / nil | Regular sail (Create `SailBlock`): **directionless drag scalar** |
-| `getSymmetricSailDrag(P, V)` | number / nil | Symmetric sail (Simulated `SymmetricSailBlock`): **directionless drag scalar** |
+| `getSailLift(P, V)` | number / nil | Regular sail (Create `SailBlock`): **lift scalar** (the symmetric sail produces no lift) |
+| `getSailDirectionlessDrag(P, V)` | number / nil | **Directionless drag scalar** shared by the regular and symmetric sails (same k2) |
 
 Arguments and conventions:
 
@@ -207,7 +206,7 @@ Arguments and conventions:
 
 ### Returned values
 
-All three methods return a **per-second equivalent force scalar** = `k·P·|V|` — substep-independent, same scale as the in-game diagram (impulse × 60), comparable to thrust readings. They no longer return per-substep impulses.
+Both methods return a **per-second equivalent force scalar** = `k·P·|V|` — substep-independent, same scale as the in-game diagram (impulse × 60), comparable to thrust readings. They no longer return per-substep impulses.
 
 ### Formulas
 
@@ -215,16 +214,17 @@ Regular sail (Create `SailBlock`, all Sable defaults):
 
 ```
 getSailLift(P, V) = k3 × P × |V| = 0.475 × P × |V|
-getSailDrag(P, V) = k2 × P × |V| = 0.06888202261 × P × |V|
 ```
 
-Symmetric sail (Simulated `SymmetricSailBlock`: `k3 = 0`, `k1 = 1.75`; `k2` not overridden):
+Directionless drag (shared by the regular and symmetric sails, `k2` not overridden):
 
 ```
-getSymmetricSailDrag(P, V) = k2 × P × |V| = 0.06888202261 × P × |V|
+getSailDirectionlessDrag(P, V) = k2 × P × |V| = 0.06888202261 × P × |V|
 ```
 
-The two sails share **k2 = 0.06888202261** (Sable's default, `(−0.75 + √(0.75² + 0.475²)) / 2` — exactly the minimum damping that keeps the default lift from diverging). The normal-drag coefficient **k1** (0.75 regular / 1.75 symmetric) never appears here because it multiplies `(n·v)`, which is 0 by the tool's condition. With n·v = 0 the lift also takes its **maximum** for the given speed (`|V − parallel drag| = |V|`); any incidence/yaw component would only reduce it.
+The symmetric sail (Simulated `SymmetricSailBlock`: `k3 = 0`, `k1 = 1.75`) produces no lift — only directionless drag, computed by the same `getSailDirectionlessDrag` (k2 identical to the regular sail).
+
+**k2 = 0.06888202261** (Sable's default, `(−0.75 + √(0.75² + 0.475²)) / 2` — exactly the minimum damping that keeps the default lift from diverging). The normal-drag coefficient **k1** (0.75 regular / 1.75 symmetric) never appears here because it multiplies `(n·v)`, which is 0 by the tool's condition. With n·v = 0 the lift also takes its **maximum** for the given speed (`|V − parallel drag| = |V|`); any incidence/yaw component would only reduce it.
 
 ### What is cached
 
@@ -237,12 +237,12 @@ local ss = require("ccpe.sensor_system")
 
 -- Regular sail (wing): lift + directionless drag at P = 0.47, 60 m/s (per-second force scalars)
 local lift = ss.getSailLift(0.47, 60)
-local drag = ss.getSailDrag(0.47, 60)
+local drag = ss.getSailDirectionlessDrag(0.47, 60)
 print("lift (N): ", lift)   -- 0.475 × P × V
 print("drag (N): ", drag)   -- 0.06888202261 × P × V
 
--- Symmetric sail (tail / rudder): pure drag (per-second force scalar)
-local sym = ss.getSymmetricSailDrag(0.47, 60)
+-- Symmetric sail (tail / rudder): same directionless drag (shared k2), same function
+local sym = ss.getSailDirectionlessDrag(0.47, 60)
 print("sym drag (N): ", sym)  -- 0.06888202261 × P × V
 ```
 
