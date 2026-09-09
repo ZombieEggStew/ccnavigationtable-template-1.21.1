@@ -13,6 +13,7 @@ import dev.ryanhcode.sable.companion.math.Pose3dc;
 import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
+import dev.ryanhcode.sable.sublevel.system.SubLevelPhysicsSystem;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
@@ -36,6 +37,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -50,7 +53,7 @@ import java.util.UUID;
  * 飞行数据记录器（调试工具，方案 B v1 + 控制输入）。
  * <p>
  * 服务端每个 ServerTick（可配置间隔）对<b>每个已注册 FMC（含 AIC）的物理体</b>采样一行，
- * 写入 {@code <gameDir>/flight_logs/flight_<维度>_<bodyUuid前8>_<起始tick>.csv}。
+ * 写入 {@code <gameDir>/flight_logs/flight_<维度>_<bodyUuid前8>_<保存时间>.csv}（保存时间 = 文件创建时刻，yyyyMMdd-HHmmss）。
  * <p>
  * 数据列 = tick/时间/机体 UUID + 机体原点世界坐标 + 姿态四元数 + 欧拉角（pitch/roll/yaw，
  * 与 {@code sensor_system.getAngles()} 同约定）+ 世界系线速度/角速度 + 机体系角速度
@@ -59,6 +62,9 @@ import java.util.UUID;
  * 均机体局部系，由 Sable {@code QueuedForceGroup} 点力重算：F=Σf、M=Σ(point−comPlot)×f）
  * ——整链力矩参考点为<b>链质心</b>（{@link SableCompat#getChainCenterOfMass}，memo §11：
  * 主机质心不含尾部子体，会引入虚假恒定俯仰力矩）
+ * + <b>通用阻力</b>（univFx/y/z：整链 Rapier 线速度阻尼的每物理子步冲量，转主机局部系；
+ * 力组/图纸里都没有这项，但物理里恒存在——平衡时 prop+drag+lift+univ ≈ 0，计算见
+ * {@link #appendUniversalDrag}）
  * + <b>控制输入</b>（摇杆2 ch7、油门 ch8、脚踏板 ch6，按本机座舱接线，
  * 见 {@link #CHANNEL_CONTROL_DESK} / {@link #CHANNEL_JOYSTICK} / {@link #CHANNEL_THROTTLE}；
  * 频道在物理体链内寻址 = Lua {@code ss.getPeripheral(ch)} 同源，控制台 BE 服务端直读，
@@ -105,6 +111,7 @@ public final class FlightDataRecorder {
             "chainLiftFx", "chainLiftFy", "chainLiftFz", "chainLiftMx", "chainLiftMy", "chainLiftMz",
             "chainDragFx", "chainDragFy", "chainDragFz", "chainDragMx", "chainDragMy", "chainDragMz",
             "chainPropFx", "chainPropFy", "chainPropFz", "chainPropMx", "chainPropMy", "chainPropMz",
+            "univFx", "univFy", "univFz",
             "joyCh", "joyX", "joyY", "joyXA", "joyYA",
             "thrCh", "thrAxis", "thrGear", "thrFwd", "thrBack",
             "pedCh", "pedL", "pedR"
@@ -144,7 +151,7 @@ public final class FlightDataRecorder {
                 if (writer == null || writer.level != sub.getLevel()) {
                     if (writer != null) writer.close();
                     try {
-                        writer = new RowWriter(sub, tick);
+                        writer = new RowWriter(sub);
                         WRITERS.put(id, writer);
                     } catch (IOException e) {
                         LOGGER.error("Failed to open flight log for body {}: {}", id, e.toString());
@@ -189,7 +196,7 @@ public final class FlightDataRecorder {
         private final boolean trackingEnabled;
         private final BufferedWriter out;
 
-        RowWriter(ServerSubLevel sub, long startTick) throws IOException {
+        RowWriter(ServerSubLevel sub) throws IOException {
             this.level = sub.getLevel();
             this.sub = sub;
             // 开启单体力组跟踪（同 Simulated 图纸 DiagramEntity）：否则 LIFT/DRAG 点力不记录
@@ -200,7 +207,10 @@ public final class FlightDataRecorder {
             String dim = level.dimension().location().getPath().replaceAll("[^A-Za-z0-9_.-]", "_");
             UUID body = sub.getUniqueId();
             String id8 = body != null ? body.toString().replace("-", "").substring(0, 8) : "unknown";
-            Path file = dir.resolve(String.format(Locale.ROOT, "flight_%s_%s_%d.csv", dim, id8, startTick));
+            // 后缀用保存时间（文件创建时刻，yyyyMMdd-HHmmss）而非起始 tick：
+            // 旧命名按起始 tick 会在重启后同机体同 tick 覆盖旧文件，时间戳不会重复
+            String ts = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").format(LocalDateTime.now());
+            Path file = dir.resolve(String.format(Locale.ROOT, "flight_%s_%s_%s.csv", dim, id8, ts));
             this.out = Files.newBufferedWriter(file, StandardCharsets.UTF_8);
             out.write(String.join(",", HEADER));
             out.newLine();
@@ -294,6 +304,8 @@ public final class FlightDataRecorder {
             // 恒定俯仰力矩（假"残余抬头力矩"）——参考点必须用链质心（Sable 动力学/风洞多物理体重心）。
             Vec3 chainComWorld = SableCompat.getChainCenterOfMass(sub);
             appendChainForces(f, sub, chainComWorld);
+            // ── 通用阻力（Rapier 线速度阻尼；力组/图纸里没有，但物理里恒存在）──
+            appendUniversalDrag(f, sub);
 
             // ── 控制输入（控制台频道寻址，BE 服务端直读，同模块句柄数据源）──
             appendControls(f, sub);
@@ -440,6 +452,65 @@ public final class FlightDataRecorder {
                 f.add("nan");
                 f.add("nan");
             }
+        }
+    }
+
+    /**
+     * 通用阻力（universal drag）：Rapier 给每个 sub-level 刚体设置的恒定线速度阻尼
+     * （{@code rigid_body.set_linear_damping(universal_drag)}，维度数据包 dimension_physics
+     * 的 {@code "universal_drag"} 字段，默认 0.09）——它直接衰减刚体速度、不走力组，
+     * 因此图纸（读 QueuedForceGroup）与力组列都看不到；但平衡时它吃掉了推力的相当一部分
+     * （飞行实测 m≈45、v≈62.6 时 F≈255，约为帆阻力的 2 倍，见 .design_guide/aircraft.md"通用阻力"一节）。
+     * <p>
+     * 每物理子步 Δt：v ← v/(1+d·Δt)，等效冲量 J = −m·d·v·Δt/(1+d·Δt)。
+     * 这里对约束链上每个 sub-level 用各自质量与线速度（世界系）求和，再整体转回主机局部系；
+     * 单位与力组列一致（每物理子步冲量刻度）→ 可直接与 chainProp/chainDrag/chainLift 相加
+     * 得到真实净力（平衡时 ≈ 0）。角速度阻尼（angular_damping=0.09）不在本列。
+     *
+     * @param main 主机（参考）物理体
+     */
+    private static void appendUniversalDrag(List<String> f, ServerSubLevel main) {
+        try {
+            if (!(main.getLevel() instanceof ServerLevel level)) {
+                f.add("nan"); f.add("nan"); f.add("nan");
+                return;
+            }
+            double d = DimensionPhysicsData.getUniversalDrag(level);
+            if (d <= 0) {
+                // 数据包把 universal_drag 设为 0 → 无阻尼，确定性地记 0（而非 nan）
+                f.add("0.00000"); f.add("0.00000"); f.add("0.00000");
+                return;
+            }
+            SubLevelPhysicsSystem sys = SubLevelPhysicsSystem.get(level);
+            int substeps = sys != null ? sys.getConfig().substepsPerTick : 2;
+            double dt = 1.0 / 20.0 / substeps;
+            double factor = d * dt / (1.0 + d * dt);   // Δv/|v| 每子步
+            Vec3 hostV = SableCompat.getLinearVelocity(level, main);
+            double[] sum = {0, 0, 0};
+            boolean any = false;
+            for (SubLevel member : SableCompat.getConnectedChain(main)) {
+                Double m = SableCompat.getMass(member);
+                Vec3 v = SableCompat.getLinearVelocity(level, member);
+                if (v == null) v = hostV;   // 刚性连接的从动体读不到速度时退化为主机速度
+                if (m == null || v == null) continue;
+                sum[0] -= m * factor * v.x;
+                sum[1] -= m * factor * v.y;
+                sum[2] -= m * factor * v.z;
+                any = true;
+            }
+            if (!any) {
+                f.add("nan"); f.add("nan"); f.add("nan");
+                return;
+            }
+            // 世界系 → 主机局部系（与 chain 系列列一致）
+            Quaterniond invMain = new Quaterniond(main.logicalPose().orientation());
+            Vector3d w = new Vector3d(sum[0], sum[1], sum[2]);
+            invMain.transformInverse(w);
+            f.add(n(w.x()));
+            f.add(n(w.y()));
+            f.add(n(w.z()));
+        } catch (Exception e) {
+            f.add("nan"); f.add("nan"); f.add("nan");
         }
     }
 

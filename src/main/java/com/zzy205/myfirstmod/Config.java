@@ -32,8 +32,9 @@ public class Config {
     // ── 调试：飞行数据记录器（方案 B）──
     public static final ModConfigSpec.BooleanValue FLIGHT_RECORDER_ENABLED = BUILDER
             .comment("Flight data recorder (debug): log per-tick body data for every FMC-registered aircraft into <gameDir>/flight_logs/*.csv "
-                    + "(see compat/cc/FlightDataRecorder.java). Only active while at least one FMC/AIC is on a Sable physics body. Disable before release.")
-            .define("flightDataRecorderEnabled", true);
+                    + "(see compat/cc/FlightDataRecorder.java). Only active while at least one FMC/AIC is on a Sable physics body. "
+                    + "Default OFF; enable in the config only when you need to record a flight.")
+            .define("flightDataRecorderEnabled", false);
 
     public static final ModConfigSpec.IntValue FLIGHT_RECORDER_INTERVAL_TICKS = BUILDER
             .comment("Flight data recorder sampling interval in ticks (1 = every tick / 20 Hz).")
