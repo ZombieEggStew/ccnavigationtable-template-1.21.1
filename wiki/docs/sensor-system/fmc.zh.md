@@ -137,3 +137,53 @@ R = F / (P × S^1.5 × N × T) + V × sin(θ) / (S^0.5 × A)
 返回所需转速 R；未 init、门控不满足（无 FMC）或参数非法（如 `P ≤ 0`）返回 `nil`。
 
 > 气压可用 `getPressure()`（静压孔读数）、速度可用 `getSpeed()`/`getAverageSpeed()`（皮托管读数）直接代入，组合成推力闭环控制。
+
+## 高度-气压换算工具
+
+同为 FMC 门控（因此装 AIC 也满足），传感器系统提供两个**世界高度 Y** 与**气压**之间的纯换算工具，用的是与游戏物理（以及静压孔读数 `getPressure()`）完全相同的空气模型：
+
+| 方法 | 返回 | 说明 |
+|---|---|---|
+| `getPressureFromAltitude(Y)` | number / nil | 世界高度 `Y` 处的气压（大气压分数，海平面 = 1.0） |
+| `getAltitudeFromPressure(P)` | number / nil | 气压为 `P` 的世界高度 `Y`（上面方法的反函数） |
+
+门控与其余 FMC 方法相同（机体含约束链上必须有 ≥1 个 FMC，AIC 等同 FMC；电脑必须在物理体上），否则返回 `nil`。两者都是**纯数学**（`mainThread = false`）：只读一份缓存的空气曲线快照，不在电脑线程上碰世界。
+
+### 计算公式
+
+游戏大气模型为 `P(Y) = basePressure × 高度曲线(Y)`，其中曲线是对维度数据包 `dimension_physics` 加载的锚点做的**分段三次 Hermite** 插值：
+
+```
+getPressureFromAltitude(Y) = basePressure × Hermite(锚点, Y)
+```
+
+主世界默认锚点（`basePressure = 1.0`，海平面 63）：
+
+| 高度 Y | 值 | 斜率 |
+|---|---|---|
+| −38.37 | 1.5（地下钳位） | −0.006 |
+| 63 | 1.0 | −0.004 |
+| 263 | 0.4493 | −0.001797 |
+| 280 | 0.4198 | −0.001679 |
+| 320 | **0**（建筑高度上限） | −0.02099 |
+
+−38 m ~ 280 m 之间它与简单指数 `P ≈ e^(−0.004·(Y − 63))` 数值上几乎一致；280 m 以上曲线向下弯向**建筑高度上限（Y=320）处的 0**，320 m 以上保持 0——主世界默认上限以上**没有空气**（无升力/阻力/推力）。曲线**不是解析可逆的**（分段三次），所以反向用数值二分：
+
+```
+getAltitudeFromPressure(P) = 在 [维度 minY, minY+logicalHeight] 上二分  →  使 P(Y) ≈ P 的 Y
+```
+
+二分单调、精度到双精度，两个方法**严格互逆**：`getAltitudeFromPressure(getPressureFromAltitude(Y)) ≈ Y`。高度基准 = **世界 Y**，与 `getAltitude()` 一致。
+
+### 缓存了什么
+
+为满足 `mainThread = false` 的线程安全，曲线参数被一次性复制进一份**静态 volatile 快照**：
+
+- `basePressure`
+- 锚点 `{高度, 值, 斜率}`（默认 5 组）
+- 二分区间 `[minY, minY + logicalHeight]`
+
+快照在**进游戏（服务器启动，用主世界）**和**放置/加载 FMC 或 AIC（`onLoad`）时刷新一次**，与螺旋桨配置缓存同款策略，**不逐 tick 读取**；门控（当前机体上有没有 FMC/AIC）仍每 tick 判定。
+
+!!! note "缓存时效"
+    改了 `dimension_physics` 数据包（`/reload`）后，需重新放置/加载一次 FMC 或 AIC（或重进世界）才会刷新快照。缓存是全局的（所有电脑共用一份曲线）：多个机体在不同维度时，取最后加载的那个维度的曲线。

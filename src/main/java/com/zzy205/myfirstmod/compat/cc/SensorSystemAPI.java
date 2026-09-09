@@ -21,6 +21,8 @@ import dev.eriksonn.aeronautics.config.AeroConfig;
 import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
 import dev.ryanhcode.sable.companion.math.JOMLConversion;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
+import dev.ryanhcode.sable.physics.config.dimension_physics.BezierResourceFunction;
+import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysics;
 import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.ryanhcode.sable.sublevel.plot.LevelPlot;
@@ -82,6 +84,8 @@ import java.util.UUID;
  * print(ss.getBodyId())           -- 物理体 UUID
  * print(ss.getAltitude())         -- 最后放置的静压孔的高度（便捷方法）
  * print(ss.getPressure())         -- 最后放置的静压孔的气压（便捷方法）
+ * print(ss.getPressureFromAltitude(252.1)) -- 世界高度 Y → 气压（同 getPressure() 同源公式；门控：机体上有 FMC/AIC）
+ * print(ss.getAltitudeFromPressure(0.47))  -- 气压 → 世界高度 Y（数值反解，与上者互逆；门控：机体上有 FMC/AIC）
  * print(ss.getSpeed())            -- 最后放置的皮托管沿管口朝向的对地速度（m/s，便捷方法）
  * print(ss.getAirSpeed())         -- 最后放置的皮托管沿管口朝向的空速（m/s，便捷方法）
  * print(ss.getAngles())           -- {pitch=, roll=, yaw=}（度；门控：机体上必须有 INS）
@@ -221,6 +225,23 @@ public class SensorSystemAPI implements ILuaAPI {
      */
     private static volatile double propellerBearingAirflow = 0.05;
 
+    // ── 大气高度-气压换算工具缓存（门控每 tick 判，曲线数据静态：进游戏/放置加载 FMC/AIC 时刷新一次） ──
+
+    /** 大气换算工具门控：所在物理体（含约束链）上有 ≥1 个 FMC（ccpe:fmc），与物理数据门控同源；主线程 update() 每 tick 刷新 */
+    private volatile boolean pressureToolsAvailable = false;
+
+    /** 维度大气 basePressure（静态缓存，默认 1.0；见 {@link #refreshPressureCurve}） */
+    private static volatile double pressureBase = 1.0;
+
+    /** 维度大气曲线锚点快照 {[高度, 值, 斜率]}（静态缓存：进游戏与放置/加载 FMC/AIC 时刷新一次，不逐 tick 读数据包） */
+    private static volatile double[][] pressureAnchors = new double[0][];
+
+    /** 维度高度下限（二分区间左端，主世界 = minY） */
+    private static volatile double atmosphereMinY = -64;
+
+    /** 维度高度上限（二分区间右端 = minY + logicalHeight，主世界 = 320） */
+    private static volatile double atmosphereMaxY = 320;
+
     /** 单个传感器的同一 tick 快照（相对物理体原点 + 相对当前电脑的局部坐标 + 读数；非对应类型读数为 null） */
     private record SensorSnapshot(SensorType type, double relX, double relY, double relZ,
                                   double compX, double compY, double compZ,
@@ -274,6 +295,7 @@ public class SensorSystemAPI implements ILuaAPI {
             chainComRelX = chainComRelY = chainComRelZ = 0;
             resetAttachedStress();
             propellerGateAvailable = false;
+            pressureToolsAvailable = false;
             return;
         }
         onBody = true;
@@ -316,6 +338,10 @@ public class SensorSystemAPI implements ILuaAPI {
         // 螺旋桨工具门控（与物理数据同源：机体上有 ≥1 个 FMC）。
         // T/A 配置不在此刷新（静态缓存，进游戏/放置 FMC 时刷新一次，见 refreshAeroConfig）。
         propellerGateAvailable = physicsGate;
+
+        // 大气换算工具门控（每 tick 判：机体上有 ≥1 个 FMC 才开放换算；曲线数据为静态缓存，
+        // 进游戏/放置加载 FMC/AIC 时刷新一次，见 refreshPressureCurve，不在 update() 里逐 tick 读数据包）
+        pressureToolsAvailable = physicsGate;
 
         // 姿态缓存（度；门控：机体上有 INS 才计算，与速度门控同一 tick 快照）
         double[] attitude = attitudeGate ? computeAttitudeDeg(sub) : null;
@@ -897,6 +923,154 @@ public class SensorSystemAPI implements ILuaAPI {
             propellerBearingAirflow = AeroConfig.server().physics.propellerBearingAirflowMult.get();
         } catch (Exception ignored) {
             // aeronautics 配置不可用时保留默认值（0.2 / 0.05）
+        }
+    }
+
+    // ═══════════════ 大气高度-气压换算工具（门控：机体（含约束链）上有 ≥1 个 FMC；AIC 等同 FMC） ═══════════════
+    //
+    // mainThread=false：不访问世界/Level（数据包重载有竞态、Sable 世界查询非线程安全），
+    // 曲线数据 = 静态 volatile 快照（pressureBase / pressureAnchors / atmosphereMinY/MaxY），
+    // 进游戏与放置/加载 FMC/AIC 时刷新一次（refreshPressureCurve，同螺旋桨 T/A 静态缓存策略）；
+    // Lua 线程在电脑线程上只做纯数学换算——正向求值与反向二分都用该快照，与
+    // DimensionPhysicsData.getAirPressure 公式逐位一致（含 basePressure / 锚点 / Hermite）。
+    // 高度基准 = 世界 Y 坐标（与 getAltitude() 同基准，主世界海平面 ≈ 63）；
+    // 曲线不是解析可逆的（分段三次 Hermite），反向用二分数值反解，与正向严格互逆
+    // （getAltitudeFromPressure(getPressureFromAltitude(y)) ≈ y，反之亦然）。
+    // 注意：主世界 280 m 以上曲线偏离纯指数，320 m（建筑高度上限）处归零——高于大气顶
+    // （P ≤ 0）没有有限高度，反向返回 nil。
+
+    /**
+     * 由<b>世界高度 Y</b> 求该处气压（大气压分数，海平面 = 1.0）。
+     * <p>
+     * 与静压孔读数同源公式：{@code P = basePressure × 高度曲线(y)}
+     * （{@link DimensionPhysicsData#getAirPressure}，维度数据包 {@code dimension_physics}
+     * 的 {@code base_pressure} / {@code pressure_function} 可覆盖；曲线快照由主线程
+     * {@link #update()} 每 tick 复制，改数据包后最多滞后 1 tick）；高度基准与
+     * {@link #getAltitude()} 一致（世界 Y 坐标）。
+     * <p>
+     * <b>门控（存在性）</b>：主线程缓存的 FMC 门控——电脑必须在物理体上，且所在物理体
+     * （含约束链）上有 ≥1 个飞行管理计算机（FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学求值，零主线程调度。
+     *
+     * @param altitude 世界高度 Y（任意实数；低于大气底/高于大气顶时按曲线钳位）
+     * @return 该高度的气压；门控不满足返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Double getPressureFromAltitude(double altitude) {
+        if (!pressureToolsAvailable) return null;
+        return evaluatePressure(altitude);
+    }
+
+    /**
+     * 由<b>气压</b>求对应<b>世界高度 Y</b>（{@link #getPressureFromAltitude(double)} 的反函数）。
+     * <p>
+     * 对 {@code P(y) = basePressure × 高度曲线(y)} 在 [维度 minY, minY+logicalHeight] 上做
+     * 二分反解（曲线单调不增；默认主世界 320 m 处 P=0）。高度基准与 {@link #getAltitude()}
+     * 一致（世界 Y 坐标）。气压超出该维度曲线值域（&gt; 大气底最大气压，或 &lt; 0 / 高于
+     * 大气顶没有有限高度）时返回 nil。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getPressureFromAltitude(double)} 相同——主线程缓存的
+     * FMC 门控：电脑必须在物理体上，且所在物理体（含约束链）上有 ≥1 个飞行管理计算机
+     * （FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学二分，零主线程调度。
+     *
+     * @param pressure 目标气压（大气压分数，海平面 = 1.0；须在 [0, 大气底最大气压] 内）
+     * @return 对应世界高度 Y；门控不满足或气压越界返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Double getAltitudeFromPressure(double pressure) {
+        if (!pressureToolsAvailable) return null;
+        double minY = atmosphereMinY;
+        double maxY = atmosphereMaxY;
+        double pLo = evaluatePressure(minY); // 曲线最大值（大气底，地下钳位）
+        double pHi = evaluatePressure(maxY); // 曲线最小值（大气顶，默认 0）
+        if (pressure > pLo || pressure < pHi) return null;
+        // 二分：P(y) 单调不增，收敛到 P(y) ≈ pressure 的分界高度
+        double lo = minY;
+        double hi = maxY;
+        for (int i = 0; i < 60; i++) {
+            double mid = (lo + hi) / 2.0;
+            if (evaluatePressure(mid) >= pressure) lo = mid;
+            else hi = mid;
+        }
+        return (lo + hi) / 2.0;
+    }
+
+    /**
+     * 在缓存的维度大气曲线上求 P(y)（纯数学，线程安全）。
+     * <p>
+     * 镜像 {@code BezierResourceFunction.evaluateFunction} + {@code basePressure} 乘法：
+     * 锚点间三次 Hermite 插值 {@code f(t) = ((c·t + q)·t + l)·t + v1}（c=(s1+s2)Δx−2Δy、
+     * q=3Δy−(2s1+s2)Δx、l=Δx·s1），结果钳位 ≥0；y 超出锚点区间时取首/末锚点值。
+     */
+    private double evaluatePressure(double y) {
+        double[][] pts = pressureAnchors;
+        double v;
+        if (pts.length == 0) {
+            v = 1;
+        } else if (pts.length == 1) {
+            v = pts[0][1];
+        } else {
+            int idx = -1;
+            for (double[] p : pts) {
+                if (y < p[0]) break;
+                idx++;
+            }
+            if (idx == -1) {
+                v = pts[0][1];
+            } else if (idx >= pts.length - 1) {
+                v = pts[pts.length - 1][1];
+            } else {
+                double a1 = pts[idx][0], v1 = pts[idx][1], s1 = pts[idx][2];
+                double a2 = pts[idx + 1][0], v2 = pts[idx + 1][1], s2 = pts[idx + 1][2];
+                double dx = a2 - a1;
+                double dy = v2 - v1;
+                double t = (y - a1) / dx;
+                double c = (s1 + s2) * dx - 2 * dy;
+                double q = 3 * dy - (2 * s1 + s2) * dx;
+                double l = dx * s1;
+                v = ((c * t + q) * t + l) * t + v1;
+                v = Math.max(v, 0);
+            }
+        }
+        return pressureBase * v;
+    }
+
+    /**
+     * 刷新维度大气曲线静态缓存（basePressure + 锚点 + 高度边界）。
+     * <p>
+     * 调用时机：进游戏（服务器启动，{@code CCPeripheralExtender#onServerStarting}）与
+     * 放置/加载 FMC（{@code FmcBlockEntity#onLoad}）/ AIC（{@code AicBlockEntity#onLoad}）
+     * 时调用一次；不随每 tick 刷新。取数与 {@code DimensionPhysicsData.getAirPressure}
+     * 同款回退链（有效物理 → 默认物理）；维度数据包 {@code /reload} 后需重新放置/加载
+     * FMC/AIC（或重启进世界）触发刷新。
+     * <p>
+     * 静态全局缓存：多维度同时使用时取最后一次加载的维度曲线（与螺旋桨 T/A 静态缓存
+     * {@link #refreshAeroConfig()} 同源策略）；Lua 线程只读该快照做纯数学换算，线程安全。
+     */
+    public static void refreshPressureCurve(Level level) {
+        if (level == null) return;
+        try {
+            DimensionPhysics physics = DimensionPhysicsData.of(level);
+            DimensionPhysics def = DimensionPhysicsData.getDefault(level);
+            double base = physics.basePressure().orElseGet(def.basePressure()::orElseThrow);
+            BezierResourceFunction curve = physics.pressureFunction().orElseGet(def.pressureFunction()::orElseThrow);
+            List<BezierResourceFunction.BezierPoint> points = curve.getPoints();
+            double[][] anchors = new double[points.size()][3];
+            for (int i = 0; i < points.size(); i++) {
+                BezierResourceFunction.BezierPoint p = points.get(i);
+                anchors[i][0] = p.altitude();
+                anchors[i][1] = p.value();
+                anchors[i][2] = p.slope();
+            }
+            pressureBase = base;
+            pressureAnchors = anchors;
+            atmosphereMinY = level.dimensionType().minY();
+            atmosphereMaxY = atmosphereMinY + level.dimensionType().logicalHeight();
+        } catch (Exception ignored) {
+            // 读不到曲线时保留上次缓存（默认值兜底）
         }
     }
 

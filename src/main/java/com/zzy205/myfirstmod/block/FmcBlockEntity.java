@@ -43,6 +43,8 @@ public class FmcBlockEntity extends BlockEntity {
         if (level != null && !level.isClientSide) {
             // 放置/加载 FMC 时刷新一次 aeronautics 螺旋桨配置静态缓存（T/A；另在服务器启动时刷新）
             SensorSystemAPI.refreshAeroConfig();
+            // 放置/加载 FMC 时刷新一次主世界大气曲线静态缓存（高度-气压换算工具用；另在服务器启动时刷新）
+            SensorSystemAPI.refreshPressureCurve(level);
             registeredBodyId = containingBodyId();
             BodySensorRegistry.register(this);
         }

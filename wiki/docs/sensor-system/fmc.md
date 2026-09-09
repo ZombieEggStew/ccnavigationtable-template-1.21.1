@@ -136,3 +136,53 @@ where **T** (Propeller Bearing Thrust, default 0.2) and **A** (Propeller Bearing
 Returns the required speed R; returns `nil` when not initialized, when the gate fails (no FMC), or when arguments are invalid (e.g. `P ≤ 0`).
 
 > Feed `getPressure()` (static port reading) as pressure and `getSpeed()`/`getAverageSpeed()` (pitot tube readings) as velocity to build a closed-loop thrust controller.
+
+## Altitude ↔ pressure conversion tools
+
+Also FMC-gated (and therefore also available with an AIC), the sensor system provides two pure conversion utilities between **world altitude Y** and **air pressure**, using exactly the same atmosphere model as the game physics (and the static port reading `getPressure()`):
+
+| Method | Returns | Description |
+|---|---|---|
+| `getPressureFromAltitude(Y)` | number / nil | Air pressure (fraction of sea level, sea level = 1.0) at world altitude `Y` |
+| `getAltitudeFromPressure(P)` | number / nil | World altitude `Y` that has air pressure `P` (inverse of the above) |
+
+Both are gated exactly like the FMC methods (the body — including constraint chains — must have ≥ 1 FMC, with AIC counting as FMC; the computer must be on a body), otherwise they return `nil`. They are **pure math** (`mainThread = false`): they read a cached copy of the atmosphere curve and never touch the world on the computer thread.
+
+### Calculation formula
+
+The game atmosphere is `P(Y) = basePressure × pressureCurve(Y)`, where the curve is a **piecewise cubic Hermite** interpolation over anchor points loaded from the dimension's `dimension_physics` datapack:
+
+```
+getPressureFromAltitude(Y) = basePressure × Hermite(anchors, Y)
+```
+
+Default overworld anchors (`basePressure = 1.0`, sea level = 63):
+
+| Altitude Y | Value | Slope |
+|---|---|---|
+| −38.37 | 1.5 (underground clamp) | −0.006 |
+| 63 | 1.0 | −0.004 |
+| 263 | 0.4493 | −0.001797 |
+| 280 | 0.4198 | −0.001679 |
+| 320 | **0** (build limit) | −0.02099 |
+
+Between −38 m and ~280 m this is numerically identical to the simple exponential `P ≈ e^(−0.004·(Y − 63))`. Above 280 m the curve bends down toward **0 at the build limit (Y = 320)** and stays 0 above it — at the default overworld ceiling there is **no air** (no lift / drag / thrust). The curve is **not analytically invertible** (piecewise cubic), so the inverse is computed numerically:
+
+```
+getAltitudeFromPressure(P) = bisection on [dimension.minY, minY + logicalHeight]  →  Y with  P(Y) ≈ P
+```
+
+The bisection is monotonic and exact to double precision, so the two methods round-trip: `getAltitudeFromPressure(getPressureFromAltitude(Y)) ≈ Y`. The altitude datum is **world Y** — identical to `getAltitude()`.
+
+### What is cached
+
+To keep `mainThread = false` thread-safe, the curve parameters are copied once into a **static volatile snapshot**:
+
+- `basePressure`
+- the anchor points `{altitude, value, slope}` (5 triples by default)
+- the bisection bounds `[minY, minY + logicalHeight]`
+
+The snapshot is refreshed **once** — at server start (using the overworld) and whenever an **FMC or AIC is placed/loaded** (`onLoad`) — mirroring the propeller config cache, **not** every tick. The gate (does this body have an FMC/AIC right now) is still checked every tick.
+
+!!! note "Cache freshness"
+    After `dimension_physics` datapack changes (`/reload`), re-place/reload an FMC or AIC (or restart the world) to refresh the snapshot. The cache is global (one curve shared by all computers): with multiple bodies in different dimensions the last-loaded dimension's curve wins.

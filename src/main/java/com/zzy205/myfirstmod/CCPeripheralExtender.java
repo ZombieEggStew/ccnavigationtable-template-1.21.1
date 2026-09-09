@@ -96,9 +96,10 @@ public class CCPeripheralExtender {
         }
     }
 
-    /** 服务器启动（进游戏/开世界）：刷新 aeronautics 螺旋桨配置静态缓存（T/A，进游戏缓存一次）。 */
+    /** 服务器启动（进游戏/开世界）：刷新 aeronautics 螺旋桨配置静态缓存（T/A）与主世界大气曲线静态缓存（进游戏缓存一次）。 */
     private static void onServerStarting(ServerStartingEvent event) {
         SensorSystemAPI.refreshAeroConfig();
+        SensorSystemAPI.refreshPressureCurve(event.getServer().overworld());
     }
 
     /** 服务器停止（关世界/回主菜单）：清空静态全局频道注册表，避免跨世界残留占用频道。 */
