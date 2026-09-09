@@ -84,7 +84,7 @@ local th    = desk.getModule("throttle")  -- 未安装油门杆返回 nil
 | `pedal` | `getLeftPedal()`、`getRightPedal()`、`getPedalDifference()`、`isLeftPedalDown()`、`isRightPedalDown()`、`isLeftPedalUp()`、`isRightPedalUp()` |
 | `joystick` | `isAxisXActive()`、`isAxisYActive()`、`getAxisX()`、`getAxisY()`、`getAxisXSigned()`、`getAxisYSigned()` |
 | `joystick_2` | `isAxisXActive()`、`isAxisYActive()`、`getAxisX()`、`getAxisY()`、`getAxisXSigned()`、`getAxisYSigned()` |
-| `throttle` | `isForwardActive()`、`isBackActive()`、`getThrottleGear()`、`getAxis()` |
+| `throttle` | `isForwardActive()`、`isBackActive()`、`isActive()`、`getThrottleGear()`、`getAxis()`、`isFreeMode()`、`setFreeMode(enabled)`、`setAxis(axis)` |
 | `throttle_2` | `getAxis()`、`getCenterAxis()`、`setAngle(degrees)` |
 | `monitor_2` | 经 `getModule("monitor")` —— 方法与[监视器](../monitor/overview.zh.md)相同 |
 

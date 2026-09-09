@@ -81,7 +81,7 @@ local th    = desk.getModule("throttle")  -- nil if no throttle installed
 | `pedal` | `getLeftPedal()`, `getRightPedal()`, `getPedalDifference()`, `isLeftPedalDown()`, `isRightPedalDown()`, `isLeftPedalUp()`, `isRightPedalUp()` |
 | `joystick` | `isAxisXActive()`, `isAxisYActive()`, `getAxisX()`, `getAxisY()`, `getAxisXSigned()`, `getAxisYSigned()` |
 | `joystick_2` | `isAxisXActive()`, `isAxisYActive()`, `getAxisX()`, `getAxisY()`, `getAxisXSigned()`, `getAxisYSigned()` |
-| `throttle` | `isForwardActive()`, `isBackActive()`, `getThrottleGear()`, `getAxis()` |
+| `throttle` | `isForwardActive()`, `isBackActive()`, `isActive()`, `getThrottleGear()`, `getAxis()`, `isFreeMode()`, `setFreeMode(enabled)`, `setAxis(axis)` |
 | `throttle_2` | `getAxis()`, `getCenterAxis()`, `setAngle(degrees)` |
 | `monitor_2` | via `getModule("monitor")` — same methods as the [Monitor](../monitor/overview.md) |
 

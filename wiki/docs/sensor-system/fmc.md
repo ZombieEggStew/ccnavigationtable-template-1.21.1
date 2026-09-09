@@ -283,6 +283,19 @@ The deviations all come from "each sail uses its own local quantities", not from
 
 ## Universal drag tool
 
+### Dark clouds
+
+![Diagram force arrows](../img/diagram.png)
+
+The screenshot above shows the force arrows of a Contraption Diagram: **the propeller's thrust is clearly much larger than the total drag on the aircraft**. If only the two forces drawn in the diagram existed, the net force would be positive and the aircraft would keep accelerating; yet the measured cruise speed stays constant (dv/dt ≈ 0). So there must be an **unknown force the diagram does not draw** canceling the excess thrust — that force is the **universal drag**:
+
+- **Direction**: opposite to the velocity;
+- **Magnitude**: proportional to mass and speed (F = −m·d·v).
+
+It is produced by the constant velocity damping Rapier applies to every sublevel rigid body, and **does not go through any force group**, so neither the Contraption Diagram nor the flight-data-recorder CSV ever show it — that is exactly why "diagram net force ≠ actual net force", and why this tool exists.
+
+---
+
 Also FMC-gated (and therefore also available with an AIC), the sensor system provides a pure-math utility that computes the **equivalent force of the universal (speed) drag** — the constant velocity damping Rapier applies to every sublevel rigid body. It is not part of any force group, so the Contraption Diagram and the flight-data-recorder CSV never show it; this tool makes it computable for design math (net-force balance: thrust − sail drag − universal drag ≈ 0).
 
 The formula mirrors the continuous approximation of the per-substep damping `v ← v/(1+d·Δt)`:
