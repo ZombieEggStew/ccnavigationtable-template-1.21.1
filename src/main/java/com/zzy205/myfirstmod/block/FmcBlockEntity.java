@@ -45,8 +45,6 @@ public class FmcBlockEntity extends BlockEntity {
             SensorSystemAPI.refreshAeroConfig();
             // 放置/加载 FMC 时刷新一次主世界大气曲线静态缓存（高度-气压换算工具用；另在服务器启动时刷新）
             SensorSystemAPI.refreshPressureCurve(level);
-            // 放置/加载 FMC 时刷新一次物理子步时长静态缓存（风帆气动工具用；另在服务器启动时刷新）
-            SensorSystemAPI.refreshSailSubsteps(level);
             // 放置/加载 FMC 时刷新一次通用阻力系数静态缓存（通用阻力工具用；另在服务器启动时刷新）
             SensorSystemAPI.refreshUniversalDrag(level);
             registeredBodyId = containingBodyId();
