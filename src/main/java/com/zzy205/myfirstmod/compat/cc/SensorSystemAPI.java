@@ -26,9 +26,11 @@ import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysics;
 import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.ryanhcode.sable.sublevel.plot.LevelPlot;
+import dev.ryanhcode.sable.sublevel.system.SubLevelPhysicsSystem;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -86,6 +88,9 @@ import java.util.UUID;
  * print(ss.getPressure())         -- 最后放置的静压孔的气压（便捷方法）
  * print(ss.getPressureFromAltitude(252.1)) -- 世界高度 Y → 气压（同 getPressure() 同源公式；门控：机体上有 FMC/AIC）
  * print(ss.getAltitudeFromPressure(0.47))  -- 气压 → 世界高度 Y（数值反解，与上者互逆；门控：机体上有 FMC/AIC）
+ * local sail = ss.getSailLiftAndDrag(0.47, 60) -- Create 普通帆（风帆，n·v=0）：{lift, drag, lift_impulse, drag_impulse}（每秒力 + 每子步冲量；门控：机体上有 FMC/AIC）
+ * local sym = ss.getSymmetricSailDrag(0.47, 60) -- Simulated 对称帆（n·v=0）：{drag, drag_impulse}（每秒力 + 每子步冲量；门控同上）
+ * local udrag = ss.getUniversalDragForce(45.25, 60) -- 通用阻力等效力标量 = m × d × |v|（d 默认 0.09，维度数据包可覆盖；门控同上）
  * print(ss.getSpeed())            -- 最后放置的皮托管沿管口朝向的对地速度（m/s，便捷方法）
  * print(ss.getAirSpeed())         -- 最后放置的皮托管沿管口朝向的空速（m/s，便捷方法）
  * print(ss.getAngles())           -- {pitch=, roll=, yaw=}（度；门控：机体上必须有 INS）
@@ -242,6 +247,31 @@ public class SensorSystemAPI implements ILuaAPI {
     /** 维度高度上限（二分区间右端 = minY + logicalHeight，主世界 = 320） */
     private static volatile double atmosphereMaxY = 320;
 
+    // ── 风帆气动工具缓存（门控每 tick 判，同物理数据门控；Δt 静态缓存：进游戏/放置加载 FMC/AIC 时刷新一次） ──
+
+    /** 风帆工具门控：所在物理体（含约束链）上有 ≥1 个 FMC（ccpe:fmc），与物理数据门控同源；主线程 update() 每 tick 刷新 */
+    private volatile boolean sailToolsAvailable = false;
+
+    /**
+     * 每物理子步时长 Δt = 1/20/substepsPerTick（Sable {@code PhysicsConfigData.substepsPerTick}，
+     * 可配置 1-10，默认 2 → Δt = 0.025 s）。静态缓存：进游戏与放置/加载 FMC/AIC 时刷新一次
+     * （{@link #refreshSailSubsteps}），读不到时保留默认 0.025（Sable 编译默认 substepsPerTick=2）。
+     */
+    private static volatile double sailSubstepTime = 1.0 / 20.0 / 2.0;
+
+    // ── 通用阻力工具缓存（门控每 tick 判，同物理数据门控；d 静态缓存：进游戏/放置加载 FMC/AIC 时刷新一次） ──
+
+    /** 通用阻力工具门控：所在物理体（含约束链）上有 ≥1 个 FMC（ccpe:fmc），与物理数据门控同源；主线程 update() 每 tick 刷新 */
+    private volatile boolean universalDragAvailable = false;
+
+    /**
+     * Rapier 通用阻力系数 d（universal drag）：每物理子步速度阻尼 v ← v/(1+d·Δt) 的等效力 F = m·d·v 中的 d。
+     * 默认 0.09（Sable {@code DimensionPhysics.DEFAULT_UNIVERSAL_DRAG}）；可被维度数据包
+     * {@code dimension_physics} 的 {@code "universal_drag"} 字段覆盖。静态缓存：进游戏与放置/加载
+     * FMC/AIC 时刷新一次（{@link #refreshUniversalDrag}），读不到时保留默认 0.09。
+     */
+    private static volatile double universalDragCoefficient = 0.09;
+
     /** 单个传感器的同一 tick 快照（相对物理体原点 + 相对当前电脑的局部坐标 + 读数；非对应类型读数为 null） */
     private record SensorSnapshot(SensorType type, double relX, double relY, double relZ,
                                   double compX, double compY, double compZ,
@@ -296,6 +326,8 @@ public class SensorSystemAPI implements ILuaAPI {
             resetAttachedStress();
             propellerGateAvailable = false;
             pressureToolsAvailable = false;
+            sailToolsAvailable = false;
+            universalDragAvailable = false;
             return;
         }
         onBody = true;
@@ -342,6 +374,14 @@ public class SensorSystemAPI implements ILuaAPI {
         // 大气换算工具门控（每 tick 判：机体上有 ≥1 个 FMC 才开放换算；曲线数据为静态缓存，
         // 进游戏/放置加载 FMC/AIC 时刷新一次，见 refreshPressureCurve，不在 update() 里逐 tick 读数据包）
         pressureToolsAvailable = physicsGate;
+
+        // 风帆气动工具门控（每 tick 判：机体上有 ≥1 个 FMC 才开放；Δt 为静态缓存，
+        // 进游戏/放置加载 FMC/AIC 时刷新一次，见 refreshSailSubsteps，不在 update() 里逐 tick 读配置）
+        sailToolsAvailable = physicsGate;
+
+        // 通用阻力工具门控（每 tick 判：机体上有 ≥1 个 FMC 才开放；d 为静态缓存，
+        // 进游戏/放置加载 FMC/AIC 时刷新一次，见 refreshUniversalDrag，不在 update() 里逐 tick 读数据包）
+        universalDragAvailable = physicsGate;
 
         // 姿态缓存（度；门控：机体上有 INS 才计算，与速度门控同一 tick 快照）
         double[] attitude = attitudeGate ? computeAttitudeDeg(sub) : null;
@@ -1071,6 +1111,196 @@ public class SensorSystemAPI implements ILuaAPI {
             atmosphereMaxY = atmosphereMinY + level.dimensionType().logicalHeight();
         } catch (Exception ignored) {
             // 读不到曲线时保留上次缓存（默认值兜底）
+        }
+    }
+
+    // ═══════════════ 风帆气动工具（门控：机体（含约束链）上有 ≥1 个 FMC；AIC 等同 FMC） ═══════════════
+    //
+    // mainThread=false：纯数学（公式 + 常量），直读 volatile 缓存，零主线程调度。
+    // 公式源 = Sable BlockSubLevelLiftProvider.sable$contributeLiftAndDrag()（每物理子步、每块帆）：
+    //   法向阻力   F_par = n·(n·v)·k1·P·Δt          → n·v = 0（速度 ⊥ 帆面法向、无法向速度）时为 0
+    //   无方向阻力 F_dir = v·k2·P·Δt                → 大小 |v|·k2·P·Δt
+    //   升力       F_lift = n·|v − F_par|·k3·P·Δt   → n·v = 0 时 = n·|v|·k3·P·Δt（该速度下取最大）
+    // 本工具固定 n·v = 0 条件（平飞时气流沿帆面、无 法向速度分量），故只返回升力 + 无方向阻力：
+    //   · Create 普通帆（SailBlockMixin 全默认）：k1 = 0.75、k2 = 0.06888202261、k3 = 0.475
+    //   · Simulated 对称帆（SymmetricSailBlock 覆写）：k1 = 1.75、k2 = 0.06888202261（未覆写）、k3 = 0
+    // 返回值同时给两种时间基准：
+    //   · force = k·P·|v|：每秒等效力（= 每子步冲量 × 20·substepsPerTick），与 substepsPerTick 配置无关，
+    //     与图纸「冲量×60」同量纲（牛顿级），用于设计配平/对比推力
+    //   · impulse = k·P·|v|·Δt：每物理子步冲量（Sable 实际计入线性冲量的值），与飞行记录器 CSV 力组列同刻度
+    // 单位约定：pressure = 大气压分数（海平面 = 1.0，与 getPressure() 同语义）；velocity = |v|（m/s，
+    // 与 getSpeed() 同单位，负数按绝对值处理）。
+
+    /** Create 普通帆（风帆）升力系数 k3：Sable {@code sable$getLiftScalar()} 默认值 0.475（SailBlockMixin 未覆写） */
+    private static final double SAIL_LIFT_SCALAR = 0.475;
+
+    /**
+     * 无方向阻力系数 k2：Sable {@code sable$getDirectionlessDragScalar()} 默认值
+     * {@code (-0.75 + sqrt(0.75^2 + 0.475^2)) / 2}（恰好压住升力发散的最小阻尼）；Create 普通帆与
+     * Simulated 对称帆均未覆写。
+     */
+    private static final double SAIL_DIRECTIONLESS_DRAG_SCALAR = 0.06888202261;
+
+    /**
+     * Create 普通帆（风帆，升力面）在 <b>n·v = 0</b>（气流速度与帆面法向垂直、无法向速度）条件下
+     * 每块帆受到的<b>升力</b>与<b>无方向阻力</b>（法向阻力在此条件下恒为 0）。
+     * <p>
+     * 公式（Sable {@code BlockSubLevelLiftProvider.sable$contributeLiftAndDrag}）：
+     * <ul>
+     * <li><b>lift</b>（每秒力）= {@code k3·P·|v|} = 0.475 × pressure × |velocity|；</li>
+     * <li><b>drag</b>（每秒力）= {@code k2·P·|v|} = 0.06888202261 × pressure × |velocity|；</li>
+     * <li><b>lift_impulse</b> / <b>drag_impulse</b> = 上两者 × Δt（每物理子步时长 = 1/20/substepsPerTick，
+     *     静态缓存 {@link #refreshSailSubsteps}；与飞行记录器 CSV 力组列同刻度）。</li>
+     * </ul>
+     * 单位约定：pressure = 大气压分数（海平面 = 1.0，与 {@link #getPressure()} 同语义）；
+     * velocity = 速度大小（m/s，与 {@link #getSpeed()} 同单位，负数按绝对值处理）。
+     * <p>
+     * <b>门控（存在性）</b>：与其余 FMC 工具相同——电脑必须在物理体上，且所在物理体（含约束链）上
+     * 有 ≥1 个飞行管理计算机（FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学计算，零主线程调度。
+     *
+     * @param pressure 气压 P（必须 &gt; 0）
+     * @param velocity 速度大小（m/s）
+     * @return {@code {lift=, drag=, lift_impulse=, drag_impulse=}}（每秒力 + 每子步冲量两种时间基准）；
+     * 门控不满足或参数非法返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getSailLiftAndDrag(double pressure, double velocity) {
+        if (!sailToolsAvailable) return null;
+        if (pressure <= 0) return null;
+        double v = Math.abs(velocity);
+        double liftForce = SAIL_LIFT_SCALAR * pressure * v;
+        double dragForce = SAIL_DIRECTIONLESS_DRAG_SCALAR * pressure * v;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("lift", liftForce);
+        m.put("drag", dragForce);
+        m.put("lift_impulse", liftForce * sailSubstepTime);
+        m.put("drag_impulse", dragForce * sailSubstepTime);
+        return m;
+    }
+
+    /**
+     * Simulated <b>对称帆</b>（纯阻力面）在 <b>n·v = 0</b>（气流速度与帆面法向垂直、无法向速度）
+     * 条件下每块帆受到的<b>阻力标量</b>（法向阻力在此条件下恒为 0，总阻力 = 无方向阻力）。
+     * <p>
+     * 公式（Sable {@code BlockSubLevelLiftProvider.sable$contributeLiftAndDrag}；
+     * SymmetricSailBlock 覆写 {@code sable$getLiftScalar()=0}、{@code sable$getParallelDragScalar()=1.75}，
+     * k2 未覆写）：
+     * <ul>
+     * <li><b>drag</b>（每秒力）= {@code k2·P·|v|} = 0.06888202261 × pressure × |velocity|；</li>
+     * <li><b>drag_impulse</b> = 上者 × Δt（每物理子步时长 = 1/20/substepsPerTick，
+     *     静态缓存 {@link #refreshSailSubsteps}；与飞行记录器 CSV 力组列同刻度）。</li>
+     * </ul>
+     * 单位约定与 {@link #getSailLiftAndDrag(double, double)} 相同。
+     * <p>
+     * <b>门控（存在性）</b>：与其余 FMC 工具相同——电脑必须在物理体上，且所在物理体（含约束链）上
+     * 有 ≥1 个飞行管理计算机（FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学计算，零主线程调度。
+     *
+     * @param pressure 气压 P（必须 &gt; 0）
+     * @param velocity 速度大小（m/s）
+     * @return {@code {drag=, drag_impulse=}}（每秒力 + 每子步冲量两种时间基准）；
+     * 门控不满足或参数非法返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getSymmetricSailDrag(double pressure, double velocity) {
+        if (!sailToolsAvailable) return null;
+        if (pressure <= 0) return null;
+        double v = Math.abs(velocity);
+        double dragForce = SAIL_DIRECTIONLESS_DRAG_SCALAR * pressure * v;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("drag", dragForce);
+        m.put("drag_impulse", dragForce * sailSubstepTime);
+        return m;
+    }
+
+    /**
+     * 刷新每物理子步时长静态缓存（Δt = 1/20/substepsPerTick）。
+     * <p>
+     * 调用时机：进游戏（服务器启动，{@code CCPeripheralExtender#onServerStarting}）与
+     * 放置/加载 FMC（{@code FmcBlockEntity#onLoad}）/ AIC（{@code AicBlockEntity#onLoad}）
+     * 时调用一次；不随每 tick 刷新。读取 Sable {@code SubLevelPhysicsSystem.get(level)}
+     * 的 {@code PhysicsConfigData.substepsPerTick}（可配置 1-10，默认 2）；读不到时保留上次缓存
+     * （默认 Δt = 0.025 s）。与 {@link #refreshPressureCurve(Level)} 同源策略。
+     */
+    public static void refreshSailSubsteps(Level level) {
+        if (level == null) return;
+        try {
+            SubLevelPhysicsSystem sys = SubLevelPhysicsSystem.get(level);
+            if (sys != null) {
+                int substeps = sys.getConfig().substepsPerTick;
+                if (substeps >= 1) sailSubstepTime = 1.0 / 20.0 / substeps;
+            }
+        } catch (Exception ignored) {
+            // 读不到时保留上次缓存（默认 Sable substepsPerTick=2 → Δt = 0.025）
+        }
+    }
+
+    // ═══════════════ 通用阻力工具（门控：机体（含约束链）上有 ≥1 个 FMC；AIC 等同 FMC） ═══════════════
+    //
+    // mainThread=false：纯数学，直读 volatile 缓存，零主线程调度。
+    // 通用阻力 = Rapier 给每个 sublevel 刚体的恒定速度阻尼（默认 d = 0.09，维度数据包
+    // dimension_physics 的 "universal_drag" 可覆盖），不经过力组（图纸/飞行记录器 CSV 看不到）。
+    // 每物理子步：v ← v/(1+d·Δt)；连续近似 dv/dt = −d·v → 等效力 F = −m·d·v（与质量、速度成正比，
+    // 不乘气压 P；方向恒与速度反向）。本工具返回其大小标量：
+    //   force = mass × d × |velocity|
+    // 单位约定：mass = kg（与 getPhysicsMass()/getPhysicsChainMass() 同单位）；velocity = |v|（m/s，
+    // 与 getSpeed() 同单位，负数按绝对值处理）。返回值即"每秒等效力"（m·d·v，牛顿级，可与推力读数
+    // 对比），连续近似已按秒归一，不涉及子步 Δt。
+
+    /**
+     * 通用阻力（universal drag，Rapier 速度阻尼）的<b>等效力标量</b>
+     * = {@code mass × d × |velocity|}。
+     * <p>
+     * 公式（见 .design_guide/aircraft.md「通用阻力」一节）：每个 sublevel 刚体每物理子步做
+     * {@code v ← v/(1+d·Δt)}，连续近似 {@code dv/dt = −d·v} → <b>等效力 F = −m·d·v</b>
+     * （与质量、速度成正比，<b>不乘气压 P</b>；方向恒与速度反向）。本方法返回其大小标量。
+     * <p>
+     * 其中 <b>d</b> = Sable 通用阻力系数，默认 0.09（{@code DimensionPhysics.DEFAULT_UNIVERSAL_DRAG}），
+     * 可被维度数据包 {@code dimension_physics} 的 {@code "universal_drag"} 字段覆盖；静态缓存
+     * {@link #refreshUniversalDrag}，进游戏与放置/加载 FMC/AIC 时刷新一次，读不到时保留默认 0.09。
+     * <p>
+     * 单位约定：mass = kg（与 {@link #getPhysicsMass()} / {@link #getPhysicsChainMass()} 同单位）；
+     * velocity = 速度大小（m/s，与 {@link #getSpeed()} 同单位，负数按绝对值处理）。
+     * 返回值是"每秒等效力"（牛顿级，可与推力读数对比），不涉及子步 Δt。
+     * <p>
+     * <b>门控（存在性）</b>：与其余 FMC 工具相同——电脑必须在物理体上，且所在物理体（含约束链）上
+     * 有 ≥1 个飞行管理计算机（FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学计算，零主线程调度。
+     *
+     * @param mass     质量（kg，必须 &gt; 0）
+     * @param velocity 速度大小（m/s）
+     * @return 通用阻力等效力标量 m·d·|v|；门控不满足或参数非法返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Double getUniversalDragForce(double mass, double velocity) {
+        if (!universalDragAvailable) return null;
+        if (mass <= 0) return null;
+        double v = Math.abs(velocity);
+        return mass * universalDragCoefficient * v;
+    }
+
+    /**
+     * 刷新 Rapier 通用阻力系数静态缓存（d，默认 0.09，维度数据包 {@code dimension_physics} 的
+     * {@code "universal_drag"} 字段可覆盖）。
+     * <p>
+     * 调用时机：进游戏（服务器启动，{@code CCPeripheralExtender#onServerStarting}）与
+     * 放置/加载 FMC（{@code FmcBlockEntity#onLoad}）/ AIC（{@code AicBlockEntity#onLoad}）
+     * 时调用一次；不随每 tick 刷新。读取 {@code DimensionPhysicsData.getUniversalDrag}
+     * （服务端维度物理，回退链与 {@link #refreshPressureCurve(Level)} 相同）；读不到时保留上次缓存
+     * （默认 0.09）。
+     */
+    public static void refreshUniversalDrag(Level level) {
+        if (level == null) return;
+        try {
+            if (level instanceof ServerLevel serverLevel) {
+                universalDragCoefficient = DimensionPhysicsData.getUniversalDrag(serverLevel);
+            }
+        } catch (Exception ignored) {
+            // 读不到时保留上次缓存（默认 0.09）
         }
     }
 

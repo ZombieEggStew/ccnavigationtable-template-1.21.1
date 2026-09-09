@@ -2,6 +2,21 @@ package com.zzy205.myfirstmod;
 
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+/**
+ * 配置文件（ccpe-common.toml / ccpe-client.toml）。
+ * <p>
+ * 各配置项的标题与说明在 NeoForge 配置界面（Mods → CC Peripheral Extender → Config）中
+ * 通过 lang 文件（assets/ccpe/lang/en_us.json / zh_cn.json）本地化：
+ * <ul>
+ * <li>标题 = {@code ccpe.configuration.<配置路径>}</li>
+ * <li>说明 = {@code ccpe.configuration.<配置路径>.tooltip}</li>
+ * </ul>
+ * 注意：NeoForge 21.1 的 {@link ModConfigSpec} <b>不要</b>对每个配置项调用 {@code .translation()}——
+ * 配置界面会把该值<b>原样</b>当作标题 key（不追加配置路径，所有条目同 key 会显示为原始前缀）；
+ * 不设置时界面回退到 {@code <modId>.configuration.<路径>}（= {@code ccpe.configuration.<路径>}，
+ * 与 lang key 一致，实测标题/说明均正常解析）。{@code .comment()} 文本仍写入 TOML，
+ * 作为 lang 缺失时的回退说明。
+ */
 public class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 

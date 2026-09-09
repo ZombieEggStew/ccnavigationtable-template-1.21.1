@@ -186,3 +186,111 @@ The snapshot is refreshed **once** — at server start (using the overworld) and
 
 !!! note "Cache freshness"
     After `dimension_physics` datapack changes (`/reload`), re-place/reload an FMC or AIC (or restart the world) to refresh the snapshot. The cache is global (one curve shared by all computers): with multiple bodies in different dimensions the last-loaded dimension's curve wins.
+
+## Sail aero tools
+
+Also FMC-gated (and therefore also available with an AIC), the sensor system provides two pure-math utilities that compute the **lift** and **directionless drag** a sail block produces under the game's aero model for a given air pressure and speed — handy for sizing wings/tails and for design math (trim, cruise-speed estimates) without needing live flight data.
+
+The formulas mirror Sable's `BlockSubLevelLiftProvider.sable$contributeLiftAndDrag()` (evaluated once per physics substep, per sail block). Both tools assume **n·v = 0** — the airflow is perpendicular to the sail normal, i.e. **no normal velocity component** (level flight). Under this condition the normal (parallel) drag is zero, so the outputs reduce to lift + directionless drag only:
+
+| Method | Returns | Description |
+|---|---|---|
+| `getSailLiftAndDrag(P, V)` | table / nil | Regular sail (Create `SailBlock`): `{lift, drag, lift_impulse, drag_impulse}` |
+| `getSymmetricSailDrag(P, V)` | table / nil | Symmetric sail (Simulated `SymmetricSailBlock`): `{drag, drag_impulse}` |
+
+Arguments and conventions:
+
+- **`P`** — air pressure (fraction of sea level, sea level = 1.0, same semantics as `getPressure()`); `P ≤ 0` → `nil`.
+- **`V`** — speed magnitude (m/s, same units as `getSpeed()`); negative values are taken as `|V|`.
+- Gated exactly like the other FMC tools (the body — including constraint chains — must have ≥ 1 FMC, AIC counting as FMC; the computer must be on a body), otherwise `nil`. Pure math (`mainThread = false`), zero main-thread scheduling.
+
+### Returned values
+
+Each field comes in **two time bases**:
+
+| Field | Meaning |
+|---|---|
+| `lift` / `drag` | **Per-second equivalent force** = `k·P·|V|` — substep-independent, same scale as the in-game diagram (impulse × 60), comparable to thrust readings |
+| `lift_impulse` / `drag_impulse` | **Per-physics-substep impulse** = `k·P·|V|·Δt` — the raw value Sable actually adds to the linear impulse; same scale as the flight-data recorder's CSV force-group columns |
+
+### Formulas
+
+Regular sail (Create `SailBlock`, all Sable defaults):
+
+```
+lift = k3 × P × |V| = 0.475 × P × |V|
+drag = k2 × P × |V| = 0.06888202261 × P × |V|
+```
+
+Symmetric sail (Simulated `SymmetricSailBlock`: `k3 = 0`, `k1 = 1.75`; `k2` not overridden):
+
+```
+drag = k2 × P × |V| = 0.06888202261 × P × |V|
+```
+
+The two sails share **k2 = 0.06888202261** (Sable's default, `(−0.75 + √(0.75² + 0.475²)) / 2` — exactly the minimum damping that keeps the default lift from diverging). The normal-drag coefficient **k1** (0.75 regular / 1.75 symmetric) never appears here because it multiplies `(n·v)`, which is 0 by the tool's condition. With n·v = 0 the lift also takes its **maximum** for the given speed (`|V − parallel drag| = |V|`); any incidence/yaw component would only reduce it.
+
+The impulse variants multiply by **Δt = 1/20/substepsPerTick** (Sable `PhysicsConfigData.substepsPerTick`, configurable 1–10, default 2 → Δt = 0.025 s). The per-second `lift`/`drag` are independent of that config.
+
+### What is cached
+
+The coefficients (k2, k3) are hard-coded constants in the mod. The substep time **Δt** is cached once — at server start and whenever an FMC or AIC is placed/loaded (`onLoad`), exactly like the atmosphere-curve snapshot; if it cannot be read, the Sable default (2 substeps/tick → Δt = 0.025 s) is kept. The gate is still checked every tick.
+
+### Example
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+-- Regular sail (wing): lift + directionless drag at P = 0.47, 60 m/s
+local sail = ss.getSailLiftAndDrag(0.47, 60)
+print("lift (N):     ", sail.lift)          -- 0.475 × P × V  (per-second force)
+print("drag (N):     ", sail.drag)          -- 0.06888202261 × P × V
+print("lift impulse: ", sail.lift_impulse)  -- per physics substep (CSV scale)
+print("drag impulse: ", sail.drag_impulse)  -- per physics substep (CSV scale)
+
+-- Symmetric sail (tail / rudder): pure drag
+local sym = ss.getSymmetricSailDrag(0.47, 60)
+print("sym drag (N): ", sym.drag)
+print("sym impulse:  ", sym.drag_impulse)
+```
+
+> Feed `getPressure()` as `P` and `getSpeed()` (or `getAverageSpeed()`) as `V` to evaluate the sails at the current flight state; multiply by the number of sail blocks to size a whole wing/tail.
+
+## Universal drag tool
+
+Also FMC-gated (and therefore also available with an AIC), the sensor system provides a pure-math utility that computes the **equivalent force of the universal (speed) drag** — the constant velocity damping Rapier applies to every sublevel rigid body. It is not part of any force group, so the Contraption Diagram and the flight-data-recorder CSV never show it; this tool makes it computable for design math (net-force balance: thrust − sail drag − universal drag ≈ 0).
+
+The formula mirrors the continuous approximation of the per-substep damping `v ← v/(1+d·Δt)`:
+
+```
+dv/dt = −d·v  →  equivalent force F = −m·d·v   (magnitude = m × d × |V|)
+```
+
+| Method | Returns | Description |
+|---|---|---|
+| `getUniversalDragForce(m, V)` | number / nil | Equivalent universal-drag force scalar = `m × d × |V|` |
+
+Arguments and conventions:
+
+- **`m`** — mass (kg, same units as `getPhysicsMass()` / `getPhysicsChainMass()`); `m ≤ 0` → `nil`.
+- **`V`** — speed magnitude (m/s, same units as `getSpeed()`); negative values are taken as `|V|`.
+- **`d`** — the universal-drag coefficient, **default 0.09** (Sable `DimensionPhysics.DEFAULT_UNIVERSAL_DRAG`), overridable per dimension via the `dimension_physics` datapack's `"universal_drag"` field.
+- Gated exactly like the other FMC tools (the body — including constraint chains — must have ≥ 1 FMC, AIC counting as FMC; the computer must be on a body), otherwise `nil`. Pure math (`mainThread = false`), zero main-thread scheduling.
+
+Unlike the sail tools the result is a single per-second force (the continuous approximation is already time-normalized, no substep Δt involved) — it does **not** scale with air pressure, only with mass and speed.
+
+### What is cached
+
+The coefficient **`d`** is cached once — at server start and whenever an FMC or AIC is placed/loaded (`onLoad`), exactly like the atmosphere-curve snapshot; if it cannot be read, the Sable default (0.09) is kept. The gate is still checked every tick.
+
+### Example
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+-- Equivalent universal drag at the current mass and speed (d = 0.09 by default)
+local drag = ss.getUniversalDragForce(ss.getPhysicsChainMass(), 60)
+print("universal drag (N):", drag)   -- m × 0.09 × V
+```
+
+> Combine with `getPhysicsMass()`/`getPhysicsChainMass()` for mass and `getSpeed()` (or `|v|`) for speed to close the force balance: `thrust − sail drag − universal drag ≈ 0` in steady cruise. Sanity check with recorded values (e.g. m ≈ 45.25 kg, v ≈ 62.6 m/s → F ≈ 255 N).

@@ -13,7 +13,7 @@
 | [静压孔](static-port.zh.md) | `ccpe:static_port` | 静压孔自身位置的气压与高度 | ≥ 1 个静压孔 |
 | [皮托管](pitot-tube.zh.md) | `ccpe:pitot_tube` | 沿管口轴线的**带符号**地速与空速 | ≥ 1 个皮托管 **且** ≥ 1 个静压孔（皮托静压门控） |
 | [惯性导航系统](ins.zh.md) | `ccpe:ins` | 姿态（俯仰/滚转/偏航）、位置、姿态四元数、角速度 | ≥ 1 个 INS |
-| [飞行管理计算机](fmc.zh.md) | `ccpe:fmc` | 质量、重力、重心、附着方块的 Create 应力网络、螺旋桨转速求解器 | ≥ 1 个 FMC |
+| [飞行管理计算机](fmc.zh.md) | `ccpe:fmc` | 质量、重力、重心、附着方块的 Create 应力网络、螺旋桨转速求解器、高度-气压换算、风帆气动与通用阻力工具 | ≥ 1 个 FMC |
 | [航空集成计算机](aic.zh.md) | `ccpe:aic` | 同时充当 **INS 与 FMC** | — |
 | [短程信号链接器](short-range-linker.zh.md) | `ccpe:short_range_linker` | 物理体作用域外设频道 + 红石输入/输出 | 处于物理体上 |
 | [航行灯](position-light.zh.md) | `ccpe:red_position_light` / `ccpe:green_position_light` / `ccpe:white_position_light` | 照明输出——不测量，可由 Lua 开关 | ≥ 1 个 FMC |
@@ -47,7 +47,7 @@ local ss = require("ccpe.sensor_system")
 - **静压孔** — `getAltitude()`、`getPressure()`、`getAverageAltitude()`、`getAveragePressure()`、`getWeightedAltitude()`、`getWeightedPressure()`
 - **皮托管** — `getSpeed()`、`getAirSpeed()`、`getAverageSpeed()`、`getAverageAirSpeed()`
 - **INS** — `getAngles()`、`getPosition()`、`getBodyPosition()`、`getOrientation()`、`getAngularVelocity()`
-- **FMC** — `getPhysicsCenterOfMassRel()`、`getPhysicsMass()`、`getPhysicsChainMass()`、`getPhysicsGravityForce()`、`getPhysicsChainGravityForce()`、`getPhysicsChainCenterOfMassRel()`、`getStressRemaining()`、`getStressCapacity()`、`initPropeller(N, S)`、`getPropellerRPM(F, P, V, θ?)`
+- **FMC** — `getPhysicsCenterOfMassRel()`、`getPhysicsMass()`、`getPhysicsChainMass()`、`getPhysicsGravityForce()`、`getPhysicsChainGravityForce()`、`getPhysicsChainCenterOfMassRel()`、`getStressRemaining()`、`getStressCapacity()`、`initPropeller(N, S)`、`getPropellerRPM(F, P, V, θ?)`、`getPressureFromAltitude(Y)`、`getAltitudeFromPressure(P)`、`getSailLiftAndDrag(P, V)`、`getSymmetricSailDrag(P, V)`、`getUniversalDragForce(m, V)`
 - **短程信号链接器** — `getPeripheral(channel)`、`getRedstoneOutput(channel)`、`getRedstoneInput(channel)`、`setRedstoneOutput(channel, signal)`
 - **航行灯** — `setLights(color, on)`、`setAllLights(on)`
 
@@ -87,7 +87,7 @@ end
 - [静压孔](static-port.zh.md) — 气压与高度
 - [皮托管](pitot-tube.zh.md) — 速度与空速（皮托静压门控）
 - [惯性导航系统](ins.zh.md) — 姿态与运动
-- [飞行管理计算机](fmc.zh.md) — 物理数据、应力与螺旋桨求解器
+- [飞行管理计算机](fmc.zh.md) — 物理数据、应力、螺旋桨求解器与气动工具
 - [航空集成计算机](aic.zh.md) — 一个方块同时充当 INS 与 FMC
 - [短程信号链接器](short-range-linker.zh.md) — 物理体作用域频道与红石输入/输出
 - [航行灯](position-light.zh.md) — 三色航行灯，Lua 控制

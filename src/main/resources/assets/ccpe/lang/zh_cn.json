@@ -174,7 +174,42 @@
   "ccpe.configuration.sensorMaxForceLoad.tooltip": "允许同时强制加载区块的传感器最大数量。设为 0 表示无限制。",
 
   "ccpe.configuration.sensorPortalTicketRadius": "物理体门票半径",
-  "ccpe.configuration.sensorPortalTicketRadius.tooltip": "Sable 物理结构上传感器使用的 PORTAL ticket 半径（单位：区块）。每个传感器加载 (2×R+1)² 个区块。默认：3（7×7区块）。"
+  "ccpe.configuration.sensorPortalTicketRadius.tooltip": "Sable 物理结构上传感器使用的 PORTAL ticket 半径（单位：区块）。每个传感器加载 (2×R+1)² 个区块。默认：3（7×7区块）。",
 
+  "ccpe.configuration.servoStressImpact": "变速箱模式应力系数",
+  "ccpe.configuration.servoStressImpact.tooltip": "传动外设在变速箱模式下的应力系数。实际应力 = 系数 × |输出转速 − 输入转速|。",
+
+  "ccpe.configuration.servoModeStressImpact": "舵机模式应力系数",
+  "ccpe.configuration.servoModeStressImpact.tooltip": "传动外设在舵机模式下的应力系数。实际应力 = 系数 × |实际输出转速|（输出转速可能被 setServoSpeed 覆盖/加速）。",
+
+  "ccpe.configuration.flightDataRecorderEnabled": "飞行数据记录器",
+  "ccpe.configuration.flightDataRecorderEnabled.tooltip": "（调试）为每个注册了 FMC 的机体按 tick 记录数据到 <gameDir>/flight_logs/*.csv。仅在机体（含约束链）上有 FMC/AIC 时工作。默认关闭；仅在需要录制飞行时开启。",
+
+  "ccpe.configuration.flightDataRecorderIntervalTicks": "记录器采样间隔",
+  "ccpe.configuration.flightDataRecorderIntervalTicks.tooltip": "飞行数据记录器的采样间隔（tick，1 = 每 tick 采样一次 / 20 Hz）。",
+
+  "ccpe.configuration.monitorOutlineR": "监视器边框颜色 - 红",
+  "ccpe.configuration.monitorOutlineR.tooltip": "监视器模块边框颜色 - 红（0-255）。默认：90",
+
+  "ccpe.configuration.monitorOutlineG": "监视器边框颜色 - 绿",
+  "ccpe.configuration.monitorOutlineG.tooltip": "监视器模块边框颜色 - 绿（0-255）。默认：143",
+
+  "ccpe.configuration.monitorOutlineB": "监视器边框颜色 - 蓝",
+  "ccpe.configuration.monitorOutlineB.tooltip": "监视器模块边框颜色 - 蓝（0-255）。默认：60",
+
+  "ccpe.configuration.monitorOutlineA": "监视器边框颜色 - 透明度",
+  "ccpe.configuration.monitorOutlineA.tooltip": "监视器模块边框颜色 - 透明度（0-255）。默认：255",
+
+  "ccpe.configuration.monitorGridLineWidth": "监视器网格线粗细",
+  "ccpe.configuration.monitorGridLineWidth.tooltip": "监视器棋盘网格线的粗细倍率（0.0-2.0）。默认：1.0",
+
+  "ccpe.configuration.monitorOutlineLineWidth": "监视器边框线条粗细",
+  "ccpe.configuration.monitorOutlineLineWidth.tooltip": "监视器模块边框/预览框线条粗细倍率（0.0-2.0）。默认：1.0",
+
+  "ccpe.configuration.joystickOverlayEnabled": "虚拟摇杆 HUD",
+  "ccpe.configuration.joystickOverlayEnabled.tooltip": "坐垫操作模式下显示虚拟摇杆 HUD（默认关闭，避免破坏沉浸感；需要时在客户端配置中开启）。",
+
+  "ccpe.configuration.section.ccpe.client.toml": "CC 外设扩展 设置（客户端）",
+  "ccpe.configuration.section.ccpe.client.toml.title": "CC 外设扩展 设置（客户端）"
 
 }

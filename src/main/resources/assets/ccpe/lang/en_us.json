@@ -172,6 +172,42 @@
   "ccpe.configuration.sensorMaxForceLoad.tooltip": "Maximum number of sensors that can force-load chunks simultaneously. 0 = unlimited.",
 
   "ccpe.configuration.sensorPortalTicketRadius": "Physics Ticket Radius",
-  "ccpe.configuration.sensorPortalTicketRadius.tooltip": "PORTAL ticket radius in chunks for sensors on Sable physics structures. Each sensor loads (2×R+1)² chunks. Default: 3 (7×7 chunks)."
+  "ccpe.configuration.sensorPortalTicketRadius.tooltip": "PORTAL ticket radius in chunks for sensors on Sable physics structures. Each sensor loads (2×R+1)² chunks. Default: 3 (7×7 chunks).",
+
+  "ccpe.configuration.servoStressImpact": "Transmission Mode Stress Coefficient",
+  "ccpe.configuration.servoStressImpact.tooltip": "Stress coefficient for the Transmission Peripheral in transmission mode. Actual stress = value × |output RPM − input RPM|.",
+
+  "ccpe.configuration.servoModeStressImpact": "Servo Mode Stress Coefficient",
+  "ccpe.configuration.servoModeStressImpact.tooltip": "Stress coefficient for the Transmission Peripheral in servo mode. Actual stress = value × |real output RPM| (the output speed may be overridden/accelerated by setServoSpeed).",
+
+  "ccpe.configuration.flightDataRecorderEnabled": "Flight Data Recorder",
+  "ccpe.configuration.flightDataRecorderEnabled.tooltip": "Log per-tick body data for every FMC-registered aircraft into <gameDir>/flight_logs/*.csv (debug tool). Only active while at least one FMC/AIC is on a Sable physics body. Default OFF; enable only when you need to record a flight.",
+
+  "ccpe.configuration.flightDataRecorderIntervalTicks": "Recorder Sampling Interval",
+  "ccpe.configuration.flightDataRecorderIntervalTicks.tooltip": "Flight data recorder sampling interval in ticks (1 = every tick / 20 Hz).",
+
+  "ccpe.configuration.monitorOutlineR": "Monitor Outline Color - Red",
+  "ccpe.configuration.monitorOutlineR.tooltip": "Monitor module outline color - Red (0-255). Default: 90",
+
+  "ccpe.configuration.monitorOutlineG": "Monitor Outline Color - Green",
+  "ccpe.configuration.monitorOutlineG.tooltip": "Monitor module outline color - Green (0-255). Default: 143",
+
+  "ccpe.configuration.monitorOutlineB": "Monitor Outline Color - Blue",
+  "ccpe.configuration.monitorOutlineB.tooltip": "Monitor module outline color - Blue (0-255). Default: 60",
+
+  "ccpe.configuration.monitorOutlineA": "Monitor Outline Color - Alpha",
+  "ccpe.configuration.monitorOutlineA.tooltip": "Monitor module outline color - Alpha / opacity (0-255). Default: 255",
+
+  "ccpe.configuration.monitorGridLineWidth": "Monitor Grid Line Width",
+  "ccpe.configuration.monitorGridLineWidth.tooltip": "Monitor checkerboard grid line thickness multiplier (0.0-2.0). Default: 1.0",
+
+  "ccpe.configuration.monitorOutlineLineWidth": "Monitor Outline Line Width",
+  "ccpe.configuration.monitorOutlineLineWidth.tooltip": "Monitor module outline / preview box line thickness multiplier (0.0-2.0). Default: 1.0",
+
+  "ccpe.configuration.joystickOverlayEnabled": "Joystick HUD Overlay",
+  "ccpe.configuration.joystickOverlayEnabled.tooltip": "Show the virtual joystick HUD while operating from a seat (default off to keep immersion; enable in client config when needed).",
+
+  "ccpe.configuration.section.ccpe.client.toml": "CC Peripheral Extender Config (Client)",
+  "ccpe.configuration.section.ccpe.client.toml.title": "CC Peripheral Extender Config (Client)"
 
 }

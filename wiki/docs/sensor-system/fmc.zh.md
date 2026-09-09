@@ -187,3 +187,111 @@ getAltitudeFromPressure(P) = 在 [维度 minY, minY+logicalHeight] 上二分  �
 
 !!! note "缓存时效"
     改了 `dimension_physics` 数据包（`/reload`）后，需重新放置/加载一次 FMC 或 AIC（或重进世界）才会刷新快照。缓存是全局的（所有电脑共用一份曲线）：多个机体在不同维度时，取最后加载的那个维度的曲线。
+
+## 风帆气动工具
+
+同为 FMC 门控（因此装 AIC 也满足），传感器系统提供两个纯数学工具：给定气压与速度，按游戏气动模型计算每块帆产生的**升力**与**无方向阻力**——适合做机翼/尾翼选型与设计计算（配平、巡航速度估算），无需实时飞行数据。
+
+公式镜像 Sable 的 `BlockSubLevelLiftProvider.sable$contributeLiftAndDrag()`（每个物理子步、每块帆计算一次）。两个工具都固定 **n·v = 0** 条件——气流速度与帆面法向垂直，即**无法向速度分量**（平飞）。该条件下法向阻力恒为 0，输出只剩升力 + 无方向阻力：
+
+| 方法 | 返回 | 说明 |
+|---|---|---|
+| `getSailLiftAndDrag(P, V)` | table / nil | Create 普通帆（`SailBlock`）：`{lift, drag, lift_impulse, drag_impulse}` |
+| `getSymmetricSailDrag(P, V)` | table / nil | Simulated 对称帆（`SymmetricSailBlock`）：`{drag, drag_impulse}` |
+
+参数与约定：
+
+- **`P`** — 气压（大气压分数，海平面 = 1.0，与 `getPressure()` 同语义）；`P ≤ 0` → `nil`。
+- **`V`** — 速度大小（m/s，与 `getSpeed()` 同单位）；负数按绝对值 `|V|` 处理。
+- 门控与其余 FMC 工具相同（机体含约束链上必须有 ≥1 个 FMC，AIC 等同 FMC；电脑必须在物理体上），否则返回 `nil`。纯数学（`mainThread = false`），零主线程调度。
+
+### 返回值
+
+每个字段都给出**两种时间基准**：
+
+| 字段 | 含义 |
+|---|---|
+| `lift` / `drag` | **每秒等效力** = `k·P·|V|`——与 substepsPerTick 配置无关，与游戏内图纸（冲量×60）同量纲，可与推力读数对比 |
+| `lift_impulse` / `drag_impulse` | **每物理子步冲量** = `k·P·|V|·Δt`——Sable 实际计入线性冲量的原始值，与飞行记录器 CSV 力组列同刻度 |
+
+### 计算公式
+
+Create 普通帆（`SailBlock`，全默认参数）：
+
+```
+lift = k3 × P × |V| = 0.475 × P × |V|
+drag = k2 × P × |V| = 0.06888202261 × P × |V|
+```
+
+Simulated 对称帆（`SymmetricSailBlock`：`k3 = 0`、`k1 = 1.75`；`k2` 未覆写）：
+
+```
+drag = k2 × P × |V| = 0.06888202261 × P × |V|
+```
+
+两种帆共用 **k2 = 0.06888202261**（Sable 默认值，`(−0.75 + √(0.75² + 0.475²)) / 2`——恰好压住默认升力发散的最小阻尼）。法向阻力系数 **k1**（普通帆 0.75 / 对称帆 1.75）在本工具中不出现：它乘的是 `(n·v)`，而该工具条件 n·v = 0。n·v = 0 时升力也取该速度下的**最大值**（`|V − 法向阻力| = |V|`）；任何迎角/偏航分量都只会让它变小。
+
+冲量变体乘 **Δt = 1/20/substepsPerTick**（Sable `PhysicsConfigData.substepsPerTick`，可配置 1-10，默认 2 → Δt = 0.025 s）；每秒力 `lift`/`drag` 与该配置无关。
+
+### 缓存了什么
+
+系数（k2、k3）是写在 mod 里的常量。子步时长 **Δt** 在**进游戏（服务器启动）**与**放置/加载 FMC 或 AIC（`onLoad`）时缓存一次**，与大气曲线快照同款策略；读不到时保留 Sable 默认（2 子步/tick → Δt = 0.025 s）。门控仍每 tick 判定。
+
+### 示例
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+-- 普通帆（机翼）：P = 0.47、60 m/s 时的升力 + 无方向阻力
+local sail = ss.getSailLiftAndDrag(0.47, 60)
+print("lift (N):     ", sail.lift)          -- 0.475 × P × V  （每秒力）
+print("drag (N):     ", sail.drag)          -- 0.06888202261 × P × V
+print("lift impulse: ", sail.lift_impulse)  -- 每物理子步（CSV 刻度）
+print("drag impulse: ", sail.drag_impulse)  -- 每物理子步（CSV 刻度）
+
+-- 对称帆（尾翼/方向舵）：纯阻力
+local sym = ss.getSymmetricSailDrag(0.47, 60)
+print("sym drag (N): ", sym.drag)
+print("sym impulse:  ", sym.drag_impulse)
+```
+
+> `P` 可代入 `getPressure()`（静压孔读数）、`V` 代入 `getSpeed()`（或 `getAverageSpeed()`）来评估当前飞行状态下的帆；估算整片机翼/尾翼时乘以帆的数量即可。
+
+## 通用阻力工具
+
+同为 FMC 门控（因此装 AIC 也满足），传感器系统提供一个纯数学工具：计算**通用阻力（速度阻尼）的等效力**——Rapier 对每个 sublevel 刚体施加的恒定速度阻尼。它不经过任何力组，图纸与飞行记录器 CSV 都看不到它；本工具让它在设计计算中可用（净力平衡：推力 − 帆阻力 − 通用阻力 ≈ 0）。
+
+公式对应每子步阻尼 `v ← v/(1+d·Δt)` 的连续近似：
+
+```
+dv/dt = −d·v  →  等效力 F = −m·d·v   （大小 = m × d × |V|）
+```
+
+| 方法 | 返回 | 说明 |
+|---|---|---|
+| `getUniversalDragForce(m, V)` | number / nil | 通用阻力等效力标量 = `m × d × |V|` |
+
+参数与约定：
+
+- **`m`** — 质量（kg，与 `getPhysicsMass()`/`getPhysicsChainMass()` 同单位）；`m ≤ 0` → `nil`。
+- **`V`** — 速度大小（m/s，与 `getSpeed()` 同单位）；负数按绝对值 `|V|` 处理。
+- **`d`** — 通用阻力系数，**默认 0.09**（Sable `DimensionPhysics.DEFAULT_UNIVERSAL_DRAG`），可被维度数据包 `dimension_physics` 的 `"universal_drag"` 字段覆盖。
+- 门控与其余 FMC 工具相同（机体含约束链上必须有 ≥1 个 FMC，AIC 等同 FMC；电脑必须在物理体上），否则返回 `nil`。纯数学（`mainThread = false`），零主线程调度。
+
+与帆工具不同，返回值是单个"每秒力"（连续近似已按秒归一，不涉及子步 Δt）——它**不随气压缩放**，只与质量、速度成正比。
+
+### 缓存了什么
+
+系数 **`d`** 在**进游戏（服务器启动）**与**放置/加载 FMC 或 AIC（`onLoad`）时缓存一次**，与大气曲线快照同款策略；读不到时保留 Sable 默认（0.09）。门控仍每 tick 判定。
+
+### 示例
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+-- 当前质量与速度下的通用阻力等效力（d 默认 0.09）
+local drag = ss.getUniversalDragForce(ss.getPhysicsChainMass(), 60)
+print("通用阻力 (N):", drag)   -- m × 0.09 × V
+```
+
+> `m` 代入 `getPhysicsMass()`/`getPhysicsChainMass()`、`V` 代入 `getSpeed()`（或 `|v|`）即可闭合全机力平衡：巡航时 `推力 − 帆阻力 − 通用阻力 ≈ 0`。可用记录值复核（如 m ≈ 45.25 kg、v ≈ 62.6 m/s → F ≈ 255 N）。
