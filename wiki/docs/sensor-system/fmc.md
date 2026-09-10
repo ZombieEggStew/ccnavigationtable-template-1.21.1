@@ -342,6 +342,8 @@ print("universal drag (N):", drag)   -- m × 0.09 × V
 
 ## Max altitude solver
 
+> This tool is only applicable to the simple aerodynamic model shown in the figure below: the thrust line passes through the center of gravity, the lift center and the weight line are aligned vertically, and the drag line basically passes through the center of gravity.![Diagram force arrows](../img/diagram.png)
+
 Also FMC-gated (and therefore also available with an AIC), this pure-math solver inverts the cruise equations: given the aircraft's mass, sail counts and propeller setup, it finds the **highest steady-state altitude** reachable at a given maximum RPM, plus the airspeed needed there.
 
 It solves the two steady-cruise equations (level flight, airflow perpendicular to the sail normal so normal drag is zero) for the unknowns `(v, P)`:
@@ -354,7 +356,7 @@ It solves the two steady-cruise equations (level flight, airflow perpendicular t
 
 | Method | Returns | Description |
 |---|---|---|
-| `getMaxAltitude(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)` | table / nil | `{velocity=..., altitude=...}` — steady cruise state at `maxRpm` |
+| `solveMaxCruise(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)` | table / nil | `{velocity=..., altitude=...}` — steady cruise state at `maxRpm` |
 
 Substituting `v = x/P` turns equation (2) into a **quadratic in `P`** — no matrices needed (the system is bilinear in `(v, P)` and collapses to one quadratic):
 
@@ -376,8 +378,16 @@ P* = (−b + √(b²−4ac))/(2a),  v* = x/P*,  altitude = inverse atmosphere cu
 ```lua
 local ss = require("ccpe.sensor_system")
 
+
+
 -- Highest steady cruise at max RPM for a given build
-local cruise = ss.getMaxAltitude(45.25, 43, 2, 2, 4, 256)
+-- Mass 45.25 kg 
+-- 32 wing sails 
+-- 20 symmetric sails 
+-- 1 propeller 
+-- 30 power blocks per propeller 
+-- max RPM 256
+local cruise = ss.solveMaxCruise(45.25, 32, 20, 1, 30, 256)
 print("cruise speed (m/s):", cruise.velocity)
 print("max altitude (Y):  ", cruise.altitude)
 ```

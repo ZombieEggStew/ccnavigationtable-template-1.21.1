@@ -126,7 +126,7 @@ Create 螺旋桨轴承（Propeller Bearing）的桨盘上装动力方块（风�
 
 - 参数来源：Propeller Bearing Thrust **T**（默认 0.2）、Propeller Bearing Airflow **A**（默认 0.05）；推力 ∝ airflow scaling × air pressure（`BlockEntityPropeller`）
 - 配置缓存：进游戏（服务器启动）与放置/加载 FMC/AIC 时刷新一次（`SensorSystemAPI.refreshAeroConfig`，不逐 tick 读）
-- 相关工具：`getPropellerRPM(F, P, V, θ?)`（本模型的转速反解）、`getMaxAltitude(...)`（见下节）
+- 相关工具：`getPropellerRPM(F, P, V, θ?)`（本模型的转速反解）、`solveMaxCruise(...)`（见下节）
 
 **N** 个螺旋桨、每个桨盘 **S** 个动力方块、转速 **R** 时的总推力模型：
 
@@ -155,7 +155,7 @@ R = F / (P · S^1.5 · N · T) + v·sinθ / (S^0.5 · A)
 
 ---
 
-# 巡航方程组与最高稳态高度（getMaxAltitude）
+# 巡航方程组与最高稳态高度（solveMaxCruise）
 
 把三类力合起来，平飞稳态巡航（θ=90、气流与帆面法向垂直故法向阻力=0）有两个方程、两个未知量 (v, P)：
 
@@ -180,7 +180,7 @@ R = F / (P · S^1.5 · N · T) + v·sinθ / (S^0.5 · A)
 
 - c<0 恒定 ⇒ 判别式恒正、**恰一正根**；根处推力=阻力>0 ⇒ 气流削减系数自动为正
 - 高度反解：P(h) 是分段 Hermite、不可解析求逆 → 数值二分（与 `getAltitudeFromPressure` 同款）
-- 对应工具：`getMaxAltitude(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)` → `{velocity, altitude}`（FMC 门控，纯数学）
+- 对应工具：`solveMaxCruise(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)` → `{velocity, altitude}`（FMC 门控，纯数学）
 
 **互补视角（正向链更简单）**：给定高度求所需转速是**显式公式**：
 

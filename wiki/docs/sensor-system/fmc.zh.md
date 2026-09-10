@@ -342,6 +342,8 @@ print("通用阻力 (N):", drag)   -- m × 0.09 × V
 > `m` 代入 `getPhysicsMass()`/`getPhysicsChainMass()`、`V` 代入 `getSpeed()`（或 `|v|`）即可闭合全机力平衡：巡航时 `推力 − 帆阻力 − 通用阻力 ≈ 0`。可用记录值复核（如 m ≈ 45.25 kg、v ≈ 62.6 m/s → F ≈ 255 N）。
 
 ## 最高巡航高度求解工具
+> 此工具仅适用于如下图的简单气动模型：推力线过重心，升力中心与重力线在垂直方向上对齐，阻力线基本过重心![图纸力箭头](../img/diagram.png)
+
 
 同为 FMC 门控（因此装 AIC 也满足），这个纯数学求解器反解巡航方程组：给定飞机质量、帆数与螺旋桨配置，求在给定**最大转速**下能达到的**最高稳态高度**与所需空速。
 
@@ -355,7 +357,7 @@ print("通用阻力 (N):", drag)   -- m × 0.09 × V
 
 | 方法 | 返回 | 说明 |
 |---|---|---|
-| `getMaxAltitude(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)` | table / nil | `{velocity=..., altitude=...}`——`maxRpm` 下的稳态巡航状态 |
+| `solveMaxCruise(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)` | table / nil | `{velocity=..., altitude=...}`——`maxRpm` 下的稳态巡航状态 |
 
 代入 `v = x/P` 后方程 (2) 化为关于 **P 的一元二次**——无需矩阵（方程组对 `(v, P)` 双线性，消元后恰为一元二次）：
 
@@ -378,9 +380,15 @@ P* = (−b + √(b²−4ac))/(2a)，v* = x/P*，高度 = 气压曲线反解(P*)�
 local ss = require("ccpe.sensor_system")
 
 -- 给定装配在最大转速下的最高稳态巡航
-local cruise = ss.getMaxAltitude(45.25, 43, 2, 2, 4, 256)
-print("巡航空速 (m/s):", cruise.velocity)
-print("最高高度 (Y):  ", cruise.altitude)
+-- 质量 45.25
+-- 升力帆数 32
+-- 对称帆数 20
+-- 螺旋桨数 1
+-- 每个螺旋桨上的动力方块数 30
+-- 最大转速 256
+local cruise = ss.solveMaxCruise(45.25, 32, 20, 1, 30, 256)
+print("cruise speed (m/s):", cruise.velocity)
+print("max altitude (Y):  ", cruise.altitude)
 ```
 
 > `m` 用 `getPhysicsChainMass()`、帆数/桨数用你装配的真实方块数、转速上限用 256；结果与飞行记录器数据对照验证。

@@ -91,7 +91,7 @@ import java.util.UUID;
  * local v = ss.solveSailLift(0.47, nil, 13.3) -- 传 P、L 求 V = L/(0.475·P)（m/s；门控同上）
  * local drag = ss.solveSailDirectionlessDrag(0.47, 60, nil) -- 阻力方程 D = 0.06888202261·P·|V|（普通帆/对称帆通用；每秒力；门控同上）
  * local udrag = ss.getUniversalDragForce(45.25, 60) -- 通用阻力等效力标量 = m × d × |v|（d 默认 0.09，维度数据包可覆盖；门控同上）
- * local cruise = ss.getMaxAltitude(45.25, 43, 4, 2, 4, 256) -- 最高稳态巡航：{velocity=..., altitude=...}（升力=重力、推力=阻力 二元方程组的唯一稳态解；门控同上）
+ * local cruise = ss.solveMaxCruise(45.25, 43, 4, 2, 4, 256) -- 最高稳态巡航：{velocity=..., altitude=...}（升力=重力、推力=阻力 二元方程组的唯一稳态解；门控同上）
  * print(ss.getSpeed())            -- 最后放置的皮托管沿管口朝向的对地速度（m/s，便捷方法）
  * print(ss.getAirSpeed())         -- 最后放置的皮托管沿管口朝向的空速（m/s，便捷方法）
  * print(ss.getAngles())           -- {pitch=, roll=, yaw=}（度；门控：机体上必须有 INS）
@@ -270,7 +270,7 @@ public class SensorSystemAPI implements ILuaAPI {
     //    k2/k3 常量、g=GRAVITY_CONSTANT、d=refreshUniversalDrag、T=refreshAeroConfig、大气曲线=refreshPressureCurve） ──
 
     /** 巡航高度求解工具门控：所在物理体（含约束链）上有 ≥1 个 FMC（ccpe:fmc），与物理数据门控同源；主线程 update() 每 tick 刷新 */
-    private volatile boolean maxAltitudeAvailable = false;
+    private volatile boolean maxCruiseAvailable = false;
 
     /** 单个传感器的同一 tick 快照（相对物理体原点 + 相对当前电脑的局部坐标 + 读数；非对应类型读数为 null） */
     private record SensorSnapshot(SensorType type, double relX, double relY, double relZ,
@@ -328,7 +328,7 @@ public class SensorSystemAPI implements ILuaAPI {
             pressureToolsAvailable = false;
             sailToolsAvailable = false;
             universalDragAvailable = false;
-            maxAltitudeAvailable = false;
+            maxCruiseAvailable = false;
             return;
         }
         onBody = true;
@@ -385,7 +385,7 @@ public class SensorSystemAPI implements ILuaAPI {
 
         // 巡航高度求解工具门控（每 tick 判：机体上有 ≥1 个 FMC 才开放；系数全为静态缓存/常量，
         // 见 refreshUniversalDrag / refreshAeroConfig / refreshPressureCurve，不在 update() 里逐 tick 读）
-        maxAltitudeAvailable = physicsGate;
+        maxCruiseAvailable = physicsGate;
 
         // 姿态缓存（度；门控：机体上有 INS 才计算，与速度门控同一 tick 快照）
         double[] attitude = attitudeGate ? computeAttitudeDeg(sub) : null;
@@ -1365,10 +1365,10 @@ public class SensorSystemAPI implements ILuaAPI {
      * @return {@code {velocity=..., altitude=...}}（m/s 与世界高度 Y）；门控不满足、参数非法或无有限高度返回 nil
      */
     @LuaFunction
-    public final @Nullable Map<String, Double> getMaxAltitude(double mass, double wingSails, double symmetricSails,
+    public final @Nullable Map<String, Double> solveMaxCruise(double mass, double wingSails, double symmetricSails,
                                                               double propellerCount, double sailsPerPropeller,
                                                               double maxRpm) {
-        if (!maxAltitudeAvailable) return null;
+        if (!maxCruiseAvailable) return null;
         if (mass <= 0 || wingSails < 1 || symmetricSails < 0 || propellerCount < 1 || sailsPerPropeller < 1 || maxRpm <= 0)
             return null;
         int nw = (int) Math.floor(wingSails);
