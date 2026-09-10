@@ -105,16 +105,15 @@
 
 ## 分析工具
 
-`.design_guide/analysis/` 下有一组 Python 分析脚本（纯标准库 `csv` 模块）。CSV 数据仍由记录器写在 `run/flight_logs/`；脚本用相对自身位置的 `LOG_DIR` 自动定位该目录，默认自动选最新 `flight_*.csv`，**从任意目录运行均可**：
+[`.design_guide/analysis/`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/tree/1.1.3/.design_guide/analysis) 下有一组 Python 分析脚本（纯标准库 `csv` 模块）。CSV 数据仍由记录器写在 `run/flight_logs/`；脚本用相对自身位置的 `LOG_DIR` 自动定位该目录，默认自动选最新 `flight_*.csv`，**从任意目录运行均可**：
 
-- `_analyze_flight.py` — 基础统计（高度/俯仰/空速/气压）+ 巡航段切分 + phugoid 峰谷检测
-- `_analyze_flight3.py` — 控制使用率 + 力列可用性 + 松手段力矩/相关分析
-- `_analyze_flight6.py` — 满油门全松手干净段提取、对数衰减阻尼比 ζ、力矩-气压回归（推力线偏置估算）
-- `_analyze_loop_delay.py` — 摇杆阶跃脉冲 → 指令/气动/总回路延迟分解
-- `_fit_aero_model.py` — 气动模型缩放结构标定（升力/阻力/推力对 P、v 的依赖）
-- `_verify_pressure.py` — 气压公式（指数近似 vs Sable 曲线）与记录数据核对
+- [`_analyze_flight.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_analyze_flight.py) — 基础统计（高度/俯仰/空速/气压）+ 巡航段切分 + phugoid 峰谷检测
+- [`_analyze_flight3.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_analyze_flight3.py) — 控制使用率 + 力列可用性 + 松手段力矩/相关分析
+- [`_analyze_flight6.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_analyze_flight6.py) — 满油门全松手干净段提取、对数衰减阻尼比 ζ、力矩-气压回归（推力线偏置估算）
+- [`_analyze_loop_delay.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_analyze_loop_delay.py) — 摇杆阶跃脉冲 → 指令/气动/总回路延迟分解
+- [`_fit_aero_model.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_fit_aero_model.py) — 气动模型缩放结构标定（升力/阻力/推力对 P、v 的依赖）
+- [`_verify_pressure.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_verify_pressure.py) — 气压公式（指数近似 vs Sable 曲线）与记录数据核对
 
-示例数据：`run/flight_logs/flight_overworld_00b1000b_*.csv`。
 
 ## 相关文件速查
 

@@ -105,16 +105,15 @@ The recorder **automatically scans** the control desks in the short-range-linker
 
 ## Analysis tooling
 
-A set of Python analysis scripts lives in `.design_guide/analysis/` (pure-stdlib `csv` module). The CSV data is still written by the recorder to `run/flight_logs/`; the scripts resolve that directory automatically through a `LOG_DIR` constant relative to the script location and by default pick the newest `flight_*.csv`, so **they can be run from any working directory**:
+A set of Python analysis scripts lives in [`/.design_guide/analysis/`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/tree/1.1.3/.design_guide/analysis) (pure-stdlib `csv` module). The CSV data is still written by the recorder to `run/flight_logs/`; the scripts resolve that directory automatically through a `LOG_DIR` constant relative to the script location and by default pick the newest `flight_*.csv`, so **they can be run from any working directory**:
 
-- `_analyze_flight.py` — basic stats (height/pitch/airspeed/pressure) + cruise-segment split + phugoid peak/trough detection
-- `_analyze_flight3.py` — control-usage ratios + force-column availability + hands-off moment/correlation analysis
-- `_analyze_flight6.py` — clean hands-off full-throttle segment extraction, log-decrement damping ratio ζ, moment-vs-pressure regression (thrust-line offset estimate)
-- `_analyze_loop_delay.py` — joystick step-pulse → command/aero/loop delay decomposition
-- `_fit_aero_model.py` — aero-model scaling calibration (lift/drag/thrust vs P and v)
-- `_verify_pressure.py` — pressure-formula (exponential approx vs Sable curve) verification against recorded data
+- [`_analyze_flight.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_analyze_flight.py) — basic stats (height/pitch/airspeed/pressure) + cruise-segment split + phugoid peak/trough detection
+- [`_analyze_flight3.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_analyze_flight3.py) — control-usage ratios + force-column availability + hands-off moment/correlation analysis
+- [`_analyze_flight6.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_analyze_flight6.py) — clean hands-off full-throttle segment extraction, log-decrement damping ratio ζ, moment-vs-pressure regression (thrust-line offset estimate)
+- [`_analyze_loop_delay.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_analyze_loop_delay.py) — joystick step-pulse → command/aero/loop delay decomposition
+- [`_fit_aero_model.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_fit_aero_model.py) — aero-model scaling calibration (lift/drag/thrust vs P and v)
+- [`_verify_pressure.py`](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/analysis/_verify_pressure.py) — pressure-formula (exponential approx vs Sable curve) verification against recorded data
 
-Sample data: `run/flight_logs/flight_overworld_00b1000b_*.csv`.
 
 ## Related files at a glance
 
