@@ -84,9 +84,4 @@
 1.1.3
 - 油门 自由模式
 - FMC 高度-气压解算工具；风帆气动工具；通用阻力工具。。。
-- INS getVelocity
-
-1.1.4
-- ccpe.sensor_system.getAngleRates()：新增姿态角速率 `{pitchRate, rollRate, yawRate}`（deg/s，姿态角数值差分 + EMA 滤波，返回即用）。
-  实测发现 `getAngularVelocity()` 的机体轴分量在俯仰+偏航机动时被世界旋转轴投影污染（体 Z 报 ±30~45°/s 假滚转），且 Sable 角速度源在剧烈机动下与四元数真实角速度偏差 0.5+ rad/s；
-  姿态角本身与四元数严格一致——PD 控制的 D 项请用它，勿用 getAngularVelocity 的机体轴分量。
+- INS getVelocity,getAngleRates
