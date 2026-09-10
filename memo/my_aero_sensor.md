@@ -116,5 +116,9 @@ compass  = Y·Z·X          (applyCompass→applyPrimary→applySecondary, euler
       姿态四元数（`logicalPose().orientation()`，与 `getOrientation()` 同一基准）做 `q⁻¹·ω` 逆旋转得到，
       参考 Simulated-Project `SimDebugThingCommands` 同款做法）；门控与 getAngles/getPosition 相同 =
       机体上有 ≥1 INS。
+- [x] `getVelocity()` 已实现（2026-08）：**世界系线速度** {x, y, z} m/s（世界 X/Y/Z 轴分量）。
+      数据源 = `SableCompat.getLinearVelocity`（刚体世界系质心速度，不含自转贡献），
+      直接返回世界系、不做旋转；需要机体局部系时用 `getOrientation()` 四元数逆旋转（q⁻¹·v）；
+      门控与 getAngles/getPosition 相同 = 机体上有 ≥1 INS。
 - Create 护目镜 tooltip 显示俯仰/滚转/航向读数。
 - 非自然维度指北行为开关（当前随机乱转）。

@@ -19,11 +19,15 @@
 | `getBodyPosition()` | table / nil | **物理体原点**（枢轴/质心轴）的世界坐标 `{x, y, z}` |
 | `getOrientation()` | table / nil | 机体姿态四元数 `{x, y, z, w}`（世界系） |
 | `getAngularVelocity()` | table / nil | **机体局部系**角速率 `{x, y, z}`（rad/s，绕机体自身 X/Y/Z 轴；机体姿态恒等时 = 世界系） |
+| `getVelocity()` | table / nil | **世界系**线速度 `{x, y, z}`（m/s，沿世界 X/Y/Z 轴） |
 
 INS 也会出现在 `getSensors()` 中，条目为 `{type="ins", pos={x,y,z}, pos_rel={x,y,z}}`（无逐传感器读数——姿态用上面的专用方法读取）。
 
 !!! note "角速度参考系"
     `getAngularVelocity()` 返回绕**机体自身轴**的角速率分量（滚转/俯仰/偏航率风格）：物理引擎的世界系角速度经与 `getOrientation()` 同一 tick 的姿态四元数旋转到机体系得到。需要世界系角速度时，用该四元数对本结果做正向旋转（`q * ω_body`）即可恢复。
+
+!!! note "线速度参考系与取值位置"
+    `getVelocity()` 是**机体自身的刚体线速度**（质心速度，不含自转贡献），直接以**世界系**返回——与物理引擎使用的数值一致。需要机体局部系线速度（沿机体自身 X/Y/Z 轴）时，用 `getOrientation()` 姿态四元数的逆对本结果做旋转（`q⁻¹ * v`）即可。
 
 ## 角度约定
 
@@ -63,6 +67,9 @@ print("quaternion:", textutils.serialize(ss.getOrientation()))
 
 -- 角速率（rad/s，机体局部系，见上方说明）
 print("ang vel:   ", textutils.serialize(ss.getAngularVelocity()))
+
+-- 线速度（m/s，世界系，见上方说明）
+print("velocity:  ", textutils.serialize(ss.getVelocity()))
 ```
 
 共享方法（`isOnBody()`、`getBodyId()`、`getSensors()` 等）的行为见[静压孔](static-port.zh.md)页面。**需要 FMC 门控**的物理数据见[飞行管理计算机](fmc.zh.md)页面。

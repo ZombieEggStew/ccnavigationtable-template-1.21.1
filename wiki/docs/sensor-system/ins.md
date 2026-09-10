@@ -19,11 +19,15 @@ All INS-gated methods require the physics body (including constraint chains) to 
 | `getBodyPosition()` | table / nil | World position `{x, y, z}` of the **physics body origin** (its pivot / center-of-mass axis) |
 | `getOrientation()` | table / nil | Body orientation quaternion `{x, y, z, w}` (world frame) |
 | `getAngularVelocity()` | table / nil | **Body-frame** angular rate `{x, y, z}` (rad/s) around the body's own X/Y/Z axes (equals the world frame when the body attitude is identity) |
+| `getVelocity()` | table / nil | **World-frame** linear velocity `{x, y, z}` (m/s) along the world X/Y/Z axes |
 
 The INS also appears in `getSensors()` as `{type="ins", pos={x,y,z}, pos_rel={x,y,z}}` (no per-sensor readings — use the dedicated methods above).
 
 !!! note "Angular velocity frame"
     `getAngularVelocity()` returns the rotation rate around the **body's own axes** (roll/pitch/yaw-rate style components): the physics engine's world-frame angular velocity rotated into the body frame with the same-tick orientation quaternion exposed by `getOrientation()`. To recover the world-frame angular velocity, rotate the result by that quaternion (`q * ω_body`).
+
+!!! note "Velocity frame and source"
+    `getVelocity()` is the **body's own rigid-body linear velocity** (center-of-mass velocity, without the rotational contribution), returned directly in the **world frame** — the same values the physics engine uses. To get the body-frame velocity (along the body's own X/Y/Z axes), rotate the result by the inverse of the orientation quaternion exposed by `getOrientation()` (`q⁻¹ * v`).
 
 ## Angle convention
 
@@ -63,6 +67,9 @@ print("quaternion:", textutils.serialize(ss.getOrientation()))
 
 -- Angular rate (rad/s, body frame; see note above)
 print("ang vel:   ", textutils.serialize(ss.getAngularVelocity()))
+
+-- Linear velocity (m/s, world frame; see note above)
+print("velocity:  ", textutils.serialize(ss.getVelocity()))
 ```
 
 The shared methods (`isOnBody()`, `getBodyId()`, `getSensors()`, ...) behave as documented on the [Static Port](static-port.md) page. Physics data gated by the **Flight Management Computer (FMC)** is documented on the [Flight Management Computer](fmc.md) page.

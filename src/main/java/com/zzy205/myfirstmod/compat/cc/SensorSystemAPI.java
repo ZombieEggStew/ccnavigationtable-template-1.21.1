@@ -98,6 +98,7 @@ import java.util.UUID;
  * print(ss.getPosition())         -- 最后放置的 INS 的世界坐标 {x, y, z}（门控：机体上必须有 INS）
  * print(ss.getOrientation())      -- 机体姿态四元数 {x, y, z, w}（门控：机体上必须有 INS）
  * print(ss.getAngularVelocity())  -- 机体局部系角速率 {x, y, z} rad/s（绕机体自身 X/Y/Z 轴，姿态恒等时=世界系；门控：机体上必须有 INS）
+ * print(ss.getVelocity())         -- 世界系线速度 {x, y, z} m/s（世界 X/Y/Z 轴分量；门控：机体上必须有 INS）
  * print(ss.getBodyPosition())     -- 物理体原点世界坐标 {x, y, z}（门控：机体上必须有 INS）
  * print(ss.getPhysicsCenterOfMassRel()) -- 重心相对最后放置的 FMC 的机体局部系位置 {x, y, z}（门控：机体上有 FMC）
  * print(ss.getPhysicsMass())      -- 所在物理体质量 kg（门控：机体上有 FMC）
@@ -159,6 +160,12 @@ public class SensorSystemAPI implements ILuaAPI {
     private volatile double angVelX = 0;
     private volatile double angVelY = 0;
     private volatile double angVelZ = 0;
+
+    /** 线速度缓存（世界系 m/s，世界 X/Y/Z 轴的线速度分量）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
+    private volatile boolean velocityAvailable = false;
+    private volatile double velX = 0;
+    private volatile double velY = 0;
+    private volatile double velZ = 0;
 
     /** 物理体原点世界坐标缓存：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
     private volatile boolean bodyPosAvailable = false;
@@ -313,6 +320,8 @@ public class SensorSystemAPI implements ILuaAPI {
             orientW = 1;
             angularVelocityAvailable = false;
             angVelX = angVelY = angVelZ = 0;
+            velocityAvailable = false;
+            velX = velY = velZ = 0;
             bodyPosAvailable = false;
             bodyPosX = bodyPosY = bodyPosZ = 0;
             comRelAvailable = false;
@@ -440,6 +449,21 @@ public class SensorSystemAPI implements ILuaAPI {
         } else {
             angularVelocityAvailable = false;
             angVelX = angVelY = angVelZ = 0;
+        }
+
+        // 线速度缓存（世界系 m/s；门控：机体上有 INS 才计算，与姿态同一 tick 快照）。
+        // SableCompat.getLinearVelocity 返回刚体世界系线速度（质心速度，不含自转贡献），
+        // 直接缓存世界系 x/y/z 分量，不做旋转。需要机体局部系线速度（沿机体自身 X/Y/Z 轴）
+        // 时，可用 getOrientation() 的姿态四元数对本结果做逆旋转（q⁻¹·v_world）。
+        Vec3 linVel = attitudeGate ? SableCompat.getLinearVelocity(sub.getLevel(), sub) : null;
+        if (linVel != null) {
+            velocityAvailable = true;
+            velX = linVel.x;
+            velY = linVel.y;
+            velZ = linVel.z;
+        } else {
+            velocityAvailable = false;
+            velX = velY = velZ = 0;
         }
 
         // 物理体原点世界坐标缓存（门控：机体上有 INS 才计算，与姿态同一 tick 快照）
@@ -731,6 +755,25 @@ public class SensorSystemAPI implements ILuaAPI {
         m.put("x", angVelX);
         m.put("y", angVelY);
         m.put("z", angVelZ);
+        return m;
+    }
+
+    /**
+     * 所在物理体（含约束链）的<b>世界系</b>线速度 {@code {x, y, z}}（m/s，世界坐标 X/Y/Z 轴的
+     * 分量）。数据源为刚体世界系线速度（{@link SableCompat#getLinearVelocity}，质心速度，
+     * 不含自转贡献），直接返回世界系分量，不做旋转。需要机体局部系线速度（沿机体自身
+     * X/Y/Z 轴）时，可用 {@link #getOrientation()} 的姿态四元数对本结果做逆旋转（q⁻¹·v）。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getAngles()} 相同——所在物理体上必须有 ≥1 个
+     * 惯性导航系统（ccpe:ins），否则返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getVelocity() {
+        if (!velocityAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("x", velX);
+        m.put("y", velY);
+        m.put("z", velZ);
         return m;
     }
 
