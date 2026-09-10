@@ -92,3 +92,4 @@ end
 - [Aviation Integrated Computer](aic.md) — INS + FMC in one block
 - [Short-Range Signal Linker](short-range-linker.md) — per-body channels & redstone I/O
 - [Position Light](position-light.md) — three-color navigation lights, Lua-controlled
+- [Flight Data Recorder](flight-data-recorder.md) — per-tick CSV flight logging (debug & analysis)

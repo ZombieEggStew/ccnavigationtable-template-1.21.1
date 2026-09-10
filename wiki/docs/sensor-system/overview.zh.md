@@ -91,3 +91,4 @@ end
 - [航空集成计算机](aic.zh.md) — 一个方块同时充当 INS 与 FMC
 - [短程信号链接器](short-range-linker.zh.md) — 物理体作用域频道与红石输入/输出
 - [航行灯](position-light.zh.md) — 三色航行灯，Lua 控制
+- [飞行数据记录系统](flight-data-recorder.zh.md) — 逐 tick CSV 飞行数据记录（调试与分析）
