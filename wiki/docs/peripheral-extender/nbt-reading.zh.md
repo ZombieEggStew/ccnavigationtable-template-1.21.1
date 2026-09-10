@@ -101,4 +101,3 @@ end
 
 - [外设代理](peripheral-proxy.md) — 获取的 CC:T 外设
 - [Lua API 完整参考](../api-reference.md)
-- [示例：自动化监控系统](../peripheral-extender/example.md)

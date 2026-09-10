@@ -65,7 +65,7 @@ plugins:
             Dock: 拓展坞
             Baffle: 挡板
             Examples & Tutorials: 示例与教程
-            Simple Monitoring System: 简单监控系统
+            trainer aircraft: 教练机
             Channel Setup: 频道设置
             Block NBT Reading: 方块 NBT 读取
             Peripheral Proxy: 外设代理
@@ -107,7 +107,6 @@ nav:
     - Aeronautics Sensor Integration: peripheral-extender/simulated-integration.md
     - Chunk & Physics Body Loading: peripheral-extender/chunk-loading.md
     - Lua API Reference: api-reference.md
-    - Simple Monitoring System: peripheral-extender/example.md
   - Redstone Transceiver:
     - Overview: redstone-transceiver/overview.md
   - Electronic Transmission:
@@ -143,5 +142,5 @@ nav:
     - Dock: control-desk/dock.md
     - Baffle: control-desk/baffle.md
   - Examples & Tutorials:
-    - Simple Monitoring System: peripheral-extender/example.md
+    - trainer aircraft: examples/trainer_aircraft.md
   - FAQ: faq.md
