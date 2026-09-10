@@ -135,6 +135,13 @@ where **T** (Propeller Bearing Thrust, default 0.2) and **A** (Propeller Bearing
 
 Returns the required speed R; returns `nil` when not initialized, when the gate fails (no FMC), or when arguments are invalid (e.g. `P ≤ 0`).
 
+**`θ` (airflow angle, degrees)** scales the airflow term `V × sin(θ) / (S^0.5 × A)` — the extra speed a propeller needs because it is moving through the air it pushes. Usage convention:
+
+- **Fixed-wing level flight: `θ = 90`** — the air flows through the propeller disc, the airflow term applies in full (`sin 90° = 1`);
+- **Helicopter vertical takeoff/landing: `θ = 0`** — no airflow term.
+
+Default is `0`.
+
 > Feed `getPressure()` (static port reading) as pressure and `getSpeed()`/`getAverageSpeed()` (pitot tube readings) as velocity to build a closed-loop thrust controller.
 
 ## Altitude ↔ pressure conversion tools
@@ -332,3 +339,47 @@ print("universal drag (N):", drag)   -- m × 0.09 × V
 ```
 
 > Combine with `getPhysicsMass()`/`getPhysicsChainMass()` for mass and `getSpeed()` (or `|v|`) for speed to close the force balance: `thrust − sail drag − universal drag ≈ 0` in steady cruise. Sanity check with recorded values (e.g. m ≈ 45.25 kg, v ≈ 62.6 m/s → F ≈ 255 N).
+
+## Max altitude solver
+
+Also FMC-gated (and therefore also available with an AIC), this pure-math solver inverts the cruise equations: given the aircraft's mass, sail counts and propeller setup, it finds the **highest steady-state altitude** reachable at a given maximum RPM, plus the airspeed needed there.
+
+It solves the two steady-cruise equations (level flight, airflow perpendicular to the sail normal so normal drag is zero) for the unknowns `(v, P)`:
+
+```
+(1) lift = gravity:   k3·P·v·N_w                          = m·g
+                      → x = P·v = m·g/(k3·N_w)            (pinned, altitude-independent)
+(2) thrust = drag:    P·S^1.5·N_p·T·R·(1 − v/(S^0.5·R·A))  = k2·P·v·N_s + m·d·v
+```
+
+| Method | Returns | Description |
+|---|---|---|
+| `getMaxAltitude(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)` | table / nil | `{velocity=..., altitude=...}` — steady cruise state at `maxRpm` |
+
+Substituting `v = x/P` turns equation (2) into a **quadratic in `P`** — no matrices needed (the system is bilinear in `(v, P)` and collapses to one quadratic):
+
+```
+a·P² + b·P + c = 0
+a = S^1.5·N_p·T·R
+b = −(S·N_p·T·x/A + k2·x·N_s)      (S^1.5/S^0.5 = S, R cancels)
+c = −m·d·x
+P* = (−b + √(b²−4ac))/(2a),  v* = x/P*,  altitude = inverse atmosphere curve(P*) (bisection)
+```
+
+- **`N_w`** = `wingSails` — lift sails (only regular sails produce lift). **`N_s`** = `wingSails + symmetricSails + propellerCount × sailsPerPropeller` — the **total power-block count** (regular + symmetric sails + propeller power blocks), all contributing to the directionless drag `k2·P·v`.
+- **Thrust model** carries the airflow reduction factor `(1 − v/(S^0.5·R·A))` — the fixed-wing level-flight form (`θ = 90`) of the `getPropellerRPM` model: the propeller has a maximum effective speed `S^0.5·R·A` beyond which thrust turns negative.
+- **Coefficients** (same sources as the other tools): `k3 = 0.475`, `k2 = 0.06888202261`, `g = 11`, `d = 0.09` (universal drag, datapack-overridable), `T = 0.2` / `A = 0.05` (aeronautics config), atmosphere curve from the dimension datapack — all cached at server start and FMC/AIC placement.
+- **Feasibility**: returns `nil` when the solved `P*` lies outside the dimension's atmosphere range (lift too weak even at the ground, or above the atmosphere top), when the gate fails (no FMC), or when arguments are invalid (`m ≤ 0`, `wingSails < 1`, `propellerCount < 1`, `sailsPerPropeller < 1`, `maxRpm ≤ 0`). `maxRpm = 256` is only the speed cap — the stress-network capacity (`getStressRemaining()`) is an additional constraint.
+
+### Example
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+-- Highest steady cruise at max RPM for a given build
+local cruise = ss.getMaxAltitude(45.25, 43, 2, 2, 4, 256)
+print("cruise speed (m/s):", cruise.velocity)
+print("max altitude (Y):  ", cruise.altitude)
+```
+
+> Use real values: `getPhysicsChainMass()` for `m`, the actual block counts of your build, and `256` for the RPM cap. Cross-check the result against the flight recorder for your aircraft.

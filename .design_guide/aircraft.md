@@ -15,7 +15,7 @@ BlockSubLevelLiftProvider.java（references\sable-main\common\src\main\java\dev\
 力矩计算（ForceTotal.java）：力矩 τ = (施加点 − 重心) × 力 ← 这就是全部规则的根源
 
 3. 推力施加在螺旋桨方块中心
-BlockEntitySubLevelPropellerActor.java（references\sable-main\common\src\main\java\dev\ryanhcode\sable\api\block\propeller\BlockEntitySubLevelPropellerActor.java）：推力在螺旋桨方块中心、沿螺旋桨朝向施加。陀螺仪螺旋桨轴承还能把推力方向在 ±12° 锥角内偏转（GyroscopicPropellerBearingBlockEntity.java）。
+BlockEntitySubLevelPropellerActor.java（references\sable-main\common\src\main\java\dev\ryanhcode\sable\api\block\propeller\BlockEntitySubLevelPropellerActor.java）：推力在螺旋桨方块中心、沿螺旋桨朝向施加。陀螺仪螺旋桨轴承还能把推力方向在 ±12° 锥角内偏转（GyroscopicPropellerBearingBlockEntity.java）。（推力大小怎么算见下文"螺旋桨推力模型"一节）
 
 4. 重力施加在重心上（DiagramEntity.java 第 186 行）→ 重力不产生力矩。
 
@@ -113,10 +113,89 @@ Simulated 的 SymmetricSailBlock 本身不算力——它只是 Sable `BlockSubL
   - 平衡账：推力 ≈ 407，帆阻力 ≈ −137，通用阻力 ≈ −255 → 净 ≈ +8 ≈ 0；实测 dv/dt = +0.014 m/s² 稳速成立
   - 通用阻力是巡航时**最大的阻力项**（约为帆阻力的 2 倍）
 - 对设计的直接含义：
-  - **极速公式**：平衡时 T(推力) = v·(0.09·m + 帆阻力系数·P) → 极速 ∝ 推力 / (0.09·m + c·P)
+  - **极速公式**（简化，忽略气流削减）：平衡时 T(推力) = v·(0.09·m + 帆阻力系数·P) → 极速 ∝ 推力 / (0.09·m + c·P)；完整模型（含推力气流削减系数与总动力方块数阻力）见下文"巡航方程组"一节
   - **减重直接提速**：通用阻力 ∝ m，同一推力下轻飞机极速更高、爬升更快（比调帆更直接）
   - **不乘 P**：帆阻力、推力都 ∝ P，通用阻力只 ∝ m·v → 高空时推力/帆阻力同衰而通用阻力不衰 → 高空极速上限下降，与"高空需更快空速才够升力"叠加，加剧高空掉速掉高（见 memo\.current_mission.md §13）
   - 角速度阻尼 0.09 同样恒定存在 → 姿态天然被阻尼（"稳重"）；做 phugoid/姿态阻尼分析时它已在物理里，别把它当成"无阻尼基线"
+
+---
+
+# 螺旋桨推力模型（Propeller）：大小怎么算（含气流削减系数）
+
+Create 螺旋桨轴承（Propeller Bearing）的桨盘上装动力方块（风帆 / 对称风帆 / 羊毛方块）产生推力。参数来自 aeronautics 配置（`aeronautics > server > Physics`）；以下公式是 `getPropellerRPM` 转速工具的来源：
+
+- 参数来源：Propeller Bearing Thrust **T**（默认 0.2）、Propeller Bearing Airflow **A**（默认 0.05）；推力 ∝ airflow scaling × air pressure（`BlockEntityPropeller`）
+- 配置缓存：进游戏（服务器启动）与放置/加载 FMC/AIC 时刷新一次（`SensorSystemAPI.refreshAeroConfig`，不逐 tick 读）
+- 相关工具：`getPropellerRPM(F, P, V, θ?)`（本模型的转速反解）、`getMaxAltitude(...)`（见下节）
+
+**N** 个螺旋桨、每个桨盘 **S** 个动力方块、转速 **R** 时的总推力模型：
+
+```
+F = P · S^1.5 · N · T · R · (1 − v·sinθ / (S^0.5 · R · A))
+```
+
+反解（达到推力 F 所需转速，即 `getPropellerRPM` 公式）：
+
+```
+R = F / (P · S^1.5 · N · T) + v·sinθ / (S^0.5 · A)
+```
+
+- **P**：气压（随高度指数衰减，与帆力同源缩放）；**v**：空速；**θ**：气流角
+- **气流削减系数 (1 − v·sinθ/(S^0.5·R·A))**：桨盘穿过自己推的空气，有效推力随空速下降。**θ 按机型取用**：
+  - **固定翼飞机平飞：θ = 90**——气流穿过桨盘，削减全额生效（sin 90° = 1）
+  - **直升机垂直起降：θ = 0**——无削减
+- **桨面最大有效速度 = S^0.5·R·A**：空速超过该值时推力 ≤ 0（桨变刹车）→ 要飞得快，桨盘动力方块 S 必须足够大
+- 平飞（θ=90）形式：`F = P·S^1.5·N·T·R·(1 − v/(S^0.5·R·A))`
+
+对设计的直接含义：
+
+- 推力 ∝ P·R，但受气流削减 → 高速时推力随 v 下降；极速与"最高高度"由 推力 = 阻力 决定（见下节）
+- θ=90 时所需转速比直觉高：R = F/(P·S^1.5·N·T) + v/(S^0.5·A)——第二项是维持平飞速度的"气流代价"，速度越快代价越大
+- 推力 ∝ S^1.5：加桨盘动力方块对推力的增益大于线性（但同时也计入总阻力 N_s，见下节）
+
+---
+
+# 巡航方程组与最高稳态高度（getMaxAltitude）
+
+把三类力合起来，平飞稳态巡航（θ=90、气流与帆面法向垂直故法向阻力=0）有两个方程、两个未知量 (v, P)：
+
+```
+(1) 升力 = 重力:   k3·P·v·N_w                          = m·g
+(2) 推力 = 阻力:   P·S^1.5·N_p·T·R·(1 − v/(S^0.5·R·A))  = k2·P·v·N_s + m·d·v
+```
+
+- **N_w** = 升力帆（普通帆）数；**N_s** = 总动力方块数 = 风帆 + 对称风帆 + 螺旋桨动力方块（N_p×S）——所有动力方块都参与无方向阻力 k2·P·v
+- 系数：k3=0.475、k2=0.06888、d=0.09（通用阻力，不乘 P）、g=11、T/A 见上节
+
+**关键消元（不需要矩阵/行列式）**：方程组对 (v, P) 是**双线性**的（每个方程里 v 与 P 只以乘积出现）。令升力乘积 x = P·v：
+
+```
+(1) → x = m·g / (k3·N_w)          （与高度无关，直接钉死）
+(2) 代入 v = x/P → 对 P 一元二次：a·P² + b·P + c = 0
+    a = S^1.5·N_p·T·R
+    b = −(S·N_p·T·x/A + k2·x·N_s)       （S^1.5/S^0.5 = S、R 消去）
+    c = −m·d·x
+正根：P* = (−b + √(b²−4ac)) / (2a)，v* = x/P*，高度 h* = 气压曲线反解(P*)（二分）
+```
+
+- c<0 恒定 ⇒ 判别式恒正、**恰一正根**；根处推力=阻力>0 ⇒ 气流削减系数自动为正
+- 高度反解：P(h) 是分段 Hermite、不可解析求逆 → 数值二分（与 `getAltitudeFromPressure` 同款）
+- 对应工具：`getMaxAltitude(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)` → `{velocity, altitude}`（FMC 门控，纯数学）
+
+**互补视角（正向链更简单）**：给定高度求所需转速是**显式公式**：
+
+```
+R(h) = [k2·x·N_s + m·d·x/P(h)] / (P(h)·S^1.5·N_p·T) + (x/P(h)) / (S^0.5·A)
+```
+
+P(h) 随高度下降 → 两项都上升 → **R(h) 随高度单调上升** → R_max 对应的 h 就是最高稳态高度；也可以直接对 h 二分 R(h) = R_max（比解二次方程更直接）。
+
+对设计的直接含义：
+
+- **最高高度由转速上限决定**：低于该高度，每个高度对应唯一所需转速（R(h) 单调）——"该高度需要多少油门"可以预先算出
+- **可行性检查**：P* 必须 ≤ 大气底最大气压（≈1.5，否则贴地也升力不足=飞不起来）；h* 受大气顶（主世界 320m，P=0 无空气）限制
+- R=256 只是转速上限，实际还受**应力网络容量**约束（`getStressRemaining`）——满转速推不动就是应力不足
+- 设计计算用途：改帆数/桨盘 S/质量，立即看最高高度变化，比进游戏试飞快
 
 ---
 

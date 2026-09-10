@@ -91,6 +91,7 @@ import java.util.UUID;
  * local v = ss.solveSailLift(0.47, nil, 13.3) -- 传 P、L 求 V = L/(0.475·P)（m/s；门控同上）
  * local drag = ss.solveSailDirectionlessDrag(0.47, 60, nil) -- 阻力方程 D = 0.06888202261·P·|V|（普通帆/对称帆通用；每秒力；门控同上）
  * local udrag = ss.getUniversalDragForce(45.25, 60) -- 通用阻力等效力标量 = m × d × |v|（d 默认 0.09，维度数据包可覆盖；门控同上）
+ * local cruise = ss.getMaxAltitude(45.25, 43, 4, 2, 4, 256) -- 最高稳态巡航：{velocity=..., altitude=...}（升力=重力、推力=阻力 二元方程组的唯一稳态解；门控同上）
  * print(ss.getSpeed())            -- 最后放置的皮托管沿管口朝向的对地速度（m/s，便捷方法）
  * print(ss.getAirSpeed())         -- 最后放置的皮托管沿管口朝向的空速（m/s，便捷方法）
  * print(ss.getAngles())           -- {pitch=, roll=, yaw=}（度；门控：机体上必须有 INS）
@@ -265,6 +266,12 @@ public class SensorSystemAPI implements ILuaAPI {
      */
     private static volatile double universalDragCoefficient = 0.09;
 
+    // ── 巡航高度求解工具缓存（门控每 tick 判，同物理数据门控；系数全部复用既有静态缓存/常量：
+    //    k2/k3 常量、g=GRAVITY_CONSTANT、d=refreshUniversalDrag、T=refreshAeroConfig、大气曲线=refreshPressureCurve） ──
+
+    /** 巡航高度求解工具门控：所在物理体（含约束链）上有 ≥1 个 FMC（ccpe:fmc），与物理数据门控同源；主线程 update() 每 tick 刷新 */
+    private volatile boolean maxAltitudeAvailable = false;
+
     /** 单个传感器的同一 tick 快照（相对物理体原点 + 相对当前电脑的局部坐标 + 读数；非对应类型读数为 null） */
     private record SensorSnapshot(SensorType type, double relX, double relY, double relZ,
                                   double compX, double compY, double compZ,
@@ -321,6 +328,7 @@ public class SensorSystemAPI implements ILuaAPI {
             pressureToolsAvailable = false;
             sailToolsAvailable = false;
             universalDragAvailable = false;
+            maxAltitudeAvailable = false;
             return;
         }
         onBody = true;
@@ -374,6 +382,10 @@ public class SensorSystemAPI implements ILuaAPI {
         // 通用阻力工具门控（每 tick 判：机体上有 ≥1 个 FMC 才开放；d 为静态缓存，
         // 进游戏/放置加载 FMC/AIC 时刷新一次，见 refreshUniversalDrag，不在 update() 里逐 tick 读数据包）
         universalDragAvailable = physicsGate;
+
+        // 巡航高度求解工具门控（每 tick 判：机体上有 ≥1 个 FMC 才开放；系数全为静态缓存/常量，
+        // 见 refreshUniversalDrag / refreshAeroConfig / refreshPressureCurve，不在 update() 里逐 tick 读）
+        maxAltitudeAvailable = physicsGate;
 
         // 姿态缓存（度；门控：机体上有 INS 才计算，与速度门控同一 tick 快照）
         double[] attitude = attitudeGate ? computeAttitudeDeg(sub) : null;
@@ -1014,6 +1026,16 @@ public class SensorSystemAPI implements ILuaAPI {
     @LuaFunction
     public final @Nullable Double getAltitudeFromPressure(double pressure) {
         if (!pressureToolsAvailable) return null;
+        return altitudeFromPressure(pressure);
+    }
+
+    /**
+     * 在缓存的维度大气曲线上对 {@code P(y)} 做数值二分反解（纯数学，线程安全）：
+     * 返回气压 {@code pressure} 对应的世界高度 Y；气压超出该维度曲线值域（&gt; 大气底最大气压，
+     * 或 &lt; 大气顶最小气压 / 默认 0）时返回 nil。曲线单调不增，60 次二分收敛到双精度。
+     * 供 {@link #getAltitudeFromPressure(double)} 与巡航高度求解工具共用。
+     */
+    private @Nullable Double altitudeFromPressure(double pressure) {
         double minY = atmosphereMinY;
         double maxY = atmosphereMaxY;
         double pLo = evaluatePressure(minY); // 曲线最大值（大气底，地下钳位）
@@ -1282,6 +1304,102 @@ public class SensorSystemAPI implements ILuaAPI {
         } catch (Exception ignored) {
             // 读不到时保留上次缓存（默认 0.09）
         }
+    }
+
+    // ═══════════════ 巡航高度求解工具（门控：机体（含约束链）上有 ≥1 个 FMC；AIC 等同 FMC） ═══════════════
+    //
+    // mainThread=false：纯数学，直读 volatile 缓存，零主线程调度。
+    // 稳态巡航（平飞、n·v=0）二元方程组：升力 = 重力、推力 = 阻力，未知量 (v, P)。
+    // 关键消元：升力乘积 x = P·v = m·g/(k3·N_w) 由升力方程直接钉死（与高度无关）；代入阻力方程后
+    // 对 P 是一元二次（正根闭式求解）；高度 = 气压曲线反解（altitudeFromPressure 二分）。
+    // 推力含气流削减系数：F = P·S^1.5·N_p·T·R·(1 − v/(S^0.5·R·A))（A = Propeller Bearing Airflow，
+    // 默认 0.05），即 getPropellerRPM 反解公式 R = F/(P·S^1.5·N·T) + v/(S^0.5·A) 的平飞形式。
+    // 总阻力按"总动力方块数" N_s = 风帆 + 对称风帆 + 螺旋桨动力方块(N_p×S) 计（所有动力方块
+    // 都参与无方向阻力 k2·P·v），通用阻力 m·d·v 另计（不乘 P）。
+    // 无需矩阵/行列式：方程组对 (v, P) 双线性，消元后恰为一元二次。
+
+    /**
+     * 求解给定装配在<b>最大转速 maxRpm</b> 下能稳态巡航的<b>最高高度</b>与对应空速
+     * （升力 = 重力、推力 = 阻力 的二元方程组在平飞、n·v=0 条件下的唯一稳态解）。
+     * <p>
+     * 模型（与 {@link #solveSailLift(Optional, Optional, Optional)} / {@link #getPropellerRPM(double, double, double, java.util.Optional)}
+     * / {@link #getUniversalDragForce(double, double)} 同源）：
+     * <pre>{@code
+     * (1) 升力 = 重力:   k3·P·v·N_w                          = m·g
+     *                    → x = P·v = m·g/(k3·N_w)             （与高度无关）
+     * (2) 推力 = 阻力:   P·S^1.5·N_p·T·R·(1 − v/(S^0.5·R·A))  = k2·P·v·N_s + m·d·v
+     *     代入 x（v = x/P）后对 P 是一元二次 a·P² + b·P + c = 0：
+     *       a = S^1.5·N_p·T·R
+     *       b = −(S·N_p·T·x/A + k2·x·N_s)      （S^1.5/S^0.5 = S、R 消去）
+     *       c = −m·d·x
+     *     正根 P* = (−b + √(b²−4ac))/(2a)，v* = x/P*，高度 h* = 气压曲线反解(P*)（二分）。
+     * }</pre>
+     * 其中 <b>N_w</b> = wingSails（升力帆数，仅普通帆产生升力），<b>N_s</b> = wingSails +
+     * symmetricSails + propellerCount × sailsPerPropeller（<b>总动力方块数</b>：风帆 + 对称风帆 +
+     * 螺旋桨上的动力方块，全部计入无方向阻力 k2·P·v）；螺旋桨参数 S、N_p、T、R、A 与
+     * {@link #initPropeller(double, double)} / {@link #getPropellerRPM(double, double, double, java.util.Optional)}
+     * 同口径。推力含气流削减系数（平飞，与 RPM 反解公式一致）：速度越高、桨面越"吃气流"，
+     * 有效推力越小；v ≥ S^0.5·R·A 时推力 ≤ 0（桨变刹车），该情形下平衡点自动落在推力为正处。
+     * <p>
+     * 系数来源：k3=0.475、k2=0.06888202261（常量）；g = {@value #GRAVITY_CONSTANT}；
+     * d = 通用阻力系数（静态缓存 {@link #refreshUniversalDrag}，默认 0.09）；
+     * T = Propeller Bearing Thrust、A = Propeller Bearing Airflow（静态缓存
+     * {@link #refreshAeroConfig}，默认 0.2 / 0.05）；
+     * 大气曲线 = 维度曲线快照（静态缓存 {@link #refreshPressureCurve}）。
+     * <p>
+     * <b>可行性</b>：解出的 P* 若超出维度大气曲线值域（&gt; 大气底最大气压 → 贴地也无法
+     * 稳态平衡、升力不足），或对应高度越过大气顶（无空气），返回 nil（飞不起来 / 无有限高度）。
+     * 注意 R=256 只是转速上限，实际还受附着面应力网络容量约束（{@link #getStressRemaining()}）。
+     * <p>
+     * <b>门控（存在性）</b>：与其余 FMC 工具相同——电脑必须在物理体上，且所在物理体（含约束链）
+     * 上有 ≥1 个飞行管理计算机（FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学计算，零主线程调度。
+     *
+     * @param mass              全机质量（kg，含约束链，必须 &gt; 0）
+     * @param wingSails         升力帆（普通帆）数量（≥ 1）
+     * @param symmetricSails    对称帆数量（≥ 0）
+     * @param propellerCount    螺旋桨（Propeller Bearing）数量（≥ 1）
+     * @param sailsPerPropeller 每个螺旋桨上的动力方块数量（≥ 1）
+     * @param maxRpm            转速上限 R（&gt; 0）
+     * @return {@code {velocity=..., altitude=...}}（m/s 与世界高度 Y）；门控不满足、参数非法或无有限高度返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getMaxAltitude(double mass, double wingSails, double symmetricSails,
+                                                              double propellerCount, double sailsPerPropeller,
+                                                              double maxRpm) {
+        if (!maxAltitudeAvailable) return null;
+        if (mass <= 0 || wingSails < 1 || symmetricSails < 0 || propellerCount < 1 || sailsPerPropeller < 1 || maxRpm <= 0)
+            return null;
+        int nw = (int) Math.floor(wingSails);
+        int np = (int) Math.floor(propellerCount);
+        int s = (int) Math.floor(sailsPerPropeller);
+        // 总动力方块数：风帆 + 对称风帆 + 螺旋桨动力方块（N_p×S），全部计入无方向阻力 k2·P·v
+        int ns = nw + (int) Math.floor(symmetricSails) + np * s;
+        double r = maxRpm;
+
+        // 升力乘积 x = P·v = m·g/(k3·N_w)：升力 = 重力 直接钉死，与高度无关
+        double x = mass * GRAVITY_CONSTANT / (SAIL_LIFT_SCALAR * nw);
+        // 推力模型（含气流削减系数）：F = P·S^1.5·N_p·T·R·(1 − v/(S^0.5·R·A))，代入 v = x/P 后
+        // 对 P 的一元二次 a·P² + b·P + c = 0：
+        //   a = S^1.5·N_p·T·R
+        //   b = −(S·N_p·T·x/A + k2·x·N_s)   （S^1.5/S^0.5 = S、R 消去；A = Propeller Bearing Airflow）
+        //   c = −m·d·x
+        if (propellerBearingAirflow <= 0) return null;
+        double a = Math.pow(s, 1.5) * np * propellerBearingThrust * r;
+        if (a <= 0) return null;
+        double airflowTerm = (double) s * np * propellerBearingThrust * x / propellerBearingAirflow;
+        double b = -(airflowTerm + SAIL_DIRECTIONLESS_DRAG_SCALAR * x * ns);
+        double c = -(mass * universalDragCoefficient * x);
+        // c<0 ⇒ 判别式恒正，恰一正根；该根处推力 = 阻力 > 0，气流削减系数自动为正
+        double pressure = (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
+        double velocity = x / pressure;
+        Double altitude = altitudeFromPressure(pressure);
+        if (altitude == null) return null;
+        Map<String, Double> out = new LinkedHashMap<>();
+        out.put("velocity", velocity);
+        out.put("altitude", altitude);
+        return out;
     }
 
     // ═══════════════ 航行灯控制（门控：机体（含约束链）上有 ≥1 个 FMC） ═══════════════

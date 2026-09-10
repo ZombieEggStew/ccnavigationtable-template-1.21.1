@@ -14,7 +14,7 @@ Everything is body-scoped: a computer only sees the sensors installed on its **o
 | [Static Port](static-port.md) | `ccpe:static_port` | Pressure & altitude at the port's own position | ≥ 1 static port |
 | [Pitot Tube](pitot-tube.md) | `ccpe:pitot_tube` | Signed ground speed & airspeed along the tube's mouth axis | ≥ 1 pitot tube **and** ≥ 1 static port (pitot-static gate) |
 | [Inertial Navigation System](ins.md) | `ccpe:ins` | Attitude (pitch / roll / yaw), position, orientation quaternion, angular velocity | ≥ 1 INS |
-| [Flight Management Computer](fmc.md) | `ccpe:fmc` | Mass, gravity force, center of mass, Create stress network of the attached block, propeller speed solver, altitude↔pressure conversion, sail aero & universal drag tools | ≥ 1 FMC |
+| [Flight Management Computer](fmc.md) | `ccpe:fmc` | Mass, gravity force, center of mass, Create stress network of the attached block, propeller speed solver, altitude↔pressure conversion, sail aero, universal drag & max-altitude tools | ≥ 1 FMC |
 | [Aviation Integrated Computer](aic.md) | `ccpe:aic` | Counts as **both** an INS and an FMC | — |
 | [Short-Range Signal Linker](short-range-linker.md) | `ccpe:short_range_linker` | Per-body peripheral channel + redstone I/O | On a physics body |
 | [Position Light](position-light.md) | `ccpe:red_position_light` / `ccpe:green_position_light` / `ccpe:white_position_light` | Lighting output — no sensing; switchable via Lua | ≥ 1 FMC |
@@ -48,7 +48,7 @@ Plus per-block methods (see each page):
 - **Static Port** — `getAltitude()`, `getPressure()`, `getAverageAltitude()`, `getAveragePressure()`, `getWeightedAltitude()`, `getWeightedPressure()`
 - **Pitot Tube** — `getSpeed()`, `getAirSpeed()`, `getAverageSpeed()`, `getAverageAirSpeed()`
 - **INS** — `getAngles()`, `getPosition()`, `getBodyPosition()`, `getOrientation()`, `getAngularVelocity()`
-- **FMC** — `getPhysicsCenterOfMassRel()`, `getPhysicsMass()`, `getPhysicsChainMass()`, `getPhysicsGravityForce()`, `getPhysicsChainGravityForce()`, `getPhysicsChainCenterOfMassRel()`, `getStressRemaining()`, `getStressCapacity()`, `initPropeller(N, S)`, `getPropellerRPM(F, P, V, θ?)`, `getPressureFromAltitude(Y)`, `getAltitudeFromPressure(P)`, `solveSailLift(P, V, L?)`, `solveSailDirectionlessDrag(P, V, D?)`, `getUniversalDragForce(m, V)`
+- **FMC** — `getPhysicsCenterOfMassRel()`, `getPhysicsMass()`, `getPhysicsChainMass()`, `getPhysicsGravityForce()`, `getPhysicsChainGravityForce()`, `getPhysicsChainCenterOfMassRel()`, `getStressRemaining()`, `getStressCapacity()`, `initPropeller(N, S)`, `getPropellerRPM(F, P, V, θ?)`, `getPressureFromAltitude(Y)`, `getAltitudeFromPressure(P)`, `solveSailLift(P, V, L?)`, `solveSailDirectionlessDrag(P, V, D?)`, `getUniversalDragForce(m, V)`, `getMaxAltitude(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)`
 - **Short-Range Signal Linker** — `getPeripheral(channel)`, `getRedstoneOutput(channel)`, `getRedstoneInput(channel)`, `setRedstoneOutput(channel, signal)`
 - **Position Light** — `setLights(color, on)`, `setAllLights(on)`
 

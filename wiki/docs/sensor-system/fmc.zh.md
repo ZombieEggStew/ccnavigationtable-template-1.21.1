@@ -136,6 +136,13 @@ R = F / (P × S^1.5 × N × T) + V × sin(θ) / (S^0.5 × A)
 
 返回所需转速 R；未 init、门控不满足（无 FMC）或参数非法（如 `P ≤ 0`）返回 `nil`。
 
+**`θ`（气流角，度）**——缩放气流项 `V × sin(θ) / (S^0.5 × A)`：螺旋桨穿过自身所推空气所需的额外转速。按机型取用：
+
+- **固定翼飞机平飞：`θ = 90`**——气流穿过桨盘，气流项全额生效（sin 90° = 1）；
+- **直升机垂直起降：`θ = 0`**——无气流项。
+
+默认 `0`。
+
 > 气压可用 `getPressure()`（静压孔读数）、速度可用 `getSpeed()`/`getAverageSpeed()`（皮托管读数）直接代入，组合成推力闭环控制。
 
 ## 高度-气压换算工具
@@ -333,3 +340,47 @@ print("通用阻力 (N):", drag)   -- m × 0.09 × V
 ```
 
 > `m` 代入 `getPhysicsMass()`/`getPhysicsChainMass()`、`V` 代入 `getSpeed()`（或 `|v|`）即可闭合全机力平衡：巡航时 `推力 − 帆阻力 − 通用阻力 ≈ 0`。可用记录值复核（如 m ≈ 45.25 kg、v ≈ 62.6 m/s → F ≈ 255 N）。
+
+## 最高巡航高度求解工具
+
+同为 FMC 门控（因此装 AIC 也满足），这个纯数学求解器反解巡航方程组：给定飞机质量、帆数与螺旋桨配置，求在给定**最大转速**下能达到的**最高稳态高度**与所需空速。
+
+对未知量 `(v, P)` 求解两个稳态巡航方程（平飞、气流与帆面法向垂直故法向阻力为 0）：
+
+```
+(1) 升力 = 重力:   k3·P·v·N_w                          = m·g
+                   → x = P·v = m·g/(k3·N_w)            （与高度无关，直接钉死）
+(2) 推力 = 阻力:   P·S^1.5·N_p·T·R·(1 − v/(S^0.5·R·A))  = k2·P·v·N_s + m·d·v
+```
+
+| 方法 | 返回 | 说明 |
+|---|---|---|
+| `getMaxAltitude(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)` | table / nil | `{velocity=..., altitude=...}`——`maxRpm` 下的稳态巡航状态 |
+
+代入 `v = x/P` 后方程 (2) 化为关于 **P 的一元二次**——无需矩阵（方程组对 `(v, P)` 双线性，消元后恰为一元二次）：
+
+```
+a·P² + b·P + c = 0
+a = S^1.5·N_p·T·R
+b = −(S·N_p·T·x/A + k2·x·N_s)      （S^1.5/S^0.5 = S、R 消去）
+c = −m·d·x
+P* = (−b + √(b²−4ac))/(2a)，v* = x/P*，高度 = 气压曲线反解(P*)（二分）
+```
+
+- **`N_w`** = `wingSails`——升力帆数（只有普通帆产生升力）。**`N_s`** = `wingSails + symmetricSails + propellerCount × sailsPerPropeller`——**总动力方块数**（风帆 + 对称风帆 + 螺旋桨动力方块），全部计入无方向阻力 `k2·P·v`。
+- **推力模型**带气流削减系数 `(1 − v/(S^0.5·R·A))`——即 `getPropellerRPM` 模型在固定翼平飞（`θ = 90`）下的形式：桨面有最大有效速度 `S^0.5·R·A`，超过它推力转负。
+- **系数来源**（与其余工具相同）：`k3 = 0.475`、`k2 = 0.06888202261`、`g = 11`、`d = 0.09`（通用阻力，数据包可覆盖）、`T = 0.2` / `A = 0.05`（aeronautics 配置）、维度大气曲线——均在进游戏与放置/加载 FMC/AIC 时缓存。
+- **可行性**：解出的 `P*` 超出维度大气值域（贴地也升力不足 / 高于大气顶）、门控不满足（无 FMC）或参数非法（`m ≤ 0`、`wingSails < 1`、`propellerCount < 1`、`sailsPerPropeller < 1`、`maxRpm ≤ 0`）时返回 `nil`。`maxRpm = 256` 只是转速上限，实际还受应力网络容量（`getStressRemaining()`）约束。
+
+### 示例
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+-- 给定装配在最大转速下的最高稳态巡航
+local cruise = ss.getMaxAltitude(45.25, 43, 2, 2, 4, 256)
+print("巡航空速 (m/s):", cruise.velocity)
+print("最高高度 (Y):  ", cruise.altitude)
+```
+
+> `m` 用 `getPhysicsChainMass()`、帆数/桨数用你装配的真实方块数、转速上限用 256；结果与飞行记录器数据对照验证。
