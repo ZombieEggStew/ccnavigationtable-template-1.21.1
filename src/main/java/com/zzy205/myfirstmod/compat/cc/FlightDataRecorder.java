@@ -114,7 +114,12 @@ public final class FlightDataRecorder {
             "univFx", "univFy", "univFz",
             "joyCh", "joyX", "joyY", "joyXA", "joyYA",
             "thrCh", "thrAxis", "thrGear", "thrFwd", "thrBack",
-            "pedCh", "pedL", "pedR"
+            "pedCh", "pedL", "pedR",
+            // ── [DEBUG-临时] INS 点速度诊断列（定位静止机体 getVelocity().y=-0.03；定位后删除）──
+            "vHelperX", "vHelperY", "vHelperZ",
+            "vOmegaCrossX", "vOmegaCrossY", "vOmegaCrossZ",
+            "vLatestX", "vLatestY", "vLatestZ",
+            "insLocalX", "insLocalY", "insLocalZ"
     };
 
     private static final double NaN = Double.NaN;
@@ -140,7 +145,7 @@ public final class FlightDataRecorder {
         if (tick % interval != 0) return;
 
         try {
-            List<ServerSubLevel> bodies = BodySensorRegistry.fmcBodies(server);
+            List<ServerSubLevel> bodies = BodySensorRegistry.bodiesWithAny(server, SensorType.FMC, SensorType.ATTITUDE);
             Set<UUID> alive = new HashSet<>();
             for (ServerSubLevel sub : bodies) {
                 UUID id = SableCompat.getSubLevelUUID(sub);
@@ -309,6 +314,8 @@ public final class FlightDataRecorder {
 
             // ── 控制输入（控制台频道寻址，BE 服务端直读，同模块句柄数据源）──
             appendControls(f, sub);
+            // ── [DEBUG-临时] INS 点速度诊断 ──
+            appendInsVelocityDebug(f, sub);
         } catch (Exception e) {
             LOGGER.debug("Flight log sampling failed (body {}): {}", SableCompat.getSubLevelId(sub), e.toString());
             return tick + "," + String.format(Locale.ROOT, "%.3f", tick / 20.0) + ","
@@ -536,6 +543,58 @@ public final class FlightDataRecorder {
             };
         } catch (Exception e) {
             return -1;
+        }
+    }
+
+    /**
+     * [DEBUG-临时] INS 点速度诊断列（定位静止机体 getVelocity().y=-0.03；定位后删除）。
+     * <ul>
+     * <li><b>vHelper</b>：{@code Sable.HELPER.getVelocity} 在<b>最后放置的 INS 方块</b>位置的点速度
+     *     （= {@code ss.getVelocity()} 的数据源，世界系，与皮托管 getSpeed 同源）；</li>
+     * <li><b>vOmegaCross</b>：ω × r（自转杠杆臂贡献，r = INS 世界坐标 − 机体原点世界坐标）；</li>
+     * <li><b>vLatest</b>：{@code ServerSubLevel.latestLinearVelocity}（每 tick 世界 pose 位置差分 ×20，
+     *     世界系，Sable 自己算的独立参照；绝对静止应为 0）；</li>
+     * <li><b>insLocal</b>：杠杆臂 r 的世界系分量。</li>
+     * </ul>
+     * 对照已有列：vX vY vZ = 裸读 {@code handle.getLinearVelocity()}（原始物理值，坐标系未验证——
+     * 早期观察到超大数，可能就是它），wX wY wZ = 裸读角速度。
+     * 机体上无 INS → 本组 12 列全 nan。
+     */
+    private static void appendInsVelocityDebug(List<String> f, ServerSubLevel sub) {
+        try {
+            SensorEntry lastIns = null;
+            for (SensorEntry e : BodySensorRegistry.sensorsOnBody(sub))
+                if (e.type() == SensorType.ATTITUDE) lastIns = e; // 注册顺序 = 放置顺序，取最后
+            if (lastIns == null) {
+                for (int i = 0; i < 12; i++) f.add("nan");
+                return;
+            }
+            Vec3 helper = SableCompat.getVelocity(sub.getLevel(), lastIns.pos());
+            Vec3 insWorld = SableCompat.projectOutOfSubLevel(sub.getLevel(), lastIns.pos());
+            Pose3dc pose = sub.logicalPose();
+            Vector3dc posP = pose.position();
+            double lx = insWorld != null ? insWorld.x - posP.x() : NaN;
+            double ly = insWorld != null ? insWorld.y - posP.y() : NaN;
+            double lz = insWorld != null ? insWorld.z - posP.z() : NaN;
+            Vec3 ang = SableCompat.getAngularVelocity(sub.getLevel(), sub);
+            double cx = ang != null ? ang.y * lz - ang.z * ly : NaN;
+            double cy = ang != null ? ang.z * lx - ang.x * lz : NaN;
+            double cz = ang != null ? ang.x * ly - ang.y * lx : NaN;
+            f.add(n(helper != null ? helper.x : NaN));
+            f.add(n(helper != null ? helper.y : NaN));
+            f.add(n(helper != null ? helper.z : NaN));
+            f.add(n(cx));
+            f.add(n(cy));
+            f.add(n(cz));
+            Vector3d latest = sub.latestLinearVelocity;
+            f.add(n(latest != null ? latest.x : NaN));
+            f.add(n(latest != null ? latest.y : NaN));
+            f.add(n(latest != null ? latest.z : NaN));
+            f.add(n(lx));
+            f.add(n(ly));
+            f.add(n(lz));
+        } catch (Exception e) {
+            for (int i = 0; i < 12; i++) f.add("nan");
         }
     }
 

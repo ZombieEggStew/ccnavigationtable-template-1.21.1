@@ -19,15 +19,15 @@
 | `getBodyPosition()` | table / nil | **物理体原点**（枢轴/质心轴）的世界坐标 `{x, y, z}` |
 | `getOrientation()` | table / nil | 机体姿态四元数 `{x, y, z, w}`（世界系） |
 | `getAngularVelocity()` | table / nil | **机体局部系**角速率 `{x, y, z}`（rad/s，绕机体自身 X/Y/Z 轴；机体姿态恒等时 = 世界系） |
-| `getVelocity()` | table / nil | **世界系**线速度 `{x, y, z}`（m/s，沿世界 X/Y/Z 轴） |
+| `getVelocity()` | table / nil | **世界系**线速度 `{x, y, z}`（m/s，**机体原点**平移速度，静止时严格 = 0） |
 
 INS 也会出现在 `getSensors()` 中，条目为 `{type="ins", pos={x,y,z}, pos_rel={x,y,z}}`（无逐传感器读数——姿态用上面的专用方法读取）。
 
 !!! note "角速度参考系"
-    `getAngularVelocity()` 返回绕**机体自身轴**的角速率分量（滚转/俯仰/偏航率风格）：物理引擎的世界系角速度经与 `getOrientation()` 同一 tick 的姿态四元数旋转到机体系得到。需要世界系角速度时，用该四元数对本结果做正向旋转（`q * ω_body`）即可恢复。
+    `getAngularVelocity()` 返回绕**机体自身轴**的角速率分量（滚转/俯仰/偏航率风格）：**世界系角速度**（Sable 每 tick 的 pose 姿态差分 `latestAngularVelocity`，×20 转 rad/s——静止时严格为 0，不同于会报幻影值的裸读物理 handle）经与 `getOrientation()` 同一 tick 的姿态四元数旋转到机体系得到。需要世界系角速度时，用该四元数对本结果做正向旋转（`q * ω_body`）即可恢复。
 
-!!! note "线速度参考系与取值位置"
-    `getVelocity()` 是**机体自身的刚体线速度**（质心速度，不含自转贡献），直接以**世界系**返回——与物理引擎使用的数值一致。需要机体局部系线速度（沿机体自身 X/Y/Z 轴）时，用 `getOrientation()` 姿态四元数的逆对本结果做旋转（`q⁻¹ * v`）即可。
+!!! note "线速度参考系与数据源"
+    `getVelocity()` 返回**机体原点的世界系平移速度**（m/s）——Sable 每 tick 用世界 pose 位置差分 ×20 计算（`ServerSubLevel.latestLinearVelocity`），**机体静止时严格为 0**。它不是裸读物理 handle 的速度，也不是 `Sable.HELPER.getVelocity` 的点速度：后两者混入了物理 handle 的非世界系幻影值（世界静止的机体上仍报 ≈ −0.03 m/s、≈ 0.008 rad/s，飞行日志诊断列已证实）。需要机体局部系线速度（沿机体自身 X/Y/Z 轴）时，用 `getOrientation()` 姿态四元数的逆对本结果做旋转（`q⁻¹ * v`）即可。
 
 ## 角度约定
 

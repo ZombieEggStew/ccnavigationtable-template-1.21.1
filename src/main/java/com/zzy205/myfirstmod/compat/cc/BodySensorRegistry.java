@@ -107,10 +107,29 @@ public final class BodySensorRegistry {
      * 仅服务端主线程调用（飞行数据记录器每 ServerTick 枚举一次）。
      */
     public static List<ServerSubLevel> fmcBodies(MinecraftServer server) {
+        return bodiesWithAny(server, SensorType.FMC);
+    }
+
+    /** 该条目集合是否含任意给定类型（FMC / AIC 都登记 FMC；INS / AIC 都登记 ATTITUDE） */
+    private static boolean hasAny(Set<SensorEntry> set, SensorType... types) {
+        for (SensorEntry e : set)
+            for (SensorType t : types)
+                if (e.type() == t) return true;
+        return false;
+    }
+
+    /**
+     * 服务器上所有已注册<b>任意给定类型</b>传感器的物理体（ServerSubLevel），按注册顺序
+     * （UUID 插入序）。仅服务端主线程调用。
+     * <p>
+     * 飞行数据记录器用它同时覆盖 FMC 与 INS（ATTITUDE）机体：FMC 门控的物理数据列在无 FMC
+     * 时写 nan，但运动学 / INS 速度诊断列始终可用（调试静止机体 INS 速度用）。
+     */
+    public static List<ServerSubLevel> bodiesWithAny(MinecraftServer server, SensorType... types) {
         List<ServerSubLevel> out = new ArrayList<>();
-        if (server == null) return out;
+        if (server == null || types.length == 0) return out;
         for (Map.Entry<UUID, Set<SensorEntry>> entry : SENSORS.entrySet()) {
-            if (!hasFmc(entry.getValue())) continue;
+            if (!hasAny(entry.getValue(), types)) continue;
             for (ServerLevel level : server.getAllLevels()) {
                 try {
                     SubLevelContainer container = SubLevelContainer.getContainer(level);

@@ -171,7 +171,9 @@ public class PeripheralExtenderAPI implements ILuaAPI {
             return Collections.emptyMap();
         Level level = sensor.getLevel();
         if (level == null) return Collections.emptyMap();
-        Vec3 vel = SableCompat.getVelocity(level, sensor.getBlockPos());
+        // 修正世界系点速度（裸读 Sable.HELPER.getVelocity 含幻影值，见 SensorSystemAPI.getVelocity 记录）
+        SubLevel sub = SableCompat.getContainingSubLevel(level, sensor.getBlockPos());
+        Vec3 vel = sub != null ? SableCompat.getWorldPointVelocity(level, sub, sensor.getBlockPos()) : null;
         if (vel == null) return Collections.emptyMap();
         return vec3ToMap(vel);
     }
@@ -186,7 +188,9 @@ public class PeripheralExtenderAPI implements ILuaAPI {
             return Collections.emptyMap();
         Level level = sensor.getLevel();
         if (level == null) return Collections.emptyMap();
-        Vec3 vel = SableCompat.getAirVelocity(level, sensor.getBlockPos());
+        // 修正世界系空速（= 修正点速度 − 风速；风速用两个 Sable 调用差值，幻影值抵消）
+        SubLevel sub = SableCompat.getContainingSubLevel(level, sensor.getBlockPos());
+        Vec3 vel = sub != null ? SableCompat.getWorldAirVelocity(level, sub, sensor.getBlockPos()) : null;
         if (vel == null) return Collections.emptyMap();
         return vec3ToMap(vel);
     }
@@ -202,7 +206,8 @@ public class PeripheralExtenderAPI implements ILuaAPI {
         SubLevel sub = sensor.getCachedSubLevel();
         Level level = sensor.getLevel();
         if (sub == null || level == null) return Collections.emptyMap();
-        Vec3 angVel = SableCompat.getAngularVelocity(level, sub);
+        // 修正世界系角速度（裸读 handle 含幻影值，见 SensorSystemAPI.getAngularVelocity 记录）
+        Vec3 angVel = SableCompat.getWorldAngularVelocity(sub);
         if (angVel == null) return Collections.emptyMap();
         return vec3ToMap(angVel);
     }
@@ -218,7 +223,8 @@ public class PeripheralExtenderAPI implements ILuaAPI {
         SubLevel subLevel = sensor.getCachedSubLevel();
         if (subLevel == null) return 0.0;
         
-        Vec3 velocity = SableCompat.getVelocity(level, sensor.getBlockPos());
+        // 修正世界系点速度（裸读 Sable.HELPER.getVelocity 含幻影值）
+        Vec3 velocity = SableCompat.getWorldPointVelocity(level, subLevel, sensor.getBlockPos());
         if (velocity == null) return 0.0;
 
         Direction axis = getSensorSide(sensor.getBlockState());

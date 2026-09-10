@@ -54,7 +54,7 @@ A computer on the same physics body (including constraint chains) uses `require(
 
 Shared methods (`isOnBody()`, `getBodyId()`, ...) behave as documented on the [Static Port](static-port.md) page.
 
-- **Ground vs air speed**: `getSpeed()` uses the world velocity; `getAirSpeed()` uses the velocity **relative to the air** (`Sable.HELPER.getVelocityRelativeToAir`, wind subtracted). Sable registers no wind by itself — without a wind-providing mod (e.g. PMWeather) both return the same value.
+- **Ground vs air speed**: `getSpeed()` uses the **corrected world-frame point velocity** at the pitot mouth (body-origin translational velocity from Sable's per-tick pose difference `latestLinearVelocity`, plus the lever-arm `ω×r` term using `latestAngularVelocity` — never the raw physics-handle values, which report phantom non-zero readings on a stationary body). `getAirSpeed()` additionally subtracts the wind, derived as `Sable.HELPER.getVelocity` − `getVelocityRelativeToAir` (both share the same contaminated base, so the phantom values cancel). Sable registers no wind by itself — without a wind-providing mod (e.g. PMWeather) both return the same value.
 - **Dead zone**: |reading| < 0.05 m/s is clamped to 0 (stationary → 0).
 - Multiple pitot tubes: `getSpeed()/getAirSpeed()` use the **most recently placed** one (registration order = placement order — see the restart warning below); `getAverageSpeed()/getAverageAirSpeed()` average **all** tubes (same-tick snapshot) and are immune to ordering.
 

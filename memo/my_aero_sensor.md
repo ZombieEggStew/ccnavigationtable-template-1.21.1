@@ -110,15 +110,24 @@ compass  = Y·Z·X          (applyCompass→applyPrimary→applySecondary, euler
 - [x] `getPosition()` 已实现（2026-08）：最后放置的 INS 的**世界坐标** {x, y, z}（plot 坐标经
       `SableCompat.projectOutOfSubLevel` 投影到世界，与静压孔高度同源；随物理体移动/旋转实时变化；
       门控与 getAngles 相同 = 机体上有 ≥1 INS）。
-- [x] `getOrientation()` / `getAngularVelocity()` 已实现（2026-08）：机体姿态四元数 {x, y, z, w}（世界系）
-      与**机体局部系角速率** {x, y, z} rad/s（绕机体自身 X/Y/Z 轴；姿态恒等时 = 世界系。
-      `SableCompat.getAngularVelocity` 返回的是刚体世界系角速度，SensorSystemAPI 缓存时用同一 tick 的
-      姿态四元数（`logicalPose().orientation()`，与 `getOrientation()` 同一基准）做 `q⁻¹·ω` 逆旋转得到，
-      参考 Simulated-Project `SimDebugThingCommands` 同款做法）；门控与 getAngles/getPosition 相同 =
+- [x] `getOrientation()` / `getAngularVelocity()` 已实现（2026-08，角速度源已修正）：机体姿态四元数
+      {x, y, z, w}（世界系）与**机体局部系角速率** {x, y, z} rad/s（绕机体自身 X/Y/Z 轴；
+      姿态恒等时 = 世界系。世界系角速度取 `SableCompat.getWorldAngularVelocity`
+      （`latestAngularVelocity`，Sable 每 tick 世界 pose 姿态差分 ×20，静止时严格 = 0），
+      SensorSystemAPI 缓存时用同一 tick 的姿态四元数（`logicalPose().orientation()`，与
+      `getOrientation()` 同一基准）做 `q⁻¹·ω` 逆旋转得到机体系，参考 Simulated-Project
+      `SimDebugThingCommands` 同款做法；⚠️ 不能裸读 `handle.getAngularVelocity`——世界静止机体上
+      仍有幻影值 ≈0.008 rad/s（飞行日志 wX 列实证））；门控与 getAngles/getPosition 相同 =
       机体上有 ≥1 INS。
-- [x] `getVelocity()` 已实现（2026-08）：**世界系线速度** {x, y, z} m/s（世界 X/Y/Z 轴分量）。
-      数据源 = `SableCompat.getLinearVelocity`（刚体世界系质心速度，不含自转贡献），
-      直接返回世界系、不做旋转；需要机体局部系时用 `getOrientation()` 四元数逆旋转（q⁻¹·v）；
-      门控与 getAngles/getPosition 相同 = 机体上有 ≥1 INS。
+- [x] `getVelocity()` 已实现（2026-08，最终版）：**机体原点的世界系平移速度** {x, y, z} m/s
+      （世界 X/Y/Z 轴分量；静止时严格为 0）。数据源 = `SableCompat.getWorldLinearVelocity`
+      （`ServerSubLevel.latestLinearVelocity`，Sable 每 tick 用世界 pose 位置差分 ×20）。
+      ⚠️ 踩坑史（飞行日志诊断列实证）：
+      1. 裸读 `handle.getLinearVelocity()` → 非世界系（曾见超大数；世界静止机体上也有 -0.067 幻影值）；
+      2. `Sable.HELPER.getVelocity`（皮托管同源）内部 = ω×r + 裸读 handle，两者都是幻影值 →
+         静止机体读数 -0.03（= 0.0083 rad/s 幻影角速度 × 4.1 格杠杆臂 + (-0.067)）；
+      3. 只有 `latestLinearVelocity`（世界 pose 差分）静止时 = 0。
+      皮托管 getSpeed 读 0 只是因为 axisSpeed 有 0.05 死区吞掉了幻影值。
+      需要机体局部系时用 `getOrientation()` 四元数逆旋转（q⁻¹·v）；门控 = 机体上有 ≥1 INS。
 - Create 护目镜 tooltip 显示俯仰/滚转/航向读数。
 - 非自然维度指北行为开关（当前随机乱转）。

@@ -55,7 +55,7 @@
 
 共享方法（`isOnBody()`、`getBodyId()` 等）行为与[静压孔](static-port.zh.md)页面一致。
 
-- **对地 vs 空速**：`getSpeed()` 用世界速度；`getAirSpeed()` 用**相对空气**的速度（`Sable.HELPER.getVelocityRelativeToAir`，已减风速）。Sable 本身不注册风——未装提供风的模组（如 PMWeather）时两者数值相同。
+- **对地 vs 空速**：`getSpeed()` 用**修正后的世界系点速度**（皮托管管口位置：机体原点平移速度取 Sable 每 tick 的 pose 位置差分 `latestLinearVelocity`，自转杠杆臂项 `ω×r` 用 `latestAngularVelocity`——绝不使用裸读物理 handle，它会在静止机体上报非零幻影值）；`getAirSpeed()` 再减去风速（风速取 `Sable.HELPER.getVelocity` − `getVelocityRelativeToAir` 的差值，两调用共享同一污染基底，幻影值恰好抵消）。Sable 本身不注册风——未装提供风的模组（如 PMWeather）时两者数值相同。
 - **死区**：|读数| < 0.05 m/s 归零（静止 → 0）。
 - 多个皮托管时，`getSpeed()/getAirSpeed()` 取**最后放置**的那个（注册顺序 = 放置顺序——见下方重启警告）；`getAverageSpeed()/getAverageAirSpeed()` 则平均**全部**皮托管（同一 tick 快照），不受顺序影响。
 

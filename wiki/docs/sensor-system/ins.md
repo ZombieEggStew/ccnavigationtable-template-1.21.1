@@ -19,15 +19,15 @@ All INS-gated methods require the physics body (including constraint chains) to 
 | `getBodyPosition()` | table / nil | World position `{x, y, z}` of the **physics body origin** (its pivot / center-of-mass axis) |
 | `getOrientation()` | table / nil | Body orientation quaternion `{x, y, z, w}` (world frame) |
 | `getAngularVelocity()` | table / nil | **Body-frame** angular rate `{x, y, z}` (rad/s) around the body's own X/Y/Z axes (equals the world frame when the body attitude is identity) |
-| `getVelocity()` | table / nil | **World-frame** linear velocity `{x, y, z}` (m/s) along the world X/Y/Z axes |
+| `getVelocity()` | table / nil | **World-frame** linear velocity `{x, y, z}` (m/s) of the **body origin** (world X/Y/Z axes; exactly 0 when stationary) |
 
 The INS also appears in `getSensors()` as `{type="ins", pos={x,y,z}, pos_rel={x,y,z}}` (no per-sensor readings — use the dedicated methods above).
 
 !!! note "Angular velocity frame"
-    `getAngularVelocity()` returns the rotation rate around the **body's own axes** (roll/pitch/yaw-rate style components): the physics engine's world-frame angular velocity rotated into the body frame with the same-tick orientation quaternion exposed by `getOrientation()`. To recover the world-frame angular velocity, rotate the result by that quaternion (`q * ω_body`).
+    `getAngularVelocity()` returns the rotation rate around the **body's own axes** (roll/pitch/yaw-rate style components): the **world-frame angular velocity** (Sable's per-tick pose-orientation difference `latestAngularVelocity`, ×20 to rad/s — exactly 0 when stationary, unlike the raw physics-handle value which reports phantom readings) rotated into the body frame with the same-tick orientation quaternion exposed by `getOrientation()`. To recover the world-frame angular velocity, rotate the result by that quaternion (`q * ω_body`).
 
 !!! note "Velocity frame and source"
-    `getVelocity()` is the **body's own rigid-body linear velocity** (center-of-mass velocity, without the rotational contribution), returned directly in the **world frame** — the same values the physics engine uses. To get the body-frame velocity (along the body's own X/Y/Z axes), rotate the result by the inverse of the orientation quaternion exposed by `getOrientation()` (`q⁻¹ * v`).
+    `getVelocity()` returns the **world-frame translational velocity of the body origin** (m/s) — computed by Sable each tick from the world pose position difference (`ServerSubLevel.latestLinearVelocity`, ×20 to per-second), so it is **exactly 0 when the body is stationary**. It is NOT the raw physics-handle velocity nor the `Sable.HELPER.getVelocity` point velocity: both mix in phantom non-world values from the physics handle (a world-stationary body still reports ≈ −0.03 m/s and ≈ 0.008 rad/s there — confirmed via flight-log columns). To get the body-frame velocity (along the body's own X/Y/Z axes), rotate the result by the inverse of the orientation quaternion exposed by `getOrientation()` (`q⁻¹ * v`).
 
 ## Angle convention
 

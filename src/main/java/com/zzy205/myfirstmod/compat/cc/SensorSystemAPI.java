@@ -98,7 +98,7 @@ import java.util.UUID;
  * print(ss.getPosition())         -- 最后放置的 INS 的世界坐标 {x, y, z}（门控：机体上必须有 INS）
  * print(ss.getOrientation())      -- 机体姿态四元数 {x, y, z, w}（门控：机体上必须有 INS）
  * print(ss.getAngularVelocity())  -- 机体局部系角速率 {x, y, z} rad/s（绕机体自身 X/Y/Z 轴，姿态恒等时=世界系；门控：机体上必须有 INS）
- * print(ss.getVelocity())         -- 世界系线速度 {x, y, z} m/s（世界 X/Y/Z 轴分量；门控：机体上必须有 INS）
+ * print(ss.getVelocity())         -- 世界系线速度 {x, y, z} m/s（机体原点平移速度，Sable pose 差分；门控：机体上必须有 INS）
  * print(ss.getBodyPosition())     -- 物理体原点世界坐标 {x, y, z}（门控：机体上必须有 INS）
  * print(ss.getPhysicsCenterOfMassRel()) -- 重心相对最后放置的 FMC 的机体局部系位置 {x, y, z}（门控：机体上有 FMC）
  * print(ss.getPhysicsMass())      -- 所在物理体质量 kg（门控：机体上有 FMC）
@@ -161,7 +161,7 @@ public class SensorSystemAPI implements ILuaAPI {
     private volatile double angVelY = 0;
     private volatile double angVelZ = 0;
 
-    /** 线速度缓存（世界系 m/s，世界 X/Y/Z 轴的线速度分量）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
+    /** 线速度缓存（世界系 m/s，机体原点平移速度，Sable 每 tick pose 位置差分 ×20）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
     private volatile boolean velocityAvailable = false;
     private volatile double velX = 0;
     private volatile double velY = 0;
@@ -435,10 +435,12 @@ public class SensorSystemAPI implements ILuaAPI {
         }
 
         // 角速度缓存（机体局部系 rad/s；门控：机体上有 INS 才计算，与姿态同一 tick 快照）。
-        // SableCompat.getAngularVelocity 返回刚体世界系角速度；机体局部系 = 用同一 tick 的姿态
-        // 四元数（orient，与 getOrientation() 同一基准，logicalPose().orientation()）做逆旋转：
-        // ω_body = q⁻¹·ω_world（JOML transformInverse），分量即绕机体自身 X/Y/Z 轴的角速率。
-        Vec3 angVel = attitudeGate ? SableCompat.getAngularVelocity(sub.getLevel(), sub) : null;
+        // SableCompat.getWorldAngularVelocity 返回 Sable 每 tick 用世界 pose 姿态差分 ×20 算的
+        // 世界系角速度（静止时严格为 0，不能用裸读 handle——世界静止机体上仍有幻影值）；
+        // 机体局部系 = 用同一 tick 的姿态四元数（orient，与 getOrientation() 同一基准，
+        // logicalPose().orientation()）做逆旋转：ω_body = q⁻¹·ω_world（JOML transformInverse），
+        // 分量即绕机体自身 X/Y/Z 轴的角速率。
+        Vec3 angVel = attitudeGate ? SableCompat.getWorldAngularVelocity(sub) : null;
         if (angVel != null && orient != null) {
             Vector3d bodyAngVel = new Vector3d(angVel.x, angVel.y, angVel.z);
             new Quaterniond(orient[0], orient[1], orient[2], orient[3]).transformInverse(bodyAngVel);
@@ -452,10 +454,13 @@ public class SensorSystemAPI implements ILuaAPI {
         }
 
         // 线速度缓存（世界系 m/s；门控：机体上有 INS 才计算，与姿态同一 tick 快照）。
-        // SableCompat.getLinearVelocity 返回刚体世界系线速度（质心速度，不含自转贡献），
-        // 直接缓存世界系 x/y/z 分量，不做旋转。需要机体局部系线速度（沿机体自身 X/Y/Z 轴）
-        // 时，可用 getOrientation() 的姿态四元数对本结果做逆旋转（q⁻¹·v_world）。
-        Vec3 linVel = attitudeGate ? SableCompat.getLinearVelocity(sub.getLevel(), sub) : null;
+        // 数据源 = SableCompat.getWorldLinearVelocity（ServerSubLevel.latestLinearVelocity）：
+        // Sable 每 tick 用世界 pose 位置差分 ×20 算的机体原点平移速度，世界系、静止时严格为 0。
+        // ⚠️ 不要用 Sable.HELPER.getVelocity（内部 = ω×r + 裸读 handle，两者在世界静止的机体上
+        // 都返回非零幻影值，静止时机体读数为约 -0.03 的假速度，见 FlightDataRecorder 诊断列）。
+        // 需要机体局部系线速度（沿机体自身 X/Y/Z 轴）时，用 getOrientation() 姿态四元数
+        // 对本结果做逆旋转（q⁻¹·v_world）。
+        Vec3 linVel = attitudeGate ? SableCompat.getWorldLinearVelocity(sub) : null;
         if (linVel != null) {
             velocityAvailable = true;
             velX = linVel.x;
@@ -739,7 +744,8 @@ public class SensorSystemAPI implements ILuaAPI {
 
     /**
      * 所在物理体（含约束链）的机体局部系角速率 {@code {x, y, z}}（rad/s，绕机体自身 X/Y/Z 轴
-     * 的角速率分量）。数据源为世界系刚体角速度（{@link SableCompat#getAngularVelocity}），
+     * 的角速率分量）。数据源为世界系角速度（{@link SableCompat#getWorldAngularVelocity}，
+     * Sable 每 tick 用世界 pose 姿态差分 ×20 计算，静止时严格为 0），
      * 缓存时用与 {@link #getOrientation()} 同一 tick 的姿态四元数
      * （{@code subLevel.logicalPose().orientation()}）做逆旋转得到机体系
      * （姿态恒等时与世界系一致）。需要世界系角速度时可用 {@link #getOrientation()} 的
@@ -760,9 +766,15 @@ public class SensorSystemAPI implements ILuaAPI {
 
     /**
      * 所在物理体（含约束链）的<b>世界系</b>线速度 {@code {x, y, z}}（m/s，世界坐标 X/Y/Z 轴的
-     * 分量）。数据源为刚体世界系线速度（{@link SableCompat#getLinearVelocity}，质心速度，
-     * 不含自转贡献），直接返回世界系分量，不做旋转。需要机体局部系线速度（沿机体自身
-     * X/Y/Z 轴）时，可用 {@link #getOrientation()} 的姿态四元数对本结果做逆旋转（q⁻¹·v）。
+     * 分量）= <b>机体原点</b>的平移速度。数据源 = {@link SableCompat#getWorldLinearVelocity}
+     * （{@code ServerSubLevel.latestLinearVelocity}，Sable 每 tick 用世界 pose 位置差分 ×20
+     * 计算），世界静止时机体读数严格为 0。
+     * <p>
+     * ⚠️ 不用 {@code Sable.HELPER.getVelocity}（皮托管同源）：其内部 = 裸读物理 handle 的
+     * 线/角速度（世界静止的机体上仍返回非零幻影值）× 杠杆臂 + 线速度，静止机体上会得到
+     * 约 -0.03 的假速度（已由飞行日志诊断列证实，见 {@code FlightDataRecorder} 的
+     * vHelper/vLatest 列）。需要机体局部系线速度（沿机体自身 X/Y/Z 轴）时，可用
+     * {@link #getOrientation()} 的姿态四元数对本结果做逆旋转（q⁻¹·v）。
      * <p>
      * <b>门控（存在性）</b>：与 {@link #getAngles()} 相同——所在物理体上必须有 ≥1 个
      * 惯性导航系统（ccpe:ins），否则返回 nil。
@@ -775,6 +787,32 @@ public class SensorSystemAPI implements ILuaAPI {
         m.put("y", velY);
         m.put("z", velZ);
         return m;
+    }
+
+    /**
+     * [DEBUG-临时] 转储 {@code getVelocity()} 的中间量，定位「静止物理体上 y=-0.03」问题。
+     * <p>
+     * 返回表字段见 {@link SableCompat#debugVelocity}：helper_velocity / pose_position /
+     * rotation_point / plot_pos / ins_world_pos / local_pos / linear_velocity /
+     * angular_velocity / omega_cross_local / sum / latest_linear_velocity。
+     * <p>
+     * 用法（进游戏，电脑装在目标物理体上）：
+     * <pre>{@code
+     * print(textutils.serialize(require("ccpe.sensor_system").getVelocityDebug()))
+     * }</pre>
+     * 定位完成后删除本方法。
+     *
+     * @return 调试转储表；不在物理体上或机体无 INS 返回 nil
+     */
+    @LuaFunction(mainThread = true)
+    public final @Nullable Map<String, Object> getVelocityDebug() {
+        SubLevel sub = resolveSubLevel();
+        if (sub == null) return null;
+        SensorEntry lastIns = null;
+        for (SensorEntry e : BodySensorRegistry.sensorsOnBody(sub))
+            if (e.type() == SensorType.ATTITUDE) lastIns = e; // 注册顺序 = 放置顺序，取最后
+        if (lastIns == null) return null;
+        return SableCompat.debugVelocity(sub.getLevel(), sub, lastIns.pos());
     }
 
     /**
@@ -1821,10 +1859,16 @@ public class SensorSystemAPI implements ILuaAPI {
      *
      * @return {x, y, z}（世界坐标）；机体上无 INS（门控）或投影失败返回 null
      */
-    private @Nullable double[] computeInsPosition(SubLevel sub, List<SensorEntry> entries) {
+    /** 最后放置（最新注册）的 INS（ATTITUDE 传感器）条目；机体上无 INS（门控）返回 null */
+    private @Nullable SensorEntry lastInsEntry(List<SensorEntry> entries) {
         SensorEntry lastIns = null;
         for (SensorEntry e : entries)
             if (e.type() == SensorType.ATTITUDE) lastIns = e; // 注册顺序 = 放置顺序，取最后
+        return lastIns;
+    }
+
+    private @Nullable double[] computeInsPosition(SubLevel sub, List<SensorEntry> entries) {
+        SensorEntry lastIns = lastInsEntry(entries);
         if (lastIns == null) return null;
         Vec3 worldPos = SableCompat.projectOutOfSubLevel(sub.getLevel(), lastIns.pos());
         if (worldPos == null) return null;
@@ -1907,12 +1951,12 @@ public class SensorSystemAPI implements ILuaAPI {
 
     /** 皮托管沿管口朝向的<b>对地</b>速度分量（m/s，有符号） */
     private @Nullable Double computeSpeed(SubLevel sub, BlockPos sensorPos) {
-        return axisSpeed(sub, sensorPos, SableCompat.getVelocity(sub.getLevel(), sensorPos));
+        return axisSpeed(sub, sensorPos, SableCompat.getWorldPointVelocity(sub.getLevel(), sub, sensorPos));
     }
 
     /** 皮托管沿管口朝向的<b>空速</b>分量（相对空气，已减风速，m/s，有符号） */
     private @Nullable Double computeAirSpeed(SubLevel sub, BlockPos sensorPos) {
-        return axisSpeed(sub, sensorPos, SableCompat.getAirVelocity(sub.getLevel(), sensorPos));
+        return axisSpeed(sub, sensorPos, SableCompat.getWorldAirVelocity(sub.getLevel(), sub, sensorPos));
     }
 
     /**
