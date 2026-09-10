@@ -232,8 +232,7 @@ public class PeripheralExtenderAPI implements ILuaAPI {
         Vec3 worldNormal = SableCompat.transformNormalToWorld(subLevel, bodyNormal);
         if (worldNormal == null) return 0.0;
 
-        double component = velocity.dot(worldNormal);
-        return Math.abs(component) < 0.05 ? 0.0 : component;
+        return velocity.dot(worldNormal);
     }
 
     @LuaFunction

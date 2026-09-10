@@ -2,7 +2,6 @@ package com.zzy205.myfirstmod.compat.sable;
 
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.SubLevelHelper;
-import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.api.physics.mass.MassData;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
@@ -27,9 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -278,18 +275,6 @@ public final class SableCompat {
     }
 
     /**
-     * 获取指定位置所在物理结构的世界空间线速度。
-     */
-    public static Vec3 getVelocity(Level level, BlockPos pos) {
-        if (level == null || pos == null) return null;
-        try {
-            return Sable.HELPER.getVelocity(level, pos.getCenter());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
      * 获取 SubLevel 当前姿态的四元数朝向。
      *
      * @return {@code {x, y, z, w}}，失败返回 null
@@ -306,36 +291,12 @@ public final class SableCompat {
     }
 
     /**
-     * 获取 SubLevel 物理刚体的角速度。
-     *
-     * @return 角速度 Vec3，失败返回 null
-     */
-    public static Vec3 getAngularVelocity(Level level, SubLevel subLevel) {
-        if (!(level instanceof ServerLevel) || subLevel == null) return null;
-        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
-        try {
-            SubLevelContainer container = SubLevelContainer.getContainer(level);
-            if (!(container instanceof ServerSubLevelContainer serverContainer)) return null;
-
-            SubLevelPhysicsSystem physicsSystem = serverContainer.physicsSystem();
-            RigidBodyHandle handle = physicsSystem.getPhysicsHandle(serverSubLevel);
-            if (handle == null) return null;
-
-            Vector3dc angVel = handle.getAngularVelocity(new Vector3d());
-            return new Vec3(angVel.x(), angVel.y(), angVel.z());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
      * 获取 SubLevel 的<b>世界系</b>线速度（m/s，每 tick 由 Sable 用世界 pose 位置差分 ×20 计算，
      * 即 {@code logicalPose().position() − lastPose().position()}，机体原点平移速度）。
      * <p>
      * ⚠️ 这是<b>唯一可信</b>的世界系线速度源：实测（飞行日志）世界静止的机体上，裸读物理 handle
-     * （{@link #getLinearVelocity}）仍返回非零"幻影值"（如 y≈-0.067），裸读角速度同样
-     * （{@link #getAngularVelocity}，如 x≈0.008 rad/s）；这些幻影值还污染了
-     * {@code Sable.HELPER.getVelocity}（内部 = ω×r + linearVelocity，静止机体上会得到
+     * 的线速度仍返回非零"幻影值"（如 y≈-0.067），裸读角速度同样（如 x≈0.008 rad/s）；这些幻影值
+     * 还污染了 {@code Sable.HELPER.getVelocity}（内部 = ω×r + linearVelocity，静止机体上会得到
      * 约 -0.03 的假速度）。只有本方法（pose 位置差分，世界系）在静止时严格为 0。
      *
      * @return 世界系线速度 Vec3（m/s）；非服务端 sub-level 或读取失败返回 null
@@ -371,41 +332,28 @@ public final class SableCompat {
     }
 
     /**
-     * 世界系<b>点速度</b>（m/s）= 机体原点平移速度 + 角速度 × (点 − 原点)，即刚体上某点的真实
-     * 世界系运动速度（含自转杠杆臂贡献）。输入用干净的世界系 latest 值（
-     * {@link #getWorldLinearVelocity} / {@link #getWorldAngularVelocity}），与
-     * {@code Sable.HELPER.getVelocity} 公式一致但无其幻影值污染（静止机体严格为 0）。
+     * 世界系<b>点速度</b>（m/s）= 把 plot 点位逐 tick 投影到世界后差分 ×20：
+     * {@code logicalPose().transformPosition(p) − lastPose().transformPosition(p)} 再 ×20，
+     * 即该点（如皮托管/速度传感器方块）的真实世界系运动速度，天然含自转杠杆臂贡献 ω×r。
+     * <p>
+     * 与 {@code simulated:velocity_sensor}（{@code VelocitySensorBlockEntity.getGlobalVelocity}）
+     * <b>完全同一算法</b>；只基于世界 pose（logicalPose/lastPose），世界静止时机体上严格为 0，
+     * <b>无幻影值</b>（不像裸读物理 handle 或 {@code Sable.HELPER.getVelocity}）。
      *
-     * @param subLevel 所在物理体
-     * @param worldPos 世界系点位（可用 {@link #projectOutOfSubLevel} 得到）
      * @return 世界系点速度 Vec3（m/s）；读取失败返回 null
      */
-    public static Vec3 getWorldPointVelocity(SubLevel subLevel, Vec3 worldPos) {
-        if (subLevel == null || worldPos == null) return null;
+    public static Vec3 getWorldPointVelocity(Level level, SubLevel subLevel, BlockPos plotPos) {
+        if (level == null || subLevel == null || plotPos == null) return null;
         try {
-            Vec3 lin = getWorldLinearVelocity(subLevel);
-            Vec3 ang = getWorldAngularVelocity(subLevel);
-            if (lin == null || ang == null) return null;
-            Pose3dc pose = subLevel.logicalPose();
-            Vector3dc posP = pose.position();
-            double rx = worldPos.x - posP.x();
-            double ry = worldPos.y - posP.y();
-            double rz = worldPos.z - posP.z();
-            // v_point = v_origin + ω × r
-            return new Vec3(lin.x + ang.y * rz - ang.z * ry,
-                            lin.y + ang.z * rx - ang.x * rz,
-                            lin.z + ang.x * ry - ang.y * rx);
+            Vec3 center = plotPos.getCenter();
+            Vector3d jomlPos = new Vector3d(center.x, center.y, center.z);
+            Vector3d nowWorld = subLevel.logicalPose().transformPosition(jomlPos, new Vector3d());
+            Vector3d prevWorld = subLevel.lastPose().transformPosition(jomlPos, new Vector3d());
+            Vector3d v = nowWorld.sub(prevWorld, new Vector3d()).mul(20.0);
+            return new Vec3(v.x, v.y, v.z);
         } catch (Exception e) {
             return null;
         }
-    }
-
-    /** 便捷：plot 坐标 → 世界系点速度（内部先投影到世界） */
-    public static Vec3 getWorldPointVelocity(Level level, SubLevel subLevel, BlockPos plotPos) {
-        if (level == null || subLevel == null || plotPos == null) return null;
-        Vec3 worldPos = projectOutOfSubLevel(level, plotPos);
-        if (worldPos == null) return null;
-        return getWorldPointVelocity(subLevel, worldPos);
     }
 
     /**
@@ -432,30 +380,6 @@ public final class SableCompat {
     }
 
     /**
-     * 获取 SubLevel 物理刚体的线速度（世界系，m/s）。
-     * 镜像 {@link #getAngularVelocity}（调试/数据记录用）。
-     *
-     * @return 线速度 Vec3，失败返回 null
-     */
-    public static Vec3 getLinearVelocity(Level level, SubLevel subLevel) {
-        if (!(level instanceof ServerLevel) || subLevel == null) return null;
-        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
-        try {
-            SubLevelContainer container = SubLevelContainer.getContainer(level);
-            if (!(container instanceof ServerSubLevelContainer serverContainer)) return null;
-
-            SubLevelPhysicsSystem physicsSystem = serverContainer.physicsSystem();
-            RigidBodyHandle handle = physicsSystem.getPhysicsHandle(serverSubLevel);
-            if (handle == null) return null;
-
-            Vector3dc linVel = handle.getLinearVelocity(new Vector3d());
-            return new Vec3(linVel.x(), linVel.y(), linVel.z());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
      * 获取 SubLevel 物理刚体的总质量。
      *
      * @return 质量（kg），失败返回 null
@@ -466,20 +390,6 @@ public final class SableCompat {
             MassData massTracker = serverSubLevel.getMassTracker();
             if (massTracker == null) return null;
             return massTracker.getMass();
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
-     * 获取指定位置物理结构的相对空气速度（已减去风速）。
-     *
-     * @return Vec3（m/s），失败返回 null
-     */
-    public static Vec3 getAirVelocity(Level level, BlockPos pos) {
-        if (level == null || pos == null) return null;
-        try {
-            return Sable.HELPER.getVelocityRelativeToAir(level, pos.getCenter());
         } catch (Exception e) {
             return null;
         }
@@ -674,82 +584,6 @@ public final class SableCompat {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    /**
-     * [DEBUG-临时] 转储指定 plot 位置的点速度计算中间量，用于定位「静止物理体上
-     * {@code Sable.HELPER.getVelocity} 返回非零（如 y=-0.03）」的问题。
-     * <p>
-     * 返回字段：
-     * <ul>
-     * <li><b>helper_velocity</b>：{@link #getVelocity} 的当前结果（= sum，理论应等于 ω×local + linear）；</li>
-     * <li><b>pose_position</b>：{@code logicalPose().position()}（世界系机体原点）；</li>
-     * <li><b>rotation_point</b>：{@code logicalPose().rotationPoint()}（plot 系机体原点/质心枢轴）；</li>
-     * <li><b>plot_pos</b>：查询点的 plot 坐标（通常为超大数）；</li>
-     * <li><b>ins_world_pos</b>：{@link #projectOutOfSubLevel}（世界系查询点位置）；</li>
-     * <li><b>local_pos</b>：ins_world_pos − pose_position（世界系杠杆臂 r）；</li>
-     * <li><b>linear_velocity</b>：{@code handle.getLinearVelocity()}（刚体质心线速度，物理原始值）；</li>
-     * <li><b>angular_velocity</b>：{@code handle.getAngularVelocity()}（刚体角速度）；</li>
-     * <li><b>omega_cross_local</b>：ω × r（自转杠杆臂贡献）；</li>
-     * <li><b>sum</b>：omega_cross_local + linear_velocity（应等于 helper_velocity）；</li>
-     * <li><b>latest_linear_velocity</b>：{@code subLevel.latestLinearVelocity}（每 tick 由
-     *     pose 位置差分 ×20 得到的世界系线速度，独立参照）。</li>
-     * </ul>
-     * 静止机体上 helper_velocity 应为 0；非零值来自哪一项（ω×r 或 linear_velocity）一目了然。
-     *
-     * @return 转储表；读取失败时含 {@code error} 字段
-     */
-    public static Map<String, Object> debugVelocity(Level level, SubLevel subLevel, BlockPos plotPos) {
-        Map<String, Object> out = new LinkedHashMap<>();
-        if (level == null || subLevel == null || plotPos == null) return out;
-        try {
-            Vec3 helperVel = getVelocity(level, plotPos);
-            out.put("helper_velocity", helperVel != null
-                    ? Map.of("x", helperVel.x, "y", helperVel.y, "z", helperVel.z) : null);
-
-            Pose3dc pose = subLevel.logicalPose();
-            Vector3dc posP = pose.position();
-            Vector3dc rp = pose.rotationPoint();
-            out.put("pose_position", Map.of("x", posP.x(), "y", posP.y(), "z", posP.z()));
-            out.put("rotation_point", Map.of("x", rp.x(), "y", rp.y(), "z", rp.z()));
-            out.put("plot_pos", Map.of("x", (double) plotPos.getX(), "y", (double) plotPos.getY(), "z", (double) plotPos.getZ()));
-
-            Vec3 insWorld = projectOutOfSubLevel(level, plotPos);
-            out.put("ins_world_pos", insWorld != null
-                    ? Map.of("x", insWorld.x, "y", insWorld.y, "z", insWorld.z) : null);
-
-            Vector3d localPos = new Vector3d();
-            if (insWorld != null) {
-                localPos.set(insWorld.x - posP.x(), insWorld.y - posP.y(), insWorld.z - posP.z());
-                out.put("local_pos", Map.of("x", localPos.x, "y", localPos.y, "z", localPos.z));
-            }
-
-            if (level instanceof ServerLevel serverLevel && subLevel instanceof ServerSubLevel serverSubLevel) {
-                SubLevelContainer container = SubLevelContainer.getContainer(serverLevel);
-                if (container instanceof ServerSubLevelContainer serverContainer) {
-                    RigidBodyHandle handle = serverContainer.physicsSystem().getPhysicsHandle(serverSubLevel);
-                    if (handle != null) {
-                        Vector3dc lin = handle.getLinearVelocity(new Vector3d());
-                        Vector3dc ang = handle.getAngularVelocity(new Vector3d());
-                        out.put("linear_velocity", Map.of("x", lin.x(), "y", lin.y(), "z", lin.z()));
-                        out.put("angular_velocity", Map.of("x", ang.x(), "y", ang.y(), "z", ang.z()));
-                        Vector3d cross = ang.cross(localPos, new Vector3d());
-                        out.put("omega_cross_local", Map.of("x", cross.x, "y", cross.y, "z", cross.z));
-                        Vector3d sum = new Vector3d(cross).add(lin);
-                        out.put("sum", Map.of("x", sum.x, "y", sum.y, "z", sum.z));
-                    }
-                }
-                try {
-                    Vector3d latest = serverSubLevel.latestLinearVelocity;
-                    out.put("latest_linear_velocity", Map.of("x", latest.x, "y", latest.y, "z", latest.z));
-                } catch (Exception ignored) {
-                    // latestLinearVelocity 不可用时跳过（非关键字段）
-                }
-            }
-        } catch (Exception e) {
-            out.put("error", e.toString());
-        }
-        return out;
     }
 
 }

@@ -652,9 +652,9 @@ public class SensorSystemAPI implements ILuaAPI {
      * （皮托管-静压系统），否则返回 nil。
      * <p>
      * 算法同 {@code simulated:velocity_sensor}：速度 = 皮托管位置的世界点速度
-     * （{@link SableCompat#getVelocity}，含旋转贡献，服务端 = {@code ω×r + v}），
-     * 轴向 = 该皮托管 24 态管口朝向经物理体姿态转到世界（{@link SableCompat#transformNormalToWorld}），
-     * 二者点积；|读数| &lt; 0.05 归零（防静止抖动）。
+     * （{@link SableCompat#getWorldPointVelocity}，逐 tick 世界点差分 ×20，含旋转贡献，
+     * 无幻影值、无死区），轴向 = 该皮托管 24 态管口朝向经物理体姿态转到世界
+     * （{@link SableCompat#transformNormalToWorld}），二者点积。
      */
     @LuaFunction
     public final @Nullable Double getSpeed() {
@@ -669,10 +669,10 @@ public class SensorSystemAPI implements ILuaAPI {
      * <b>门控（存在性）</b>：与 {@link #getSpeed()} 相同——物理体（含约束链）必须<b>同时</b>
      * 有 ≥1 皮托管 且 ≥1 静压孔，否则返回 nil。
      * <p>
-     * 与 {@link #getSpeed()} 同构，仅速度源不同：空速 = 相对空气速度（
-     * {@link SableCompat#getAirVelocity} = {@code Sable.HELPER.getVelocityRelativeToAir}，
-     * 已减去风速，同 {@code ccpe.pe.getPhysicsAirVelocity}），沿管口朝向的有符号投影；
-     * |读数| &lt; 0.05 归零（防静止抖动）。
+     * 与 {@link #getSpeed()} 同构，仅速度源不同：空速 = 相对空气速度
+     * （{@link SableCompat#getWorldAirVelocity} = 修正点速度 − 风速，风速取
+     * {@code Sable.HELPER.getVelocity} − {@code getVelocityRelativeToAir} 差值抵消幻影值，
+     * 同 {@code ccpe.pe.getPhysicsAirVelocity}），沿管口朝向的有符号投影。
      */
     @LuaFunction
     public final @Nullable Double getAirSpeed() {
@@ -772,9 +772,9 @@ public class SensorSystemAPI implements ILuaAPI {
      * <p>
      * ⚠️ 不用 {@code Sable.HELPER.getVelocity}（皮托管同源）：其内部 = 裸读物理 handle 的
      * 线/角速度（世界静止的机体上仍返回非零幻影值）× 杠杆臂 + 线速度，静止机体上会得到
-     * 约 -0.03 的假速度（已由飞行日志诊断列证实，见 {@code FlightDataRecorder} 的
-     * vHelper/vLatest 列）。需要机体局部系线速度（沿机体自身 X/Y/Z 轴）时，可用
-     * {@link #getOrientation()} 的姿态四元数对本结果做逆旋转（q⁻¹·v）。
+     * 约 -0.03 的假速度（曾由飞行日志诊断列证实，诊断列已删除）。需要机体局部系线速度
+     * （沿机体自身 X/Y/Z 轴）时，可用 {@link #getOrientation()} 的姿态四元数对本结果做
+     * 逆旋转（q⁻¹·v）。
      * <p>
      * <b>门控（存在性）</b>：与 {@link #getAngles()} 相同——所在物理体上必须有 ≥1 个
      * 惯性导航系统（ccpe:ins），否则返回 nil。
@@ -787,32 +787,6 @@ public class SensorSystemAPI implements ILuaAPI {
         m.put("y", velY);
         m.put("z", velZ);
         return m;
-    }
-
-    /**
-     * [DEBUG-临时] 转储 {@code getVelocity()} 的中间量，定位「静止物理体上 y=-0.03」问题。
-     * <p>
-     * 返回表字段见 {@link SableCompat#debugVelocity}：helper_velocity / pose_position /
-     * rotation_point / plot_pos / ins_world_pos / local_pos / linear_velocity /
-     * angular_velocity / omega_cross_local / sum / latest_linear_velocity。
-     * <p>
-     * 用法（进游戏，电脑装在目标物理体上）：
-     * <pre>{@code
-     * print(textutils.serialize(require("ccpe.sensor_system").getVelocityDebug()))
-     * }</pre>
-     * 定位完成后删除本方法。
-     *
-     * @return 调试转储表；不在物理体上或机体无 INS 返回 nil
-     */
-    @LuaFunction(mainThread = true)
-    public final @Nullable Map<String, Object> getVelocityDebug() {
-        SubLevel sub = resolveSubLevel();
-        if (sub == null) return null;
-        SensorEntry lastIns = null;
-        for (SensorEntry e : BodySensorRegistry.sensorsOnBody(sub))
-            if (e.type() == SensorType.ATTITUDE) lastIns = e; // 注册顺序 = 放置顺序，取最后
-        if (lastIns == null) return null;
-        return SableCompat.debugVelocity(sub.getLevel(), sub, lastIns.pos());
     }
 
     /**
@@ -1962,7 +1936,7 @@ public class SensorSystemAPI implements ILuaAPI {
     /**
      * 速度 {@code v}（世界系，皮托管位置的点速度）在<b>世界管口朝向</b>上的有符号投影
      * （同 simulated:velocity_sensor 算法）；管口朝向 = blockstate 的 24 态轴
-     * （{@link PitotTubeBlock#axisOf}，plot 帧）经物理体姿态转到世界；|读数| &lt; 0.05 归零（防静止抖动）。
+     * （{@link PitotTubeBlock#axisOf}，plot 帧）经物理体姿态转到世界。
      * <p>
      * 注：轴向与速度均以电脑所在 sub-level 的姿态为基准（与静压孔读数一致）；
      * 传感器位于约束链其它 sub-level 时轴向姿态可能有偏差（现有已知边界）。
@@ -1976,8 +1950,7 @@ public class SensorSystemAPI implements ILuaAPI {
         Vec3 worldAxis = SableCompat.transformNormalToWorld(sub,
                 Vec3.atLowerCornerOf(PitotTubeBlock.axisOf(state).getNormal()));
         if (worldAxis == null) return null;
-        double dot = vel.dot(worldAxis);
-        return Math.abs(dot) < 0.05 ? 0.0 : dot;
+        return vel.dot(worldAxis);
     }
 
     /** 电脑所在位置的 SubLevel；不在物理体上返回 null */

@@ -127,7 +127,18 @@ compass  = Y·Z·X          (applyCompass→applyPrimary→applySecondary, euler
       2. `Sable.HELPER.getVelocity`（皮托管同源）内部 = ω×r + 裸读 handle，两者都是幻影值 →
          静止机体读数 -0.03（= 0.0083 rad/s 幻影角速度 × 4.1 格杠杆臂 + (-0.067)）；
       3. 只有 `latestLinearVelocity`（世界 pose 差分）静止时 = 0。
-      皮托管 getSpeed 读 0 只是因为 axisSpeed 有 0.05 死区吞掉了幻影值。
+      皮托管 getSpeed 读 0 只是因为 axisSpeed 有 0.05 死区吞掉了幻影值（死区随后已删除，
+      见下）。
       需要机体局部系时用 `getOrientation()` 四元数逆旋转（q⁻¹·v）；门控 = 机体上有 ≥1 INS。
+      <br>→ 连带修复：皮托管 computeSpeed/computeAirSpeed 与 ccpe.pe 四个物理方法全部改用
+      `SableCompat.getWorldPointVelocity` / `getWorldAirVelocity`（点速度 = **逐 tick 世界点差分**
+      `logicalPose.transformPosition(p) − lastPose.transformPosition(p)` × 20，与
+      `simulated:velocity_sensor`（VelocitySensorBlockEntity.getGlobalVelocity）完全同一算法，
+      天然含自转杠杆臂项、无幻影值——早期版本的 v_原点+ω×r 合成已弃用；空速 = 修正点速度 − 风速，
+      风速取 `Sable.HELPER.getVelocity` − `getVelocityRelativeToAir` 差值抵消幻影值）；
+      `FlightDataRecorder` 运动学/通用阻力/皮托管列同样切换到干净源；
+      ⚠️ **0.05 死区已从 axisSpeed / getAxisVelocity 删除**（用户要求：速度源干净后死区只会掩盖
+      真实小速度）；调试诊断列与 `getVelocityDebug()`、`SableCompat.debugVelocity` 及
+      裸读版 `getVelocity/getAirVelocity/getLinearVelocity/getAngularVelocity` 已删除。
 - Create 护目镜 tooltip 显示俯仰/滚转/航向读数。
 - 非自然维度指北行为开关（当前随机乱转）。
