@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.compat.cc;
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.PitotTubeBlock;
+import com.zzy205.myfirstmod.block.Throttle2Motion;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorEntry;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorType;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
@@ -41,6 +42,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -65,11 +67,10 @@ import java.util.UUID;
  * + <b>通用阻力</b>（univFx/y/z：整链 Rapier 线速度阻尼的每物理子步冲量，转主机局部系；
  * 力组/图纸里都没有这项，但物理里恒存在——平衡时 prop+drag+lift+univ ≈ 0，计算见
  * {@link #appendUniversalDrag}）
- * + <b>控制输入</b>（摇杆2 ch7、油门 ch8、脚踏板 ch6，按本机座舱接线，
- * 见 {@link #CHANNEL_CONTROL_DESK} / {@link #CHANNEL_JOYSTICK} / {@link #CHANNEL_THROTTLE}；
- * 频道在物理体链内寻址 = Lua {@code ss.getPeripheral(ch)} 同源，控制台 BE 服务端直读，
- * 数据源与 joystick_2 / throttle / pedal 模块句柄一致）。数值读取失败列写 {@code nan}，
- * 对应频道无控制台时通道列写 -1；力组不存在（无对应力源）时力列为 nan。
+ * + <b>控制输入</b>（自动扫描链上短程信号链接器频道空间的控制台，记录其已安装的
+ * 脚踏板 / 操纵杆1 / 操纵杆2 / 油门1 / 油门2，每类取链内第一台；频道列 = 该控制台真实频道，
+ * 数据源与各控制台模块句柄一致）。未安装该控件 / 链上无控制台时该组列写 0；
+ * 数值读取失败列写 {@code nan}；力组不存在（无对应力源）时力列为 nan。
  * <p>
  * <b>受力前提</b>：记录器对主机及其整条约束链（含 aero_bearing 从动 sub-level）调用
  * {@code ServerSubLevel.enableIndividualQueuedForcesTracking(true)}（Simulated 图纸同款机制，
@@ -83,14 +84,6 @@ import java.util.UUID;
 public final class FlightDataRecorder {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("ccpe:FlightDataRecorder");
-
-    // ═══════════ 控制输入所在控制台频道（物理体链内寻址，同 Lua ss.getPeripheral）═══════════
-    /** 仪表台控制台（含 monitor + 脚踏板）频道——与你的座舱接线一致，变了改这里 */
-    private static final int CHANNEL_CONTROL_DESK = 6;
-    /** 摇杆2 控制台频道 */
-    private static final int CHANNEL_JOYSTICK = 7;
-    /** 油门杆控制台频道 */
-    private static final int CHANNEL_THROTTLE = 8;
 
     private static final String[] HEADER = {
             "tick", "time_s", "body",
@@ -112,9 +105,11 @@ public final class FlightDataRecorder {
             "chainDragFx", "chainDragFy", "chainDragFz", "chainDragMx", "chainDragMy", "chainDragMz",
             "chainPropFx", "chainPropFy", "chainPropFz", "chainPropMx", "chainPropMy", "chainPropMz",
             "univFx", "univFy", "univFz",
+            "pedCh", "pedL", "pedR",
+            "joy1Ch", "joy1X", "joy1Y", "joy1XA", "joy1YA",
             "joyCh", "joyX", "joyY", "joyXA", "joyYA",
             "thrCh", "thrAxis", "thrGear", "thrFwd", "thrBack",
-            "pedCh", "pedL", "pedR"
+            "thr2Ch", "thr2Axis", "thr2Center", "thr2Up", "thr2Down"
     };
 
     private static final double NaN = Double.NaN;
@@ -541,47 +536,100 @@ public final class FlightDataRecorder {
         }
     }
 
-    /** 控制输入列：摇杆2（ch7）+ 油门（ch8）+ 脚踏板（ch6）；频道内无控制台 → 通道列 -1、数值列 nan */
+    /** 已对"同类型多台控制台"发过警告的控件类型（避免每 tick 刷屏）；类型最多 5 种，随会话增长无碍 */
+    private static final Set<ControlDeskBlockEntity.ControlType> WARNED_DUPLICATE_TYPES = new HashSet<>();
+
+    /**
+     * 控制输入列：自动扫描链上短程信号链接器频道空间中的全部控制台，记录其已安装的
+     * 脚踏板 / 操纵杆1 / 操纵杆2 / 油门1 / 油门2（每组列顺序见 {@link #HEADER}）。
+     * <ul>
+     *   <li>每类控件取<b>链内第一台</b>（desks 按频道升序，结果确定）；同类型多台只记第一台并警告一次；</li>
+     *   <li>频道列 = 该控制台真实频道（{@link ControlDeskBlockEntity#getChannel()}，不再硬编码）；</li>
+     *   <li>链上无控制台 / 未安装该控件 → 该组列全部写 0；读数失败写 {@code nan}。</li>
+     * </ul>
+     */
     private static void appendControls(List<String> f, ServerSubLevel sub) {
         Set<UUID> chain = chainUuidsOf(sub);
-        ControlDeskBlockEntity joy = ControlDeskRegistry.get(chain, CHANNEL_JOYSTICK);
-        ControlDeskBlockEntity thr = ControlDeskRegistry.get(chain, CHANNEL_THROTTLE);
-        ControlDeskBlockEntity ped = ControlDeskRegistry.get(chain, CHANNEL_CONTROL_DESK);
-        if (joy != null) {
-            f.add(String.valueOf(CHANNEL_JOYSTICK));
-            f.add(n(joy.getJoystick2AxisX()));
-            f.add(n(joy.getJoystick2AxisY()));
-            f.add(joy.isJoystick2XActive() ? "1" : "0");
-            f.add(joy.isJoystick2YActive() ? "1" : "0");
+        List<ControlDeskBlockEntity> desks = new ArrayList<>(ShortRangeLinkerRegistry.desksOnChain(chain));
+        desks.sort(Comparator.comparingInt(ControlDeskBlockEntity::getChannel));
+
+        // 脚踏板：pedCh pedL pedR
+        ControlDeskBlockEntity ped = firstDeskWith(desks, ControlDeskBlockEntity.ControlType.PEDAL);
+        if (ped != null) {
+            f.add(String.valueOf(ped.getChannel()));
+            f.add(n(ped.getPedalLeftAxis()));
+            f.add(n(ped.getPedalRightAxis()));
         } else {
-            f.add("-1");
-            f.add("nan");
-            f.add("nan");
-            f.add("0");
-            f.add("0");
+            f.add("0"); f.add("0"); f.add("0");
         }
+
+        // 操纵杆1：joy1Ch joy1X joy1Y joy1XA joy1YA
+        ControlDeskBlockEntity joy1 = firstDeskWith(desks, ControlDeskBlockEntity.ControlType.JOYSTICK);
+        if (joy1 != null) {
+            f.add(String.valueOf(joy1.getChannel()));
+            f.add(n(joy1.getJoystickAxisX()));
+            f.add(n(joy1.getJoystickAxisY()));
+            f.add(joy1.isJoystickXActive() ? "1" : "0");
+            f.add(joy1.isJoystickYActive() ? "1" : "0");
+        } else {
+            f.add("0"); f.add("0"); f.add("0"); f.add("0"); f.add("0");
+        }
+
+        // 操纵杆2：joyCh joyX joyY joyXA joyYA
+        ControlDeskBlockEntity joy2 = firstDeskWith(desks, ControlDeskBlockEntity.ControlType.JOYSTICK_2);
+        if (joy2 != null) {
+            f.add(String.valueOf(joy2.getChannel()));
+            f.add(n(joy2.getJoystick2AxisX()));
+            f.add(n(joy2.getJoystick2AxisY()));
+            f.add(joy2.isJoystick2XActive() ? "1" : "0");
+            f.add(joy2.isJoystick2YActive() ? "1" : "0");
+        } else {
+            f.add("0"); f.add("0"); f.add("0"); f.add("0"); f.add("0");
+        }
+
+        // 油门1：thrCh thrAxis thrGear thrFwd thrBack
+        ControlDeskBlockEntity thr = firstDeskWith(desks, ControlDeskBlockEntity.ControlType.THROTTLE);
         if (thr != null) {
-            f.add(String.valueOf(CHANNEL_THROTTLE));
+            f.add(String.valueOf(thr.getChannel()));
             f.add(n(thr.getThrottleAxis()));
             f.add(String.valueOf(thr.getThrottleGear()));
             f.add(thr.isThrottleForwardActive() ? "1" : "0");
             f.add(thr.isThrottleBackActive() ? "1" : "0");
         } else {
-            f.add("-1");
-            f.add("nan");
-            f.add("nan");
-            f.add("0");
-            f.add("0");
+            f.add("0"); f.add("0"); f.add("0"); f.add("0"); f.add("0");
         }
-        if (ped != null) {
-            f.add(String.valueOf(CHANNEL_CONTROL_DESK));
-            f.add(n(ped.getPedalLeftAxis()));
-            f.add(n(ped.getPedalRightAxis()));
+
+        // 油门2：thr2Ch thr2Axis thr2Center thr2Up thr2Down
+        ControlDeskBlockEntity thr2 = firstDeskWith(desks, ControlDeskBlockEntity.ControlType.THROTTLE_2);
+        if (thr2 != null) {
+            f.add(String.valueOf(thr2.getChannel()));
+            f.add(n(thr2.getThrottle2Angle() / Throttle2Motion.MAX_DEG));
+            f.add(n((thr2.getThrottle2Angle() - Throttle2Motion.NEUTRAL_DEG) / Throttle2Motion.NEUTRAL_DEG));
+            f.add(thr2.isThrottle2UpActive() ? "1" : "0");
+            f.add(thr2.isThrottle2DownActive() ? "1" : "0");
         } else {
-            f.add("-1");
-            f.add("nan");
-            f.add("nan");
+            f.add("0"); f.add("0"); f.add("0"); f.add("0"); f.add("0");
         }
+    }
+
+    /** 链内第一台安装了指定控件的控制台（desks 需已按频道升序排序）；
+     *  同类型多台只取第一台并警告一次（静态去重，避免每 tick 刷屏）。 */
+    private static @Nullable ControlDeskBlockEntity firstDeskWith(List<ControlDeskBlockEntity> desks,
+            ControlDeskBlockEntity.ControlType type) {
+        ControlDeskBlockEntity found = null;
+        int count = 0;
+        for (ControlDeskBlockEntity desk : desks) {
+            if (desk.isInstalled(type)) {
+                count++;
+                if (found == null) found = desk;
+            }
+        }
+        if (count > 1 && WARNED_DUPLICATE_TYPES.add(type)) {
+            LOGGER.warn("FlightDataRecorder: {} desks with {} installed on the same body chain — recording only the "
+                            + "first (channel {}); remove duplicates or accept single-channel recording.",
+                    count, type, found.getChannel());
+        }
+        return found;
     }
 
     /** 物理体（含约束链）的全部子次元 UUID 集合（控制台链内频道寻址用） */

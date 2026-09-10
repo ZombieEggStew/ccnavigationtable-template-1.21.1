@@ -1,8 +1,17 @@
-import csv, math, os
+import csv, glob, math, os
 
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "run", "flight_logs")
 
-path = os.path.join(LOG_DIR, "flight_overworld_00b1000b_20.csv")
+
+def latest_csv():
+    """自动选 LOG_DIR 下最新的 flight_*.csv（按修改时间）"""
+    files = sorted(glob.glob(os.path.join(LOG_DIR, "flight_*.csv")), key=os.path.getmtime)
+    if not files:
+        raise SystemExit(f"no flight_*.csv under {LOG_DIR}")
+    return files[-1]
+
+
+path = latest_csv()
 rows = []
 with open(path, newline='', encoding='utf-8') as f:
     for row in csv.DictReader(f):

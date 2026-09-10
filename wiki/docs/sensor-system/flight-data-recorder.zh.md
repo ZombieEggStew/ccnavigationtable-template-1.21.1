@@ -76,15 +76,17 @@
 
 力组/图纸里都没有这项，但物理里恒存在——**平飞平衡时 prop + drag + lift + univ ≈ 0**（早期分析中"净力神秘缺口"就是它）。
 
-### 6. 控制输入
+### 6. 控制输入（自动发现）
 
 | 列组 | 含义 |
 |---|---|
-| `joyCh` `joyX` `joyY` `joyXA` `joyYA` | 摇杆 2（频道 7）：X/Y 轴 + 活动标志 |
-| `thrCh` `thrAxis` `thrGear` `thrFwd` `thrBack` | 油门（频道 8） |
-| `pedCh` `pedL` `pedR` | 脚踏板（频道 6） |
+| `pedCh` `pedL` `pedR` | 脚踏板：左/右踏板轴值（-1..1） |
+| `joy1Ch` `joy1X` `joy1Y` `joy1XA` `joy1YA` | 操纵杆 1：X/Y 轴值 + 活动标志 |
+| `joyCh` `joyX` `joyY` `joyXA` `joyYA` | 操纵杆 2：X/Y 轴值 + 活动标志 |
+| `thrCh` `thrAxis` `thrGear` `thrFwd` `thrBack` | 油门 1：轴值 / 档位 + 前进/后退活动标志 |
+| `thr2Ch` `thr2Axis` `thr2Center` `thr2Up` `thr2Down` | 油门 2（总距杆）：轴值（0..1）/ 居中轴（-1..1）+ 上/下活动标志 |
 
-频道常量在 `FlightDataRecorder.java` 顶部，座舱接线变了改这里。
+记录器**自动扫描**链上短程信号链接器频道空间中的控制台，记录其已安装的上述全部控件（每类取链内第一台，同类型多台只记第一台并在日志警告一次）。`*Ch` 列 = 该控制台**真实频道**（读 `getChannel()`，不再硬编码）；链上无控制台 / 未安装该控件 → 该组列全为 0。
 
 ## 力是怎么被记录的（解读数据前必读）
 
@@ -92,7 +94,7 @@
 - **力组匹配**：运行时按注册表 id 匹配（`sable:force_groups` 的 `lift` / `drag` / `propulsion` 路径），不直接引用 `ForceGroups` 类。
 - **采样时机** = 游戏 tick 末（`ServerTickEvent.Post`），读到的是该 tick **最后一个物理子步**记录的力组（组在每个物理步开始被 reset）——phugoid 级分析足够。
 - **单位**：Sable 每物理步**冲量刻度**，不是绝对牛顿值 → 用于看趋势/力矩平衡，勿当绝对力值。
-- 力组不存在（无对应力源）→ 该组全 `nan`；对应频道无控制台 → 通道列写 `-1`、数值列写 `nan`；整行采样失败 → 一行全 `nan` 占位保持列对齐（Python 可安全解析）。
+- 力组不存在（无对应力源）→ 该组全 `nan`；链上无控制台 / 未安装该控件 → 该组控制列全为 0；整行采样失败 → 一行全 `nan` 占位保持列对齐（Python 可安全解析）。
 
 ## 解读约定
 
@@ -103,11 +105,14 @@
 
 ## 分析工具
 
-`.design_guide/analysis/` 下有一组 Python 分析脚本（纯标准库 `csv` 模块）。CSV 数据仍由记录器写在 `run/flight_logs/`；脚本用相对自身位置的 `LOG_DIR` 自动定位该目录，**从任意目录运行均可**：
+`.design_guide/analysis/` 下有一组 Python 分析脚本（纯标准库 `csv` 模块）。CSV 数据仍由记录器写在 `run/flight_logs/`；脚本用相对自身位置的 `LOG_DIR` 自动定位该目录，默认自动选最新 `flight_*.csv`，**从任意目录运行均可**：
 
 - `_analyze_flight.py` — 基础统计（高度/俯仰/空速/气压）+ 巡航段切分 + phugoid 峰谷检测
+- `_analyze_flight3.py` — 控制使用率 + 力列可用性 + 松手段力矩/相关分析
 - `_analyze_flight6.py` — 满油门全松手干净段提取、对数衰减阻尼比 ζ、力矩-气压回归（推力线偏置估算）
-- 其余 `_analyze_*.py`、`_fit_aero_model.py` 等 — 针对具体问题的分析脚本
+- `_analyze_loop_delay.py` — 摇杆阶跃脉冲 → 指令/气动/总回路延迟分解
+- `_fit_aero_model.py` — 气动模型缩放结构标定（升力/阻力/推力对 P、v 的依赖）
+- `_verify_pressure.py` — 气压公式（指数近似 vs Sable 曲线）与记录数据核对
 
 示例数据：`run/flight_logs/flight_overworld_00b1000b_*.csv`。
 

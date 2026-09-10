@@ -76,15 +76,17 @@ Same shape as group 3, but **aggregated over the whole constraint chain** (inclu
 
 This force is not in any force group or the diagram, but is always present in the physics — at level cruise **prop + drag + lift + univ ≈ 0** (an early "mysterious net-force gap" turned out to be exactly this).
 
-### 6. Control inputs
+### 6. Control inputs (auto-discovered)
 
 | Column group | Meaning |
 |---|---|
-| `joyCh` `joyX` `joyY` `joyXA` `joyYA` | Joystick 2 (channel 7): X/Y axes + active flags |
-| `thrCh` `thrAxis` `thrGear` `thrFwd` `thrBack` | Throttle (channel 8) |
-| `pedCh` `pedL` `pedR` | Foot pedals (channel 6) |
+| `pedCh` `pedL` `pedR` | Foot pedals: left/right pedal axis (-1..1) |
+| `joy1Ch` `joy1X` `joy1Y` `joy1XA` `joy1YA` | Joystick 1: X/Y axis values + active flags |
+| `joyCh` `joyX` `joyY` `joyXA` `joyYA` | Joystick 2: X/Y axis values + active flags |
+| `thrCh` `thrAxis` `thrGear` `thrFwd` `thrBack` | Throttle 1: axis / gear + forward/back active flags |
+| `thr2Ch` `thr2Axis` `thr2Center` `thr2Up` `thr2Down` | Throttle 2 (collective): axis (0..1) / center axis (-1..1) + up/down active flags |
 
-The channel constants live at the top of `FlightDataRecorder.java` — change them there when your cockpit wiring changes.
+The recorder **automatically scans** the control desks in the short-range-linker channel space of the body chain and records all of the above controls they have installed (first desk per type; if several desks install the same type, only the first is recorded and a one-time warning is logged). The `*Ch` columns carry the desk's **real channel** (read from `getChannel()`, no longer hardcoded); if the chain has no desk or the control isn't installed, the whole group reads 0.
 
 ## How forces are recorded (read before interpreting)
 
@@ -92,7 +94,7 @@ The channel constants live at the top of `FlightDataRecorder.java` — change th
 - **Force-group matching**: done at runtime by registry id (`sable:force_groups` paths `lift` / `drag` / `propulsion`); the `ForceGroups` class is not referenced directly.
 - **Sampling moment** = end of the game tick (`ServerTickEvent.Post`), reading the force group recorded by the **last physics substep** of that tick (groups are reset at the start of each substep) — sufficient for phugoid-level analysis.
 - **Units**: Sable's per-physics-substep **impulse scale**, not absolute Newtons → use for trends / moment balance, not as absolute force values.
-- If a force group doesn't exist (no corresponding force source) → all 6 columns of that group are `nan`; a channel with no console → the channel column is `-1` and its numeric columns are `nan`; a whole-row sampling failure → a row of all-`nan` placeholders keeps column alignment (safe for Python parsing).
+- If a force group doesn't exist (no corresponding force source) → all 6 columns of that group are `nan`; if the chain has no desk or a control isn't installed → that control group reads all 0; a whole-row sampling failure → a row of all-`nan` placeholders keeps column alignment (safe for Python parsing).
 
 ## Interpretation conventions
 
@@ -103,11 +105,14 @@ The channel constants live at the top of `FlightDataRecorder.java` — change th
 
 ## Analysis tooling
 
-A set of Python analysis scripts lives in `.design_guide/analysis/` (pure-stdlib `csv` module). The CSV data is still written by the recorder to `run/flight_logs/`; the scripts resolve that directory automatically through a `LOG_DIR` constant relative to the script location, so **they can be run from any working directory**:
+A set of Python analysis scripts lives in `.design_guide/analysis/` (pure-stdlib `csv` module). The CSV data is still written by the recorder to `run/flight_logs/`; the scripts resolve that directory automatically through a `LOG_DIR` constant relative to the script location and by default pick the newest `flight_*.csv`, so **they can be run from any working directory**:
 
 - `_analyze_flight.py` — basic stats (height/pitch/airspeed/pressure) + cruise-segment split + phugoid peak/trough detection
+- `_analyze_flight3.py` — control-usage ratios + force-column availability + hands-off moment/correlation analysis
 - `_analyze_flight6.py` — clean hands-off full-throttle segment extraction, log-decrement damping ratio ζ, moment-vs-pressure regression (thrust-line offset estimate)
-- other `_analyze_*.py`, `_fit_aero_model.py`, etc. — problem-specific analysis scripts
+- `_analyze_loop_delay.py` — joystick step-pulse → command/aero/loop delay decomposition
+- `_fit_aero_model.py` — aero-model scaling calibration (lift/drag/thrust vs P and v)
+- `_verify_pressure.py` — pressure-formula (exponential approx vs Sable curve) verification against recorded data
 
 Sample data: `run/flight_logs/flight_overworld_00b1000b_*.csv`.
 
