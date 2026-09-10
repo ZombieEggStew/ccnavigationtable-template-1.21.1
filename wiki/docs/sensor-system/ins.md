@@ -19,12 +19,21 @@ All INS-gated methods require the physics body (including constraint chains) to 
 | `getBodyPosition()` | table / nil | World position `{x, y, z}` of the **physics body origin** (its pivot / center-of-mass axis) |
 | `getOrientation()` | table / nil | Body orientation quaternion `{x, y, z, w}` (world frame) |
 | `getAngularVelocity()` | table / nil | **Body-frame** angular rate `{x, y, z}` (rad/s) around the body's own X/Y/Z axes (equals the world frame when the body attitude is identity) |
+| `getAngleRates()` | table / nil | **Attitude-angle rates** `{pitchRate, rollRate, yawRate}` in **deg/s** (derivatives of pitch/roll/yaw; see "why use it" below) |
 | `getVelocity()` | table / nil | **World-frame** linear velocity `{x, y, z}` (m/s) of the **body origin** (world X/Y/Z axes; exactly 0 when stationary) |
 
 The INS also appears in `getSensors()` as `{type="ins", pos={x,y,z}, pos_rel={x,y,z}}` (no per-sensor readings — use the dedicated methods above).
 
 !!! note "Angular velocity frame"
     `getAngularVelocity()` returns the rotation rate around the **body's own axes** (roll/pitch/yaw-rate style components): the **world-frame angular velocity** (Sable's per-tick pose-orientation difference `latestAngularVelocity`, ×20 to rad/s — exactly 0 when stationary, unlike the raw physics-handle value which reports phantom readings) rotated into the body frame with the same-tick orientation quaternion exposed by `getOrientation()`. To recover the world-frame angular velocity, rotate the result by that quaternion (`q * ω_body`).
+
+!!! note "Why use getAngleRates() instead of getAngularVelocity() for attitude rates"
+    The body-axis components of `getAngularVelocity()` (especially body-Z) **cannot be used directly as roll/pitch rates**. Measured flight logs (2026-09) found two problems:
+
+    1. **Body-axis components are contaminated by the world rotation axis** — during pitch+yaw maneuvers the world rotation axis projects onto the (pitched) body-Z axis, so `av.z` reports ±30~45 °/s of "fake roll" while the true roll is only ~5 °/s (`av.z ≈ −yaw_rate·sin(pitch)`). Used as roll damping, it turns pitch maneuvers into roll commands, causing large roll swings.
+    2. **Sable's angular-velocity source is imprecise during fast maneuvers** — `latestAngularVelocity` (world pose-orientation difference) deviates from the quaternion sequence's true angular velocity by up to 0.5+ rad/s during fast pitch (verified: the finite difference of world-down-in-body `ld` ≠ `ld × ω_body`).
+
+    Meanwhile the attitude angles behind `getAngles()` are **exactly consistent with the quaternion** (recomputation error 0.00). `getAngleRates()` differentiates the attitude angles directly (minimal-angle wraparound for ±180° + EMA low-pass, time constant ~0.09 s @20 Hz), giving exactly the pitch/roll/yaw rates a controller needs — same sign convention as `getAngles()`, so a PD controller pairs the P term (angle) with the D term (rate) naturally. **The return value is ready to use; no Lua-side filtering needed.**
 
 !!! note "Velocity frame and source"
     `getVelocity()` returns the **world-frame translational velocity of the body origin** (m/s) — computed by Sable each tick from the world pose position difference (`ServerSubLevel.latestLinearVelocity`, ×20 to per-second), so it is **exactly 0 when the body is stationary**. It is NOT the raw physics-handle velocity nor the `Sable.HELPER.getVelocity` point velocity: both mix in phantom non-world values from the physics handle (a world-stationary body still reports ≈ −0.03 m/s and ≈ 0.008 rad/s there — confirmed via flight-log columns). To get the body-frame velocity (along the body's own X/Y/Z axes), rotate the result by the inverse of the orientation quaternion exposed by `getOrientation()` (`q⁻¹ * v`).
@@ -67,6 +76,9 @@ print("quaternion:", textutils.serialize(ss.getOrientation()))
 
 -- Angular rate (rad/s, body frame; see note above)
 print("ang vel:   ", textutils.serialize(ss.getAngularVelocity()))
+
+-- Attitude-angle rates (deg/s, pre-filtered; use as the D term of a PD controller; see note above)
+print("angle rates:", textutils.serialize(ss.getAngleRates()))
 
 -- Linear velocity (m/s, world frame; see note above)
 print("velocity:  ", textutils.serialize(ss.getVelocity()))

@@ -47,7 +47,7 @@ Plus per-block methods (see each page):
 
 - **Static Port** — `getAltitude()`, `getPressure()`, `getAverageAltitude()`, `getAveragePressure()`, `getWeightedAltitude()`, `getWeightedPressure()`
 - **Pitot Tube** — `getSpeed()`, `getAirSpeed()`, `getAverageSpeed()`, `getAverageAirSpeed()`
-- **INS** — `getAngles()`, `getPosition()`, `getBodyPosition()`, `getOrientation()`, `getAngularVelocity()`, `getVelocity()`
+- **INS** — `getAngles()`, `getPosition()`, `getBodyPosition()`, `getOrientation()`, `getAngularVelocity()`, `getAngleRates()`, `getVelocity()`
 - **FMC** — `getPhysicsCenterOfMassRel()`, `getPhysicsMass()`, `getPhysicsChainMass()`, `getPhysicsGravityForce()`, `getPhysicsChainGravityForce()`, `getPhysicsChainCenterOfMassRel()`, `getStressRemaining()`, `getStressCapacity()`, `initPropeller(N, S)`, `getPropellerRPM(F, P, V, θ?)`, `getPressureFromAltitude(Y)`, `getAltitudeFromPressure(P)`, `solveSailLift(P, V, L?)`, `solveSailDirectionlessDrag(P, V, D?)`, `getUniversalDragForce(m, V)`, `solveMaxCruise(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)`
 - **Short-Range Signal Linker** — `getPeripheral(channel)`, `getRedstoneOutput(channel)`, `getRedstoneInput(channel)`, `setRedstoneOutput(channel, signal)`
 - **Position Light** — `setLights(color, on)`, `setAllLights(on)`

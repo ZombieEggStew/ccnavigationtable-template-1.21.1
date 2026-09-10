@@ -161,6 +161,17 @@ public class SensorSystemAPI implements ILuaAPI {
     private volatile double angVelY = 0;
     private volatile double angVelZ = 0;
 
+    /** 三轴欧拉角速率（deg/s，姿态角差分 + EMA 滤波）状态 */
+    private static final double ANGLE_RATE_ALPHA = 0.35;    // EMA 低通系数（20Hz，τ≈0.09s）
+    private static final double ANGLE_RATE_PER_SEC = 20.0;  // 1 / 游戏tick(0.05s)
+    private volatile boolean angleRatesAvailable = false;
+    private volatile double pitchRateDeg = 0;
+    private volatile double rollRateDeg = 0;
+    private volatile double yawRateDeg = 0;
+    private double lastPitchDeg = 0;   // 仅 update() 线程访问
+    private double lastRollDeg = 0;
+    private double lastYawDeg = 0;
+
     /** 线速度缓存（世界系 m/s，机体原点平移速度，Sable 每 tick pose 位置差分 ×20）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
     private volatile boolean velocityAvailable = false;
     private volatile double velX = 0;
@@ -320,6 +331,9 @@ public class SensorSystemAPI implements ILuaAPI {
             orientW = 1;
             angularVelocityAvailable = false;
             angVelX = angVelY = angVelZ = 0;
+            angleRatesAvailable = false;
+            pitchRateDeg = rollRateDeg = yawRateDeg = 0;
+            lastPitchDeg = lastRollDeg = lastYawDeg = 0;
             velocityAvailable = false;
             velX = velY = velZ = 0;
             bodyPosAvailable = false;
@@ -406,6 +420,22 @@ public class SensorSystemAPI implements ILuaAPI {
         } else {
             attitudeAvailable = false;
             pitchDeg = rollDeg = yawDeg = 0;
+        }
+
+        // 三轴欧拉角速率缓存（deg/s；门控同姿态，与姿态同一 tick 快照）。见 getAngleRates() 文档。
+        boolean hadRates = angleRatesAvailable;   // 上一 tick 的状态（本 tick 尚未更新）
+        if (attitudeAvailable) {
+            pitchRateDeg = angleRate(lastPitchDeg, pitchDeg, pitchRateDeg, !hadRates);
+            rollRateDeg  = angleRate(lastRollDeg,  rollDeg,  rollRateDeg,  !hadRates);
+            yawRateDeg   = angleRate(lastYawDeg,   yawDeg,   yawRateDeg,   !hadRates);
+            lastPitchDeg = pitchDeg;
+            lastRollDeg  = rollDeg;
+            lastYawDeg   = yawDeg;
+            angleRatesAvailable = true;
+        } else {
+            angleRatesAvailable = false;
+            pitchRateDeg = rollRateDeg = yawRateDeg = 0;
+            lastPitchDeg = lastRollDeg = lastYawDeg = 0;
         }
 
         // INS 位置缓存（世界坐标；门控：机体上有 INS 才计算，与姿态同一 tick 快照）
@@ -761,6 +791,32 @@ public class SensorSystemAPI implements ILuaAPI {
         m.put("x", angVelX);
         m.put("y", angVelY);
         m.put("z", angVelZ);
+        return m;
+    }
+
+    /**
+     * 所在物理体（含约束链）的<b>姿态角速率</b> {@code {pitchRate, rollRate, yawRate}}（deg/s）。
+     * <p>
+     * 与 {@link #getAngles()} 同基准同门控：三个值分别是 pitch/roll/yaw 的导数
+     * （姿态角数值差分 + EMA 低通滤波，±180° 回绕已处理，滤波时间常数 ~0.09s @20Hz，
+     * 无需在 Lua 侧再滤波）。
+     * <p>
+     * ⚠ 不要用 {@link #getAngularVelocity()} 的机体轴分量当姿态角速率：实测（2026-09 CSV）在
+     * 俯仰+偏航机动时，机体轴分量被世界旋转轴的投影污染（体 Z ≠ 滚转速率），且 Sable
+     * latestAngularVelocity 在剧烈机动时本身与四元数真实角速度偏差可达 0.5+ rad/s。
+     * 本方法直接由姿态角（与四元数严格一致，误差 0.00）差分，免疫这两类问题，
+     * 是控制器阻尼项的正确信号源。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getAngles()} 相同——机体上必须有 ≥1 个惯性导航系统
+     * （ccpe:ins），否则返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getAngleRates() {
+        if (!angleRatesAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("pitchRate", pitchRateDeg);
+        m.put("rollRate", rollRateDeg);
+        m.put("yawRate", yawRateDeg);
         return m;
     }
 
@@ -1812,6 +1868,20 @@ public class SensorSystemAPI implements ILuaAPI {
      *
      * @return {pitch, roll, yaw}（度）
      */
+    /**
+     * 角速率数值差分（最小角差处理 ±180° 回绕）+ EMA 低通。
+     *
+     * @param first 首次（无上一 tick 参考）时返回 0，避免姿态恢复时刻的阶跃尖峰
+     */
+    private static double angleRate(double lastAngle, double angle, double lastRate, boolean first) {
+        if (first) return 0.0;
+        double d = angle - lastAngle;
+        if (d > 180) d -= 360;
+        else if (d < -180) d += 360;
+        double raw = d * ANGLE_RATE_PER_SEC;   // deg/tick → deg/s
+        return ANGLE_RATE_ALPHA * raw + (1 - ANGLE_RATE_ALPHA) * lastRate;
+    }
+
     private double[] computeAttitudeDeg(SubLevel sub) {
         final Pose3dc pose = sub.logicalPose();
 
