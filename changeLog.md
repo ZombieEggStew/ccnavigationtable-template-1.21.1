@@ -82,8 +82,8 @@
 - Added the trailing wheel mount
 
 1.1.3
-- 油门 自由模式
-- FMC 高度-气压解算工具；风帆气动工具；通用阻力工具。。。
-- 飞行数据记录系统
-- INS getVelocity,getAngleRates
-- trailing wheel mount 添加了转向功能 控制方法见wiki
+- Added free mode for the Throttle.
+- Added altitude-pressure conversion tools, sail aero tools, the universal drag tool and the max-cruise-altitude solver to the FMC. Check the wiki for more details.
+- Added the Flight Data Recorder system.
+- Added getVelocity / getAngleRates to the INS.
+- Added steering to the trailing wheel mount. Check the wiki for the control method.

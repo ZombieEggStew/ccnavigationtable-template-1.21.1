@@ -2,7 +2,8 @@
 
 > A complete CCPE avionics example: a flyable fixed-wing trainer aircraft that integrates the [Sensor System](../sensor-system/overview.md) (static port / pitot tube / INS / FMC), the [Modular Monitor](../monitor/overview.md) (switch / knob / screen), the [Control Desk](../control-desk/overview.md) (joystick / pedal / throttle) and [Aero Bearing](../aero-bearing/overview.md) control surfaces — with pitch damping, auto-roll, auto-throttle and altitude hold.
 
-## [> Download Save <](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/1.1.3/.design_guide/trainer%20aircraft.zip)
+## [> Download Save <](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/main/.design_guide/trainer%20aircraft.zip)
+[OneDrive](https://1drv.ms/u/c/4fabe5939824c0f1/IQDyp7GaueyWSJS6sStblBfdAdL7uPhhr4vora3CftGzKo0)
 
 ## Required Mods
 
