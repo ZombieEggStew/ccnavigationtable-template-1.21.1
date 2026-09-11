@@ -90,8 +90,6 @@
 - Improved the Examples & Tutorials section of the wiki.
 
 1.1.4
-
-1.1.5
 - Fixed cross-thread visibility on the trailing wheel mount: `steeringSignal` / `chasingYaw` / `lastChasingYaw` are now `volatile`.
   (The server thread writes them while CC Lua computer threads read them via `getSteering`/`getSteeringAngle`, and the client render thread reads `chasingYaw` through `getLerpedYaw`.)
 - Fixed a torn-snapshot window in the altitude-pressure conversion: the atmosphere curve snapshot (base pressure, anchors, Y bounds) is now published as a single immutable record through one `volatile` reference instead of four separate `volatile` fields.
