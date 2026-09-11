@@ -7,13 +7,16 @@
 Keep these three in mind — every "placement rule" follows from them, not from aviation theory:
 
 1. **Force directions are body-fixed; they do not flip with the airflow**
-   Real life: wing lift is perpendicular to the airflow and continuously redirects with angle of attack. Game: regular sail lift always points along the sail normal `+n`, symmetric sail drag along `±n`, directionless damping along `-v`. → The sail's orientation decides the force direction: upside down, wing lift pushes downward.
+
+      Real life: wing lift is perpendicular to the airflow and continuously redirects with angle of attack. Game: regular sail lift always points along the sail normal `+n`, symmetric sail drag along `±n`, directionless damping along `-v`. → The sail's orientation decides the force direction: upside down, wing lift pushes downward.
 
 2. **Force magnitude ∝ local airflow speed (linear), not v²**
-   Real life: dynamic pressure q = ½ρv². Game: each sail F ≈ k·P·Δt·v. → Aero forces decay linearly at low speed; at zero speed there is no aero force at all.
+
+      Real life: dynamic pressure q = ½ρv². Game: each sail F ≈ k·P·Δt·v. → Aero forces decay linearly at low speed; at zero speed there is no aero force at all.
 
 3. **The angle-of-attack (α) effect comes only from the (n·v) term, and only symmetric-sail normal drag is an "odd function"**
-   Regular sail lift **decreases** with (n·v)² (even function, symmetric in ±α); symmetric sail normal drag is the linear (n·v) term (**odd function** — nose-up and nose-down perturbations produce equal and opposite restoring forces).
+
+      Regular sail lift **decreases** with (n·v)² (even function, symmetric in ±α); symmetric sail normal drag is the linear (n·v) term (**odd function** — nose-up and nose-down perturbations produce equal and opposite restoring forces).
 
 → Corollary: the real-world rule "center of gravity ahead of the aerodynamic center → static stability" relies on wing lift **growing** with α. In the game, regular sail lift is symmetric in ±α and **shrinks**, so that rule cannot be copied. True **two-way static stability** comes from an odd-function surface (symmetric sail normal drag) placed behind the center of gravity — it acts like a weathervane / α-spring that pulls the body back into alignment with the airflow.
 
