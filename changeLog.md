@@ -84,5 +84,6 @@
 1.1.3
 - 油门 自由模式
 - FMC 高度-气压解算工具；风帆气动工具；通用阻力工具。。。
+- 飞行数据记录系统
 - INS getVelocity,getAngleRates
 - trailing wheel mount 添加了转向功能 控制方法见wiki
