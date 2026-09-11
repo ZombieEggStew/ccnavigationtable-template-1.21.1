@@ -69,7 +69,11 @@ print(f"troughs: {[(round(a,1),round(b,0)) for a,b in trs]}")
 ext = sorted(peaks+trs, key=lambda p:p[0])
 per = [ext[k+1][0]-ext[k][0] for k in range(len(ext)-1)]
 print(f"half-periods: {[round(p,1) for p in per]}")
-print(f"full period mean: {2*sum(per)/len(per):.1f} s")
+if per:
+    print(f"full period mean: {2*sum(per)/len(per):.1f} s")
+else:
+    # 短航程 / 强阻尼（无交替峰谷）时 ext 不足 2 个极值 → 无周期可算，不能除零
+    print("full period mean: unavailable (fewer than 2 alternating extrema in segment)")
 
 amps=[]
 for k in range(min(len(peaks),len(trs))):

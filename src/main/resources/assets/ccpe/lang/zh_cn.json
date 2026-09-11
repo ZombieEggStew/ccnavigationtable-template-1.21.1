@@ -183,7 +183,7 @@
   "ccpe.configuration.servoModeStressImpact.tooltip": "传动外设在舵机模式下的应力系数。实际应力 = 系数 × |实际输出转速|（输出转速可能被 setServoSpeed 覆盖/加速）。",
 
   "ccpe.configuration.flightDataRecorderEnabled": "飞行数据记录器",
-  "ccpe.configuration.flightDataRecorderEnabled.tooltip": "（调试）为每个注册了 FMC 的机体按 tick 记录数据到 <gameDir>/flight_logs/*.csv。仅在机体（含约束链）上有 FMC/AIC 时工作。默认关闭；仅在需要录制飞行时开启。",
+  "ccpe.configuration.flightDataRecorderEnabled.tooltip": "（调试）为每个注册了 FMC/AIC/INS 的机体按 tick 记录数据到 <gameDir>/flight_logs/*.csv。仅当机体（含约束链）上有 FMC/AIC/INS 传感器时工作（INS-only 机体的运动学/速度列可用，物理数据列读 nan）。默认关闭；仅在需要录制飞行时开启。",
 
   "ccpe.configuration.flightDataRecorderIntervalTicks": "记录器采样间隔",
   "ccpe.configuration.flightDataRecorderIntervalTicks.tooltip": "飞行数据记录器的采样间隔（tick，1 = 每 tick 采样一次 / 20 Hz）。",

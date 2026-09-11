@@ -86,10 +86,14 @@ def stats(rows, label):
 for fn in sorted(glob.glob(os.path.join(LOG_DIR, "flight_*.csv"))):
     stats(load(fn), fn)
 
-# high-altitude detail from _8_delaytest (y up to 361)
+# high-altitude detail from _8_delaytest (y up to 361)：历史日志非必现，缺失时跳过（不中断整段分析）
 print("\n-- y>270 detail from flight_overworld_00b1000b_8_delaytest.csv --")
-rows = load(os.path.join(LOG_DIR, "flight_overworld_00b1000b_8_delaytest.csv"))
-hi = [r for r in rows if r[0] > 270]
-step = max(1, len(hi)//12)
-for y, p in hi[::step]:
-    print(f"   y={y:7.2f}  rec={p:.5f}  P0={P0(y):.5f}  P1={P1(y):.5f}  rec-P0={p-P0(y):+.5f}  rec-P1={p-P1(y):+.5f}")
+detail = os.path.join(LOG_DIR, "flight_overworld_00b1000b_8_delaytest.csv")
+rows = load(detail) if os.path.exists(detail) else []
+if not rows:
+    print("   (detail log not present under flight_logs; skipped)")
+else:
+    hi = [r for r in rows if r[0] > 270]
+    step = max(1, len(hi)//12)
+    for y, p in hi[::step]:
+        print(f"   y={y:7.2f}  rec={p:.5f}  P0={P0(y):.5f}  P1={P1(y):.5f}  rec-P0={p-P0(y):+.5f}  rec-P1={p-P1(y):+.5f}")

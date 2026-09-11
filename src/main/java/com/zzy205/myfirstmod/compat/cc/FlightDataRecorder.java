@@ -54,7 +54,7 @@ import java.util.UUID;
 /**
  * 飞行数据记录器（调试工具，方案 B v1 + 控制输入）。
  * <p>
- * 服务端每个 ServerTick（可配置间隔）对<b>每个已注册 FMC（含 AIC）的物理体</b>采样一行，
+ * 服务端每个 ServerTick（可配置间隔）对<b>每个已注册 FMC/AIC/INS（ATTITUDE）传感器的物理体</b>采样一行，
  * 写入 {@code <gameDir>/flight_logs/flight_<维度>_<bodyUuid前8>_<保存时间>.csv}（保存时间 = 文件创建时刻，yyyyMMdd-HHmmss）。
  * <p>
  * 数据列 = tick/时间/机体 UUID + 机体原点世界坐标 + 姿态四元数 + 欧拉角（pitch/roll/yaw，
@@ -79,7 +79,8 @@ import java.util.UUID;
  * 物理步开始被 reset）；phugoid 级分析足够。力/力矩单位与 Sable 内部一致（每物理步冲量刻度）。
  * <p>
  * 只读 Sable / 控制台 BE 公开 API，不改任何物理或控制行为；开关/采样间隔见
- * {@link Config#FLIGHT_RECORDER_ENABLED}（默认开，仅在有 FMC 物理体时产生文件）。
+ * {@link Config#FLIGHT_RECORDER_ENABLED}（默认关，启用且机体的约束链上有 FMC/AIC/INS
+ * 传感器时才产生文件；INS-only 机体的运动学列可用、物理数据列读 nan）。
  */
 public final class FlightDataRecorder {
 
@@ -119,7 +120,7 @@ public final class FlightDataRecorder {
 
     private FlightDataRecorder() {}
 
-    /** 服务端每 tick（主线程）。开关关或没有 FMC 物理体时无事发生 */
+    /** 服务端每 tick（主线程）。开关关或没有 FMC/AIC/INS 物理体时无事发生 */
     public static void onServerTick(ServerTickEvent.Post event) {
         if (!Config.FLIGHT_RECORDER_ENABLED.get()) {
             closeAll();

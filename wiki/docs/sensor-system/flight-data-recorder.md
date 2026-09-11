@@ -14,14 +14,14 @@ The **Flight Data Recorder** (`FlightDataRecorder.java`) is a **read-only** debu
 | `flightDataRecorderEnabled` | `false` | Master switch. **Off by default**; enable in `config/ccpe-common.toml` when you need to record. **Requires a restart** |
 | `flightDataRecorderIntervalTicks` | `1` | Sampling interval in ticks. `1` = one row per tick = 20 Hz |
 
-- Files are produced only while **at least one FMC/AIC is on a Sable physics body**.
+- Files are produced only while **at least one FMC/AIC/INS sensor is on a Sable physics body**.
 - The recorder also covers bodies with only an INS (ATTITUDE) sensor: the kinematics/velocity diagnostic columns are always available; without an FMC the physics-data columns read `nan`.
 
 ## Output files
 
 Path: `<gameDir>/flight_logs/flight_<dimension>_<first-8-of-body-UUID>_<yyyyMMdd-HHmmss>.csv`
 
-- **One file per FMC/AIC body** (keyed by body UUID).
+- **One file per body** carrying any FMC/AIC/INS sensor (keyed by body UUID).
 - The timestamp suffix is the **file creation time** (not the starting tick) → files are never overwritten after a restart (the old start-tick naming overwrote previous files for the same body & tick after a restart).
 - The header is written only **when the file is created** → after changing the recorder code you must restart the game and re-fly, otherwise new columns won't match the header.
 - Files are closed normally when the body is disassembled/unloaded, on server stop, or when the recorder is disabled.
