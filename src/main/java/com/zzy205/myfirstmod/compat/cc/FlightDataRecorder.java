@@ -1,0 +1,770 @@
+package com.zzy205.myfirstmod.compat.cc;
+
+import com.zzy205.myfirstmod.Config;
+import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
+import com.zzy205.myfirstmod.block.PitotTubeBlock;
+import com.zzy205.myfirstmod.block.Throttle2Motion;
+import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorEntry;
+import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry.SensorType;
+import com.zzy205.myfirstmod.compat.sable.SableCompat;
+import dev.ryanhcode.sable.api.physics.force.ForceGroup;
+import dev.ryanhcode.sable.api.physics.force.QueuedForceGroup;
+import dev.ryanhcode.sable.companion.math.JOMLConversion;
+import dev.ryanhcode.sable.companion.math.Pose3dc;
+import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
+import dev.ryanhcode.sable.sublevel.ServerSubLevel;
+import dev.ryanhcode.sable.sublevel.SubLevel;
+import dev.ryanhcode.sable.sublevel.system.SubLevelPhysicsSystem;
+import net.minecraft.core.Direction;
+import net.minecraft.core.Registry;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
+import net.neoforged.fml.loading.FMLPaths;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import org.joml.Quaterniond;
+import org.joml.Vector3d;
+import org.joml.Vector3dc;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * 飞行数据记录器（调试工具，方案 B v1 + 控制输入）。
+ * <p>
+ * 服务端每个 ServerTick（可配置间隔）对<b>每个已注册 FMC（含 AIC）的物理体</b>采样一行，
+ * 写入 {@code <gameDir>/flight_logs/flight_<维度>_<bodyUuid前8>_<保存时间>.csv}（保存时间 = 文件创建时刻，yyyyMMdd-HHmmss）。
+ * <p>
+ * 数据列 = tick/时间/机体 UUID + 机体原点世界坐标 + 姿态四元数 + 欧拉角（pitch/roll/yaw，
+ * 与 {@code sensor_system.getAngles()} 同约定）+ 世界系线速度/角速度 + 机体系角速度
+ * + 静压孔平均气压/高度 + 皮托管沿管口对地速度/空速 + 质量/链质量/重心（世界 + 相对原点）/
+ * 链质心（相对原点）+ <b>受力</b>（LIFT/DRAG/PROPULSION 力组：合力 F 与绕质心合力矩 M，
+ * 均机体局部系，由 Sable {@code QueuedForceGroup} 点力重算：F=Σf、M=Σ(point−comPlot)×f）
+ * ——整链力矩参考点为<b>链质心</b>（{@link SableCompat#getChainCenterOfMass}，memo §11：
+ * 主机质心不含尾部子体，会引入虚假恒定俯仰力矩）
+ * + <b>通用阻力</b>（univFx/y/z：整链 Rapier 线速度阻尼的每物理子步冲量，转主机局部系；
+ * 力组/图纸里都没有这项，但物理里恒存在——平衡时 prop+drag+lift+univ ≈ 0，计算见
+ * {@link #appendUniversalDrag}）
+ * + <b>控制输入</b>（自动扫描链上短程信号链接器频道空间的控制台，记录其已安装的
+ * 脚踏板 / 操纵杆1 / 操纵杆2 / 油门1 / 油门2，每类取链内第一台；频道列 = 该控制台真实频道，
+ * 数据源与各控制台模块句柄一致）。未安装该控件 / 链上无控制台时该组列写 0；
+ * 数值读取失败列写 {@code nan}；力组不存在（无对应力源）时力列为 nan。
+ * <p>
+ * <b>受力前提</b>：记录器对主机及其整条约束链（含 aero_bearing 从动 sub-level）调用
+ * {@code ServerSubLevel.enableIndividualQueuedForcesTracking(true)}（Simulated 图纸同款机制，
+ * 每 tick 幂等开启、文件关闭时对当前链恢复 false）；否则 LIFT/DRAG 组点力不会被 Sable 记录。
+ * 采样时机 = ServerTick（每游戏 tick 末），读到的是该 tick 最后一个物理步记录的力组（组在每个
+ * 物理步开始被 reset）；phugoid 级分析足够。力/力矩单位与 Sable 内部一致（每物理步冲量刻度）。
+ * <p>
+ * 只读 Sable / 控制台 BE 公开 API，不改任何物理或控制行为；开关/采样间隔见
+ * {@link Config#FLIGHT_RECORDER_ENABLED}（默认开，仅在有 FMC 物理体时产生文件）。
+ */
+public final class FlightDataRecorder {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger("ccpe:FlightDataRecorder");
+
+    private static final String[] HEADER = {
+            "tick", "time_s", "body",
+            "x", "y", "z",
+            "qx", "qy", "qz", "qw",
+            "pitchDeg", "rollDeg", "yawDeg",
+            "vX", "vY", "vZ", "vNorm",
+            "wX", "wY", "wZ",
+            "wbX", "wbY", "wbZ",
+            "pressure", "altitude", "airSpeed", "groundSpeed",
+            "massKg", "chainMassKg",
+            "comX", "comY", "comZ",
+            "comRelX", "comRelY", "comRelZ",
+            "chainComRelX", "chainComRelY", "chainComRelZ",
+            "liftFx", "liftFy", "liftFz", "liftMx", "liftMy", "liftMz",
+            "dragFx", "dragFy", "dragFz", "dragMx", "dragMy", "dragMz",
+            "propFx", "propFy", "propFz", "propMx", "propMy", "propMz",
+            "chainLiftFx", "chainLiftFy", "chainLiftFz", "chainLiftMx", "chainLiftMy", "chainLiftMz",
+            "chainDragFx", "chainDragFy", "chainDragFz", "chainDragMx", "chainDragMy", "chainDragMz",
+            "chainPropFx", "chainPropFy", "chainPropFz", "chainPropMx", "chainPropMy", "chainPropMz",
+            "univFx", "univFy", "univFz",
+            "pedCh", "pedL", "pedR",
+            "joy1Ch", "joy1X", "joy1Y", "joy1XA", "joy1YA",
+            "joyCh", "joyX", "joyY", "joyXA", "joyYA",
+            "thrCh", "thrAxis", "thrGear", "thrFwd", "thrBack",
+            "thr2Ch", "thr2Axis", "thr2Center", "thr2Up", "thr2Down"
+    };
+
+    private static final double NaN = Double.NaN;
+
+    /** 每个物理体一个 CSV 写者（按 UUID 键） */
+    private static final Map<UUID, RowWriter> WRITERS = new HashMap<>();
+
+    private FlightDataRecorder() {}
+
+    /** 服务端每 tick（主线程）。开关关或没有 FMC 物理体时无事发生 */
+    public static void onServerTick(ServerTickEvent.Post event) {
+        if (!Config.FLIGHT_RECORDER_ENABLED.get()) {
+            closeAll();
+            return;
+        }
+        int interval = Config.FLIGHT_RECORDER_INTERVAL_TICKS.get();
+        if (interval <= 0) {
+            closeAll();
+            return;
+        }
+        MinecraftServer server = event.getServer();
+        long tick = server.getTickCount();
+        if (tick % interval != 0) return;
+
+        try {
+            List<ServerSubLevel> bodies = BodySensorRegistry.bodiesWithAny(server, SensorType.FMC, SensorType.ATTITUDE);
+            Set<UUID> alive = new HashSet<>();
+            for (ServerSubLevel sub : bodies) {
+                UUID id = SableCompat.getSubLevelUUID(sub);
+                if (id == null) continue;
+                alive.add(id);
+                RowWriter writer = WRITERS.get(id);
+                // 维度/level 变了（重装、跨维度）→ 换新文件
+                if (writer == null || writer.level != sub.getLevel()) {
+                    if (writer != null) writer.close();
+                    try {
+                        writer = new RowWriter(sub);
+                        WRITERS.put(id, writer);
+                    } catch (IOException e) {
+                        LOGGER.error("Failed to open flight log for body {}: {}", id, e.toString());
+                        WRITERS.remove(id);
+                        continue;
+                    }
+                }
+                // 开启整条约束链的力组跟踪（含 aero_bearing 从动 sub-level 的尾翼/副翼面；
+                // 幂等，重复调用无副作用）
+                for (SubLevel chainMember : SableCompat.getConnectedChain(sub)) {
+                    if (chainMember instanceof ServerSubLevel serverMember) {
+                        try {
+                            serverMember.enableIndividualQueuedForcesTracking(true);
+                        } catch (Exception ignored) {}
+                    }
+                }
+                writer.writeRow(sub, tick);
+            }
+            // 关闭已消失机体的写者（拆卸/卸载）
+            WRITERS.entrySet().removeIf(entry -> {
+                if (!alive.contains(entry.getKey())) {
+                    entry.getValue().close();
+                    return true;
+                }
+                return false;
+            });
+        } catch (Exception e) {
+            LOGGER.debug("FlightDataRecorder tick failed: {}", e.toString());
+        }
+    }
+
+    /** 服务器停止 / 记录器关闭：关掉全部文件 */
+    public static void closeAll() {
+        for (RowWriter w : WRITERS.values()) w.close();
+        WRITERS.clear();
+    }
+
+    /** 每物理体一个 CSV 文件：创建时写表头 + 开启 Sable 力组跟踪；关闭时恢复 */
+    private static final class RowWriter implements AutoCloseable {
+        private final ServerLevel level;
+        private final ServerSubLevel sub;
+        private final boolean trackingEnabled;
+        private final BufferedWriter out;
+
+        RowWriter(ServerSubLevel sub) throws IOException {
+            this.level = sub.getLevel();
+            this.sub = sub;
+            // 开启单体力组跟踪（同 Simulated 图纸 DiagramEntity）：否则 LIFT/DRAG 点力不记录
+            sub.enableIndividualQueuedForcesTracking(true);
+            this.trackingEnabled = true;
+            Path dir = FMLPaths.GAMEDIR.get().resolve("flight_logs");
+            Files.createDirectories(dir);
+            String dim = level.dimension().location().getPath().replaceAll("[^A-Za-z0-9_.-]", "_");
+            UUID body = sub.getUniqueId();
+            String id8 = body != null ? body.toString().replace("-", "").substring(0, 8) : "unknown";
+            // 后缀用保存时间（文件创建时刻，yyyyMMdd-HHmmss）而非起始 tick：
+            // 旧命名按起始 tick 会在重启后同机体同 tick 覆盖旧文件，时间戳不会重复
+            String ts = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").format(LocalDateTime.now());
+            Path file = dir.resolve(String.format(Locale.ROOT, "flight_%s_%s_%s.csv", dim, id8, ts));
+            this.out = Files.newBufferedWriter(file, StandardCharsets.UTF_8);
+            out.write(String.join(",", HEADER));
+            out.newLine();
+        }
+
+        void writeRow(ServerSubLevel sub, long tick) {
+            try {
+                out.write(sampleRow(sub, tick));
+                out.newLine();
+                out.flush();
+            } catch (Exception e) {
+                LOGGER.debug("Flight log row write failed (body {}): {}", SableCompat.getSubLevelId(sub), e.toString());
+            }
+        }
+
+        @Override
+        public void close() {
+            try {
+                out.close();
+            } catch (IOException ignored) {}
+            if (trackingEnabled) {
+                try {
+                    for (SubLevel chainMember : SableCompat.getConnectedChain(sub)) {
+                        if (chainMember instanceof ServerSubLevel serverMember) {
+                            serverMember.enableIndividualQueuedForcesTracking(false);
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    /**
+     * 采样一行（字段顺序与 {@link #HEADER} 严格一致）。所有读数失败为 nan；采样整体失败时
+     * 输出一行全 nan 占位（保持列对齐），便于 Python 直接解析。
+     */
+    private static String sampleRow(ServerSubLevel sub, long tick) {
+        List<String> f = new ArrayList<>(HEADER.length);
+        try {
+            f.add(String.valueOf(tick));
+            f.add(String.format(Locale.ROOT, "%.3f", tick / 20.0));
+            UUID id = SableCompat.getSubLevelUUID(sub);
+            f.add(id != null ? id.toString() : "null");
+
+            // ── 机体位姿 / 运动学 ──
+            double[] pose = poseOf(sub);              // x y z qx qy qz qw（世界）
+            double[] euler = eulerDeg(sub);           // pitchDeg rollDeg yawDeg（sensor_system 同约定）
+            // 速度源 = Sable 每 tick 世界 pose 差分（latestLinearVelocity/latestAngularVelocity）：
+            // 不能用裸读物理 handle（世界静止机体上仍报幻影值，见 SensorSystemAPI.getVelocity 记录）
+            Vec3 lin = SableCompat.getWorldLinearVelocity(sub);
+            Vec3 ang = SableCompat.getWorldAngularVelocity(sub);
+            double[] wb = bodyAngVel(sub, ang);
+            for (double v : pose) f.add(n(v));
+            for (double v : euler) f.add(n(v));
+            f.add(n(lin != null ? lin.x : NaN));
+            f.add(n(lin != null ? lin.y : NaN));
+            f.add(n(lin != null ? lin.z : NaN));
+            f.add(n(lin != null ? lin.length() : NaN));
+            f.add(n(ang != null ? ang.x : NaN));
+            f.add(n(ang != null ? ang.y : NaN));
+            f.add(n(ang != null ? ang.z : NaN));
+            f.add(n(wb[0]));
+            f.add(n(wb[1]));
+            f.add(n(wb[2]));
+
+            // ── 环境（静压孔/皮托管，门控与 sensor_system 同）──
+            double[] env = sensorEnv(sub);            // pressure altitude airSpeed groundSpeed
+            for (double v : env) f.add(n(v));
+
+            // ── 质量 / 重心 ──
+            Double mass = SableCompat.getMass(sub);
+            Double chainMass = SableCompat.getChainMass(sub);
+            Vec3 comW = SableCompat.getCenterOfMass(sub);
+            Vec3 comL = SableCompat.getCenterOfMassLocal(sub);
+            Vec3 chainL = SableCompat.getChainCenterOfMassLocal(sub);
+            f.add(n(mass != null ? mass : NaN));
+            f.add(n(chainMass != null ? chainMass : NaN));
+            f.add(n(comW != null ? comW.x : NaN));
+            f.add(n(comW != null ? comW.y : NaN));
+            f.add(n(comW != null ? comW.z : NaN));
+            f.add(n(comL != null ? comL.x : NaN));
+            f.add(n(comL != null ? comL.y : NaN));
+            f.add(n(comL != null ? comL.z : NaN));
+            f.add(n(chainL != null ? chainL.x : NaN));
+            f.add(n(chainL != null ? chainL.y : NaN));
+            f.add(n(chainL != null ? chainL.z : NaN));
+
+            // ── 受力（Sable 力组点力重算：机体局部系合力 F + 绕 plot 质心合力矩 M）──
+            Vec3 comPlot = SableCompat.getCenterOfMassPlot(sub);
+            appendForces(f, sub, comPlot);
+            // ── 整链受力（方案 A：链上全部 sub-level 的力组合并，绕【链质心】求矩后转回主机局部系）──
+            // memo §11：主机质心不含尾部子体（链质心偏移 ~0.95m），绕它求矩会引入 ∝升力 的虚假
+            // 恒定俯仰力矩（假"残余抬头力矩"）——参考点必须用链质心（Sable 动力学/风洞多物理体重心）。
+            Vec3 chainComWorld = SableCompat.getChainCenterOfMass(sub);
+            appendChainForces(f, sub, chainComWorld);
+            // ── 通用阻力（Rapier 线速度阻尼；力组/图纸里没有，但物理里恒存在）──
+            appendUniversalDrag(f, sub);
+
+            // ── 控制输入（控制台频道寻址，BE 服务端直读，同模块句柄数据源）──
+            appendControls(f, sub);
+        } catch (Exception e) {
+            LOGGER.debug("Flight log sampling failed (body {}): {}", SableCompat.getSubLevelId(sub), e.toString());
+            return tick + "," + String.format(Locale.ROOT, "%.3f", tick / 20.0) + ","
+                    + (SableCompat.getSubLevelUUID(sub) != null ? SableCompat.getSubLevelUUID(sub) : "null")
+                    + "," + String.join(",", Collections.nCopies(HEADER.length - 3, "nan"));
+        }
+        return String.join(",", f);
+    }
+
+    /** Sable 力组注册表 key（sable:force_groups）。不直接引用 ForceGroups 类（其静态字段类型引用 veil 的
+     *  RegistryObject，veil 不在编译 classpath），改为运行时按注册表 id 匹配力组。 */
+    private static final ResourceKey<Registry<ForceGroup>> FORCE_GROUP_REGISTRY =
+            ResourceKey.createRegistryKey(ResourceLocation.fromNamespaceAndPath("sable", "force_groups"));
+
+    /**
+     * 追加 LIFT / DRAG / PROPULSION 三个力组（固定顺序，各 6 列）：
+     * 合力 F（机体局部系）+ 绕 plot 质心的合力矩 M = Σ(point − comPlot) × force（局部系）。
+     * 力组不存在 / 无点力 / 注册表匹配失败 → 对应组全 nan；comPlot 读不到时只记合力、力矩 nan。
+     */
+    private static void appendForces(List<String> f, ServerSubLevel sub, Vec3 comPlot) {
+        double[][] acc = new double[3][6];   // [lift, drag, propulsion][Fx,Fy,Fz,Mx,My,Mz]
+        boolean[] any = new boolean[3];
+        try {
+            Registry<ForceGroup> registry = forceGroupRegistry(sub);
+            Map<ForceGroup, QueuedForceGroup> groups = sub.getQueuedForceGroups();
+            if (groups != null) {
+                for (Map.Entry<ForceGroup, QueuedForceGroup> entry : groups.entrySet()) {
+                    int slot = groupSlot(registry, entry.getKey());
+                    if (slot < 0) continue;
+                    double[] out = acc[slot];
+                    List<QueuedForceGroup.PointForce> points = entry.getValue().getRecordedPointForces();
+                    if (points == null || points.isEmpty()) continue;
+                    double cx = comPlot != null ? comPlot.x : 0;
+                    double cy = comPlot != null ? comPlot.y : 0;
+                    double cz = comPlot != null ? comPlot.z : 0;
+                    for (QueuedForceGroup.PointForce pf : points) {
+                        Vector3dc p = pf.point();
+                        Vector3dc fo = pf.force();
+                        out[0] += fo.x();
+                        out[1] += fo.y();
+                        out[2] += fo.z();
+                        if (comPlot != null) {
+                            double rx = p.x() - cx;
+                            double ry = p.y() - cy;
+                            double rz = p.z() - cz;
+                            out[3] += ry * fo.z() - rz * fo.y();
+                            out[4] += rz * fo.x() - rx * fo.z();
+                            out[5] += rx * fo.y() - ry * fo.x();
+                        }
+                    }
+                    any[slot] = true;
+                }
+            }
+        } catch (Exception ignored) {}
+        for (int slot = 0; slot < 3; slot++) {
+            if (any[slot]) {
+                for (int k = 0; k < 6; k++) f.add(n(acc[slot][k]));
+            } else {
+                f.add("nan");
+                f.add("nan");
+                f.add("nan");
+                f.add("nan");
+                f.add("nan");
+                f.add("nan");
+            }
+        }
+    }
+
+    /**
+     * 整链力组聚合（方案 A）：遍历约束链上每个 ServerSubLevel 的 LIFT/DRAG/PROPULSION 点力，
+     * 各自转到世界系后求和；力矩绕<b>链质心（世界坐标）</b>计算——链质心 = 链上全部 sub-level
+     * 质量加权质心（{@link SableCompat#getChainCenterOfMass}，含尾部舵面子体），是整机真实
+     * 动力学/配平参考点；最后整体转回主机局部系。
+     * 适用于尾翼/副翼在 aero_bearing 从动 sub-level 上的布局——主机自己的力组只有机身面，
+     * 链级列才包含全部控制面（近似把约束链当刚体：aero bearing PD 锁定刚度高）。
+     * ⚠ 力矩参考点必须用链质心而非主机质心：主机质心不含尾部子体，会引入
+     * 虚假恒定俯仰力矩（memo §11：+0.95m 偏移 × 升力 ≈ +13，且 ∝P 伪装成"低空抬头"）。
+     *
+     * @param chainComWorld 链质心世界坐标；为 null 时只记合力、力矩列 nan
+     */
+    private static void appendChainForces(List<String> f, ServerSubLevel main, Vec3 chainComWorld) {
+        double[][] acc = new double[3][6];   // 世界系累计 [Fx,Fy,Fz,Mx,My,Mz]
+        boolean[] any = new boolean[3];
+        boolean comOk = chainComWorld != null;
+        double ccx = comOk ? chainComWorld.x : 0;
+        double ccy = comOk ? chainComWorld.y : 0;
+        double ccz = comOk ? chainComWorld.z : 0;
+        try {
+            Registry<ForceGroup> registry = forceGroupRegistry(main);
+            for (SubLevel member : SableCompat.getConnectedChain(main)) {
+                if (!(member instanceof ServerSubLevel serverMember)) continue;
+                Map<ForceGroup, QueuedForceGroup> groups = serverMember.getQueuedForceGroups();
+                if (groups == null) continue;
+                Pose3dc pose = serverMember.logicalPose();
+                for (Map.Entry<ForceGroup, QueuedForceGroup> entry : groups.entrySet()) {
+                    int slot = groupSlot(registry, entry.getKey());
+                    if (slot < 0) continue;
+                    double[] out = acc[slot];
+                    List<QueuedForceGroup.PointForce> points = entry.getValue().getRecordedPointForces();
+                    if (points == null || points.isEmpty()) continue;
+                    for (QueuedForceGroup.PointForce pf : points) {
+                        // 点力矢量：局部系 → 世界系（旋转）
+                        Vector3d wf = pose.transformNormal(new Vector3d(pf.force()), new Vector3d());
+                        // 施力点：plot 帧 → 世界
+                        Vector3d wp = pose.transformPosition(new Vector3d(pf.point()), new Vector3d());
+                        out[0] += wf.x();
+                        out[1] += wf.y();
+                        out[2] += wf.z();
+                        if (comOk) {
+                            double rx = wp.x() - ccx;
+                            double ry = wp.y() - ccy;
+                            double rz = wp.z() - ccz;
+                            out[3] += ry * wf.z() - rz * wf.y();
+                            out[4] += rz * wf.x() - rx * wf.z();
+                            out[5] += rx * wf.y() - ry * wf.x();
+                        }
+                    }
+                    any[slot] = true;
+                }
+            }
+        } catch (Exception ignored) {}
+        // 世界系合力/力矩 → 主机局部系（逆旋转），与其它局部系列一致
+        Quaterniond invMain = new Quaterniond(main.logicalPose().orientation());
+        for (int slot = 0; slot < 3; slot++) {
+            if (any[slot]) {
+                Vector3d fw = new Vector3d(acc[slot][0], acc[slot][1], acc[slot][2]);
+                invMain.transformInverse(fw);
+                f.add(n(fw.x()));
+                f.add(n(fw.y()));
+                f.add(n(fw.z()));
+                Vector3d mw = new Vector3d(acc[slot][3], acc[slot][4], acc[slot][5]);
+                invMain.transformInverse(mw);
+                f.add(n(mw.x()));
+                f.add(n(mw.y()));
+                f.add(n(mw.z()));
+            } else {
+                f.add("nan");
+                f.add("nan");
+                f.add("nan");
+                f.add("nan");
+                f.add("nan");
+                f.add("nan");
+            }
+        }
+    }
+
+    /**
+     * 通用阻力（universal drag）：Rapier 给每个 sub-level 刚体设置的恒定线速度阻尼
+     * （{@code rigid_body.set_linear_damping(universal_drag)}，维度数据包 dimension_physics
+     * 的 {@code "universal_drag"} 字段，默认 0.09）——它直接衰减刚体速度、不走力组，
+     * 因此图纸（读 QueuedForceGroup）与力组列都看不到；但平衡时它吃掉了推力的相当一部分
+     * （飞行实测 m≈45、v≈62.6 时 F≈255，约为帆阻力的 2 倍，见 .design_guide/aircraft.md"通用阻力"一节）。
+     * <p>
+     * 每物理子步 Δt：v ← v/(1+d·Δt)，等效冲量 J = −m·d·v·Δt/(1+d·Δt)。
+     * 这里对约束链上每个 sub-level 用各自质量与线速度（世界系）求和，再整体转回主机局部系；
+     * 单位与力组列一致（每物理子步冲量刻度）→ 可直接与 chainProp/chainDrag/chainLift 相加
+     * 得到真实净力（平衡时 ≈ 0）。角速度阻尼（angular_damping=0.09）不在本列。
+     *
+     * @param main 主机（参考）物理体
+     */
+    private static void appendUniversalDrag(List<String> f, ServerSubLevel main) {
+        try {
+            if (!(main.getLevel() instanceof ServerLevel level)) {
+                f.add("nan"); f.add("nan"); f.add("nan");
+                return;
+            }
+            double d = DimensionPhysicsData.getUniversalDrag(level);
+            if (d <= 0) {
+                // 数据包把 universal_drag 设为 0 → 无阻尼，确定性地记 0（而非 nan）
+                f.add("0.00000"); f.add("0.00000"); f.add("0.00000");
+                return;
+            }
+            SubLevelPhysicsSystem sys = SubLevelPhysicsSystem.get(level);
+            int substeps = sys != null ? sys.getConfig().substepsPerTick : 2;
+            double dt = 1.0 / 20.0 / substeps;
+            double factor = d * dt / (1.0 + d * dt);   // Δv/|v| 每子步
+            Vec3 hostV = SableCompat.getWorldLinearVelocity(main);
+            double[] sum = {0, 0, 0};
+            boolean any = false;
+            for (SubLevel member : SableCompat.getConnectedChain(main)) {
+                Double m = SableCompat.getMass(member);
+                Vec3 v = SableCompat.getWorldLinearVelocity(member);
+                if (v == null) v = hostV;   // 刚性连接的从动体读不到速度时退化为主机速度
+                if (m == null || v == null) continue;
+                sum[0] -= m * factor * v.x;
+                sum[1] -= m * factor * v.y;
+                sum[2] -= m * factor * v.z;
+                any = true;
+            }
+            if (!any) {
+                f.add("nan"); f.add("nan"); f.add("nan");
+                return;
+            }
+            // 世界系 → 主机局部系（与 chain 系列列一致）
+            Quaterniond invMain = new Quaterniond(main.logicalPose().orientation());
+            Vector3d w = new Vector3d(sum[0], sum[1], sum[2]);
+            invMain.transformInverse(w);
+            f.add(n(w.x()));
+            f.add(n(w.y()));
+            f.add(n(w.z()));
+        } catch (Exception e) {
+            f.add("nan"); f.add("nan"); f.add("nan");
+        }
+    }
+
+    /** 该 level 的 sable:force_groups 注册表（读取失败返回 null → 组匹配不可用） */
+    private static @Nullable Registry<ForceGroup> forceGroupRegistry(ServerSubLevel sub) {
+        try {
+            return sub.getLevel().registryAccess().registry(FORCE_GROUP_REGISTRY).orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 力组 → 列槽位：0=lift 1=drag 2=propulsion；匹配不到返回 -1 */
+    private static int groupSlot(@Nullable Registry<ForceGroup> registry, ForceGroup group) {
+        if (registry == null) return -1;
+        try {
+            ResourceLocation id = registry.getKey(group);
+            return switch (id != null ? id.getPath() : "") {
+                case "lift" -> 0;
+                case "drag" -> 1;
+                case "propulsion" -> 2;
+                default -> -1;
+            };
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** 已对"同类型多台控制台"发过警告的控件类型（避免每 tick 刷屏）；类型最多 5 种，随会话增长无碍 */
+    private static final Set<ControlDeskBlockEntity.ControlType> WARNED_DUPLICATE_TYPES = new HashSet<>();
+
+    /**
+     * 控制输入列：自动扫描链上短程信号链接器频道空间中的全部控制台，记录其已安装的
+     * 脚踏板 / 操纵杆1 / 操纵杆2 / 油门1 / 油门2（每组列顺序见 {@link #HEADER}）。
+     * <ul>
+     *   <li>每类控件取<b>链内第一台</b>（desks 按频道升序，结果确定）；同类型多台只记第一台并警告一次；</li>
+     *   <li>频道列 = 该控制台真实频道（{@link ControlDeskBlockEntity#getChannel()}，不再硬编码）；</li>
+     *   <li>链上无控制台 / 未安装该控件 → 该组列全部写 0；读数失败写 {@code nan}。</li>
+     * </ul>
+     */
+    private static void appendControls(List<String> f, ServerSubLevel sub) {
+        Set<UUID> chain = chainUuidsOf(sub);
+        List<ControlDeskBlockEntity> desks = new ArrayList<>(ShortRangeLinkerRegistry.desksOnChain(chain));
+        desks.sort(Comparator.comparingInt(ControlDeskBlockEntity::getChannel));
+
+        // 脚踏板：pedCh pedL pedR
+        ControlDeskBlockEntity ped = firstDeskWith(desks, ControlDeskBlockEntity.ControlType.PEDAL);
+        if (ped != null) {
+            f.add(String.valueOf(ped.getChannel()));
+            f.add(n(ped.getPedalLeftAxis()));
+            f.add(n(ped.getPedalRightAxis()));
+        } else {
+            f.add("0"); f.add("0"); f.add("0");
+        }
+
+        // 操纵杆1：joy1Ch joy1X joy1Y joy1XA joy1YA
+        ControlDeskBlockEntity joy1 = firstDeskWith(desks, ControlDeskBlockEntity.ControlType.JOYSTICK);
+        if (joy1 != null) {
+            f.add(String.valueOf(joy1.getChannel()));
+            f.add(n(joy1.getJoystickAxisX()));
+            f.add(n(joy1.getJoystickAxisY()));
+            f.add(joy1.isJoystickXActive() ? "1" : "0");
+            f.add(joy1.isJoystickYActive() ? "1" : "0");
+        } else {
+            f.add("0"); f.add("0"); f.add("0"); f.add("0"); f.add("0");
+        }
+
+        // 操纵杆2：joyCh joyX joyY joyXA joyYA
+        ControlDeskBlockEntity joy2 = firstDeskWith(desks, ControlDeskBlockEntity.ControlType.JOYSTICK_2);
+        if (joy2 != null) {
+            f.add(String.valueOf(joy2.getChannel()));
+            f.add(n(joy2.getJoystick2AxisX()));
+            f.add(n(joy2.getJoystick2AxisY()));
+            f.add(joy2.isJoystick2XActive() ? "1" : "0");
+            f.add(joy2.isJoystick2YActive() ? "1" : "0");
+        } else {
+            f.add("0"); f.add("0"); f.add("0"); f.add("0"); f.add("0");
+        }
+
+        // 油门1：thrCh thrAxis thrGear thrFwd thrBack
+        ControlDeskBlockEntity thr = firstDeskWith(desks, ControlDeskBlockEntity.ControlType.THROTTLE);
+        if (thr != null) {
+            f.add(String.valueOf(thr.getChannel()));
+            f.add(n(thr.getThrottleAxis()));
+            f.add(String.valueOf(thr.getThrottleGear()));
+            f.add(thr.isThrottleForwardActive() ? "1" : "0");
+            f.add(thr.isThrottleBackActive() ? "1" : "0");
+        } else {
+            f.add("0"); f.add("0"); f.add("0"); f.add("0"); f.add("0");
+        }
+
+        // 油门2：thr2Ch thr2Axis thr2Center thr2Up thr2Down
+        ControlDeskBlockEntity thr2 = firstDeskWith(desks, ControlDeskBlockEntity.ControlType.THROTTLE_2);
+        if (thr2 != null) {
+            f.add(String.valueOf(thr2.getChannel()));
+            f.add(n(thr2.getThrottle2Angle() / Throttle2Motion.MAX_DEG));
+            f.add(n((thr2.getThrottle2Angle() - Throttle2Motion.NEUTRAL_DEG) / Throttle2Motion.NEUTRAL_DEG));
+            f.add(thr2.isThrottle2UpActive() ? "1" : "0");
+            f.add(thr2.isThrottle2DownActive() ? "1" : "0");
+        } else {
+            f.add("0"); f.add("0"); f.add("0"); f.add("0"); f.add("0");
+        }
+    }
+
+    /** 链内第一台安装了指定控件的控制台（desks 需已按频道升序排序）；
+     *  同类型多台只取第一台并警告一次（静态去重，避免每 tick 刷屏）。 */
+    private static @Nullable ControlDeskBlockEntity firstDeskWith(List<ControlDeskBlockEntity> desks,
+            ControlDeskBlockEntity.ControlType type) {
+        ControlDeskBlockEntity found = null;
+        int count = 0;
+        for (ControlDeskBlockEntity desk : desks) {
+            if (desk.isInstalled(type)) {
+                count++;
+                if (found == null) found = desk;
+            }
+        }
+        if (count > 1 && WARNED_DUPLICATE_TYPES.add(type)) {
+            LOGGER.warn("FlightDataRecorder: {} desks with {} installed on the same body chain — recording only the "
+                            + "first (channel {}); remove duplicates or accept single-channel recording.",
+                    count, type, found.getChannel());
+        }
+        return found;
+    }
+
+    /** 物理体（含约束链）的全部子次元 UUID 集合（控制台链内频道寻址用） */
+    private static Set<UUID> chainUuidsOf(SubLevel sub) {
+        Set<UUID> ids = new HashSet<>();
+        for (SubLevel s : SableCompat.getConnectedChain(sub)) {
+            UUID id = SableCompat.getSubLevelUUID(s);
+            if (id != null) ids.add(id);
+        }
+        return ids;
+    }
+
+    /** 机体原点世界位姿 {x,y,z, qx,qy,qz,qw}（logicalPose，同 sensor_system 姿态基准） */
+    private static double[] poseOf(SubLevel sub) {
+        try {
+            Pose3dc pose = sub.logicalPose();
+            return new double[]{
+                    pose.position().x(), pose.position().y(), pose.position().z(),
+                    pose.orientation().x(), pose.orientation().y(), pose.orientation().z(), pose.orientation().w()
+            };
+        } catch (Exception e) {
+            return new double[]{NaN, NaN, NaN, NaN, NaN, NaN, NaN};
+        }
+    }
+
+    /**
+     * 姿态欧拉角（度）{pitch, roll, yaw}——镜像 {@code SensorSystemAPI.computeAttitudeDeg}：
+     * pitch/roll/yaw 约定与 {@code ss.getAngles()} 完全一致（你的实测：低头 = pitch 正、抬头 = pitch 负）。
+     */
+    private static double[] eulerDeg(SubLevel sub) {
+        try {
+            Pose3dc pose = sub.logicalPose();
+            Vector3d ld = JOMLConversion.toJOML(Vec3.atLowerCornerOf(Direction.DOWN.getNormal()));
+            pose.orientation().transformInverse(ld);
+            double pitch = ld.y() < 0 || ld.z() * ld.z() > 0.001 ? Math.atan2(ld.z(), -ld.y()) : 0;
+            double roll = ld.y() < 0 || ld.x() * ld.x() > 0.001 ? Math.atan2(ld.x(), -ld.y()) : 0;
+            Vector3d north = new Vector3d(0, 0, -1);
+            pose.orientation().transformInverse(north);
+            double yaw = -Math.atan2(north.x(), -north.z());
+            return new double[]{Math.toDegrees(pitch), Math.toDegrees(roll), Math.toDegrees(yaw)};
+        } catch (Exception e) {
+            return new double[]{NaN, NaN, NaN};
+        }
+    }
+
+    /** 世界系角速度 → 机体系（用同一 tick 的姿态四元数逆旋转，同 sensor_system） */
+    private static double[] bodyAngVel(SubLevel sub, Vec3 angVelWorld) {
+        if (angVelWorld == null) return new double[]{NaN, NaN, NaN};
+        try {
+            Vector3d v = new Vector3d(angVelWorld.x, angVelWorld.y, angVelWorld.z);
+            new Quaterniond(sub.logicalPose().orientation()).transformInverse(v);
+            return new double[]{v.x(), v.y(), v.z()};
+        } catch (Exception e) {
+            return new double[]{NaN, NaN, NaN};
+        }
+    }
+
+    /**
+     * 传感器读数（门控与 sensor_system 同）：
+     * {平均气压 P, 平均高度（静压孔世界 y）, 最后皮托管空速, 最后皮托管对地速度}；
+     * 无对应传感器或门控不满足时对应列为 nan。
+     */
+    private static double[] sensorEnv(SubLevel sub) {
+        double pressure = NaN, altitude = NaN, airSpeed = NaN, groundSpeed = NaN;
+        try {
+            List<SensorEntry> entries = BodySensorRegistry.sensorsOnBody(sub);
+            boolean hasPitot = false;
+            boolean hasPort = false;
+            double sumP = 0;
+            double sumA = 0;
+            int count = 0;
+            SensorEntry lastPitot = null;
+            for (SensorEntry e : entries) {
+                switch (e.type()) {
+                    case PRESSURE -> {
+                        hasPort = true;
+                        Vec3 worldPos = SableCompat.projectOutOfSubLevel(sub.getLevel(), e.pos());
+                        if (worldPos != null) {
+                            Double pr = computePressure(sub.getLevel(), worldPos);
+                            if (pr != null) {
+                                sumP += pr;
+                                sumA += worldPos.y;
+                                count++;
+                            }
+                        }
+                    }
+                    case SPEED -> {
+                        hasPitot = true;
+                        lastPitot = e;
+                    }
+                    default -> {}
+                }
+            }
+            if (count > 0) {
+                pressure = sumP / count;
+                altitude = sumA / count;
+            }
+            if (hasPitot && hasPort && lastPitot != null) {
+                // 修正世界系点速度/空速（裸读 Sable.HELPER.* 含幻影值）
+                Double g = axisSpeed(sub, lastPitot, SableCompat.getWorldPointVelocity(sub.getLevel(), sub, lastPitot.pos()));
+                Double a = axisSpeed(sub, lastPitot, SableCompat.getWorldAirVelocity(sub.getLevel(), sub, lastPitot.pos()));
+                if (g != null) groundSpeed = g;
+                if (a != null) airSpeed = a;
+            }
+        } catch (Exception ignored) {}
+        return new double[]{pressure, altitude, airSpeed, groundSpeed};
+    }
+
+    /** 镜像 SensorSystemAPI.computePressure */
+    private static Double computePressure(Level level, Vec3 worldPos) {
+        try {
+            return DimensionPhysicsData.getAirPressure(level, new Vector3d(worldPos.x, worldPos.y, worldPos.z));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 镜像 SensorSystemAPI.axisSpeed：速度在世界管口朝向（blockstate 轴转世界）上的有符号投影（无死区） */
+    private static Double axisSpeed(SubLevel sub, SensorEntry entry, Vec3 vel) {
+        if (vel == null) return null;
+        try {
+            BlockState state = sub.getLevel().getBlockState(entry.pos());
+            if (!(state.getBlock() instanceof PitotTubeBlock)) return null; // 注册表滞后：方块已拆
+            Vec3 worldAxis = SableCompat.transformNormalToWorld(sub,
+                    Vec3.atLowerCornerOf(PitotTubeBlock.axisOf(state).getNormal()));
+            if (worldAxis == null) return null;
+            return vel.dot(worldAxis);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 数值列格式化（nan / 无穷原样标记，避免 CSV 数字解析混乱） */
+    private static String n(double v) {
+        if (Double.isNaN(v) || Double.isInfinite(v)) return "nan";
+        return String.format(Locale.ROOT, "%.5f", v);
+    }
+}

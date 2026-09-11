@@ -21,12 +21,15 @@ import dev.eriksonn.aeronautics.config.AeroConfig;
 import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
 import dev.ryanhcode.sable.companion.math.JOMLConversion;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
+import dev.ryanhcode.sable.physics.config.dimension_physics.BezierResourceFunction;
+import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysics;
 import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.ryanhcode.sable.sublevel.plot.LevelPlot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -82,12 +85,20 @@ import java.util.UUID;
  * print(ss.getBodyId())           -- 物理体 UUID
  * print(ss.getAltitude())         -- 最后放置的静压孔的高度（便捷方法）
  * print(ss.getPressure())         -- 最后放置的静压孔的气压（便捷方法）
+ * print(ss.getPressureFromAltitude(252.1)) -- 世界高度 Y → 气压（同 getPressure() 同源公式；门控：机体上有 FMC/AIC）
+ * print(ss.getAltitudeFromPressure(0.47))  -- 气压 → 世界高度 Y（数值反解，与上者互逆；门控：机体上有 FMC/AIC）
+ * local lift = ss.solveSailLift(0.47, 60, nil) -- 升力方程 L = 0.475·P·|V|：传 P、V 求 L（正向；每秒力；门控：机体上有 FMC/AIC）
+ * local v = ss.solveSailLift(0.47, nil, 13.3) -- 传 P、L 求 V = L/(0.475·P)（m/s；门控同上）
+ * local drag = ss.solveSailDirectionlessDrag(0.47, 60, nil) -- 阻力方程 D = 0.06888202261·P·|V|（普通帆/对称帆通用；每秒力；门控同上）
+ * local udrag = ss.getUniversalDragForce(45.25, 60) -- 通用阻力等效力标量 = m × d × |v|（d 默认 0.09，维度数据包可覆盖；门控同上）
+ * local cruise = ss.solveMaxCruise(45.25, 43, 4, 2, 4, 256) -- 最高稳态巡航：{velocity=..., altitude=...}（升力=重力、推力=阻力 二元方程组的唯一稳态解；门控同上）
  * print(ss.getSpeed())            -- 最后放置的皮托管沿管口朝向的对地速度（m/s，便捷方法）
  * print(ss.getAirSpeed())         -- 最后放置的皮托管沿管口朝向的空速（m/s，便捷方法）
  * print(ss.getAngles())           -- {pitch=, roll=, yaw=}（度；门控：机体上必须有 INS）
  * print(ss.getPosition())         -- 最后放置的 INS 的世界坐标 {x, y, z}（门控：机体上必须有 INS）
  * print(ss.getOrientation())      -- 机体姿态四元数 {x, y, z, w}（门控：机体上必须有 INS）
  * print(ss.getAngularVelocity())  -- 机体局部系角速率 {x, y, z} rad/s（绕机体自身 X/Y/Z 轴，姿态恒等时=世界系；门控：机体上必须有 INS）
+ * print(ss.getVelocity())         -- 世界系线速度 {x, y, z} m/s（机体原点平移速度，Sable pose 差分；门控：机体上必须有 INS）
  * print(ss.getBodyPosition())     -- 物理体原点世界坐标 {x, y, z}（门控：机体上必须有 INS）
  * print(ss.getPhysicsCenterOfMassRel()) -- 重心相对最后放置的 FMC 的机体局部系位置 {x, y, z}（门控：机体上有 FMC）
  * print(ss.getPhysicsMass())      -- 所在物理体质量 kg（门控：机体上有 FMC）
@@ -149,6 +160,23 @@ public class SensorSystemAPI implements ILuaAPI {
     private volatile double angVelX = 0;
     private volatile double angVelY = 0;
     private volatile double angVelZ = 0;
+
+    /** 三轴欧拉角速率（deg/s，姿态角差分 + EMA 滤波）状态 */
+    private static final double ANGLE_RATE_ALPHA = 0.35;    // EMA 低通系数（20Hz，τ≈0.09s）
+    private static final double ANGLE_RATE_PER_SEC = 20.0;  // 1 / 游戏tick(0.05s)
+    private volatile boolean angleRatesAvailable = false;
+    private volatile double pitchRateDeg = 0;
+    private volatile double rollRateDeg = 0;
+    private volatile double yawRateDeg = 0;
+    private double lastPitchDeg = 0;   // 仅 update() 线程访问
+    private double lastRollDeg = 0;
+    private double lastYawDeg = 0;
+
+    /** 线速度缓存（世界系 m/s，机体原点平移速度，Sable 每 tick pose 位置差分 ×20）：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
+    private volatile boolean velocityAvailable = false;
+    private volatile double velX = 0;
+    private volatile double velY = 0;
+    private volatile double velZ = 0;
 
     /** 物理体原点世界坐标缓存：门控与姿态相同——机体（含约束链）上有 ≥1 个 INS */
     private volatile boolean bodyPosAvailable = false;
@@ -221,6 +249,47 @@ public class SensorSystemAPI implements ILuaAPI {
      */
     private static volatile double propellerBearingAirflow = 0.05;
 
+    // ── 大气高度-气压换算工具缓存（门控每 tick 判，曲线数据静态：进游戏/放置加载 FMC/AIC 时刷新一次） ──
+
+    /** 大气换算工具门控：所在物理体（含约束链）上有 ≥1 个 FMC（ccpe:fmc），与物理数据门控同源；主线程 update() 每 tick 刷新 */
+    private volatile boolean pressureToolsAvailable = false;
+
+    /** 维度大气 basePressure（静态缓存，默认 1.0；见 {@link #refreshPressureCurve}） */
+    private static volatile double pressureBase = 1.0;
+
+    /** 维度大气曲线锚点快照 {[高度, 值, 斜率]}（静态缓存：进游戏与放置/加载 FMC/AIC 时刷新一次，不逐 tick 读数据包） */
+    private static volatile double[][] pressureAnchors = new double[0][];
+
+    /** 维度高度下限（二分区间左端，主世界 = minY） */
+    private static volatile double atmosphereMinY = -64;
+
+    /** 维度高度上限（二分区间右端 = minY + logicalHeight，主世界 = 320） */
+    private static volatile double atmosphereMaxY = 320;
+
+    // ── 风帆气动工具缓存（门控每 tick 判，同物理数据门控；系数为 mod 内常量，无静态缓存） ──
+
+    /** 风帆工具门控：所在物理体（含约束链）上有 ≥1 个 FMC（ccpe:fmc），与物理数据门控同源；主线程 update() 每 tick 刷新 */
+    private volatile boolean sailToolsAvailable = false;
+
+    // ── 通用阻力工具缓存（门控每 tick 判，同物理数据门控；d 静态缓存：进游戏/放置加载 FMC/AIC 时刷新一次） ──
+
+    /** 通用阻力工具门控：所在物理体（含约束链）上有 ≥1 个 FMC（ccpe:fmc），与物理数据门控同源；主线程 update() 每 tick 刷新 */
+    private volatile boolean universalDragAvailable = false;
+
+    /**
+     * Rapier 通用阻力系数 d（universal drag）：每物理子步速度阻尼 v ← v/(1+d·Δt) 的等效力 F = m·d·v 中的 d。
+     * 默认 0.09（Sable {@code DimensionPhysics.DEFAULT_UNIVERSAL_DRAG}）；可被维度数据包
+     * {@code dimension_physics} 的 {@code "universal_drag"} 字段覆盖。静态缓存：进游戏与放置/加载
+     * FMC/AIC 时刷新一次（{@link #refreshUniversalDrag}），读不到时保留默认 0.09。
+     */
+    private static volatile double universalDragCoefficient = 0.09;
+
+    // ── 巡航高度求解工具缓存（门控每 tick 判，同物理数据门控；系数全部复用既有静态缓存/常量：
+    //    k2/k3 常量、g=GRAVITY_CONSTANT、d=refreshUniversalDrag、T=refreshAeroConfig、大气曲线=refreshPressureCurve） ──
+
+    /** 巡航高度求解工具门控：所在物理体（含约束链）上有 ≥1 个 FMC（ccpe:fmc），与物理数据门控同源；主线程 update() 每 tick 刷新 */
+    private volatile boolean maxCruiseAvailable = false;
+
     /** 单个传感器的同一 tick 快照（相对物理体原点 + 相对当前电脑的局部坐标 + 读数；非对应类型读数为 null） */
     private record SensorSnapshot(SensorType type, double relX, double relY, double relZ,
                                   double compX, double compY, double compZ,
@@ -262,6 +331,11 @@ public class SensorSystemAPI implements ILuaAPI {
             orientW = 1;
             angularVelocityAvailable = false;
             angVelX = angVelY = angVelZ = 0;
+            angleRatesAvailable = false;
+            pitchRateDeg = rollRateDeg = yawRateDeg = 0;
+            lastPitchDeg = lastRollDeg = lastYawDeg = 0;
+            velocityAvailable = false;
+            velX = velY = velZ = 0;
             bodyPosAvailable = false;
             bodyPosX = bodyPosY = bodyPosZ = 0;
             comRelAvailable = false;
@@ -274,6 +348,10 @@ public class SensorSystemAPI implements ILuaAPI {
             chainComRelX = chainComRelY = chainComRelZ = 0;
             resetAttachedStress();
             propellerGateAvailable = false;
+            pressureToolsAvailable = false;
+            sailToolsAvailable = false;
+            universalDragAvailable = false;
+            maxCruiseAvailable = false;
             return;
         }
         onBody = true;
@@ -317,6 +395,21 @@ public class SensorSystemAPI implements ILuaAPI {
         // T/A 配置不在此刷新（静态缓存，进游戏/放置 FMC 时刷新一次，见 refreshAeroConfig）。
         propellerGateAvailable = physicsGate;
 
+        // 大气换算工具门控（每 tick 判：机体上有 ≥1 个 FMC 才开放换算；曲线数据为静态缓存，
+        // 进游戏/放置加载 FMC/AIC 时刷新一次，见 refreshPressureCurve，不在 update() 里逐 tick 读数据包）
+        pressureToolsAvailable = physicsGate;
+
+        // 风帆气动工具门控（每 tick 判：机体上有 ≥1 个 FMC 才开放；系数为 mod 内常量，无静态缓存）
+        sailToolsAvailable = physicsGate;
+
+        // 通用阻力工具门控（每 tick 判：机体上有 ≥1 个 FMC 才开放；d 为静态缓存，
+        // 进游戏/放置加载 FMC/AIC 时刷新一次，见 refreshUniversalDrag，不在 update() 里逐 tick 读数据包）
+        universalDragAvailable = physicsGate;
+
+        // 巡航高度求解工具门控（每 tick 判：机体上有 ≥1 个 FMC 才开放；系数全为静态缓存/常量，
+        // 见 refreshUniversalDrag / refreshAeroConfig / refreshPressureCurve，不在 update() 里逐 tick 读）
+        maxCruiseAvailable = physicsGate;
+
         // 姿态缓存（度；门控：机体上有 INS 才计算，与速度门控同一 tick 快照）
         double[] attitude = attitudeGate ? computeAttitudeDeg(sub) : null;
         if (attitude != null) {
@@ -327,6 +420,22 @@ public class SensorSystemAPI implements ILuaAPI {
         } else {
             attitudeAvailable = false;
             pitchDeg = rollDeg = yawDeg = 0;
+        }
+
+        // 三轴欧拉角速率缓存（deg/s；门控同姿态，与姿态同一 tick 快照）。见 getAngleRates() 文档。
+        boolean hadRates = angleRatesAvailable;   // 上一 tick 的状态（本 tick 尚未更新）
+        if (attitudeAvailable) {
+            pitchRateDeg = angleRate(lastPitchDeg, pitchDeg, pitchRateDeg, !hadRates);
+            rollRateDeg  = angleRate(lastRollDeg,  rollDeg,  rollRateDeg,  !hadRates);
+            yawRateDeg   = angleRate(lastYawDeg,   yawDeg,   yawRateDeg,   !hadRates);
+            lastPitchDeg = pitchDeg;
+            lastRollDeg  = rollDeg;
+            lastYawDeg   = yawDeg;
+            angleRatesAvailable = true;
+        } else {
+            angleRatesAvailable = false;
+            pitchRateDeg = rollRateDeg = yawRateDeg = 0;
+            lastPitchDeg = lastRollDeg = lastYawDeg = 0;
         }
 
         // INS 位置缓存（世界坐标；门控：机体上有 INS 才计算，与姿态同一 tick 快照）
@@ -356,10 +465,12 @@ public class SensorSystemAPI implements ILuaAPI {
         }
 
         // 角速度缓存（机体局部系 rad/s；门控：机体上有 INS 才计算，与姿态同一 tick 快照）。
-        // SableCompat.getAngularVelocity 返回刚体世界系角速度；机体局部系 = 用同一 tick 的姿态
-        // 四元数（orient，与 getOrientation() 同一基准，logicalPose().orientation()）做逆旋转：
-        // ω_body = q⁻¹·ω_world（JOML transformInverse），分量即绕机体自身 X/Y/Z 轴的角速率。
-        Vec3 angVel = attitudeGate ? SableCompat.getAngularVelocity(sub.getLevel(), sub) : null;
+        // SableCompat.getWorldAngularVelocity 返回 Sable 每 tick 用世界 pose 姿态差分 ×20 算的
+        // 世界系角速度（静止时严格为 0，不能用裸读 handle——世界静止机体上仍有幻影值）；
+        // 机体局部系 = 用同一 tick 的姿态四元数（orient，与 getOrientation() 同一基准，
+        // logicalPose().orientation()）做逆旋转：ω_body = q⁻¹·ω_world（JOML transformInverse），
+        // 分量即绕机体自身 X/Y/Z 轴的角速率。
+        Vec3 angVel = attitudeGate ? SableCompat.getWorldAngularVelocity(sub) : null;
         if (angVel != null && orient != null) {
             Vector3d bodyAngVel = new Vector3d(angVel.x, angVel.y, angVel.z);
             new Quaterniond(orient[0], orient[1], orient[2], orient[3]).transformInverse(bodyAngVel);
@@ -370,6 +481,24 @@ public class SensorSystemAPI implements ILuaAPI {
         } else {
             angularVelocityAvailable = false;
             angVelX = angVelY = angVelZ = 0;
+        }
+
+        // 线速度缓存（世界系 m/s；门控：机体上有 INS 才计算，与姿态同一 tick 快照）。
+        // 数据源 = SableCompat.getWorldLinearVelocity（ServerSubLevel.latestLinearVelocity）：
+        // Sable 每 tick 用世界 pose 位置差分 ×20 算的机体原点平移速度，世界系、静止时严格为 0。
+        // ⚠️ 不要用 Sable.HELPER.getVelocity（内部 = ω×r + 裸读 handle，两者在世界静止的机体上
+        // 都返回非零幻影值，静止时机体读数为约 -0.03 的假速度，见 FlightDataRecorder 诊断列）。
+        // 需要机体局部系线速度（沿机体自身 X/Y/Z 轴）时，用 getOrientation() 姿态四元数
+        // 对本结果做逆旋转（q⁻¹·v_world）。
+        Vec3 linVel = attitudeGate ? SableCompat.getWorldLinearVelocity(sub) : null;
+        if (linVel != null) {
+            velocityAvailable = true;
+            velX = linVel.x;
+            velY = linVel.y;
+            velZ = linVel.z;
+        } else {
+            velocityAvailable = false;
+            velX = velY = velZ = 0;
         }
 
         // 物理体原点世界坐标缓存（门控：机体上有 INS 才计算，与姿态同一 tick 快照）
@@ -553,9 +682,9 @@ public class SensorSystemAPI implements ILuaAPI {
      * （皮托管-静压系统），否则返回 nil。
      * <p>
      * 算法同 {@code simulated:velocity_sensor}：速度 = 皮托管位置的世界点速度
-     * （{@link SableCompat#getVelocity}，含旋转贡献，服务端 = {@code ω×r + v}），
-     * 轴向 = 该皮托管 24 态管口朝向经物理体姿态转到世界（{@link SableCompat#transformNormalToWorld}），
-     * 二者点积；|读数| &lt; 0.05 归零（防静止抖动）。
+     * （{@link SableCompat#getWorldPointVelocity}，逐 tick 世界点差分 ×20，含旋转贡献，
+     * 无幻影值、无死区），轴向 = 该皮托管 24 态管口朝向经物理体姿态转到世界
+     * （{@link SableCompat#transformNormalToWorld}），二者点积。
      */
     @LuaFunction
     public final @Nullable Double getSpeed() {
@@ -570,10 +699,10 @@ public class SensorSystemAPI implements ILuaAPI {
      * <b>门控（存在性）</b>：与 {@link #getSpeed()} 相同——物理体（含约束链）必须<b>同时</b>
      * 有 ≥1 皮托管 且 ≥1 静压孔，否则返回 nil。
      * <p>
-     * 与 {@link #getSpeed()} 同构，仅速度源不同：空速 = 相对空气速度（
-     * {@link SableCompat#getAirVelocity} = {@code Sable.HELPER.getVelocityRelativeToAir}，
-     * 已减去风速，同 {@code ccpe.pe.getPhysicsAirVelocity}），沿管口朝向的有符号投影；
-     * |读数| &lt; 0.05 归零（防静止抖动）。
+     * 与 {@link #getSpeed()} 同构，仅速度源不同：空速 = 相对空气速度
+     * （{@link SableCompat#getWorldAirVelocity} = 修正点速度 − 风速，风速取
+     * {@code Sable.HELPER.getVelocity} − {@code getVelocityRelativeToAir} 差值抵消幻影值，
+     * 同 {@code ccpe.pe.getPhysicsAirVelocity}），沿管口朝向的有符号投影。
      */
     @LuaFunction
     public final @Nullable Double getAirSpeed() {
@@ -645,7 +774,8 @@ public class SensorSystemAPI implements ILuaAPI {
 
     /**
      * 所在物理体（含约束链）的机体局部系角速率 {@code {x, y, z}}（rad/s，绕机体自身 X/Y/Z 轴
-     * 的角速率分量）。数据源为世界系刚体角速度（{@link SableCompat#getAngularVelocity}），
+     * 的角速率分量）。数据源为世界系角速度（{@link SableCompat#getWorldAngularVelocity}，
+     * Sable 每 tick 用世界 pose 姿态差分 ×20 计算，静止时严格为 0），
      * 缓存时用与 {@link #getOrientation()} 同一 tick 的姿态四元数
      * （{@code subLevel.logicalPose().orientation()}）做逆旋转得到机体系
      * （姿态恒等时与世界系一致）。需要世界系角速度时可用 {@link #getOrientation()} 的
@@ -661,6 +791,57 @@ public class SensorSystemAPI implements ILuaAPI {
         m.put("x", angVelX);
         m.put("y", angVelY);
         m.put("z", angVelZ);
+        return m;
+    }
+
+    /**
+     * 所在物理体（含约束链）的<b>姿态角速率</b> {@code {pitchRate, rollRate, yawRate}}（deg/s）。
+     * <p>
+     * 与 {@link #getAngles()} 同基准同门控：三个值分别是 pitch/roll/yaw 的导数
+     * （姿态角数值差分 + EMA 低通滤波，±180° 回绕已处理，滤波时间常数 ~0.09s @20Hz，
+     * 无需在 Lua 侧再滤波）。
+     * <p>
+     * ⚠ 不要用 {@link #getAngularVelocity()} 的机体轴分量当姿态角速率：实测（2026-09 CSV）在
+     * 俯仰+偏航机动时，机体轴分量被世界旋转轴的投影污染（体 Z ≠ 滚转速率），且 Sable
+     * latestAngularVelocity 在剧烈机动时本身与四元数真实角速度偏差可达 0.5+ rad/s。
+     * 本方法直接由姿态角（与四元数严格一致，误差 0.00）差分，免疫这两类问题，
+     * 是控制器阻尼项的正确信号源。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getAngles()} 相同——机体上必须有 ≥1 个惯性导航系统
+     * （ccpe:ins），否则返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getAngleRates() {
+        if (!angleRatesAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("pitchRate", pitchRateDeg);
+        m.put("rollRate", rollRateDeg);
+        m.put("yawRate", yawRateDeg);
+        return m;
+    }
+
+    /**
+     * 所在物理体（含约束链）的<b>世界系</b>线速度 {@code {x, y, z}}（m/s，世界坐标 X/Y/Z 轴的
+     * 分量）= <b>机体原点</b>的平移速度。数据源 = {@link SableCompat#getWorldLinearVelocity}
+     * （{@code ServerSubLevel.latestLinearVelocity}，Sable 每 tick 用世界 pose 位置差分 ×20
+     * 计算），世界静止时机体读数严格为 0。
+     * <p>
+     * ⚠️ 不用 {@code Sable.HELPER.getVelocity}（皮托管同源）：其内部 = 裸读物理 handle 的
+     * 线/角速度（世界静止的机体上仍返回非零幻影值）× 杠杆臂 + 线速度，静止机体上会得到
+     * 约 -0.03 的假速度（曾由飞行日志诊断列证实，诊断列已删除）。需要机体局部系线速度
+     * （沿机体自身 X/Y/Z 轴）时，可用 {@link #getOrientation()} 的姿态四元数对本结果做
+     * 逆旋转（q⁻¹·v）。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getAngles()} 相同——所在物理体上必须有 ≥1 个
+     * 惯性导航系统（ccpe:ins），否则返回 nil。
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> getVelocity() {
+        if (!velocityAvailable) return null;
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("x", velX);
+        m.put("y", velY);
+        m.put("z", velZ);
         return m;
     }
 
@@ -898,6 +1079,438 @@ public class SensorSystemAPI implements ILuaAPI {
         } catch (Exception ignored) {
             // aeronautics 配置不可用时保留默认值（0.2 / 0.05）
         }
+    }
+
+    // ═══════════════ 大气高度-气压换算工具（门控：机体（含约束链）上有 ≥1 个 FMC；AIC 等同 FMC） ═══════════════
+    //
+    // mainThread=false：不访问世界/Level（数据包重载有竞态、Sable 世界查询非线程安全），
+    // 曲线数据 = 静态 volatile 快照（pressureBase / pressureAnchors / atmosphereMinY/MaxY），
+    // 进游戏与放置/加载 FMC/AIC 时刷新一次（refreshPressureCurve，同螺旋桨 T/A 静态缓存策略）；
+    // Lua 线程在电脑线程上只做纯数学换算——正向求值与反向二分都用该快照，与
+    // DimensionPhysicsData.getAirPressure 公式逐位一致（含 basePressure / 锚点 / Hermite）。
+    // 高度基准 = 世界 Y 坐标（与 getAltitude() 同基准，主世界海平面 ≈ 63）；
+    // 曲线不是解析可逆的（分段三次 Hermite），反向用二分数值反解，与正向严格互逆
+    // （getAltitudeFromPressure(getPressureFromAltitude(y)) ≈ y，反之亦然）。
+    // 注意：主世界 280 m 以上曲线偏离纯指数，320 m（建筑高度上限）处归零——高于大气顶
+    // （P ≤ 0）没有有限高度，反向返回 nil。
+
+    /**
+     * 由<b>世界高度 Y</b> 求该处气压（大气压分数，海平面 = 1.0）。
+     * <p>
+     * 与静压孔读数同源公式：{@code P = basePressure × 高度曲线(y)}
+     * （{@link DimensionPhysicsData#getAirPressure}，维度数据包 {@code dimension_physics}
+     * 的 {@code base_pressure} / {@code pressure_function} 可覆盖；曲线快照由主线程
+     * {@link #update()} 每 tick 复制，改数据包后最多滞后 1 tick）；高度基准与
+     * {@link #getAltitude()} 一致（世界 Y 坐标）。
+     * <p>
+     * <b>门控（存在性）</b>：主线程缓存的 FMC 门控——电脑必须在物理体上，且所在物理体
+     * （含约束链）上有 ≥1 个飞行管理计算机（FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学求值，零主线程调度。
+     *
+     * @param altitude 世界高度 Y（任意实数；低于大气底/高于大气顶时按曲线钳位）
+     * @return 该高度的气压；门控不满足返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Double getPressureFromAltitude(double altitude) {
+        if (!pressureToolsAvailable) return null;
+        return evaluatePressure(altitude);
+    }
+
+    /**
+     * 由<b>气压</b>求对应<b>世界高度 Y</b>（{@link #getPressureFromAltitude(double)} 的反函数）。
+     * <p>
+     * 对 {@code P(y) = basePressure × 高度曲线(y)} 在 [维度 minY, minY+logicalHeight] 上做
+     * 二分反解（曲线单调不增；默认主世界 320 m 处 P=0）。高度基准与 {@link #getAltitude()}
+     * 一致（世界 Y 坐标）。气压超出该维度曲线值域（&gt; 大气底最大气压，或 &lt; 0 / 高于
+     * 大气顶没有有限高度）时返回 nil。
+     * <p>
+     * <b>门控（存在性）</b>：与 {@link #getPressureFromAltitude(double)} 相同——主线程缓存的
+     * FMC 门控：电脑必须在物理体上，且所在物理体（含约束链）上有 ≥1 个飞行管理计算机
+     * （FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学二分，零主线程调度。
+     *
+     * @param pressure 目标气压（大气压分数，海平面 = 1.0；须在 [0, 大气底最大气压] 内）
+     * @return 对应世界高度 Y；门控不满足或气压越界返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Double getAltitudeFromPressure(double pressure) {
+        if (!pressureToolsAvailable) return null;
+        return altitudeFromPressure(pressure);
+    }
+
+    /**
+     * 在缓存的维度大气曲线上对 {@code P(y)} 做数值二分反解（纯数学，线程安全）：
+     * 返回气压 {@code pressure} 对应的世界高度 Y；气压超出该维度曲线值域（&gt; 大气底最大气压，
+     * 或 &lt; 大气顶最小气压 / 默认 0）时返回 nil。曲线单调不增，60 次二分收敛到双精度。
+     * 供 {@link #getAltitudeFromPressure(double)} 与巡航高度求解工具共用。
+     */
+    private @Nullable Double altitudeFromPressure(double pressure) {
+        double minY = atmosphereMinY;
+        double maxY = atmosphereMaxY;
+        double pLo = evaluatePressure(minY); // 曲线最大值（大气底，地下钳位）
+        double pHi = evaluatePressure(maxY); // 曲线最小值（大气顶，默认 0）
+        if (pressure > pLo || pressure < pHi) return null;
+        // 二分：P(y) 单调不增，收敛到 P(y) ≈ pressure 的分界高度
+        double lo = minY;
+        double hi = maxY;
+        for (int i = 0; i < 60; i++) {
+            double mid = (lo + hi) / 2.0;
+            if (evaluatePressure(mid) >= pressure) lo = mid;
+            else hi = mid;
+        }
+        return (lo + hi) / 2.0;
+    }
+
+    /**
+     * 在缓存的维度大气曲线上求 P(y)（纯数学，线程安全）。
+     * <p>
+     * 镜像 {@code BezierResourceFunction.evaluateFunction} + {@code basePressure} 乘法：
+     * 锚点间三次 Hermite 插值 {@code f(t) = ((c·t + q)·t + l)·t + v1}（c=(s1+s2)Δx−2Δy、
+     * q=3Δy−(2s1+s2)Δx、l=Δx·s1），结果钳位 ≥0；y 超出锚点区间时取首/末锚点值。
+     */
+    private double evaluatePressure(double y) {
+        double[][] pts = pressureAnchors;
+        double v;
+        if (pts.length == 0) {
+            v = 1;
+        } else if (pts.length == 1) {
+            v = pts[0][1];
+        } else {
+            int idx = -1;
+            for (double[] p : pts) {
+                if (y < p[0]) break;
+                idx++;
+            }
+            if (idx == -1) {
+                v = pts[0][1];
+            } else if (idx >= pts.length - 1) {
+                v = pts[pts.length - 1][1];
+            } else {
+                double a1 = pts[idx][0], v1 = pts[idx][1], s1 = pts[idx][2];
+                double a2 = pts[idx + 1][0], v2 = pts[idx + 1][1], s2 = pts[idx + 1][2];
+                double dx = a2 - a1;
+                double dy = v2 - v1;
+                double t = (y - a1) / dx;
+                double c = (s1 + s2) * dx - 2 * dy;
+                double q = 3 * dy - (2 * s1 + s2) * dx;
+                double l = dx * s1;
+                v = ((c * t + q) * t + l) * t + v1;
+                v = Math.max(v, 0);
+            }
+        }
+        return pressureBase * v;
+    }
+
+    /**
+     * 刷新维度大气曲线静态缓存（basePressure + 锚点 + 高度边界）。
+     * <p>
+     * 调用时机：进游戏（服务器启动，{@code CCPeripheralExtender#onServerStarting}）与
+     * 放置/加载 FMC（{@code FmcBlockEntity#onLoad}）/ AIC（{@code AicBlockEntity#onLoad}）
+     * 时调用一次；不随每 tick 刷新。取数与 {@code DimensionPhysicsData.getAirPressure}
+     * 同款回退链（有效物理 → 默认物理）；维度数据包 {@code /reload} 后需重新放置/加载
+     * FMC/AIC（或重启进世界）触发刷新。
+     * <p>
+     * 静态全局缓存：多维度同时使用时取最后一次加载的维度曲线（与螺旋桨 T/A 静态缓存
+     * {@link #refreshAeroConfig()} 同源策略）；Lua 线程只读该快照做纯数学换算，线程安全。
+     */
+    public static void refreshPressureCurve(Level level) {
+        if (level == null) return;
+        try {
+            DimensionPhysics physics = DimensionPhysicsData.of(level);
+            DimensionPhysics def = DimensionPhysicsData.getDefault(level);
+            double base = physics.basePressure().orElseGet(def.basePressure()::orElseThrow);
+            BezierResourceFunction curve = physics.pressureFunction().orElseGet(def.pressureFunction()::orElseThrow);
+            List<BezierResourceFunction.BezierPoint> points = curve.getPoints();
+            double[][] anchors = new double[points.size()][3];
+            for (int i = 0; i < points.size(); i++) {
+                BezierResourceFunction.BezierPoint p = points.get(i);
+                anchors[i][0] = p.altitude();
+                anchors[i][1] = p.value();
+                anchors[i][2] = p.slope();
+            }
+            pressureBase = base;
+            pressureAnchors = anchors;
+            atmosphereMinY = level.dimensionType().minY();
+            atmosphereMaxY = atmosphereMinY + level.dimensionType().logicalHeight();
+        } catch (Exception ignored) {
+            // 读不到曲线时保留上次缓存（默认值兜底）
+        }
+    }
+
+    // ═══════════════ 风帆气动工具（门控：机体（含约束链）上有 ≥1 个 FMC；AIC 等同 FMC） ═══════════════
+    //
+    // mainThread=false：纯数学（公式 + 常量），直读 volatile 缓存，零主线程调度。
+    // 公式源 = Sable BlockSubLevelLiftProvider.sable$contributeLiftAndDrag()（每物理子步、每块帆）：
+    //   法向阻力   F_par = n·(n·v)·k1·P·Δt          → n·v = 0（速度 ⊥ 帆面法向、无法向速度）时为 0
+    //   无方向阻力 F_dir = v·k2·P·Δt                → 大小 |v|·k2·P·Δt
+    //   升力       F_lift = n·|v − F_par|·k3·P·Δt   → n·v = 0 时 = n·|v|·k3·P·Δt（该速度下取最大）
+    // 两个工具固定 n·v = 0 条件（平飞时气流沿帆面、无法向速度分量），故只出现升力 + 无方向阻力：
+    //   · Create 普通帆（SailBlockMixin 全默认）：k1 = 0.75、k2 = 0.06888202261、k3 = 0.475
+    //   · Simulated 对称帆（SymmetricSailBlock 覆写）：k1 = 1.75、k2 = 0.06888202261（未覆写）、k3 = 0
+    // 无方向阻力系数 k2 两种帆共享（都未覆写），故阻力工具对两种帆通用，只需一个方法
+    // （solveSailDirectionlessDrag）；对称帆 k3 = 0 不产生升力，升力工具仅适用于 Create 普通帆。
+    // 每个方法都是「已知方程 F = k·P·|v| 中任意两个量、求解剩下一个」的统一求解器：
+    // 三个参数（P、V、F）传任意两个，缺失的那个传 nil（CC:Tweaked 将 nil 绑定为
+    // Optional.empty()），返回缺失量；正向计算（传 P、V，F 传 nil）即原 getSail* 的等价物，
+    // 故不再单独提供正向函数。返回值都是「每秒等效力」标量 = k·P·|v|（与 substepsPerTick 配置
+    // 无关，与图纸「冲量×60」同量纲、可与推力读数对比），不涉及每子步冲量（已移除，Δt 缓存随之删除）。
+    // 单位约定：pressure = 大气压分数（海平面 = 1.0，与 getPressure() 同语义）；velocity = |v|（m/s，
+    // 与 getSpeed() 同单位，负数按绝对值处理）。
+
+    /** Create 普通帆（风帆）升力系数 k3：Sable {@code sable$getLiftScalar()} 默认值 0.475（SailBlockMixin 未覆写） */
+    private static final double SAIL_LIFT_SCALAR = 0.475;
+
+    /**
+     * 无方向阻力系数 k2：Sable {@code sable$getDirectionlessDragScalar()} 默认值
+     * {@code (-0.75 + sqrt(0.75^2 + 0.475^2)) / 2}（恰好压住升力发散的最小阻尼）；Create 普通帆与
+     * Simulated 对称帆均未覆写。
+     */
+    private static final double SAIL_DIRECTIONLESS_DRAG_SCALAR = 0.06888202261;
+
+    /**
+     * 求解 Create 普通帆（风帆，升力面）的升力方程 <b>lift = k3·P·|v| = 0.475 × P × |velocity|</b>
+     * （n·v = 0 条件，法向阻力为 0，升力取该速度下的最大值）中<b>缺失的一个量</b>。
+     * <p>
+     * 三个参数（气压 P、速度 V、升力 L）传<b>任意两个</b>，缺失的那个传 {@code nil}，返回缺失量：
+     * <ul>
+     * <li>{@code solveSailLift(P, V, nil)} → 升力 L = 0.475·P·|V|（等价于原正向工具）；</li>
+     * <li>{@code solveSailLift(P, nil, L)} → 速度 V = L / (0.475·P)——如平飞时 L = 重力，求所需空速；</li>
+     * <li>{@code solveSailLift(nil, V, L)} → 气压 P = L / (0.475·|V|)——求维持该升力所需的最低气压。</li>
+     * </ul>
+     * 只传 1 个量或 3 个量都传 → nil（欠定/超定）。校验：P ≤ 0、L &lt; 0 → nil；
+     * 求解 P 时 |V| = 0（除零）→ nil。负数 V 按 |V| 处理。
+     * <p>
+     * <b>门控（存在性）</b>：与其余 FMC 工具相同——电脑必须在物理体上，且所在物理体（含约束链）上
+     * 有 ≥1 个飞行管理计算机（FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学计算，零主线程调度。
+     *
+     * @param pressure 气压 P（已知时传；必须 &gt; 0）
+     * @param velocity 速度大小 V（m/s，已知时传；负数按 |V| 处理）
+     * @param lift     升力 L（已知时传；必须 ≥ 0）
+     * @return 缺失的那个量（每秒力标量 / m/s / 气压分数）；门控不满足或参数非法返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Double solveSailLift(Optional<Double> pressure, Optional<Double> velocity, Optional<Double> lift) {
+        return solveSailEquation(SAIL_LIFT_SCALAR, pressure, velocity, lift);
+    }
+
+    /**
+     * 求解无方向阻力方程 <b>drag = k2·P·|v| = 0.06888202261 × P × |velocity|</b>
+     * （n·v = 0 条件，法向阻力为 0，总阻力 = 无方向阻力）中<b>缺失的一个量</b>；
+     * Create 普通帆与 Simulated 对称帆共享 k2，本方法对两种帆通用。
+     * <p>
+     * 三个参数（气压 P、速度 V、阻力 D）传<b>任意两个</b>，缺失的那个传 {@code nil}，返回缺失量：
+     * <ul>
+     * <li>{@code solveSailDirectionlessDrag(P, V, nil)} → 阻力 D = 0.06888202261·P·|V|（正向）；</li>
+     * <li>{@code solveSailDirectionlessDrag(P, nil, D)} → 速度 V = D / (0.06888202261·P)；</li>
+     * <li>{@code solveSailDirectionlessDrag(nil, V, D)} → 气压 P = D / (0.06888202261·|V|)。</li>
+     * </ul>
+     * 只传 1 个量或 3 个量都传 → nil（欠定/超定）。校验：P ≤ 0、D &lt; 0 → nil；
+     * 求解 P 时 |V| = 0（除零）→ nil。负数 V 按 |V| 处理。
+     * <p>
+     * 单位约定与 {@link #solveSailLift(Optional, Optional, Optional)} 相同。
+     * <p>
+     * <b>门控（存在性）</b>：与其余 FMC 工具相同——电脑必须在物理体上，且所在物理体（含约束链）上
+     * 有 ≥1 个飞行管理计算机（FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学计算，零主线程调度。
+     *
+     * @param pressure 气压 P（已知时传；必须 &gt; 0）
+     * @param velocity 速度大小 V（m/s，已知时传；负数按 |V| 处理）
+     * @param drag     无方向阻力 D（已知时传；必须 ≥ 0）
+     * @return 缺失的那个量（每秒力标量 / m/s / 气压分数）；门控不满足或参数非法返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Double solveSailDirectionlessDrag(Optional<Double> pressure, Optional<Double> velocity, Optional<Double> drag) {
+        return solveSailEquation(SAIL_DIRECTIONLESS_DRAG_SCALAR, pressure, velocity, drag);
+    }
+
+    /**
+     * 三个参数（P、V、F）传任意两个、求解缺失量的公共实现：F = k·P·|v|。
+     * <p>
+     * 恰好传 2 个量才解方程，否则 nil（欠定/超定）；P ≤ 0 或 F &lt; 0 → nil；
+     * 求解 P 时 |V| = 0 → nil（除零）；求解 V 时返回 |V| = F/(k·P)（≥ 0）；求解 F 时返回 k·P·|V|。
+     */
+    private @Nullable Double solveSailEquation(double k, Optional<Double> pressure, Optional<Double> velocity, Optional<Double> force) {
+        if (!sailToolsAvailable) return null;
+        int given = (pressure.isPresent() ? 1 : 0) + (velocity.isPresent() ? 1 : 0) + (force.isPresent() ? 1 : 0);
+        if (given != 2) return null;
+        if (pressure.isPresent() && pressure.get() <= 0) return null;
+        if (force.isPresent() && force.get() < 0) return null;
+        if (!pressure.isPresent()) {
+            double absV = Math.abs(velocity.get());
+            if (absV == 0) return null;
+            return force.get() / (k * absV);
+        }
+        if (!velocity.isPresent()) {
+            return force.get() / (k * pressure.get());
+        }
+        return k * pressure.get() * Math.abs(velocity.get());
+    }
+
+    // ═══════════════ 通用阻力工具（门控：机体（含约束链）上有 ≥1 个 FMC；AIC 等同 FMC） ═══════════════
+    //
+    // mainThread=false：纯数学，直读 volatile 缓存，零主线程调度。
+    // 通用阻力 = Rapier 给每个 sublevel 刚体的恒定速度阻尼（默认 d = 0.09，维度数据包
+    // dimension_physics 的 "universal_drag" 可覆盖），不经过力组（图纸/飞行记录器 CSV 看不到）。
+    // 每物理子步：v ← v/(1+d·Δt)；连续近似 dv/dt = −d·v → 等效力 F = −m·d·v（与质量、速度成正比，
+    // 不乘气压 P；方向恒与速度反向）。本工具返回其大小标量：
+    //   force = mass × d × |velocity|
+    // 单位约定：mass = kg（与 getPhysicsMass()/getPhysicsChainMass() 同单位）；velocity = |v|（m/s，
+    // 与 getSpeed() 同单位，负数按绝对值处理）。返回值即"每秒等效力"（m·d·v，牛顿级，可与推力读数
+    // 对比），连续近似已按秒归一，不涉及子步 Δt。
+
+    /**
+     * 通用阻力（universal drag，Rapier 速度阻尼）的<b>等效力标量</b>
+     * = {@code mass × d × |velocity|}。
+     * <p>
+     * 公式（见 .design_guide/aircraft.md「通用阻力」一节）：每个 sublevel 刚体每物理子步做
+     * {@code v ← v/(1+d·Δt)}，连续近似 {@code dv/dt = −d·v} → <b>等效力 F = −m·d·v</b>
+     * （与质量、速度成正比，<b>不乘气压 P</b>；方向恒与速度反向）。本方法返回其大小标量。
+     * <p>
+     * 其中 <b>d</b> = Sable 通用阻力系数，默认 0.09（{@code DimensionPhysics.DEFAULT_UNIVERSAL_DRAG}），
+     * 可被维度数据包 {@code dimension_physics} 的 {@code "universal_drag"} 字段覆盖；静态缓存
+     * {@link #refreshUniversalDrag}，进游戏与放置/加载 FMC/AIC 时刷新一次，读不到时保留默认 0.09。
+     * <p>
+     * 单位约定：mass = kg（与 {@link #getPhysicsMass()} / {@link #getPhysicsChainMass()} 同单位）；
+     * velocity = 速度大小（m/s，与 {@link #getSpeed()} 同单位，负数按绝对值处理）。
+     * 返回值是"每秒等效力"（牛顿级，可与推力读数对比），不涉及子步 Δt。
+     * <p>
+     * <b>门控（存在性）</b>：与其余 FMC 工具相同——电脑必须在物理体上，且所在物理体（含约束链）上
+     * 有 ≥1 个飞行管理计算机（FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学计算，零主线程调度。
+     *
+     * @param mass     质量（kg，必须 &gt; 0）
+     * @param velocity 速度大小（m/s）
+     * @return 通用阻力等效力标量 m·d·|v|；门控不满足或参数非法返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Double getUniversalDragForce(double mass, double velocity) {
+        if (!universalDragAvailable) return null;
+        if (mass <= 0) return null;
+        double v = Math.abs(velocity);
+        return mass * universalDragCoefficient * v;
+    }
+
+    /**
+     * 刷新 Rapier 通用阻力系数静态缓存（d，默认 0.09，维度数据包 {@code dimension_physics} 的
+     * {@code "universal_drag"} 字段可覆盖）。
+     * <p>
+     * 调用时机：进游戏（服务器启动，{@code CCPeripheralExtender#onServerStarting}）与
+     * 放置/加载 FMC（{@code FmcBlockEntity#onLoad}）/ AIC（{@code AicBlockEntity#onLoad}）
+     * 时调用一次；不随每 tick 刷新。读取 {@code DimensionPhysicsData.getUniversalDrag}
+     * （服务端维度物理，回退链与 {@link #refreshPressureCurve(Level)} 相同）；读不到时保留上次缓存
+     * （默认 0.09）。
+     */
+    public static void refreshUniversalDrag(Level level) {
+        if (level == null) return;
+        try {
+            if (level instanceof ServerLevel serverLevel) {
+                universalDragCoefficient = DimensionPhysicsData.getUniversalDrag(serverLevel);
+            }
+        } catch (Exception ignored) {
+            // 读不到时保留上次缓存（默认 0.09）
+        }
+    }
+
+    // ═══════════════ 巡航高度求解工具（门控：机体（含约束链）上有 ≥1 个 FMC；AIC 等同 FMC） ═══════════════
+    //
+    // mainThread=false：纯数学，直读 volatile 缓存，零主线程调度。
+    // 稳态巡航（平飞、n·v=0）二元方程组：升力 = 重力、推力 = 阻力，未知量 (v, P)。
+    // 关键消元：升力乘积 x = P·v = m·g/(k3·N_w) 由升力方程直接钉死（与高度无关）；代入阻力方程后
+    // 对 P 是一元二次（正根闭式求解）；高度 = 气压曲线反解（altitudeFromPressure 二分）。
+    // 推力含气流削减系数：F = P·S^1.5·N_p·T·R·(1 − v/(S^0.5·R·A))（A = Propeller Bearing Airflow，
+    // 默认 0.05），即 getPropellerRPM 反解公式 R = F/(P·S^1.5·N·T) + v/(S^0.5·A) 的平飞形式。
+    // 总阻力按"总动力方块数" N_s = 风帆 + 对称风帆 + 螺旋桨动力方块(N_p×S) 计（所有动力方块
+    // 都参与无方向阻力 k2·P·v），通用阻力 m·d·v 另计（不乘 P）。
+    // 无需矩阵/行列式：方程组对 (v, P) 双线性，消元后恰为一元二次。
+
+    /**
+     * 求解给定装配在<b>最大转速 maxRpm</b> 下能稳态巡航的<b>最高高度</b>与对应空速
+     * （升力 = 重力、推力 = 阻力 的二元方程组在平飞、n·v=0 条件下的唯一稳态解）。
+     * <p>
+     * 模型（与 {@link #solveSailLift(Optional, Optional, Optional)} / {@link #getPropellerRPM(double, double, double, java.util.Optional)}
+     * / {@link #getUniversalDragForce(double, double)} 同源）：
+     * <pre>{@code
+     * (1) 升力 = 重力:   k3·P·v·N_w                          = m·g
+     *                    → x = P·v = m·g/(k3·N_w)             （与高度无关）
+     * (2) 推力 = 阻力:   P·S^1.5·N_p·T·R·(1 − v/(S^0.5·R·A))  = k2·P·v·N_s + m·d·v
+     *     代入 x（v = x/P）后对 P 是一元二次 a·P² + b·P + c = 0：
+     *       a = S^1.5·N_p·T·R
+     *       b = −(S·N_p·T·x/A + k2·x·N_s)      （S^1.5/S^0.5 = S、R 消去）
+     *       c = −m·d·x
+     *     正根 P* = (−b + √(b²−4ac))/(2a)，v* = x/P*，高度 h* = 气压曲线反解(P*)（二分）。
+     * }</pre>
+     * 其中 <b>N_w</b> = wingSails（升力帆数，仅普通帆产生升力），<b>N_s</b> = wingSails +
+     * symmetricSails + propellerCount × sailsPerPropeller（<b>总动力方块数</b>：风帆 + 对称风帆 +
+     * 螺旋桨上的动力方块，全部计入无方向阻力 k2·P·v）；螺旋桨参数 S、N_p、T、R、A 与
+     * {@link #initPropeller(double, double)} / {@link #getPropellerRPM(double, double, double, java.util.Optional)}
+     * 同口径。推力含气流削减系数（平飞，与 RPM 反解公式一致）：速度越高、桨面越"吃气流"，
+     * 有效推力越小；v ≥ S^0.5·R·A 时推力 ≤ 0（桨变刹车），该情形下平衡点自动落在推力为正处。
+     * <p>
+     * 系数来源：k3=0.475、k2=0.06888202261（常量）；g = {@value #GRAVITY_CONSTANT}；
+     * d = 通用阻力系数（静态缓存 {@link #refreshUniversalDrag}，默认 0.09）；
+     * T = Propeller Bearing Thrust、A = Propeller Bearing Airflow（静态缓存
+     * {@link #refreshAeroConfig}，默认 0.2 / 0.05）；
+     * 大气曲线 = 维度曲线快照（静态缓存 {@link #refreshPressureCurve}）。
+     * <p>
+     * <b>可行性</b>：解出的 P* 若超出维度大气曲线值域（&gt; 大气底最大气压 → 贴地也无法
+     * 稳态平衡、升力不足），或对应高度越过大气顶（无空气），返回 nil（飞不起来 / 无有限高度）。
+     * 注意 R=256 只是转速上限，实际还受附着面应力网络容量约束（{@link #getStressRemaining()}）。
+     * <p>
+     * <b>门控（存在性）</b>：与其余 FMC 工具相同——电脑必须在物理体上，且所在物理体（含约束链）
+     * 上有 ≥1 个飞行管理计算机（FMC，ccpe:fmc；AIC 等同 FMC），否则返回 nil。
+     * <p>
+     * mainThread=false：直读 volatile 缓存做纯数学计算，零主线程调度。
+     *
+     * @param mass              全机质量（kg，含约束链，必须 &gt; 0）
+     * @param wingSails         升力帆（普通帆）数量（≥ 1）
+     * @param symmetricSails    对称帆数量（≥ 0）
+     * @param propellerCount    螺旋桨（Propeller Bearing）数量（≥ 1）
+     * @param sailsPerPropeller 每个螺旋桨上的动力方块数量（≥ 1）
+     * @param maxRpm            转速上限 R（&gt; 0）
+     * @return {@code {velocity=..., altitude=...}}（m/s 与世界高度 Y）；门控不满足、参数非法或无有限高度返回 nil
+     */
+    @LuaFunction
+    public final @Nullable Map<String, Double> solveMaxCruise(double mass, double wingSails, double symmetricSails,
+                                                              double propellerCount, double sailsPerPropeller,
+                                                              double maxRpm) {
+        if (!maxCruiseAvailable) return null;
+        if (mass <= 0 || wingSails < 1 || symmetricSails < 0 || propellerCount < 1 || sailsPerPropeller < 1 || maxRpm <= 0)
+            return null;
+        int nw = (int) Math.floor(wingSails);
+        int np = (int) Math.floor(propellerCount);
+        int s = (int) Math.floor(sailsPerPropeller);
+        // 总动力方块数：风帆 + 对称风帆 + 螺旋桨动力方块（N_p×S），全部计入无方向阻力 k2·P·v
+        int ns = nw + (int) Math.floor(symmetricSails) + np * s;
+        double r = maxRpm;
+
+        // 升力乘积 x = P·v = m·g/(k3·N_w)：升力 = 重力 直接钉死，与高度无关
+        double x = mass * GRAVITY_CONSTANT / (SAIL_LIFT_SCALAR * nw);
+        // 推力模型（含气流削减系数）：F = P·S^1.5·N_p·T·R·(1 − v/(S^0.5·R·A))，代入 v = x/P 后
+        // 对 P 的一元二次 a·P² + b·P + c = 0：
+        //   a = S^1.5·N_p·T·R
+        //   b = −(S·N_p·T·x/A + k2·x·N_s)   （S^1.5/S^0.5 = S、R 消去；A = Propeller Bearing Airflow）
+        //   c = −m·d·x
+        if (propellerBearingAirflow <= 0) return null;
+        double a = Math.pow(s, 1.5) * np * propellerBearingThrust * r;
+        if (a <= 0) return null;
+        double airflowTerm = (double) s * np * propellerBearingThrust * x / propellerBearingAirflow;
+        double b = -(airflowTerm + SAIL_DIRECTIONLESS_DRAG_SCALAR * x * ns);
+        double c = -(mass * universalDragCoefficient * x);
+        // c<0 ⇒ 判别式恒正，恰一正根；该根处推力 = 阻力 > 0，气流削减系数自动为正
+        double pressure = (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
+        double velocity = x / pressure;
+        Double altitude = altitudeFromPressure(pressure);
+        if (altitude == null) return null;
+        Map<String, Double> out = new LinkedHashMap<>();
+        out.put("velocity", velocity);
+        out.put("altitude", altitude);
+        return out;
     }
 
     // ═══════════════ 航行灯控制（门控：机体（含约束链）上有 ≥1 个 FMC） ═══════════════
@@ -1255,6 +1868,20 @@ public class SensorSystemAPI implements ILuaAPI {
      *
      * @return {pitch, roll, yaw}（度）
      */
+    /**
+     * 角速率数值差分（最小角差处理 ±180° 回绕）+ EMA 低通。
+     *
+     * @param first 首次（无上一 tick 参考）时返回 0，避免姿态恢复时刻的阶跃尖峰
+     */
+    private static double angleRate(double lastAngle, double angle, double lastRate, boolean first) {
+        if (first) return 0.0;
+        double d = angle - lastAngle;
+        if (d > 180) d -= 360;
+        else if (d < -180) d += 360;
+        double raw = d * ANGLE_RATE_PER_SEC;   // deg/tick → deg/s
+        return ANGLE_RATE_ALPHA * raw + (1 - ANGLE_RATE_ALPHA) * lastRate;
+    }
+
     private double[] computeAttitudeDeg(SubLevel sub) {
         final Pose3dc pose = sub.logicalPose();
 
@@ -1276,10 +1903,16 @@ public class SensorSystemAPI implements ILuaAPI {
      *
      * @return {x, y, z}（世界坐标）；机体上无 INS（门控）或投影失败返回 null
      */
-    private @Nullable double[] computeInsPosition(SubLevel sub, List<SensorEntry> entries) {
+    /** 最后放置（最新注册）的 INS（ATTITUDE 传感器）条目；机体上无 INS（门控）返回 null */
+    private @Nullable SensorEntry lastInsEntry(List<SensorEntry> entries) {
         SensorEntry lastIns = null;
         for (SensorEntry e : entries)
             if (e.type() == SensorType.ATTITUDE) lastIns = e; // 注册顺序 = 放置顺序，取最后
+        return lastIns;
+    }
+
+    private @Nullable double[] computeInsPosition(SubLevel sub, List<SensorEntry> entries) {
+        SensorEntry lastIns = lastInsEntry(entries);
         if (lastIns == null) return null;
         Vec3 worldPos = SableCompat.projectOutOfSubLevel(sub.getLevel(), lastIns.pos());
         if (worldPos == null) return null;
@@ -1362,18 +1995,18 @@ public class SensorSystemAPI implements ILuaAPI {
 
     /** 皮托管沿管口朝向的<b>对地</b>速度分量（m/s，有符号） */
     private @Nullable Double computeSpeed(SubLevel sub, BlockPos sensorPos) {
-        return axisSpeed(sub, sensorPos, SableCompat.getVelocity(sub.getLevel(), sensorPos));
+        return axisSpeed(sub, sensorPos, SableCompat.getWorldPointVelocity(sub.getLevel(), sub, sensorPos));
     }
 
     /** 皮托管沿管口朝向的<b>空速</b>分量（相对空气，已减风速，m/s，有符号） */
     private @Nullable Double computeAirSpeed(SubLevel sub, BlockPos sensorPos) {
-        return axisSpeed(sub, sensorPos, SableCompat.getAirVelocity(sub.getLevel(), sensorPos));
+        return axisSpeed(sub, sensorPos, SableCompat.getWorldAirVelocity(sub.getLevel(), sub, sensorPos));
     }
 
     /**
      * 速度 {@code v}（世界系，皮托管位置的点速度）在<b>世界管口朝向</b>上的有符号投影
      * （同 simulated:velocity_sensor 算法）；管口朝向 = blockstate 的 24 态轴
-     * （{@link PitotTubeBlock#axisOf}，plot 帧）经物理体姿态转到世界；|读数| &lt; 0.05 归零（防静止抖动）。
+     * （{@link PitotTubeBlock#axisOf}，plot 帧）经物理体姿态转到世界。
      * <p>
      * 注：轴向与速度均以电脑所在 sub-level 的姿态为基准（与静压孔读数一致）；
      * 传感器位于约束链其它 sub-level 时轴向姿态可能有偏差（现有已知边界）。
@@ -1387,8 +2020,7 @@ public class SensorSystemAPI implements ILuaAPI {
         Vec3 worldAxis = SableCompat.transformNormalToWorld(sub,
                 Vec3.atLowerCornerOf(PitotTubeBlock.axisOf(state).getNormal()));
         if (worldAxis == null) return null;
-        double dot = vel.dot(worldAxis);
-        return Math.abs(dot) < 0.05 ? 0.0 : dot;
+        return vel.dot(worldAxis);
     }
 
     /** 电脑所在位置的 SubLevel；不在物理体上返回 null */

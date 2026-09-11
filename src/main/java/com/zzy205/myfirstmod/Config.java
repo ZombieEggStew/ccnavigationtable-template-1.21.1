@@ -2,6 +2,21 @@ package com.zzy205.myfirstmod;
 
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+/**
+ * 配置文件（ccpe-common.toml / ccpe-client.toml）。
+ * <p>
+ * 各配置项的标题与说明在 NeoForge 配置界面（Mods → CC Peripheral Extender → Config）中
+ * 通过 lang 文件（assets/ccpe/lang/en_us.json / zh_cn.json）本地化：
+ * <ul>
+ * <li>标题 = {@code ccpe.configuration.<配置路径>}</li>
+ * <li>说明 = {@code ccpe.configuration.<配置路径>.tooltip}</li>
+ * </ul>
+ * 注意：NeoForge 21.1 的 {@link ModConfigSpec} <b>不要</b>对每个配置项调用 {@code .translation()}——
+ * 配置界面会把该值<b>原样</b>当作标题 key（不追加配置路径，所有条目同 key 会显示为原始前缀）；
+ * 不设置时界面回退到 {@code <modId>.configuration.<路径>}（= {@code ccpe.configuration.<路径>}，
+ * 与 lang key 一致，实测标题/说明均正常解析）。{@code .comment()} 文本仍写入 TOML，
+ * 作为 lang 缺失时的回退说明。
+ */
 public class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
@@ -28,6 +43,17 @@ public class Config {
     public static final ModConfigSpec.DoubleValue SERVO_MODE_STRESS_IMPACT = BUILDER
             .comment("Stress coefficient for the Transmission Peripheral in servo mode: actual stress = value × |real output RPM| (the output speed may be overridden/accelerated by setServoSpeed).")
             .defineInRange("servoModeStressImpact", 2.0, 0.0, 1024.0);
+
+    // ── 调试：飞行数据记录器（方案 B）──
+    public static final ModConfigSpec.BooleanValue FLIGHT_RECORDER_ENABLED = BUILDER
+            .comment("Flight data recorder (debug): log per-tick body data for every FMC-registered aircraft into <gameDir>/flight_logs/*.csv "
+                    + "(see compat/cc/FlightDataRecorder.java). Only active while at least one FMC/AIC is on a Sable physics body. "
+                    + "Default OFF; enable in the config only when you need to record a flight.")
+            .define("flightDataRecorderEnabled", false);
+
+    public static final ModConfigSpec.IntValue FLIGHT_RECORDER_INTERVAL_TICKS = BUILDER
+            .comment("Flight data recorder sampling interval in ticks (1 = every tick / 20 Hz).")
+            .defineInRange("flightDataRecorderIntervalTicks", 1, 1, 200);
 
     // ── 客户端：Monitor 模块渲染 ──
     private static final ModConfigSpec.Builder CLIENT_BUILDER = new ModConfigSpec.Builder();

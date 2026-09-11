@@ -135,4 +135,261 @@ where **T** (Propeller Bearing Thrust, default 0.2) and **A** (Propeller Bearing
 
 Returns the required speed R; returns `nil` when not initialized, when the gate fails (no FMC), or when arguments are invalid (e.g. `P ≤ 0`).
 
+**`θ` (airflow angle, degrees)** scales the airflow term `V × sin(θ) / (S^0.5 × A)` — the extra speed a propeller needs because it is moving through the air it pushes. Usage convention:
+
+- **Fixed-wing level flight: `θ = 90`** — the air flows through the propeller disc, the airflow term applies in full (`sin 90° = 1`);
+- **Helicopter vertical takeoff/landing: `θ = 0`** — no airflow term.
+
+Default is `0`.
+
 > Feed `getPressure()` (static port reading) as pressure and `getSpeed()`/`getAverageSpeed()` (pitot tube readings) as velocity to build a closed-loop thrust controller.
+
+## Altitude ↔ pressure conversion tools
+
+Also FMC-gated (and therefore also available with an AIC), the sensor system provides two pure conversion utilities between **world altitude Y** and **air pressure**, using exactly the same atmosphere model as the game physics (and the static port reading `getPressure()`):
+
+| Method | Returns | Description |
+|---|---|---|
+| `getPressureFromAltitude(Y)` | number / nil | Air pressure (fraction of sea level, sea level = 1.0) at world altitude `Y` |
+| `getAltitudeFromPressure(P)` | number / nil | World altitude `Y` that has air pressure `P` (inverse of the above) |
+
+Both are gated exactly like the FMC methods (the body — including constraint chains — must have ≥ 1 FMC, with AIC counting as FMC; the computer must be on a body), otherwise they return `nil`. They are **pure math** (`mainThread = false`): they read a cached copy of the atmosphere curve and never touch the world on the computer thread.
+
+### Calculation formula
+
+The game atmosphere is `P(Y) = basePressure × pressureCurve(Y)`, where the curve is a **piecewise cubic Hermite** interpolation over anchor points loaded from the dimension's `dimension_physics` datapack:
+
+```
+getPressureFromAltitude(Y) = basePressure × Hermite(anchors, Y)
+```
+
+Default overworld anchors (`basePressure = 1.0`, sea level = 63):
+
+| Altitude Y | Value | Slope |
+|---|---|---|
+| −38.37 | 1.5 (underground clamp) | −0.006 |
+| 63 | 1.0 | −0.004 |
+| 263 | 0.4493 | −0.001797 |
+| 280 | 0.4198 | −0.001679 |
+| 320 | **0** (build limit) | −0.02099 |
+
+Between −38 m and ~280 m this is numerically identical to the simple exponential `P ≈ e^(−0.004·(Y − 63))`. Above 280 m the curve bends down toward **0 at the build limit (Y = 320)** and stays 0 above it — at the default overworld ceiling there is **no air** (no lift / drag / thrust). The curve is **not analytically invertible** (piecewise cubic), so the inverse is computed numerically:
+
+```
+getAltitudeFromPressure(P) = bisection on [dimension.minY, minY + logicalHeight]  →  Y with  P(Y) ≈ P
+```
+
+The bisection is monotonic and exact to double precision, so the two methods round-trip: `getAltitudeFromPressure(getPressureFromAltitude(Y)) ≈ Y`. The altitude datum is **world Y** — identical to `getAltitude()`.
+
+### What is cached
+
+To keep `mainThread = false` thread-safe, the curve parameters are copied once into a **static volatile snapshot**:
+
+- `basePressure`
+- the anchor points `{altitude, value, slope}` (5 triples by default)
+- the bisection bounds `[minY, minY + logicalHeight]`
+
+The snapshot is refreshed **once** — at server start (using the overworld) and whenever an **FMC or AIC is placed/loaded** (`onLoad`) — mirroring the propeller config cache, **not** every tick. The gate (does this body have an FMC/AIC right now) is still checked every tick.
+
+!!! note "Cache freshness"
+    After `dimension_physics` datapack changes (`/reload`), re-place/reload an FMC or AIC (or restart the world) to refresh the snapshot. The cache is global (one curve shared by all computers): with multiple bodies in different dimensions the last-loaded dimension's curve wins.
+
+## Sail aero tools
+
+Also FMC-gated (and therefore also available with an AIC), the sensor system provides two pure-math utilities built around the two equations of the game's aero model — **lift** and **directionless drag** — for design math (trim, cruise-speed estimates, stall / minimum-pressure analysis) without needing live flight data:
+
+```
+Lift:             L = k3 × P × |V| = 0.475 × P × |V|          (regular sail only)
+Directionless drag: D = k2 × P × |V| = 0.06888202261 × P × |V|  (regular & symmetric sails)
+```
+
+The formulas mirror Sable's `BlockSubLevelLiftProvider.sable$contributeLiftAndDrag()` (evaluated once per physics substep, per sail block). Both tools assume **n·v = 0** — the airflow is perpendicular to the sail normal, i.e. **no normal velocity component** (level flight). Under this condition the normal (parallel) drag is zero, so the outputs reduce to lift + directionless drag only:
+
+| Method | Returns | Description |
+|---|---|---|
+| `solveSailLift(P, V, L?)` | number / nil | Lift equation (Create `SailBlock`): pass any two of the three values, `nil` for the missing one, returns the third |
+| `solveSailDirectionlessDrag(P, V, D?)` | number / nil | Directionless drag equation (regular & symmetric sails): same pattern |
+
+### Argument convention: pass any two, `nil` for the unknown
+
+Each method is a unified solver for "given any two of the equation's quantities, return the third". The three parameters are air pressure P, speed V, and the output quantity (lift L / drag D). **Pass any two, `nil` for the missing one**, and the method returns the missing value:
+
+```lua
+-- Lift equation L = 0.475 × P × |V|
+ss.solveSailLift(P, V, nil)   -- → lift L (forward)
+ss.solveSailLift(P, nil, L)   -- → speed V = L/(0.475·P)     (level flight: L = weight → required airspeed)
+ss.solveSailLift(nil, V, L)   -- → pressure P = L/(0.475·|V|) (minimum pressure for that lift → max usable altitude)
+
+-- Directionless drag equation D = 0.06888202261 × P × |V| (same for both sail types)
+ss.solveSailDirectionlessDrag(P, V, nil)   -- → drag D (forward)
+ss.solveSailDirectionlessDrag(P, nil, D)   -- → speed V = D/(0.06888202261·P)
+ss.solveSailDirectionlessDrag(nil, V, D)   -- → pressure P = D/(0.06888202261·|V|)
+```
+
+- Passing only 1 value, or all 3 → `nil` (under-determined / over-determined).
+- **`P`** — air pressure (fraction of sea level, sea level = 1.0, same semantics as `getPressure()`); `P ≤ 0` → `nil`.
+- **`V`** — speed magnitude (m/s, same units as `getSpeed()`); negative values are taken as `|V|`; when solving for P, `|V| = 0` (division by zero) → `nil`.
+- **`L` / `D`** — force scalar; negative has no solution → `nil`.
+- Gated exactly like the other FMC tools (the body — including constraint chains — must have ≥ 1 FMC, AIC counting as FMC; the computer must be on a body), otherwise `nil`. Pure math (`mainThread = false`), zero main-thread scheduling.
+
+### Returned values
+
+The methods return the missing quantity as a **per-second equivalent force scalar** (force / m/s / pressure fraction) — substep-independent, same scale as the in-game diagram (impulse × 60), comparable to thrust readings. They no longer return per-substep impulses.
+
+### Formulas
+
+Regular sail (Create `SailBlock`, all Sable defaults):
+
+```
+L = k3 × P × |V| = 0.475 × P × |V|
+V = L / (0.475 × P)
+P = L / (0.475 × |V|)
+```
+
+Directionless drag (shared by the regular and symmetric sails, `k2` not overridden):
+
+```
+D = k2 × P × |V| = 0.06888202261 × P × |V|
+V = D / (0.06888202261 × P)
+P = D / (0.06888202261 × |V|)
+```
+
+The symmetric sail (Simulated `SymmetricSailBlock`: `k3 = 0`, `k1 = 1.75`) produces no lift — only directionless drag, computed by the same `solveSailDirectionlessDrag` (k2 identical to the regular sail).
+
+**k2 = 0.06888202261** (Sable's default, `(−0.75 + √(0.75² + 0.475²)) / 2` — exactly the minimum damping that keeps the default lift from diverging). The normal-drag coefficient **k1** (0.75 regular / 1.75 symmetric) never appears here because it multiplies `(n·v)`, which is 0 by the tool's condition. With n·v = 0 the lift also takes its **maximum** for the given speed (`|V − parallel drag| = |V|`); any incidence/yaw component would only reduce it.
+
+### What is cached
+
+The coefficients (k2, k3) are hard-coded constants in the mod — there is no static cache. The gate is still checked every tick.
+
+### Example
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+-- Forward: regular-sail lift + directionless drag at P = 0.47, 60 m/s (per-second force scalars)
+local lift = ss.solveSailLift(0.47, 60, nil)
+local drag = ss.solveSailDirectionlessDrag(0.47, 60, nil)
+print("lift (N): ", lift)   -- 0.475 × P × V
+print("drag (N): ", drag)   -- 0.06888202261 × P × V
+
+-- Inverse: wing needs 13.3 N of lift (≈ a small plane's weight) at P = 0.47 → required airspeed
+local v = ss.solveSailLift(0.47, nil, 13.3)
+print("required speed (m/s): ", v)  -- 13.3 / (0.475 × 0.47)
+```
+
+### Total lift of multiple sails: linear accumulation
+
+Sable evaluates the **same lift formula independently for every sail block** and accumulates them into the total impulse (`ServerSubLevel.prePhysicsTick()` loops over each sail; the `LiftProviderGroup` grouping only affects how the Diagram / recorder draws force arrows, it does not change the per-sail force) — there is **no "more sails, weaker per-sail lift" attenuation**. So in level flight with **no rotation (pure translation), identical sail orientation and height**, the total lift is exactly `sail count × per-sail lift`, and multiplying the tool output by the sail count holds.
+
+The deviations all come from "each sail uses its own local quantities", not from sail-to-sail interference:
+
+- **Angular velocity**: each sail uses the local airflow at its own position, `v_local = V + ω×r`; when rotating, sails farther from the centre of mass feel more airflow and produce more lift, so the total ≠ count × (per-sail lift at body speed).
+- **Mixed orientations** (dihedral, control-surface deflection): lift is a vector along each sail's normal; different directions make the vector sum smaller than the scalar sum, and n·v ≠ 0 lowers per-sail lift below its maximum.
+- **Per-sail pressure**: P is sampled at each sail's own block centre; a wing spanning a large height range sees slightly different P (usually negligible).
+
+## Universal drag tool
+
+### Dark clouds
+
+![Diagram force arrows](../img/diagram.png)
+
+The screenshot above shows the force arrows of a Contraption Diagram: **the propeller's thrust is clearly much larger than the total drag on the aircraft**. If only the two forces drawn in the diagram existed, the net force would be positive and the aircraft would keep accelerating; yet the measured cruise speed stays constant (dv/dt ≈ 0). So there must be an **unknown force the diagram does not draw** canceling the excess thrust — that force is the **universal drag**:
+
+- **Direction**: opposite to the velocity;
+- **Magnitude**: proportional to mass and speed (F = −m·d·v).
+
+It is produced by the constant velocity damping Rapier applies to every sublevel rigid body, and **does not go through any force group**, so neither the Contraption Diagram nor the flight-data-recorder CSV ever show it — that is exactly why "diagram net force ≠ actual net force", and why this tool exists.
+
+---
+
+Also FMC-gated (and therefore also available with an AIC), the sensor system provides a pure-math utility that computes the **equivalent force of the universal (speed) drag** — the constant velocity damping Rapier applies to every sublevel rigid body. It is not part of any force group, so the Contraption Diagram and the flight-data-recorder CSV never show it; this tool makes it computable for design math (net-force balance: thrust − sail drag − universal drag ≈ 0).
+
+The formula mirrors the continuous approximation of the per-substep damping `v ← v/(1+d·Δt)`:
+
+```
+dv/dt = −d·v  →  equivalent force F = −m·d·v   (magnitude = m × d × |V|)
+```
+
+| Method | Returns | Description |
+|---|---|---|
+| `getUniversalDragForce(m, V)` | number / nil | Equivalent universal-drag force scalar = `m × d × |V|` |
+
+Arguments and conventions:
+
+- **`m`** — mass (kg, same units as `getPhysicsMass()` / `getPhysicsChainMass()`); `m ≤ 0` → `nil`.
+- **`V`** — speed magnitude (m/s, same units as `getSpeed()`); negative values are taken as `|V|`.
+- **`d`** — the universal-drag coefficient, **default 0.09** (Sable `DimensionPhysics.DEFAULT_UNIVERSAL_DRAG`), overridable per dimension via the `dimension_physics` datapack's `"universal_drag"` field.
+- Gated exactly like the other FMC tools (the body — including constraint chains — must have ≥ 1 FMC, AIC counting as FMC; the computer must be on a body), otherwise `nil`. Pure math (`mainThread = false`), zero main-thread scheduling.
+
+Unlike the sail tools the result is a single per-second force (the continuous approximation is already time-normalized, no substep Δt involved) — it does **not** scale with air pressure, only with mass and speed.
+
+### What is cached
+
+The coefficient **`d`** is cached once — at server start and whenever an FMC or AIC is placed/loaded (`onLoad`), exactly like the atmosphere-curve snapshot; if it cannot be read, the Sable default (0.09) is kept. The gate is still checked every tick.
+
+### Example
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+-- Equivalent universal drag at the current mass and speed (d = 0.09 by default)
+local drag = ss.getUniversalDragForce(ss.getPhysicsChainMass(), 60)
+print("universal drag (N):", drag)   -- m × 0.09 × V
+```
+
+> Combine with `getPhysicsMass()`/`getPhysicsChainMass()` for mass and `getSpeed()` (or `|v|`) for speed to close the force balance: `thrust − sail drag − universal drag ≈ 0` in steady cruise. Sanity check with recorded values (e.g. m ≈ 45.25 kg, v ≈ 62.6 m/s → F ≈ 255 N).
+
+## Max altitude solver
+
+> This tool is only applicable to the simple aerodynamic model shown in the figure below: the thrust line passes through the center of gravity, the lift center and the weight line are aligned vertically, and the drag line basically passes through the center of gravity.![Diagram force arrows](../img/diagram.png)
+
+Also FMC-gated (and therefore also available with an AIC), this pure-math solver inverts the cruise equations: given the aircraft's mass, sail counts and propeller setup, it finds the **highest steady-state altitude** reachable at a given maximum RPM, plus the airspeed needed there.
+
+It solves the two steady-cruise equations (level flight, airflow perpendicular to the sail normal so normal drag is zero) for the unknowns `(v, P)`:
+
+```
+(1) lift = gravity:   k3·P·v·N_w                          = m·g
+                      → x = P·v = m·g/(k3·N_w)            (pinned, altitude-independent)
+(2) thrust = drag:    P·S^1.5·N_p·T·R·(1 − v/(S^0.5·R·A))  = k2·P·v·N_s + m·d·v
+```
+
+| Method | Returns | Description |
+|---|---|---|
+| `solveMaxCruise(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)` | table / nil | `{velocity=..., altitude=...}` — steady cruise state at `maxRpm` |
+
+Substituting `v = x/P` turns equation (2) into a **quadratic in `P`** — no matrices needed (the system is bilinear in `(v, P)` and collapses to one quadratic):
+
+```
+a·P² + b·P + c = 0
+a = S^1.5·N_p·T·R
+b = −(S·N_p·T·x/A + k2·x·N_s)      (S^1.5/S^0.5 = S, R cancels)
+c = −m·d·x
+P* = (−b + √(b²−4ac))/(2a),  v* = x/P*,  altitude = inverse atmosphere curve(P*) (bisection)
+```
+
+- **`N_w`** = `wingSails` — lift sails (only regular sails produce lift). **`N_s`** = `wingSails + symmetricSails + propellerCount × sailsPerPropeller` — the **total power-block count** (regular + symmetric sails + propeller power blocks), all contributing to the directionless drag `k2·P·v`.
+- **Thrust model** carries the airflow reduction factor `(1 − v/(S^0.5·R·A))` — the fixed-wing level-flight form (`θ = 90`) of the `getPropellerRPM` model: the propeller has a maximum effective speed `S^0.5·R·A` beyond which thrust turns negative.
+- **Coefficients** (same sources as the other tools): `k3 = 0.475`, `k2 = 0.06888202261`, `g = 11`, `d = 0.09` (universal drag, datapack-overridable), `T = 0.2` / `A = 0.05` (aeronautics config), atmosphere curve from the dimension datapack — all cached at server start and FMC/AIC placement.
+- **Feasibility**: returns `nil` when the solved `P*` lies outside the dimension's atmosphere range (lift too weak even at the ground, or above the atmosphere top), when the gate fails (no FMC), or when arguments are invalid (`m ≤ 0`, `wingSails < 1`, `propellerCount < 1`, `sailsPerPropeller < 1`, `maxRpm ≤ 0`). `maxRpm = 256` is only the speed cap — the stress-network capacity (`getStressRemaining()`) is an additional constraint.
+
+### Example
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+
+
+-- Highest steady cruise at max RPM for a given build
+-- Mass 45.25 kg 
+-- 32 wing sails 
+-- 20 symmetric sails 
+-- 1 propeller 
+-- 30 power blocks per propeller 
+-- max RPM 256
+local cruise = ss.solveMaxCruise(45.25, 32, 20, 1, 30, 256)
+print("cruise speed (m/s):", cruise.velocity)
+print("max altitude (Y):  ", cruise.altitude)
+```
+
+> Use real values: `getPhysicsChainMass()` for `m`, the actual block counts of your build, and `256` for the RPM cap. Cross-check the result against the flight recorder for your aircraft.

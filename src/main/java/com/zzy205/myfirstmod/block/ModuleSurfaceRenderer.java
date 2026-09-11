@@ -92,7 +92,9 @@ public final class ModuleSurfaceRenderer {
                 : Math.round(angle) + "°";
         }
         var font = Minecraft.getInstance().font;
-        float scale = 1f / 512f;
+        // 字号缩放（块/字素）：原 1/512，放大 1.5× 提升可读性；
+        // 最长文本（如 "100%" ≈ 23 字素）放大后仍落在旋钮头（直径 ≈0.075 块）内
+        float scale = 1.5f / 512f;
         poseStack.pushPose();
         poseStack.mulPose(Axis.XP.rotationDegrees(-90));
         poseStack.mulPose(Axis.ZP.rotationDegrees(180));

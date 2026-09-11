@@ -6,8 +6,12 @@ import com.zzy205.myfirstmod.block.InsBlockEntity;
 import com.zzy205.myfirstmod.block.PitotTubeBlockEntity;
 import com.zzy205.myfirstmod.block.StaticPortBlockEntity;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
+import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
+import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.ArrayList;
@@ -89,5 +93,61 @@ public final class BodySensorRegistry {
         if (be instanceof InsBlockEntity) return List.of(SensorType.ATTITUDE);
         if (be instanceof FmcBlockEntity) return List.of(SensorType.FMC);
         return List.of();
+    }
+
+    /** 该条目集合是否含 FMC 门控（FMC / AIC 都登记 FMC 类型） */
+    private static boolean hasFmc(Set<SensorEntry> set) {
+        for (SensorEntry e : set)
+            if (e.type() == SensorType.FMC) return true;
+        return false;
+    }
+
+    /**
+     * 服务器上所有已注册 FMC（含 AIC）的物理体（ServerSubLevel），按注册顺序（UUID 插入序）。
+     * 仅服务端主线程调用（飞行数据记录器每 ServerTick 枚举一次）。
+     */
+    public static List<ServerSubLevel> fmcBodies(MinecraftServer server) {
+        return bodiesWithAny(server, SensorType.FMC);
+    }
+
+    /** 该条目集合是否含任意给定类型（FMC / AIC 都登记 FMC；INS / AIC 都登记 ATTITUDE） */
+    private static boolean hasAny(Set<SensorEntry> set, SensorType... types) {
+        for (SensorEntry e : set)
+            for (SensorType t : types)
+                if (e.type() == t) return true;
+        return false;
+    }
+
+    /**
+     * 服务器上所有已注册<b>任意给定类型</b>传感器的物理体（ServerSubLevel），按注册顺序
+     * （UUID 插入序）。仅服务端主线程调用。
+     * <p>
+     * 飞行数据记录器用它同时覆盖 FMC 与 INS（ATTITUDE）机体：FMC 门控的物理数据列在无 FMC
+     * 时写 nan，但运动学 / INS 速度诊断列始终可用（调试静止机体 INS 速度用）。
+     */
+    public static List<ServerSubLevel> bodiesWithAny(MinecraftServer server, SensorType... types) {
+        List<ServerSubLevel> out = new ArrayList<>();
+        if (server == null || types.length == 0) return out;
+        for (Map.Entry<UUID, Set<SensorEntry>> entry : SENSORS.entrySet()) {
+            if (!hasAny(entry.getValue(), types)) continue;
+            for (ServerLevel level : server.getAllLevels()) {
+                try {
+                    SubLevelContainer container = SubLevelContainer.getContainer(level);
+                    SubLevel sub = container != null ? container.getSubLevel(entry.getKey()) : null;
+                    if (sub instanceof ServerSubLevel serverSub && !serverSub.isRemoved()) {
+                        out.add(serverSub);
+                        break;
+                    }
+                } catch (Exception ignored) {
+                    // Sable 容器查询失败（卸载竞态等）→ 跳过该 level
+                }
+            }
+        }
+        return out;
+    }
+
+    /** 服务器停止（关世界/回主菜单）：清空注册表，避免跨世界残留（对齐 GlobalChannelRegistry.clear 用法） */
+    public static void clear() {
+        SENSORS.clear();
     }
 }

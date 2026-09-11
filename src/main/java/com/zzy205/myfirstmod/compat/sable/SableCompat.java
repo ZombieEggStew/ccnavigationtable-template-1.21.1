@@ -2,7 +2,6 @@ package com.zzy205.myfirstmod.compat.sable;
 
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.SubLevelHelper;
-import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.api.physics.mass.MassData;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
@@ -276,18 +275,6 @@ public final class SableCompat {
     }
 
     /**
-     * 获取指定位置所在物理结构的世界空间线速度。
-     */
-    public static Vec3 getVelocity(Level level, BlockPos pos) {
-        if (level == null || pos == null) return null;
-        try {
-            return Sable.HELPER.getVelocity(level, pos.getCenter());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
      * 获取 SubLevel 当前姿态的四元数朝向。
      *
      * @return {@code {x, y, z, w}}，失败返回 null
@@ -304,23 +291,89 @@ public final class SableCompat {
     }
 
     /**
-     * 获取 SubLevel 物理刚体的角速度。
+     * 获取 SubLevel 的<b>世界系</b>线速度（m/s，每 tick 由 Sable 用世界 pose 位置差分 ×20 计算，
+     * 即 {@code logicalPose().position() − lastPose().position()}，机体原点平移速度）。
+     * <p>
+     * ⚠️ 这是<b>唯一可信</b>的世界系线速度源：实测（飞行日志）世界静止的机体上，裸读物理 handle
+     * 的线速度仍返回非零"幻影值"（如 y≈-0.067），裸读角速度同样（如 x≈0.008 rad/s）；这些幻影值
+     * 还污染了 {@code Sable.HELPER.getVelocity}（内部 = ω×r + linearVelocity，静止机体上会得到
+     * 约 -0.03 的假速度）。只有本方法（pose 位置差分，世界系）在静止时严格为 0。
      *
-     * @return 角速度 Vec3，失败返回 null
+     * @return 世界系线速度 Vec3（m/s）；非服务端 sub-level 或读取失败返回 null
      */
-    public static Vec3 getAngularVelocity(Level level, SubLevel subLevel) {
-        if (!(level instanceof ServerLevel) || subLevel == null) return null;
+    public static Vec3 getWorldLinearVelocity(SubLevel subLevel) {
         if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
         try {
-            SubLevelContainer container = SubLevelContainer.getContainer(level);
-            if (!(container instanceof ServerSubLevelContainer serverContainer)) return null;
+            Vector3d v = serverSubLevel.latestLinearVelocity;
+            return new Vec3(v.x, v.y, v.z);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
-            SubLevelPhysicsSystem physicsSystem = serverContainer.physicsSystem();
-            RigidBodyHandle handle = physicsSystem.getPhysicsHandle(serverSubLevel);
-            if (handle == null) return null;
+    /**
+     * 获取 SubLevel 的<b>世界系</b>角速度（rad/s，每 tick 由 Sable 用世界 pose 姿态差分 ×20
+     * 计算，即 {@code ServerSubLevel.latestAngularVelocity}）。
+     * <p>
+     * ⚠️ 这是<b>唯一可信</b>的世界系角速度源：裸读物理 handle（{@link #getAngularVelocity}）
+     * 在世界静止的机体上仍返回非零幻影值（飞行日志 wX 列实证，静止机体 ≈0.008 rad/s）；
+     * 本方法在姿态恒定时严格为 0。
+     *
+     * @return 世界系角速度 Vec3（rad/s）；非服务端 sub-level 或读取失败返回 null
+     */
+    public static Vec3 getWorldAngularVelocity(SubLevel subLevel) {
+        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
+        try {
+            Vector3d v = serverSubLevel.latestAngularVelocity;
+            return new Vec3(v.x, v.y, v.z);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
-            Vector3dc angVel = handle.getAngularVelocity(new Vector3d());
-            return new Vec3(angVel.x(), angVel.y(), angVel.z());
+    /**
+     * 世界系<b>点速度</b>（m/s）= 把 plot 点位逐 tick 投影到世界后差分 ×20：
+     * {@code logicalPose().transformPosition(p) − lastPose().transformPosition(p)} 再 ×20，
+     * 即该点（如皮托管/速度传感器方块）的真实世界系运动速度，天然含自转杠杆臂贡献 ω×r。
+     * <p>
+     * 与 {@code simulated:velocity_sensor}（{@code VelocitySensorBlockEntity.getGlobalVelocity}）
+     * <b>完全同一算法</b>；只基于世界 pose（logicalPose/lastPose），世界静止时机体上严格为 0，
+     * <b>无幻影值</b>（不像裸读物理 handle 或 {@code Sable.HELPER.getVelocity}）。
+     *
+     * @return 世界系点速度 Vec3（m/s）；读取失败返回 null
+     */
+    public static Vec3 getWorldPointVelocity(Level level, SubLevel subLevel, BlockPos plotPos) {
+        if (level == null || subLevel == null || plotPos == null) return null;
+        try {
+            Vec3 center = plotPos.getCenter();
+            Vector3d jomlPos = new Vector3d(center.x, center.y, center.z);
+            Vector3d nowWorld = subLevel.logicalPose().transformPosition(jomlPos, new Vector3d());
+            Vector3d prevWorld = subLevel.lastPose().transformPosition(jomlPos, new Vector3d());
+            Vector3d v = nowWorld.sub(prevWorld, new Vector3d()).mul(20.0);
+            return new Vec3(v.x, v.y, v.z);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 世界系<b>空速</b>（相对空气的）点速度（m/s）= 修正点速度 − 风速。
+     * <p>
+     * 风速 = {@code Sable.HELPER.getVelocity} − {@code Sable.HELPER.getVelocityRelativeToAir}
+     * （两个调用共享同一污染基底，差值恰好抵消幻影值，只剩 wind provider 贡献；Sable 本身不
+     * 注册风，未装风模组（如 PMWeather）时为 0）。
+     *
+     * @return 世界系空速 Vec3（m/s）；读取失败返回 null
+     */
+    public static Vec3 getWorldAirVelocity(Level level, SubLevel subLevel, BlockPos plotPos) {
+        if (level == null || subLevel == null || plotPos == null) return null;
+        try {
+            Vec3 ground = getWorldPointVelocity(level, subLevel, plotPos);
+            if (ground == null) return null;
+            Vec3 sableGround = Sable.HELPER.getVelocity(level, plotPos.getCenter());
+            Vec3 sableAir = Sable.HELPER.getVelocityRelativeToAir(level, plotPos.getCenter());
+            Vec3 wind = sableGround.subtract(sableAir);
+            return ground.subtract(wind);
         } catch (Exception e) {
             return null;
         }
@@ -343,14 +396,21 @@ public final class SableCompat {
     }
 
     /**
-     * 获取指定位置物理结构的相对空气速度（已减去风速）。
+     * 获取 SubLevel 物理刚体在 plot（方块）坐标系中的<b>绝对</b>质心坐标
+     * （{@code MassTracker.getCenterOfMass()} 原值，未做 rotationPoint 归零）。
+     * 与 Sable 力组的点力（{@code QueuedForceGroup.PointForce.point()}）同一坐标系，
+     * 供力矩计算 {@code Σ (point − comPlot) × force} 使用。
      *
-     * @return Vec3（m/s），失败返回 null
+     * @return 质心 plot 坐标；失败或不存在时返回 null
      */
-    public static Vec3 getAirVelocity(Level level, BlockPos pos) {
-        if (level == null || pos == null) return null;
+    public static Vec3 getCenterOfMassPlot(SubLevel subLevel) {
+        if (!(subLevel instanceof ServerSubLevel serverSubLevel)) return null;
         try {
-            return Sable.HELPER.getVelocityRelativeToAir(level, pos.getCenter());
+            MassData massTracker = serverSubLevel.getMassTracker();
+            if (massTracker == null) return null;
+            Vector3dc com = massTracker.getCenterOfMass();
+            if (com == null) return null;
+            return new Vec3(com.x(), com.y(), com.z());
         } catch (Exception e) {
             return null;
         }
@@ -435,6 +495,40 @@ public final class SableCompat {
             Vector3d local = pose.transformPositionInverse(weighted, new Vector3d());
             Vector3dc rp = pose.rotationPoint();
             return new Vec3(local.x - rp.x(), local.y - rp.y(), local.z - rp.z());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取约束链（含全部约束连接，轴承等；始终包含自身）的<b>总质心（世界坐标）</b>。
+     * <p>
+     * 与 {@link #getChainCenterOfMassLocal} 同源：世界系按质量加权平均链上各 sub-level 的
+     * 合并质心（{@code Σ(mᵢ·comᵢ)/Σmᵢ}，用 {@link #getMass} + {@link #getCenterOfMass}，
+     * 后者已是世界系），但<b>不转回局部系</b>，直接返回世界坐标。
+     * <p>
+     * 用途：整链受力/力矩应以链质心为参考点（真实动力学与 Sable 约束求解、风洞多物理体
+     * 重心一致），而非主机自身质心——主机质心不含尾部子体，会引入虚假的恒定俯仰力矩
+     * （= 链质心偏移 × 升力，见 memo §11）。
+     *
+     * @return 链质心（世界空间）；失败或总质量非正时返回 null
+     */
+    public static Vec3 getChainCenterOfMass(SubLevel subLevel) {
+        if (subLevel == null) return null;
+        try {
+            List<SubLevel> chain = getConnectedChain(subLevel);
+            double totalMass = 0.0;
+            Vector3d weighted = new Vector3d();
+            for (SubLevel sl : chain) {
+                Double m = getMass(sl);
+                Vec3 com = getCenterOfMass(sl); // 世界系合并质心
+                if (m == null || com == null) continue;
+                totalMass += m;
+                weighted.fma(m, new Vector3d(com.x, com.y, com.z));
+            }
+            if (totalMass <= 0.0) return null;
+            weighted.div(totalMass);
+            return new Vec3(weighted.x, weighted.y, weighted.z);
         } catch (Exception e) {
             return null;
         }

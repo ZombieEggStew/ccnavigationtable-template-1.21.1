@@ -65,7 +65,8 @@ plugins:
             Dock: 拓展坞
             Baffle: 挡板
             Examples & Tutorials: 示例与教程
-            Simple Monitoring System: 简单监控系统
+            trainer aircraft: 教练机
+            Aerodynamics: 气动模型
             Channel Setup: 频道设置
             Block NBT Reading: 方块 NBT 读取
             Peripheral Proxy: 外设代理
@@ -79,8 +80,11 @@ plugins:
             Flight Management Computer: 飞行管理计算机
             Aviation Integrated Computer: 航空集成计算机
             Position Light: 航行灯
+            Flight Data Recorder: 飞行数据记录系统
             Short-Range Signal Linker: 短程信号链接器
             Lua API Reference: Lua API 参考
+            Other: 其他
+            Trailing Wheel Mount: 从动轮悬架
             FAQ: 常见问题
         - locale: en
           name: English
@@ -106,7 +110,6 @@ nav:
     - Aeronautics Sensor Integration: peripheral-extender/simulated-integration.md
     - Chunk & Physics Body Loading: peripheral-extender/chunk-loading.md
     - Lua API Reference: api-reference.md
-    - Simple Monitoring System: peripheral-extender/example.md
   - Redstone Transceiver:
     - Overview: redstone-transceiver/overview.md
   - Electronic Transmission:
@@ -123,6 +126,7 @@ nav:
     - Aviation Integrated Computer: sensor-system/aic.md
     - Short-Range Signal Linker: sensor-system/short-range-linker.md
     - Position Light: sensor-system/position-light.md
+    - Flight Data Recorder: sensor-system/flight-data-recorder.md
   - Modular Monitor:
     - Overview: monitor/overview.md
     - Monitor: monitor/monitor.md
@@ -140,6 +144,9 @@ nav:
     - Monitor 2: control-desk/monitor_2.md
     - Dock: control-desk/dock.md
     - Baffle: control-desk/baffle.md
+  - Other:
+    - Trailing Wheel Mount: other/trailing-wheel-mount.md
   - Examples & Tutorials:
-    - Simple Monitoring System: peripheral-extender/example.md
+    - trainer aircraft: examples/trainer_aircraft.md
+    - Aerodynamics: examples/aerodynamics.md
   - FAQ: faq.md

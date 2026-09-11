@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.ShortRangeLinkerBlockEntity;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dev.ryanhcode.sable.sublevel.SubLevel;
@@ -128,6 +129,19 @@ public final class ShortRangeLinkerRegistry {
             if (m == null) continue;
             for (BlockEntity be : m.values()) {
                 if (be instanceof ShortRangeLinkerBlockEntity linker) out.add(linker);
+            }
+        }
+        return out;
+    }
+
+    /** 链内全部控制台（飞行数据记录器扫描控制输入用；链接器不计入）。返回顺序不保证，调用方按需排序 */
+    public static List<ControlDeskBlockEntity> desksOnChain(Collection<UUID> chainUuids) {
+        List<ControlDeskBlockEntity> out = new ArrayList<>();
+        for (UUID id : chainUuids) {
+            Map<Integer, BlockEntity> m = BY_SUBLEVEL.get(id);
+            if (m == null) continue;
+            for (BlockEntity be : m.values()) {
+                if (be instanceof ControlDeskBlockEntity desk) out.add(desk);
             }
         }
         return out;

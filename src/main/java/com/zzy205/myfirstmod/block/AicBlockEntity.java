@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry;
+import com.zzy205.myfirstmod.compat.cc.SensorSystemAPI;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dev.ryanhcode.sable.companion.math.Pose3d;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
@@ -77,6 +78,10 @@ public class AicBlockEntity extends BlockEntity {
         if (level != null && level.isClientSide) {
             this.randomNudge();
         } else if (level != null) {
+            // 放置/加载 AIC（= INS + FMC 门控）时刷新一次主世界大气曲线静态缓存（高度-气压换算工具用；另在服务器启动时刷新）
+            SensorSystemAPI.refreshPressureCurve(level);
+            // 放置/加载 AIC（= INS + FMC 门控）时刷新一次通用阻力系数静态缓存（通用阻力工具用；另在服务器启动时刷新）
+            SensorSystemAPI.refreshUniversalDrag(level);
             registeredBodyId = containingBodyId();
             BodySensorRegistry.register(this);
         }

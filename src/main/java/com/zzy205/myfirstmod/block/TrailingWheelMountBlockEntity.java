@@ -51,8 +51,10 @@ import java.util.Collection;
  * <li><b>不继承 {@code KineticBlockEntity}</b>：无 Create 转速/应力/轴——完全从动；</li>
  * <li><b>删除驱动项</b>：{@code sable$physicsTick} 只保留弹簧支撑 + 阻尼 + 侧滑摩擦
  *     （贴地轮被车身推着滚，不主动产生前进推力）；</li>
- * <li><b>删除红石转向/刹车/悬挂强度滚轮</b>：首版极简，刚度用常量
- *     {@value #SUSPENSION_STRENGTH}；</li>
+ * <li><b>转向由 CC Lua 外设驱动</b>（{@code compat/cc/TrailingWheelMountPeripheral}）：
+ *     不读红石，Lua {@code setSteering} 写入 {@link #steeringSignal}（-15..15，0=直线），
+ *     照 offroad 公式转成 yaw 旋转施力方向/滚动方向（见 {@link #getRotatedWheelAxis}）；</li>
+ * <li><b>删除刹车/悬挂强度滚轮</b>：刚度用常量 {@value #SUSPENSION_STRENGTH}；</li>
  * <li><b>客户端滚动</b>：贴地时由车身平移驱动轮子角度（从动），离地后停转
  *     （原 offroad 空中由转速带动，此处无转速 → 自然停）；</li>
  * <li>轮胎栈照抄 offroad 单槽语义（NBT {@code CurrentStack}），轮胎 = 任意带
@@ -78,6 +80,11 @@ public class TrailingWheelMountBlockEntity extends BlockEntity implements BlockE
     private double angularVelocity = 0.0;
     private double touchingFriction = 1.0;
     private boolean liftedUp = false;
+
+    /** Lua 转向输入（-15..15，0=直线；服务端权威，不持久化，仅随更新包同步客户端） */
+    private int steeringSignal = 0;
+    /** 转向偏航角（chasing 平滑，客户端渲染 / 服务端施力共用，照 offroad chasingYaw） */
+    private double chasingYaw = 0.0, lastChasingYaw = 0.0;
 
     private final Vector3d queuedForcePos = new Vector3d();
     private final Vector3d queuedForce = new Vector3d();
@@ -105,6 +112,8 @@ public class TrailingWheelMountBlockEntity extends BlockEntity implements BlockE
      * </ul>
      */
     private void tickClientAnimation() {
+        this.updateChasingYaw();
+
         final ItemStack item = this.getHeldItem();
         final TireLike tire = item.get(OffroadDataComponents.TIRE);
 
@@ -137,7 +146,7 @@ public class TrailingWheelMountBlockEntity extends BlockEntity implements BlockE
 
         Vec3i normal = Direction.get(Direction.AxisDirection.POSITIVE, axis).getNormal();
         normal = new Vec3i(normal.getZ(), 0, normal.getX());
-        final Vector3dc normalD = this.getRollDirection(normal);
+        final Vector3dc normalD = this.getRotatedWheelAxis(normal);
 
         final double translation = localVelocity.dot(normalD);
 
@@ -165,7 +174,7 @@ public class TrailingWheelMountBlockEntity extends BlockEntity implements BlockE
         final Direction.Axis axis = facing.getAxis();
         Vec3i normal = Direction.get(Direction.AxisDirection.POSITIVE, axis).getNormal();
         normal = new Vec3i(normal.getZ(), 0, normal.getX());
-        final Vector3dc rotatedAxis = this.getRollDirection(normal);
+        final Vector3dc rotatedAxis = this.getRotatedWheelAxis(normal);
 
         final TerrainCastResult extensionToTerrain = this.computeMaxExtensionToTerrain(rotatedAxis, pose);
         final double unclampedExtension = extensionToTerrain.maxExtension() - radius;
@@ -248,15 +257,40 @@ public class TrailingWheelMountBlockEntity extends BlockEntity implements BlockE
         return new TerrainCastResult(minExtension, minNormal, minHitSubLevel, minInteractingBlock);
     }
 
-    /** 滚动方向（水平、与 facing 轴垂直）。offroad 此处还会做转向 yaw 旋转；无转向 → 恒等 */
-    private @NotNull Vector3dc getRollDirection(final Vec3i normal) {
-        return new Vector3d(normal.getX(), normal.getY(), normal.getZ());
+    /**
+     * 滚动方向（水平、与 facing 轴垂直），绕 Y 施加转向偏航（照 offroad {@code getRotatedWheelAxis}）。
+     * 施力方向 / 滚动方向 / 射线横向偏移共用——转向生效的关键点。
+     */
+    private @NotNull Vector3dc getRotatedWheelAxis(final Vec3i normal) {
+        final Vector3d normalD = new Vector3d(normal.getX(), normal.getY(), normal.getZ());
+        normalD.rotateY(this.getChasingYaw());
+        return normalD;
+    }
+
+    /** 当前转向偏航角（rad） */
+    private double getChasingYaw() {
+        return this.chasingYaw;
+    }
+
+    /** 转向信号 → 目标偏航角；公式照 offroad {@code computeYaw}（信号 ±15 → 约 ±30°） */
+    protected double computeYaw() {
+        final int signal = this.steeringSignal;
+        if (signal == 0) return 0.0;
+        return (-signal / 15.0 * Math.PI / 4.0 * (30.0 / 45.0));
+    }
+
+    /** 每 tick（客户端）/ 每物理 substep（服务端）朝目标偏航角 chasing（照 offroad tick 的 lerp 0.4） */
+    private void updateChasingYaw() {
+        this.lastChasingYaw = this.chasingYaw;
+        this.chasingYaw = Mth.lerp(0.4, this.chasingYaw, this.computeYaw());
     }
 
     // ── Sable 物理：弹簧支撑（服务端权威，从动） ──
 
     @Override
     public void sable$physicsTick(final ServerSubLevel subLevel, final RigidBodyHandle handle, final double timeStep) {
+        this.updateChasingYaw();
+
         final ItemStack item = this.getHeldItem();
         final TireLike tire = item.get(OffroadDataComponents.TIRE);
         final BlockPos blockPos = this.getBlockPos();
@@ -285,9 +319,9 @@ public class TrailingWheelMountBlockEntity extends BlockEntity implements BlockE
 
         final Direction.Axis axis = facing.getAxis();
         Vec3i normal = Direction.get(Direction.AxisDirection.POSITIVE, axis).getNormal();
-        final Vector3dc sideD = this.getRollDirection(normal);
+        final Vector3dc sideD = this.getRotatedWheelAxis(normal);
         normal = new Vec3i(normal.getZ(), 0, normal.getX());
-        final Vector3dc normalD = this.getRollDirection(normal);
+        final Vector3dc normalD = this.getRotatedWheelAxis(normal);
 
         final TerrainCastResult extensionToTerrain = this.computeMaxExtensionToTerrain(normalD, pose);
         final double maxExtension = extensionToTerrain.maxExtension();
@@ -367,6 +401,47 @@ public class TrailingWheelMountBlockEntity extends BlockEntity implements BlockE
         }
     }
 
+    // ── Lua 转向（CC 外设驱动，无红石） ──
+
+    /** Lua 设置转向信号（-15..15，0=直线）；服务端权威，随更新包同步客户端；不持久化（重启/卸载后归零） */
+    public void setSteeringSignal(final int signal) {
+        if (this.level != null && this.level.isClientSide) {
+            return;
+        }
+        this.steeringSignal = Mth.clamp(signal, -15, 15);
+        this.setChanged();
+        if (this.level != null) {
+            this.level.sendBlockUpdated(this.worldPosition, this.getBlockState(), this.getBlockState(), 2);
+        }
+    }
+
+    public int getSteeringSignal() {
+        return this.steeringSignal;
+    }
+
+    /** 渲染用的转向偏航角（rad，partialTick 插值） */
+    public double getLerpedYaw(final float partialTick) {
+        return Mth.lerp(partialTick, this.lastChasingYaw, this.chasingYaw);
+    }
+
+    // ── 遥测读取（CC 外设 Lua 只读） ──
+
+    public double getExtension() {
+        return this.extension;
+    }
+
+    public double getAngularVelocity() {
+        return this.angularVelocity;
+    }
+
+    public boolean isLiftedUp() {
+        return this.liftedUp;
+    }
+
+    public double getTouchingFriction() {
+        return this.touchingFriction;
+    }
+
     // ── 轮胎槽（单槽，照 offroad WheelMountInventory 语义） ──
 
     public ItemStack getHeldItem() {
@@ -399,12 +474,17 @@ public class TrailingWheelMountBlockEntity extends BlockEntity implements BlockE
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         this.heldItem = ItemStack.parseOptional(registries, tag.getCompound("CurrentStack"));
+        // 转向值不持久化：磁盘 NBT 无此键（重启/卸载后归零），仅在客户端收到更新包时写入
+        if (tag.contains("SteeringSignal", 3)) {
+            this.steeringSignal = Mth.clamp(tag.getInt("SteeringSignal"), -15, 15);
+        }
     }
 
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         CompoundTag tag = super.getUpdateTag(registries);
         tag.put("CurrentStack", this.heldItem.saveOptional(registries));
+        tag.putInt("SteeringSignal", this.steeringSignal);
         return tag;
     }
 

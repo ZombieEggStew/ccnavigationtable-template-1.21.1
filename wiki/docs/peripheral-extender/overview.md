@@ -18,8 +18,6 @@ Channel configuration is saved with Create's schematic system, but be careful ab
 4. [Wireless Redstone](wireless-redstone.md) — send and receive redstone signals
 5. [Aeronautics Sensor Integration](simulated-integration.md) — read velocity, mass and orientation from the Sable physics engine
 6. [Chunk / Physics Body Loading](chunk-loading.md) — keep the area around the target block or a physics structure loaded
-
-- [Real-world Example](example.md) — monitor chest capacity, find specific items
 ---
 
 ## API

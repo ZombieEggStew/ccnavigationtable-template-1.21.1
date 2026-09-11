@@ -100,4 +100,3 @@ end
 
 - [Peripheral Proxy](peripheral-proxy.md) — get CC:T peripherals
 - [Complete Lua API Reference](../api-reference.md)
-- [Example: Automated Monitoring System](../peripheral-extender/example.md)
