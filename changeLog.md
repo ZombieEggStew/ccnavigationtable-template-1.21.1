@@ -87,3 +87,4 @@
 - Added the Flight Data Recorder system.
 - Added getVelocity / getAngleRates to the INS.
 - Added steering to the trailing wheel mount. Check the wiki for the control method.
+- Improved the Examples & Tutorials section of the wiki.
