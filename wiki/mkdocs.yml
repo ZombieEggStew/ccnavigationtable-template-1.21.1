@@ -143,8 +143,8 @@ nav:
     - Monitor 2: control-desk/monitor_2.md
     - Dock: control-desk/dock.md
     - Baffle: control-desk/baffle.md
-  - Examples & Tutorials:
-    - trainer aircraft: examples/trainer_aircraft.md
   - Other:
     - Trailing Wheel Mount: other/trailing-wheel-mount.md
+  - Examples & Tutorials:
+    - trainer aircraft: examples/trainer_aircraft.md
   - FAQ: faq.md
