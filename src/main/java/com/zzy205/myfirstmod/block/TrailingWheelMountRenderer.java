@@ -38,7 +38,8 @@ import org.joml.Vector2d;
  * <ul>
  * <li>无 SHAFT_HALF（无传动轴）；</li>
  * <li>无 FilteringRenderer（无悬挂强度滚轮 UI）；</li>
- * <li>无红石转向 yaw 旋转与 diode（首版无转向）；</li>
+ * <li>无 diode（offroad 的转向指示二极管）；</li>
+ * <li>转向：轮组绕 pivot 做 yaw 旋转（照 offroad {@code getLerpedYaw} + rotateAround，Lua 外设驱动）；</li>
  * <li>轮子自转 = 从动滚动角 {@link TrailingWheelMountBlockEntity#getLerpedAngle}。</li>
  * </ul>
  */
@@ -110,9 +111,13 @@ public class TrailingWheelMountRenderer extends SafeBlockEntityRenderer<Trailing
         teleInner.light(light).renderInto(ms, vb);
         ms.popPose();
 
-        // 轮组（mount + 轮胎）；无转向 → 不绕 pivot 做 yaw 旋转
+        // 轮组（mount + 轮胎）：绕转向 pivot 做 yaw 旋转。照 offroad WheelMountRenderer 的
+        // rotateAround（pivot z = -horizontalWheelPosition + 6/16，几何常量与 offroad 一致）
         ms.pushPose();
         ms.translate(0.0, verticalWheelPosition, 26.0 / 16.0 - horizontalWheelPosition);
+        ms.translate(0.5, 0.5, 0.5);
+        ms.rotateAround(Axis.YP.rotation((float) be.getLerpedYaw(partialTicks)), 0.0F, 0.0F, (float) (-horizontalWheelPosition + 6.0 / 16.0));
+        ms.translate(-0.5, -0.5, -0.5);
         teleMount.light(light).renderInto(ms, vb);
 
         ms.translate(0.5, 0.5, 0.5);

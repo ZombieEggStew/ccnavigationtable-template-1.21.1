@@ -53,7 +53,7 @@ Sable 物理轴承，直接轴向动力输入。**Lua 控制模式**下旋转角
 ---
 ## 🚀 快速开始
 
-[示例与教程](peripheral-extender/example.md) — 查看实际应用案例
+[示例与教程](examples/trainer_aircraft.zh.md) — 查看实际应用案例
 
 
 ## 🔗 相关链接

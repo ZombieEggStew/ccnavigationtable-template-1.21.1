@@ -51,7 +51,7 @@ Aviation sensors for physics bodies (Sable sub-levels), all readable from Lua vi
 ---
 ## 🚀 Quick Start
 
-[Examples & Tutorials](peripheral-extender/example.md) — see real-world use cases
+[Examples & Tutorials](examples/trainer_aircraft.md) — see real-world use cases
 
 
 ## 🔗 Related Links

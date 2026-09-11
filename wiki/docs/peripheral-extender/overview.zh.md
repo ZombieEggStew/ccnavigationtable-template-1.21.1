@@ -18,8 +18,6 @@
 4. [无线红石详细文档](wireless-redstone.md) - 发送和接收红石信号
 5. [航空学传感器集成详细文档](simulated-integration.md) — 读取 Sable 物理引擎的速度、质量、姿态
 6. [区块/物理结构加载详细文档](chunk-loading.md) - 保持目标方块所在区域或者物理结构不被卸载
-
-- [实战案例](example.md) — 监控箱子容量、查找特定物品
 ---
 
 ## API

@@ -50,6 +50,7 @@
 | `block/TrailingWheelRenderer.java` | 纯 BER（`SafeBlockEntityRenderer`）：tele/spring/mount + 轮胎渲染照 offroad，**去掉** SHAFT_HALF / FilteringRenderer / 转向 yaw / diode；partial 跨 namespace `offroad:block/wheel_mount/...`；`getViewDistance` 512、`getRenderBoundingBox` 按 `radius+1` 膨胀 |
 | `build.gradle` | `compileOnly files("libs/offroad-neoforge-1.21.1-1.3.2.jar")`（从 create-aeronautics-bundled 抽出） |
 | `CCPeripheralExtender.java` | 构造器注册 `SableEventPlatform.INSTANCE.onPhysicsTick(TrailingWheelBlockEntity::onPhysicsTick)`（照 offroad `Offroad.java:62`） |
+| `compat/cc/TrailingWheelMountPeripheral.java` + `CCPeripheralCapabilities.java` | **CC 外设 `trailing_wheel_mount`（Lua 转向，无红石）**：`setSteering`（[-1,1]→信号±15→`computeYaw` 约±30°）写入 BE 服务端权威 `steeringSignal` → `getRotatedWheelAxis` 旋转物理施力/滚动方向 + 同步客户端渲染轮组 yaw；附遥测 `hasTire/getTireRadius/getExtension/getAngularVelocity/isLiftedUp/getTouchingFriction`。参考 CreateAvionics `WheelMountPeripheral`（其用 mixin 改 offroad BE；本项目 BE 自有，直接加字段） |
 | `MyModBlocks` / `MyModBlockEntities` / `CCPeripheralExtenderClient` / `MyModCreativeModeTabs` | 注册 `trailing_wheel` 方块/BE/BER/创造标签 |
 | `assets/ccpe/blockstates/trailing_wheel.json` | facing 4 向 → 模型 `offroad:block/wheel_mount/block`（y 旋转照 offroad wheel_mount.json） |
 | `assets/ccpe/models/item/trailing_wheel.json` | parent `offroad:block/wheel_mount/item`（物品展示=offroad 全套） |
@@ -60,6 +61,7 @@
 - 模型零拷贝：blockstate / item / partial 全部跨 namespace 引用 offroad 资产 → 依赖运行时 offroad（bundled 必带），无资产维护成本；
 - 无 Create：不继承 `HorizontalKineticBlock`/`KineticBlockEntity`，无轴/应力/`getSpeed`；
 - 从动：物理删除驱动项（`getSpeed` 相关 fma），仅保留弹簧+阻尼+侧滑+基础滚动阻力；客户端轮子贴地滚动角由车身平移推导，离地无动力自然停转；
+- **转向 = CC Lua 外设驱动（无红石）**：`steeringSignal`（-15..15，服务端权威）→ `computeYaw()`（offroad 原公式，±15 → 约±30°）→ `chasingYaw`（lerp 0.4 平滑；客户端每 tick、服务端每物理 substep 更新）→ `getRotatedWheelAxis` 绕 Y 旋转。**不持久化**（内存值，重启/卸载归零），仅随 update packet 同步客户端；`computeMaxExtension`/`sable$physicsTick`/客户端滚动角三处共用（与 offroad 一致）；
 - 批处理沿用 offroad（静态队列 + physics tick 事件统一 `applyForcesAndReset`），`CCPeripheralExtender` 注册一次。
 
 ## 双轮轴式（后续扩展设计）
@@ -88,8 +90,8 @@
 
 ## 待确认问题
 
-- [ ] 从动轮是否需要**驻车/刹车**（红石输入）？默认：不做（首版已删净）。
-- [ ] 是否需要 **CC 外设**（读轮速/行程/刹车）？（默认先不做，后续按需，参考 Simulated-CC-Compat `WheelMountPeripheral`）
+- [ ] 从动轮是否需要**驻车/刹车**（红石输入）？默认：不做（首版已删净；CC 外设也未暴露 brake，参考 CreateAvionics 可后续加）。
+- [x] 是否需要 **CC 外设**（读轮速/行程/刹车）？→ **已实现**（转向 + 遥测，见 `TrailingWheelMountPeripheral`；刹车未做）。
 - [ ] 是否要做悬挂强度滚轮 UI？（参考 `SuspensionStrengthValueBehaviour`；不做则常量）
 
 ## 参考来源

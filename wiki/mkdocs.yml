@@ -82,6 +82,8 @@ plugins:
             Flight Data Recorder: 飞行数据记录系统
             Short-Range Signal Linker: 短程信号链接器
             Lua API Reference: Lua API 参考
+            Other: 其他
+            Trailing Wheel Mount: 从动轮悬架
             FAQ: 常见问题
         - locale: en
           name: English
@@ -143,4 +145,6 @@ nav:
     - Baffle: control-desk/baffle.md
   - Examples & Tutorials:
     - trainer aircraft: examples/trainer_aircraft.md
+  - Other:
+    - Trailing Wheel Mount: other/trailing-wheel-mount.md
   - FAQ: faq.md
