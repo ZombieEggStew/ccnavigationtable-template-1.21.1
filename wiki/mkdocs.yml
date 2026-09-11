@@ -66,6 +66,7 @@ plugins:
             Baffle: 挡板
             Examples & Tutorials: 示例与教程
             trainer aircraft: 教练机
+            Aerodynamics: 气动模型
             Channel Setup: 频道设置
             Block NBT Reading: 方块 NBT 读取
             Peripheral Proxy: 外设代理
@@ -147,4 +148,5 @@ nav:
     - Trailing Wheel Mount: other/trailing-wheel-mount.md
   - Examples & Tutorials:
     - trainer aircraft: examples/trainer_aircraft.md
+    - Aerodynamics: examples/aerodynamics.md
   - FAQ: faq.md
