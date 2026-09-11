@@ -14,14 +14,14 @@
 | `flightDataRecorderEnabled` | `false` | 总开关。**默认关**，需要录制时在 `config/ccpe-common.toml` 打开；**需重启生效** |
 | `flightDataRecorderIntervalTicks` | `1` | 采样间隔（tick）。`1` = 每 tick 一行 = 20 Hz |
 
-- 只有**至少一个 FMC/AIC 在某个 Sable 物理体上**时才会产生文件。
+- 只有**至少一个 FMC/AIC/INS 传感器在某个 Sable 物理体上**时才会产生文件。
 - 记录器同样覆盖仅装有 INS（ATTITUDE）的机体：运动学/速度诊断列始终可用，无 FMC 时物理数据列为 `nan`。
 
 ## 输出文件
 
 路径：`<gameDir>/flight_logs/flight_<维度>_<机体UUID前8位>_<yyyyMMdd-HHmmss>.csv`
 
-- **每个 FMC/AIC 机体一个文件**（按机体 UUID 键）。
+- **每个装有 FMC/AIC/INS 传感器的机体一个文件**（按机体 UUID 键）。
 - 后缀时间戳 = **文件创建时刻**（不是起始 tick）→ 重启后不会覆盖旧文件（旧命名按起始 tick，重启后同机体同 tick 会覆盖）。
 - 表头只在**建文件时**写入 → 改过记录器代码后必须重启游戏再飞，否则新列对不上表头。
 - 机体被拆卸/卸载、服务器停止、或记录器被关闭时，文件正常关闭。

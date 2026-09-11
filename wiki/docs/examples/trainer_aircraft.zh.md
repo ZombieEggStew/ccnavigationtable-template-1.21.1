@@ -2,6 +2,10 @@
 
 > 一个完整的 CCPE 航电应用示例：可驾驶的固定翼教练机，集成了[传感器系统](../sensor-system/overview.zh.md)（静压孔 / 皮托管 / INS / FMC）、[模块化监视器](../monitor/overview.zh.md)（开关 / 旋钮 / 屏幕）、[控制台](../control-desk/overview.zh.md)（操纵杆 / 脚踏板 / 油门）与[航空轴承](../aero-bearing/overview.zh.md)舵面，并带俯仰阻尼、自动滚转、自动油门与高度保持。
 
+
+![nice](../img/nice.png)
+
+
 ## [> 存档下载 <](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/main/.design_guide/trainer%20aircraft.zip)
 [OneDrive](https://1drv.ms/u/c/4fabe5939824c0f1/IQDyp7GaueyWSJS6sStblBfdAdL7uPhhr4vora3CftGzKo0)
 

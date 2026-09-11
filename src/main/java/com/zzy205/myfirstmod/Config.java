@@ -46,8 +46,9 @@ public class Config {
 
     // ── 调试：飞行数据记录器（方案 B）──
     public static final ModConfigSpec.BooleanValue FLIGHT_RECORDER_ENABLED = BUILDER
-            .comment("Flight data recorder (debug): log per-tick body data for every FMC-registered aircraft into <gameDir>/flight_logs/*.csv "
-                    + "(see compat/cc/FlightDataRecorder.java). Only active while at least one FMC/AIC is on a Sable physics body. "
+            .comment("Flight data recorder (debug): log per-tick body data for every FMC/AIC/INS-registered aircraft into <gameDir>/flight_logs/*.csv "
+                    + "(see compat/cc/FlightDataRecorder.java). Active while at least one FMC/AIC/INS sensor is on a Sable physics body "
+                    + "(INS-only bodies get kinematics/velocity columns; physics columns read nan). "
                     + "Default OFF; enable in the config only when you need to record a flight.")
             .define("flightDataRecorderEnabled", false);
 

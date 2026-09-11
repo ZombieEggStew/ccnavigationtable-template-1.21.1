@@ -181,7 +181,7 @@
   "ccpe.configuration.servoModeStressImpact.tooltip": "Stress coefficient for the Transmission Peripheral in servo mode. Actual stress = value × |real output RPM| (the output speed may be overridden/accelerated by setServoSpeed).",
 
   "ccpe.configuration.flightDataRecorderEnabled": "Flight Data Recorder",
-  "ccpe.configuration.flightDataRecorderEnabled.tooltip": "Log per-tick body data for every FMC-registered aircraft into <gameDir>/flight_logs/*.csv (debug tool). Only active while at least one FMC/AIC is on a Sable physics body. Default OFF; enable only when you need to record a flight.",
+  "ccpe.configuration.flightDataRecorderEnabled.tooltip": "Log per-tick body data for every FMC/AIC/INS-registered aircraft into <gameDir>/flight_logs/*.csv (debug tool). Active while at least one FMC/AIC/INS sensor is on a Sable physics body (INS-only bodies get kinematics/velocity columns; physics columns read nan). Default OFF; enable only when you need to record a flight.",
 
   "ccpe.configuration.flightDataRecorderIntervalTicks": "Recorder Sampling Interval",
   "ccpe.configuration.flightDataRecorderIntervalTicks.tooltip": "Flight data recorder sampling interval in ticks (1 = every tick / 20 Hz).",

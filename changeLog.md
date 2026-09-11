@@ -87,3 +87,13 @@
 - Added the Flight Data Recorder system.
 - Added getVelocity / getAngleRates to the INS.
 - Added steering to the trailing wheel mount. Check the wiki for the control method.
+- Improved the Examples & Tutorials section of the wiki.
+
+1.1.4
+- Fixed cross-thread visibility on the trailing wheel mount: `steeringSignal` / `chasingYaw` / `lastChasingYaw` are now `volatile`.
+  (The server thread writes them while CC Lua computer threads read them via `getSteering`/`getSteeringAngle`, and the client render thread reads `chasingYaw` through `getLerpedYaw`.)
+- Fixed a torn-snapshot window in the altitude-pressure conversion: the atmosphere curve snapshot (base pressure, anchors, Y bounds) is now published as a single immutable record through one `volatile` reference instead of four separate `volatile` fields.
+- Fixed `TrailingWheelMountPeripheral.equals` comparing only BlockPos: it now compares the block entity identity, so a peripheral at the same coordinates in another dimension (or a re-placed block entity after a chunk reload) is no longer treated as the same peripheral.
+- `_analyze_flight6.py`: guarded the half-period / full-period calculation against an empty extrema list — short or strongly damped flights no longer raise `ZeroDivisionError`.
+- `_verify_pressure.py`: the hard-coded `_8_delaytest` detail log is now optional (skipped with a notice when missing) instead of failing the whole analysis.
+- Flight Data Recorder docs now consistently describe the actual **FMC/AIC/INS** scope (INS-only bodies are recorded too) and correct the "default on" wording to "default off": Config comment, class Javadoc, en_us / zh_cn tooltips, and both wiki pages.

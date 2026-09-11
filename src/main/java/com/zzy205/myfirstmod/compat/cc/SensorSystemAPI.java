@@ -254,17 +254,20 @@ public class SensorSystemAPI implements ILuaAPI {
     /** 大气换算工具门控：所在物理体（含约束链）上有 ≥1 个 FMC（ccpe:fmc），与物理数据门控同源；主线程 update() 每 tick 刷新 */
     private volatile boolean pressureToolsAvailable = false;
 
-    /** 维度大气 basePressure（静态缓存，默认 1.0；见 {@link #refreshPressureCurve}） */
-    private static volatile double pressureBase = 1.0;
+    /**
+     * 维度大气曲线的一次完整快照（basePressure + 锚点 + 高度边界）。
+     * 用<b>单个 volatile 引用</b>整体发布（{@link #refreshPressureCurve}），Lua 线程在
+     * {@link #evaluatePressure} / {@link #altitudeFromPressure} 里只读一次引用，
+     * 保证 base / anchors / 边界来自同一次刷新——避免旧方案下四个字段分开发布被观察到
+     * "新锚点 + 旧 base" 的撕裂快照（窗口虽小，但会产生瞬时错误的换算/二分结果）。
+     */
+    private record PressureCurve(double base, double[][] anchors, double minY, double maxY) {
+        /** 默认曲线快照（主世界默认值：base=1.0、空锚点、-64..320） */
+        static final PressureCurve DEFAULT = new PressureCurve(1.0, new double[0][], -64, 320);
+    }
 
-    /** 维度大气曲线锚点快照 {[高度, 值, 斜率]}（静态缓存：进游戏与放置/加载 FMC/AIC 时刷新一次，不逐 tick 读数据包） */
-    private static volatile double[][] pressureAnchors = new double[0][];
-
-    /** 维度高度下限（二分区间左端，主世界 = minY） */
-    private static volatile double atmosphereMinY = -64;
-
-    /** 维度高度上限（二分区间右端 = minY + logicalHeight，主世界 = 320） */
-    private static volatile double atmosphereMaxY = 320;
+    /** 维度大气曲线快照（静态缓存：进游戏与放置/加载 FMC/AIC 时刷新一次，不逐 tick 读数据包） */
+    private static volatile PressureCurve pressureCurve = PressureCurve.DEFAULT;
 
     // ── 风帆气动工具缓存（门控每 tick 判，同物理数据门控；系数为 mod 内常量，无静态缓存） ──
 
@@ -1084,7 +1087,7 @@ public class SensorSystemAPI implements ILuaAPI {
     // ═══════════════ 大气高度-气压换算工具（门控：机体（含约束链）上有 ≥1 个 FMC；AIC 等同 FMC） ═══════════════
     //
     // mainThread=false：不访问世界/Level（数据包重载有竞态、Sable 世界查询非线程安全），
-    // 曲线数据 = 静态 volatile 快照（pressureBase / pressureAnchors / atmosphereMinY/MaxY），
+    // 曲线数据 = 静态 volatile 快照（PressureCurve 单 record：base + anchors + minY/maxY），
     // 进游戏与放置/加载 FMC/AIC 时刷新一次（refreshPressureCurve，同螺旋桨 T/A 静态缓存策略）；
     // Lua 线程在电脑线程上只做纯数学换算——正向求值与反向二分都用该快照，与
     // DimensionPhysicsData.getAirPressure 公式逐位一致（含 basePressure / 锚点 / Hermite）。
@@ -1147,8 +1150,9 @@ public class SensorSystemAPI implements ILuaAPI {
      * 供 {@link #getAltitudeFromPressure(double)} 与巡航高度求解工具共用。
      */
     private @Nullable Double altitudeFromPressure(double pressure) {
-        double minY = atmosphereMinY;
-        double maxY = atmosphereMaxY;
+        PressureCurve curve = pressureCurve;   // 单次读取快照，避免撕裂
+        double minY = curve.minY();
+        double maxY = curve.maxY();
         double pLo = evaluatePressure(minY); // 曲线最大值（大气底，地下钳位）
         double pHi = evaluatePressure(maxY); // 曲线最小值（大气顶，默认 0）
         if (pressure > pLo || pressure < pHi) return null;
@@ -1171,7 +1175,8 @@ public class SensorSystemAPI implements ILuaAPI {
      * q=3Δy−(2s1+s2)Δx、l=Δx·s1），结果钳位 ≥0；y 超出锚点区间时取首/末锚点值。
      */
     private double evaluatePressure(double y) {
-        double[][] pts = pressureAnchors;
+        PressureCurve curve = pressureCurve;   // 单次读取快照，避免撕裂
+        double[][] pts = curve.anchors();
         double v;
         if (pts.length == 0) {
             v = 1;
@@ -1200,7 +1205,7 @@ public class SensorSystemAPI implements ILuaAPI {
                 v = Math.max(v, 0);
             }
         }
-        return pressureBase * v;
+        return curve.base() * v;
     }
 
     /**
@@ -1230,10 +1235,9 @@ public class SensorSystemAPI implements ILuaAPI {
                 anchors[i][1] = p.value();
                 anchors[i][2] = p.slope();
             }
-            pressureBase = base;
-            pressureAnchors = anchors;
-            atmosphereMinY = level.dimensionType().minY();
-            atmosphereMaxY = atmosphereMinY + level.dimensionType().logicalHeight();
+            // 四个量打包成单个 record 整体发布：Lua 线程读到的必是同一刷新的完整快照
+            pressureCurve = new PressureCurve(base, anchors,
+                    level.dimensionType().minY(), level.dimensionType().minY() + level.dimensionType().logicalHeight());
         } catch (Exception ignored) {
             // 读不到曲线时保留上次缓存（默认值兜底）
         }

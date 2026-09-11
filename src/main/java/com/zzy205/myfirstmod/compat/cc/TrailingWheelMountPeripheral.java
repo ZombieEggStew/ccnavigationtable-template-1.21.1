@@ -38,10 +38,10 @@ public class TrailingWheelMountPeripheral implements IPeripheral {
     @Override
     public boolean equals(@Nullable IPeripheral other) {
         if (other == this) return true;
-        if (other instanceof TrailingWheelMountPeripheral that) {
-            return this.be.getBlockPos().equals(that.be.getBlockPos());
-        }
-        return false;
+        // 只比 BlockPos 会把「不同维度同坐标」或「拆了重放/区块重载后的新 BE」误判为同一外设，
+        // 导致 CC:T 外设缓存路由到旧方块实体；同一方块实体对象才视为同一外设。
+        return other instanceof TrailingWheelMountPeripheral that
+                && this.be == that.be;
     }
 
     // ════════════════════ 转向控制 ════════════════════

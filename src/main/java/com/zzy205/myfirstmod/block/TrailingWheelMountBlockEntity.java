@@ -81,10 +81,13 @@ public class TrailingWheelMountBlockEntity extends BlockEntity implements BlockE
     private double touchingFriction = 1.0;
     private boolean liftedUp = false;
 
-    /** Lua 转向输入（-15..15，0=直线；服务端权威，不持久化，仅随更新包同步客户端） */
-    private int steeringSignal = 0;
-    /** 转向偏航角（chasing 平滑，客户端渲染 / 服务端施力共用，照 offroad chasingYaw） */
-    private double chasingYaw = 0.0, lastChasingYaw = 0.0;
+    /** Lua 转向输入（-15..15，0=直线；服务端权威，不持久化，仅随更新包同步客户端）。
+     *  volatile：主线程写（setSteeringSignal / 更新包），CC Lua 电脑线程（getSteering 等
+     *  mainThread=false）与 Sable 物理回调直读，跨线程发布需可见性保证。 */
+    private volatile int steeringSignal = 0;
+    /** 转向偏航角（chasing 平滑，客户端渲染 / 服务端施力共用，照 offroad chasingYaw）。
+     *  volatile：服务端物理 tick 写、客户端渲染线程经 getLerpedYaw 读，跨线程发布需可见性保证。 */
+    private volatile double chasingYaw = 0.0, lastChasingYaw = 0.0;
 
     private final Vector3d queuedForcePos = new Vector3d();
     private final Vector3d queuedForce = new Vector3d();
