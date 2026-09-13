@@ -31,8 +31,8 @@ public class SteamPowerChamberBlockEntity extends BlockEntity {
     /** 活塞往复周期（tick，一个完整往返） */
     public static final float PISTON_PERIOD = 8f;
 
-    /** 剩余燃烧时长（burnTick 制，服务端，仅 controller 读写；持久化） */
-    public int burnTicks = 0;
+    /** 剩余燃烧时长（burnTick 制，float 支持效率小数递减；服务端，仅 controller 读写；持久化） */
+    public float burnTicks = 0f;
 
     /** 流体燃料消耗累加器（mb 小数，服务端，仅 controller 读写；不持久化——重启丢失不足 1mb 无影响） */
     public float fluidFuelDebt = 0f;
@@ -46,13 +46,13 @@ public class SteamPowerChamberBlockEntity extends BlockEntity {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        tag.putInt("BurnTicks", burnTicks);
+        tag.putFloat("BurnTicks", burnTicks);
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        burnTicks = tag.getInt("BurnTicks");
+        burnTicks = tag.getFloat("BurnTicks");
     }
 
     // ================= 活塞动画（客户端） =================

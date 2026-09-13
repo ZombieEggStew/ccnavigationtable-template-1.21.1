@@ -53,6 +53,11 @@
   "tooltip.ccpe.aero_bearing.current_angle": "当前角度：",
   "tooltip.ccpe.aero_bearing.target_angle": "目标角度：",
 
+  "tooltip.ccpe.engine.header": "发动机状态",
+  "tooltip.ccpe.engine.temperature": "温度：",
+  "tooltip.ccpe.engine.overheated": "过热停机！需加强冷却",
+  "tooltip.ccpe.engine.efficiency": "效率：",
+
   "gui.ccpe.monitor.module_info": "%s 位于 (%s, %s) 尺寸 %s×%s",
   "gui.ccpe.monitor_menu.done": "完成",
   "gui.ccpe.monitor_menu.id_title": "监视器频道",

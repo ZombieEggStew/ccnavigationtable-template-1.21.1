@@ -5,8 +5,12 @@ import com.simibubi.create.AllSoundEvents;
 import com.simibubi.create.api.connectivity.ConnectivityHandler;
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.IMultiBlockEntityContainer;
+import com.zzy205.myfirstmod.compat.cc.SensorSystemAPI;
+import com.zzy205.myfirstmod.compat.sable.SableCompat;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.createmod.catnip.nbt.NBTHelper;
 import net.createmod.catnip.platform.CatnipServices;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -14,7 +18,9 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -34,6 +40,7 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
@@ -117,6 +124,57 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 蒸汽室流体燃料重扫冷却 */
     protected int steamFuelRescanCooldown = 0;
 
+    // ---- P3：温度/冷却（牛顿冷却模型，方案见 memo/engine-module.md 关键机制 6） ----
+    /** 过热阈值（°C）：T ≥ 此值硬停 */
+    public static final float OVERHEAT_TEMP = 200f;
+    /** 滞回恢复阈值（°C）：T ≤ 此值才允许重启（0.8×OVERHEAT_TEMP） */
+    public static final float OVERHEAT_RESUME = 160f;
+    /** 海平面环境温度（°C） */
+    public static final float T_AMB_SEA = 20f;
+    /** 对流层环境温度递减率（°C/m，按海平面高度） */
+    public static final float T_AMB_LAPSE = 0.0065f;
+    /** 环境温度下限（°C） */
+    public static final float T_AMB_FLOOR = -40f;
+    /** 流体室基础热（°C/s，100% 效率下每室） */
+    public static final float BASE_HEAT_FLUID = 30f;
+    /** 蒸汽室基础热倍率（吃水 = 天然冷却，比流体室低 20%） */
+    public static final float STEAM_HEAT_FACTOR = 0.8f;
+    /** 环境散热系数（°C/s/°C/室）——静态 eff25% 不过热 ⇒ K_AMB ≥ 0.25×H0/ΔT_max */
+    public static final float K_AMBIENT = 0.05f;
+    /** 每冷却风道散热系数（°C/s/°C）——静态 eff50% + 1风道/室 ⇒ K_AMB+K_DUCT ≥ 0.5×H0/ΔT_max */
+    public static final float K_DUCT = 0.05f;
+    /** 引擎核心自身散热系数（°C/s/°C/节）：停机时核心仍缓慢散热（不依赖冷却风道），τ ≈ 1/0.02 = 50s */
+    public static final float K_CORE = 0.02f;
+    /** 冲压冷却满增益（×）：运动 ≥RAM_FULL 时总散热 ×2.0（eff100% + 1风道/室 + 冲压 ⇒ 足够） */
+    public static final float RAM_MAX = 2.0f;
+    /** 冲压起始速度（m/s）：低于此无增益 */
+    public static final float RAM_START = 10f;
+    /** 冲压满速（m/s）：达到此速度增益 = RAM_MAX */
+    public static final float RAM_FULL = 30f;
+    /** 热容基数（°C 变化速率分母；×length：模块越大热得越慢） */
+    public static final float C_TH_BASE = 1.0f;
+    /** 气压因子下限（防大气顶气压→0 导致冷却归零） */
+    public static final float PRESSURE_FLOOR = 0.25f;
+    /** 温度同步到客户端的阈值（°C，避免每 tick 发包） */
+    public static final float SYNC_TEMP_DELTA = 1f;
+
+    /** 模块温度（°C，controller 持有；NBT 持久化 + 客户端同步显示） */
+    protected float temperature = T_AMB_SEA;
+    /** 效率（=油门，同时缩出力和热量；P3 默认 0.25，P4 由 Lua 控制） */
+    protected float efficiency = 0.25f;
+    /** 过热锁定（滞回：T≥OVERHEAT_TEMP 置位，T≤OVERHEAT_RESUME 复位） */
+    protected boolean overheated = false;
+    /** 上次同步给客户端的温度（差量发包用） */
+    protected float lastSyncedTemp = T_AMB_SEA;
+    /** 客户端温度显示值（服务端差量采样 → 趋势外推平滑，见 tickClient） */
+    @OnlyIn(Dist.CLIENT)
+    protected float displayedTemperature = T_AMB_SEA;
+    /** 最近两个温度采样点（服务端差量发包到达时滚动，tickClient 沿斜率外推） */
+    @OnlyIn(Dist.CLIENT)
+    protected float lastTempSample = T_AMB_SEA, newTempSample = T_AMB_SEA;
+    @OnlyIn(Dist.CLIENT)
+    protected long lastTempSampleTime, newTempSampleTime;
+
     @OnlyIn(Dist.CLIENT)
     protected EngineSoundInstance soundInstance;
 
@@ -137,7 +195,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (!isController())
             return;
 
-        // ---- P1+P2：燃烧室 → 燃料 → 发电/消耗（零缓存，直接从源罐 drain） ----
+        // ---- P1+P2+P3：燃烧室 → 燃料 → 发电/消耗/温度（零缓存，直接从源罐 drain） ----
         boolean prevRunning = running;
         float prevCapacity = moduleCapacity;
 
@@ -145,14 +203,23 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         ModuleScan scan = scanModule();
         List<BlockPos> neighbors = scan.neighbors();
 
-        // 流体燃烧室（P1）：燃料表第一个可用流体；每室 consumption mb/s
+        // 过热锁定（滞回）：T≥OVERHEAT_TEMP 停机锁定，T≤OVERHEAT_RESUME 解锁
+        if (overheated) {
+            if (temperature <= OVERHEAT_RESUME)
+                overheated = false;
+        } else if (temperature >= OVERHEAT_TEMP) {
+            overheated = true;
+        }
+        boolean heatAllowed = !overheated;
+
+        // 流体燃烧室（P1）：燃料表第一个可用流体；每室 consumption mb/s × 效率
         int runningFluid = 0;
         float fluidCapacity = 0;
-        EngineFuels.Entry fluidFuel = findFuel(neighbors);
+        EngineFuels.Entry fluidFuel = heatAllowed ? findFuel(neighbors) : null;
         if (!scan.fluidChambers.isEmpty() && fluidFuel != null && !overstressed) {
             runningFluid = scan.fluidChambers.size();
             fluidCapacity = runningFluid * BASE_STRESS_PER_CHAMBER * fluidFuel.stress();
-            fuelDebt += runningFluid * fluidFuel.consumption() / 20f;
+            fuelDebt += runningFluid * fluidFuel.consumption() * efficiency / 20f;
             while (fuelDebt >= 1f) {
                 if (drainFuel(1)) {
                     fuelDebt -= 1f;
@@ -169,15 +236,15 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
         // 蒸汽动力室（P2）：水 + 流体燃料（burnTick 制，水在才烧；水不可用整类暂停；固体燃料抽取暂缓见 tryPullSolidFuel）
         int runningSteam = 0;
-        boolean waterOk = !overstressed && waterAvailable(neighbors);
-        EngineFuels.Entry steamFuel = scan.steamChambers.isEmpty() ? null : findSteamFluidFuel(neighbors);
+        boolean waterOk = !overstressed && heatAllowed && waterAvailable(neighbors);
+        EngineFuels.Entry steamFuel = heatAllowed && !scan.steamChambers.isEmpty() ? findSteamFluidFuel(neighbors) : null;
         if (waterOk && steamFuel != null) {
             for (BlockPos sp : scan.steamChambers) {
                 if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
                     continue;
-                // 流体燃料：每 tick 每室消耗 1000/burn_ticks_per_bucket mb（≈1 burnTick/tick 当量），
+                // 流体燃料：每 tick 每室消耗 1000/burn_ticks_per_bucket × 效率 mb（≈效率 个 burnTick/tick），
                 // 累计 ≥1mb 从源罐抽；每抽 1mb → burn_ticks_per_bucket/1000 个 burnTick（熔岩 20 tick/mb）
-                be.fluidFuelDebt += 1000f / steamFuel.burnTicksPerBucket();
+                be.fluidFuelDebt += 1000f / steamFuel.burnTicksPerBucket() * efficiency;
                 while (be.fluidFuelDebt >= 1f) {
                     if (drainSteamFluidFuel(1)) {
                         be.fluidFuelDebt -= 1f;
@@ -189,13 +256,14 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                     }
                 }
                 if (be.burnTicks > 0) {
-                    if (--be.burnTicks == 0)
+                    be.burnTicks -= efficiency; // 1 个 burnTick 烧 1/efficiency tick（25% 效率 = 4× 时长）
+                    if (be.burnTicks <= 0)
                         be.setChanged();
                     runningSteam++;
                 }
             }
             if (runningSteam > 0) {
-                waterDebt += runningSteam * 0.05f; // 1mb/s/室 = 0.05mb/t
+                waterDebt += runningSteam * 0.05f * efficiency; // 1mb/s/室 × 效率 = 0.05mb/t
                 while (waterDebt >= 1f) {
                     if (drainWater(1)) {
                         waterDebt -= 1f;
@@ -208,32 +276,49 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
 
         int runningTotal = runningFluid + runningSteam;
-        running = runningTotal > 0 && !overstressed;
-        moduleCapacity = fluidCapacity + runningSteam * STEAM_STRESS_PER_CHAMBER;
+        running = runningTotal > 0 && !overstressed && !overheated;
+        moduleCapacity = (fluidCapacity + runningSteam * STEAM_STRESS_PER_CHAMBER) * efficiency;
 
-        if (running != prevRunning || moduleCapacity != prevCapacity) {
+        // ---- P3：温度更新（牛顿冷却） ----
+        float heat = 0;
+        if (running && !overheated) {
+            if (runningFluid > 0 && fluidFuel != null)
+                heat += runningFluid * efficiency * fluidFuel.heat() * BASE_HEAT_FLUID;
+            if (runningSteam > 0 && steamFuelEntry != null)
+                heat += runningSteam * efficiency * steamFuelEntry.heat() * BASE_HEAT_FLUID * STEAM_HEAT_FACTOR;
+        }
+        float tAmb = ambientTemp();
+        float kTotal = (K_CORE * length + K_AMBIENT * runningTotal + K_DUCT * scan.coolingDucts)
+                * ramFactor() * pressureFactor();
+        temperature = Mth.clamp(
+                temperature + (heat - kTotal * (temperature - tAmb)) / thermalCapacity() / 20f,
+                tAmb, OVERHEAT_TEMP * 1.2f);
+
+        if (running != prevRunning || !Mth.equal(moduleCapacity, prevCapacity)
+                || Math.abs(temperature - lastSyncedTemp) >= SYNC_TEMP_DELTA) {
             reActivateSource = true;
             setChanged();
+            lastSyncedTemp = temperature;
             sendData();
         }
 
         if (DEBUG) {
             if (running != prevRunning) {
-                LOGGER.info("[EngineCore] {} running {} -> {} | fluid={} steam={} fuel={} water={} capacity={} overstressed={}",
+                LOGGER.info("[EngineCore] {} running {} -> {} | fluid={} steam={} fuel={} water={} T={}℃ overheated={} capacity={}",
                         worldPosition, prevRunning, running, runningFluid, runningSteam,
-                        fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterOk, moduleCapacity, overstressed);
+                        fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterOk, temperature, overheated, moduleCapacity);
             } else if (!running && level.getGameTime() % 40 == 0) {
-                LOGGER.info("[EngineCore] {} idle | fluid={} steam={} fuel={} water={} steamFuel={} fuelTable={} len={} speed={}",
+                LOGGER.info("[EngineCore] {} idle | fluid={} steam={} fuel={} water={} T={}℃ overheated={} ducts={} len={} speed={}",
                         worldPosition, scan.fluidChambers.size(), scan.steamChambers.size(),
-                        fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterOk,
-                        steamFuelEntry == null ? "NONE" : steamFuelEntry.fluid(),
-                        EngineFuels.loadedFluids(), length, getSpeed());
+                        fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterOk, temperature, overheated,
+                        scan.coolingDucts, length, getSpeed());
             }
         }
     }
 
-    /** 模块扫描结果：一次遍历收集两类燃烧室 + 去重后的全部邻居（core 成员 6 邻居 ∪ 燃烧室 6 邻居） */
-    protected record ModuleScan(List<BlockPos> fluidChambers, List<BlockPos> steamChambers, List<BlockPos> neighbors) {}
+    /** 模块扫描结果：一次遍历收集两类燃烧室 + 冷却风道数 + 去重后的全部邻居（core 成员 6 邻居 ∪ 燃烧室 6 邻居） */
+    protected record ModuleScan(List<BlockPos> fluidChambers, List<BlockPos> steamChambers, List<BlockPos> neighbors,
+                                int coolingDucts) {}
 
     /**
      * 扫描本条引擎（全部成员）：统计贴附的流体/蒸汽燃烧室（仅计入背面 FACING 反方向正贴核心的，
@@ -244,6 +329,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         List<BlockPos> steamChambers = new ArrayList<>();
         Set<BlockPos> seen = new HashSet<>();
         List<BlockPos> neighbors = new ArrayList<>();
+        int coolingDucts = 0;
 
         Direction.Axis axis = getMainConnectionAxis();
         for (int i = 0; i < length; i++) {
@@ -259,6 +345,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                         && neighbor.relative(state.getValue(SteamPowerChamberBlock.FACING).getOpposite()).equals(corePos)) {
                     steamChambers.add(neighbor);
                 }
+                // 冷却风道：贴在核心成员上即计入（blockstate 计数，无 BE；去重防两核心间重复计）
+                if (state.is(MyModBlocks.cooling_duct.get()) && seen.add(neighbor))
+                    coolingDucts++;
                 addNeighbor(seen, neighbors, neighbor);
             }
         }
@@ -267,7 +356,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             addNeighbors(seen, neighbors, chamber);
         for (BlockPos chamber : steamChambers)
             addNeighbors(seen, neighbors, chamber);
-        return new ModuleScan(fluidChambers, steamChambers, neighbors);
+        return new ModuleScan(fluidChambers, steamChambers, neighbors, coolingDucts);
     }
 
     private void addNeighbor(Set<BlockPos> seen, List<BlockPos> list, BlockPos pos) {
@@ -453,6 +542,53 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return false;
     }
 
+    // ================= P3：温度/冷却辅助 =================
+
+    /** 冲压冷却因子：运动体速度 10→30 m/s 线性爬升 1.0→RAM_MAX（<10 无增益，≥30 满增益；静态方块 = 1.0） */
+    protected float ramFactor() {
+        SubLevel sub = SableCompat.getContainingSubLevel(this);
+        if (sub == null)
+            return 1f;
+        Vec3 v = SableCompat.getWorldLinearVelocity(sub);
+        if (v == null)
+            return 1f;
+        float speed = (float) v.length();
+        if (speed <= RAM_START)
+            return 1f;
+        if (speed >= RAM_FULL)
+            return RAM_MAX;
+        float t = (speed - RAM_START) / (RAM_FULL - RAM_START);
+        return 1f + (RAM_MAX - 1f) * t;
+    }
+
+    /** 引擎当前世界高度 Y：运动体上取物理体原点 Y，静态取方块自身 Y */
+    protected float engineAltitude() {
+        SubLevel sub = SableCompat.getContainingSubLevel(this);
+        if (sub != null) {
+            Vec3 pos = SableCompat.getSubLevelWorldPos(sub);
+            if (pos != null)
+                return (float) pos.y;
+        }
+        return worldPosition.getY();
+    }
+
+    /** 气压因子：pressure^0.8（钳位下限 PRESSURE_FLOOR）。高空气压低 → 换热差 → 冷却更差（物理结论见 memo） */
+    protected float pressureFactor() {
+        double p = SensorSystemAPI.getPressureForEngine(engineAltitude());
+        return (float) Math.pow(Math.max(p, PRESSURE_FLOOR), 0.8);
+    }
+
+    /** 环境温度（°C）：海平面 20°C，对流层 −0.0065°C/m（按海平面高度），下限 T_AMB_FLOOR */
+    protected float ambientTemp() {
+        float aboveSea = Math.max(0, engineAltitude() - 63f);
+        return Math.max(T_AMB_SEA - T_AMB_LAPSE * aboveSea, T_AMB_FLOOR);
+    }
+
+    /** 热容：C_TH_BASE × 节数（模块越大热得越慢） */
+    protected float thermalCapacity() {
+        return C_TH_BASE * Math.max(1, length);
+    }
+
     /** 从当前源罐 drain 指定量（mb）；源罐失效返回 false */
     protected boolean drainFuel(int mb) {
         if (fuelSourcePos == null)
@@ -472,6 +608,20 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     @OnlyIn(Dist.CLIENT)
     protected void tickClient() {
+        // 温度显示：沿最近两个采样点的斜率外推（服务端差量发包低频 → 外推让显示连续无台阶/平台）
+        long now = level.getGameTime();
+        if (lastTempSampleTime < newTempSampleTime) {
+            float dt = Math.max(1, newTempSampleTime - lastTempSampleTime);
+            float slope = (newTempSample - lastTempSample) / dt;
+            float extrapolated = newTempSample + slope * Math.max(0, now - newTempSampleTime);
+            // 限制外推带，防温度曲线拐弯（接近平衡/停机冷却）时过冲
+            float lo = Math.min(lastTempSample, newTempSample) - 10f;
+            float hi = Math.max(lastTempSample, newTempSample) + 10f;
+            displayedTemperature = Mth.clamp(extrapolated, lo, hi);
+        } else {
+            displayedTemperature = newTempSample;
+        }
+
         if (isController() && running && !isOverStressed()) {
             Vec3 pos = Vec3.atCenterOf(getBlockPos());
             switch (getMainConnectionAxis()) {
@@ -627,9 +777,19 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (isController())
             length = compound.getInt("Height");
         running = compound.getBoolean("Running");
+        if (compound.contains("Temperature"))
+            temperature = compound.getFloat("Temperature");
+        if (compound.contains("Efficiency"))
+            efficiency = compound.getFloat("Efficiency");
 
         if (!clientPacket)
             return;
+
+        // 温度采样滚动：新包到达时推进采样窗口（tickClient 沿最近两点斜率外推显示）
+        lastTempSample = newTempSample;
+        lastTempSampleTime = newTempSampleTime;
+        newTempSample = temperature;
+        newTempSampleTime = hasLevel() ? level.getGameTime() : 0;
 
         boolean changeOfController = !Objects.equals(controllerBefore, controller);
         if (changeOfController || prevHeight != length) {
@@ -652,6 +812,37 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (isController())
             compound.putInt("Height", length);
         compound.putBoolean("Running", running);
+        compound.putFloat("Temperature", temperature);
+        compound.putFloat("Efficiency", efficiency);
+    }
+
+    /** Goggle 提示：非 controller 委托给 controller；首行标题（Create overlay 视为标题行，其后有间距）→ 内容整体下移一行 */
+    @Override
+    public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
+        if (!isController()) {
+            EngineCoreBlockEntity controller = getControllerBE();
+            if (controller == null)
+                return false;
+            return controller.addToGoggleTooltip(tooltip, isPlayerSneaking);
+        }
+        tooltip.add(Component.literal("    ")
+                .append(Component.translatable("tooltip.ccpe.engine.header")
+                        .withStyle(ChatFormatting.WHITE)));
+
+        boolean added = super.addToGoggleTooltip(tooltip, isPlayerSneaking);
+
+        float shownTemp = level != null && level.isClientSide ? displayedTemperature : temperature;
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.temperature").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.format(Locale.ROOT, "%.1f°C", shownTemp))
+                        .withStyle(overheated ? ChatFormatting.RED : ChatFormatting.GOLD)));
+        if (overheated)
+            tooltip.add(Component.literal("     ")
+                    .append(Component.translatable("tooltip.ccpe.engine.overheated").withStyle(ChatFormatting.RED)));
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.efficiency").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
+        return true;
     }
 
     @Override
