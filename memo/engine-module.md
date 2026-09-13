@@ -1,6 +1,6 @@
 # 引擎模块（aero_engine：engine_core + 燃烧室 + 冷却风道）— 方案设计
 
-> 状态：**方案已定稿；P0 已实现并编译通过**（引擎核心排成一排 + 延伸放置 + 存档重组）；**P1 已实现并编译通过**（流体燃烧室烧水：JSON 燃料表、零缓存抽罐、发电 256rpm、Create STEAM 音效、活塞动画+对置/轴向交替相位）；**P2 已实现并编译通过**（蒸汽室：水 + 固体/流体燃料 burnTick 制自动消耗 + 活塞动画同款）；P3~P4 待做。
+> 状态：**方案已定稿；P0 已实现并编译通过**（引擎核心排成一排 + 延伸放置 + 存档重组）；**P1 已实现并编译通过**（流体燃烧室烧水：JSON 燃料表、零缓存抽罐、发电 256rpm、Create STEAM 音效、活塞动画+对置/轴向交替相位）；**P2 已实现并编译通过**（蒸汽室：水 + 流体燃料熔岩 burnTick 制 + 活塞动画同款；固体燃料暂缓）；**P3 温度/冷却方案已定稿待实现**（过热硬停+滞回、效率同缩出力和热量、蒸汽室基础热低 20%、冲压冷却连续曲线、高空冷却更差）；P4 待做。
 > 设计封闭（本会话内用户确认）：蒸汽室=水+燃料（无蒸汽流体）、冷却风道=过热约束、各燃烧室独立配方可混烧、严格零流体缓存、固体燃料从周围容器自动抽取、水走 drain 管线、**无红石控制，末段做 Lua 控制**。
 > 实现前先读参考源码（见文末「参考来源」）。
 
@@ -27,6 +27,10 @@
 | 流体缓存 | **严格零缓存**：所有消耗 = controller 每 tick 直接从源储罐 capability drain，无罐无液位显示 |
 | 固体燃料输入 | 从周围容器**自动抽取**（蒸汽室 6 邻居的 `IItemHandler`，`extractItem`），零 UI；可加 tag `ccpe:engine_fuel_sources` 白名单（默认不启用） |
 | 红石 | 不要；末段做 Lua 控制（见「Lua 控制」节） |
+| 过热行为 | T ≥ T_max 硬停（不烧油）；T ≤ 0.8×T_max（滞回）才允许重启，防启停振荡 |
+| 效率语义 | 效率 = 油门：**同时缩出力和热量**（P4 Lua 控制；P3 默认 0.25——静态无风道不过热，现有无风道测试机继续可用） |
+| 蒸汽室热量 | 基础热比流体室**低 20%**（吃水 = 天然冷却） |
+| 冲压冷却 | **连续曲线**：10→30 m/s 线性爬升，30 m/s 达满（ram_max = 2.0） |
 
 ## 参考实现
 
@@ -104,6 +108,41 @@ FuelType：datapack JSON（流体燃料表 + 蒸汽室流体燃料表 + 各室 p
   - 语义：Lua 是唯一控制入口（对应 CDG 的红石/模拟油门位，全部由 Lua 承担）
 - 待末段阶段按项目外设模式（参考 `my_bearing` 的 CC 外设控制、`transmission_peripheral`、`short-range link`）细化。
 
+### 6. 温度与过热冷却（P3，方案已定稿）
+
+**模型**（controller 每 tick，服务端；牛顿冷却）：
+
+```
+Q_heat   = Σ运行室 × efficiency × 燃料.heat × 类型基础热      // 流体室 H0，蒸汽室 0.8×H0（吃水=天然冷却）
+K_total  = (K_AMB×N + K_DUCT×D) × ram(speed) × f(pressure)   // N=运行室数，D=冷却风道数
+T_amb    = 20 − 0.0065×altitude，下限 −40℃                    // 对流层递减率
+T'       = (Q_heat − K_total×(T − T_amb)) / C_th
+T       += T'/20；钳制 [T_amb, T_max×1.2]
+overheat = T ≥ T_max → 硬停（running=false，不消耗）；resume = T ≤ 0.8×T_max（滞回）
+
+ram(speed)：<10 m/s = 1.0，10→30 线性爬升到 2.0（连续，无悬崖）
+f(pressure)：pressure^0.8（气压分数，海平面 1.0，来自 SensorSystemAPI.getPressureFromAltitude）
+speed/onBody：SableCompat.getContainingSubLevel（子次元=运动体）+ Sable.HELPER.getVelocity（复用现有 INS/悬架读取）
+```
+
+**平衡定标**（H0 归一化、ΔT_max = T_max−20℃，目标点留裕量再调）：
+
+| 目标 | 约束 |
+|---|---|
+| 静态 0 风道 eff25% 不过热 | K_AMB ≥ 0.25×H0/ΔT_max |
+| 静态 1 风道/室 eff50% 不过热 | K_AMB + K_DUCT ≥ 0.5×H0/ΔT_max |
+| 运动 ≥30m/s 1 风道/室 eff100% 不过热 | (K_AMB + K_DUCT)×ram_max ≥ H0/ΔT_max → ram_max ≈ 2.0 |
+
+**高空冷却结论（物理）**：**更差**——压力项主导。气压 1.0→0.4（10km）换热系数 h∝ρ^0.8 掉到 ~0.48，低温 ΔT 只补 ~1.4 倍 → 净 ~0.67（差 1/3）。公式保留两项（压力进 h、低温进 ΔT），净效果由常量定。
+
+**实现要点**：
+- `temperature` 存 controller NBT 持久化；sendData 同步客户端（goggle 温度条/过热警告，P3 打磨项）
+- `efficiency` 字段默认 0.25（P3 前无 Lua，静态无风道不过热；出力与热量同缩，`capacity = Σ室×base×efficiency`）
+- 燃料 JSON 的 `heat` 字段（P1 已解析未用）P3 接入 Q_heat
+- 冷却风道计数沿用模块扫描（贴在核心成员，blockstate 计数，无 BE）
+- 过载（isOverStressed）与过热独立：过载停烧照旧；过热是温度机制
+- 数值（T_max=200℃、C_th、K 常量、ram 曲线）进游戏调
+
 ## 消耗模型
 
 | 输入 | 规则 |
@@ -171,7 +210,7 @@ FuelType：datapack JSON（流体燃料表 + 蒸汽室流体燃料表 + 各室 p
 | P0 ✅ | `EngineCoreBlockEntity` / `EngineCoreBlock` | `IMultiBlockEntityContainer` + form/split + PoleHelper 延伸放置 + Uninitialized 存档重组 | 低（照抄 CDG） |
 | P1 ✅ | 流体室 + 核心 tick | 燃料 datapack、罐 drain、fuelDebt、发电（4096/室、256rpm）+ 活塞动画 | 低 |
 | P2 ✅ | 蒸汽室 | 水 + 流体燃料（熔岩，burnTick 制，**固体燃料暂缓**）+ 暂停规则 + 活塞动画 | 中（双输入） |
-| P3 | 冷却/打磨 | 冷却计数与过热公式、Goggle（运行态/室数/燃料源/速率）、引擎声、缓存与脏标记优化 | 低 |
+| P3 | 温度/冷却 | 牛顿冷却温度模型（过热硬停+滞回）、冷却风道计数、冲压冷却（Sable 速度/气压复用）、Goggle 温度显示 | 中（跨 Sable 集成） |
 | P4 | Lua 外设 | `ccpe.engine` 外设（状态读 + 控制），按项目外设模式 | 中（末段） |
 
 ## 参考来源
