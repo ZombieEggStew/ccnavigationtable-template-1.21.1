@@ -1,0 +1,30 @@
+{
+  "variants": {
+    "facing=down": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/block",
+      "x": 180
+    },
+    "facing=east": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/block",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/block",
+      "x": 90
+    },
+    "facing=south": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/block",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/block"
+    },
+    "facing=west": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/block",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

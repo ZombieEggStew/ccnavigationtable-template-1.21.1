@@ -156,6 +156,14 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 蒸汽动力室（steam_power_chamber）：6 向贴附式方块，模式照抄流体燃烧室（见 SteamPowerChamberBlock）；音效对齐发动机核心（SoundType.NETHERITE_BLOCK） */
+    public static final DeferredBlock<SteamPowerChamberBlock> steam_power_chamber =
+            registerBlocks("steam_power_chamber", () -> new SteamPowerChamberBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(5.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {
         DeferredBlock<T> blocks = BLOCKS.register(name , block);
         MyModItems.registerBlockItems(name , blocks);

@@ -30,6 +30,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.aero_bearing);
                 output.accept(MyModBlocks.engine_core); // 发动机核心（Create 动力源骨架）
                 output.accept(MyModBlocks.fluid_combustion_chamber); // 流体燃烧室（活塞动态渲染）
+                output.accept(MyModBlocks.steam_power_chamber); // 蒸汽动力室（活塞动态渲染）
                 output.accept(MyModBlocks.static_port);
                 output.accept(MyModBlocks.pitot_tube);
                 output.accept(MyModBlocks.ins);

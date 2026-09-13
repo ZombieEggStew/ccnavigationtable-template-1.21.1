@@ -15,6 +15,7 @@
   "block.ccpe.aero_bearing": "Aero Bearing",
   "block.ccpe.engine_core": "Engine Core",
   "block.ccpe.fluid_combustion_chamber": "Fluid Combustion Chamber",
+  "block.ccpe.steam_power_chamber": "Steam Power Chamber",
   "block.ccpe.static_port": "Static Port",
   "block.ccpe.pitot_tube": "Pitot Tube",
   "block.ccpe.ins": "Inertial Navigation System",

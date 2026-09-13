@@ -14,6 +14,8 @@ import com.zzy205.myfirstmod.block.EngineCoreRenderer;
 import com.zzy205.myfirstmod.block.EngineCoreVisual;
 import com.zzy205.myfirstmod.block.FluidCombustionChamberRenderer;
 import com.zzy205.myfirstmod.block.FluidCombustionChamberVisual;
+import com.zzy205.myfirstmod.block.SteamPowerChamberRenderer;
+import com.zzy205.myfirstmod.block.SteamPowerChamberVisual;
 import com.zzy205.myfirstmod.block.TrailingWheelMountRenderer;
 import com.zzy205.myfirstmod.block.ControlDeskVisual;
 import com.zzy205.myfirstmod.block.ControlDeskRenderer;
@@ -151,6 +153,12 @@ public class CCPeripheralExtenderClient {
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
+        // 注册 Flywheel Visual（蒸汽动力室：活塞实例化渲染，同流体燃烧室模式）。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.steam_power_chamber_entity.get())
+                .factory(SteamPowerChamberVisual::new)
+                .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
         // 初始化自定义 PartialModel（参照 Create 的 AllPartialModels.init()）
         MyModPartialModels.init();
         event.enqueueWork(MonitorBackgrounds::reload);
@@ -191,6 +199,9 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.fluid_combustion_chamber_entity.get(),
                 FluidCombustionChamberRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.steam_power_chamber_entity.get(),
+                SteamPowerChamberRenderer::new);
     }
 
     @SubscribeEvent

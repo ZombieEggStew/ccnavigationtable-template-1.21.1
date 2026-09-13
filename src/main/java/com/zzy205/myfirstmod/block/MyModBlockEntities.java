@@ -30,6 +30,8 @@ public final class MyModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<EngineCoreBlockEntity>> engine_core_entity = BLOCK_ENTITY_TYPES.register("engine_core", () -> BlockEntityType.Builder.of(EngineCoreBlockEntity::new, MyModBlocks.engine_core.get()).build(null));
     /** 流体燃烧室 BE：轻量 BlockEntity（供 Flywheel/BER 读活塞状态，当前无动画） */
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FluidCombustionChamberBlockEntity>> fluid_combustion_chamber_entity = BLOCK_ENTITY_TYPES.register("fluid_combustion_chamber", () -> BlockEntityType.Builder.of(FluidCombustionChamberBlockEntity::new, MyModBlocks.fluid_combustion_chamber.get()).build(null));
+    /** 蒸汽动力室 BE：轻量 BlockEntity（同流体燃烧室模式） */
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SteamPowerChamberBlockEntity>> steam_power_chamber_entity = BLOCK_ENTITY_TYPES.register("steam_power_chamber", () -> BlockEntityType.Builder.of(SteamPowerChamberBlockEntity::new, MyModBlocks.steam_power_chamber.get()).build(null));
 
     public static void register(IEventBus bus) {
         BLOCK_ENTITY_TYPES.register(bus);
