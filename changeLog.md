@@ -97,3 +97,6 @@
 - `_analyze_flight6.py`: guarded the half-period / full-period calculation against an empty extrema list — short or strongly damped flights no longer raise `ZeroDivisionError`.
 - `_verify_pressure.py`: the hard-coded `_8_delaytest` detail log is now optional (skipped with a notice when missing) instead of failing the whole analysis.
 - Flight Data Recorder docs now consistently describe the actual **FMC/AIC/INS** scope (INS-only bodies are recorded too) and correct the "default on" wording to "default off": Config comment, class Javadoc, en_us / zh_cn tooltips, and both wiki pages.
+
+
+- 流体端口重量0.5kg->0.25kg
