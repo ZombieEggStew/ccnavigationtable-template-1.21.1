@@ -140,6 +140,14 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 发动机核心（engine_core）：Create 动力源方块骨架（AXIS X/Y/Z 三向 + 贯通传动杆，发电逻辑待后续模块接入，见 EngineCoreBlockEntity）；音效对齐 simulated:portable_engine（SoundType.NETHERITE_BLOCK） */
+    public static final DeferredBlock<EngineCoreBlock> engine_core =
+            registerBlocks("engine_core", () -> new EngineCoreBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(5.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {
         DeferredBlock<T> blocks = BLOCKS.register(name , block);
         MyModItems.registerBlockItems(name , blocks);

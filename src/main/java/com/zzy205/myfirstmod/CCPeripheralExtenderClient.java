@@ -10,6 +10,8 @@ import com.zzy205.myfirstmod.block.InsRenderer;
 import com.zzy205.myfirstmod.block.InsVisual;
 import com.zzy205.myfirstmod.block.AicRenderer;
 import com.zzy205.myfirstmod.block.AicVisual;
+import com.zzy205.myfirstmod.block.EngineCoreRenderer;
+import com.zzy205.myfirstmod.block.EngineCoreVisual;
 import com.zzy205.myfirstmod.block.TrailingWheelMountRenderer;
 import com.zzy205.myfirstmod.block.ControlDeskVisual;
 import com.zzy205.myfirstmod.block.ControlDeskRenderer;
@@ -133,6 +135,13 @@ public class CCPeripheralExtenderClient {
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
+        // 注册 Flywheel Visual（发动机核心：AXIS 两端半传动杆实例化渲染，贯通传动杆）。
+        // 方块本体由 blockstate 静态模型渲染，半轴是唯一动态部分，Flywheel 可用时跳过 vanilla BE 渲染。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.engine_core_entity.get())
+                .factory(EngineCoreVisual::new)
+                .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
         // 初始化自定义 PartialModel（参照 Create 的 AllPartialModels.init()）
         MyModPartialModels.init();
         event.enqueueWork(MonitorBackgrounds::reload);
@@ -167,6 +176,9 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.trailing_wheel_mount_entity.get(),
                 TrailingWheelMountRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.engine_core_entity.get(),
+                EngineCoreRenderer::new);
     }
 
     @SubscribeEvent
