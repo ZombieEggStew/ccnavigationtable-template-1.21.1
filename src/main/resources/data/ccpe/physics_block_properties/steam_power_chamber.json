@@ -1,0 +1,6 @@
+{
+  "selector": "ccpe:steam_power_chamber",
+  "properties": {
+    "sable:mass": 0.5
+  }
+}

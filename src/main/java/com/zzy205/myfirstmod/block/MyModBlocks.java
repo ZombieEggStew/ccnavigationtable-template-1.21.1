@@ -172,6 +172,14 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 冷却风道（cooling_duct）：6 面贴附 × 每面 2 旋转 = 12 态纯静态方块（无 BE，见 CoolingDuctBlock）；音效对齐发动机核心（SoundType.NETHERITE_BLOCK） */
+    public static final DeferredBlock<CoolingDuctBlock> cooling_duct =
+            registerBlocks("cooling_duct", () -> new CoolingDuctBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(5.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {
         DeferredBlock<T> blocks = BLOCKS.register(name , block);
         MyModItems.registerBlockItems(name , blocks);

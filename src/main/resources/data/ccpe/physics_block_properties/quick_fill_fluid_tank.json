@@ -1,0 +1,6 @@
+{
+  "selector": "ccpe:quick_fill_fluid_tank",
+  "properties": {
+    "sable:mass": 0.5
+  }
+}

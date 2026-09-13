@@ -1,0 +1,6 @@
+{
+  "selector": "ccpe:fluid_combustion_chamber",
+  "properties": {
+    "sable:mass": 0.5
+  }
+}
