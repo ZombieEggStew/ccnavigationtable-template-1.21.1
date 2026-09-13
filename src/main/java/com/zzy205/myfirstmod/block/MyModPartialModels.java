@@ -44,6 +44,8 @@ public class MyModPartialModels {
     public static final PartialModel INS_YAW = block("my_aero_sensor/ins/test");
     /** 航空集成计算机（AIC）：可旋转罗盘（以旋转中心为原点建模，渲染时平移到 COMPASS_POS 再旋转） */
     public static final PartialModel AIC_COMPASS = block("my_aero_sensor/aic/compass");
+    /** 流体燃烧室：活塞（动态部件，Flywheel/BER 叠加渲染，沿 FACING 方向伸出；腔体由 blockstate 静态模型渲染） */
+    public static final PartialModel FLUID_COMBUSTION_CHAMBER_PISTON = block("aero_engine/fluid_combustion_chamber/piston");
 
     private static PartialModel block(String path) {
         return PartialModel.of(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "block/" + path));

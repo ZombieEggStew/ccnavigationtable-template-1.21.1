@@ -12,6 +12,8 @@ import com.zzy205.myfirstmod.block.AicRenderer;
 import com.zzy205.myfirstmod.block.AicVisual;
 import com.zzy205.myfirstmod.block.EngineCoreRenderer;
 import com.zzy205.myfirstmod.block.EngineCoreVisual;
+import com.zzy205.myfirstmod.block.FluidCombustionChamberRenderer;
+import com.zzy205.myfirstmod.block.FluidCombustionChamberVisual;
 import com.zzy205.myfirstmod.block.TrailingWheelMountRenderer;
 import com.zzy205.myfirstmod.block.ControlDeskVisual;
 import com.zzy205.myfirstmod.block.ControlDeskRenderer;
@@ -142,6 +144,13 @@ public class CCPeripheralExtenderClient {
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
+        // 注册 Flywheel Visual（流体燃烧室：活塞实例化渲染，沿 FACING 方向伸出）。
+        // 腔体由 blockstate 静态模型渲染，活塞是唯一动态部分，Flywheel 可用时跳过 vanilla BE 渲染。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.fluid_combustion_chamber_entity.get())
+                .factory(FluidCombustionChamberVisual::new)
+                .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
         // 初始化自定义 PartialModel（参照 Create 的 AllPartialModels.init()）
         MyModPartialModels.init();
         event.enqueueWork(MonitorBackgrounds::reload);
@@ -179,6 +188,9 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.engine_core_entity.get(),
                 EngineCoreRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.fluid_combustion_chamber_entity.get(),
+                FluidCombustionChamberRenderer::new);
     }
 
     @SubscribeEvent

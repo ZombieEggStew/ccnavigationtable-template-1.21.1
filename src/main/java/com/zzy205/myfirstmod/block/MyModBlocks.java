@@ -148,6 +148,14 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 流体燃烧室（fluid_combustion_chamber）：6 向贴附式方块（blockstate 结构参考 fluid_port，见 FluidCombustionChamberBlock）；活塞由 Flywheel/BER 叠加渲染（当前无动画）；音效对齐发动机核心（SoundType.NETHERITE_BLOCK） */
+    public static final DeferredBlock<FluidCombustionChamberBlock> fluid_combustion_chamber =
+            registerBlocks("fluid_combustion_chamber", () -> new FluidCombustionChamberBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(5.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {
         DeferredBlock<T> blocks = BLOCKS.register(name , block);
         MyModItems.registerBlockItems(name , blocks);
