@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod;
 
 import com.mojang.logging.LogUtils;
 import com.tterrag.registrate.Registrate;
+import com.zzy205.myfirstmod.block.EngineFuels;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.block.TrailingWheelMountBlockEntity;
@@ -64,6 +65,9 @@ public class CCPeripheralExtender {
 
         // 注册全部自定义网络包（按功能域拆分在 network 包内）
         modEventBus.addListener(RegisterPayloadHandlersEvent.class, ModPackets::register);
+
+        // 引擎燃料表（engine_fuel/*.json）：服务端数据包重载时加载（P1，见 EngineFuels）
+        NeoForge.EVENT_BUS.addListener(EngineFuels::registerAddReloadListener);
 
         // 注册 CC:T 外设 capability（支持 peripheral.wrap / peripheral.find）
         modEventBus.addListener(RegisterCapabilitiesEvent.class, CCPeripheralCapabilities::register);

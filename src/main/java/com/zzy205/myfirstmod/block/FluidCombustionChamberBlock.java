@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
+import net.createmod.catnip.placement.PlacementHelpers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -42,6 +43,10 @@ import java.util.Map;
 public class FluidCombustionChamberBlock extends DirectionalBlock implements IWrenchable, EntityBlock {
 
     public static final MapCodec<FluidCombustionChamberBlock> CODEC = simpleCodec(FluidCombustionChamberBlock::new);
+
+    /** 贴附虚影助手 id：手持流体燃烧室对准引擎核心时显示虚影（见 ChamberAttachPlacementHelper） */
+    private static final int placementHelperId = PlacementHelpers.register(
+            new ChamberAttachPlacementHelper(stack -> stack.is(MyModBlocks.fluid_combustion_chamber.get().asItem())));
 
     /** 6 向选择框：up 未旋转盒 = 腔体 (0,0,0,16,8,16) + 顶沿 collar (2,8,2,14,10,14)；down x180；水平四向 = north 基准盒绕 Y 四向 */
     private static final Map<Direction, VoxelShape> SHAPES = buildShapes();

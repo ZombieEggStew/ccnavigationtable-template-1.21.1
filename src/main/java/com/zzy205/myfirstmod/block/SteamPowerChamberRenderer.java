@@ -35,8 +35,8 @@ public class SteamPowerChamberRenderer extends SafeBlockEntityRenderer<SteamPowe
         final Direction facing = be.getBlockState().getValue(SteamPowerChamberBlock.FACING);
         final Quaternionf base = SteamPowerChamberVisual.pistonOrientation(facing);
 
-        // 活塞滑动（沿 FACING 方向，最外层；当前 offset = 0）
-        final float offset = be.getPistonOffset();
+        // 活塞滑动（沿 FACING 方向，最外层；引擎运行时 ±2/16 正弦往复，见 SteamPowerChamberBlockEntity#getPistonOffset）
+        final float offset = be.getPistonOffset(partialTicks);
         final VertexConsumer vb = buffer.getBuffer(RenderType.solid());
         final SuperByteBuffer buf = CachedBuffers.partial(MyModPartialModels.STEAM_POWER_CHAMBER_PISTON,
                 be.getBlockState());

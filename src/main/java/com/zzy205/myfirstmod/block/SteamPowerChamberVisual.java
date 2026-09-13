@@ -41,11 +41,11 @@ public class SteamPowerChamberVisual extends AbstractBlockEntityVisual<SteamPowe
     }
 
     @Override
-    public void beginFrame(Context context) {
+    public void beginFrame(Context ctx) {
         Direction facing = blockEntity.getBlockState().getValue(SteamPowerChamberBlock.FACING);
 
-        // 活塞滑动（沿 FACING 方向；当前 offset = 0 无动画）
-        float offset = blockEntity.getPistonOffset();
+        // 活塞滑动（沿 FACING 方向；引擎运行时 ±2/16 正弦往复，见 SteamPowerChamberBlockEntity#getPistonOffset）
+        float offset = blockEntity.getPistonOffset(ctx.partialTick());
         if (offset == 0) {
             piston.position(getVisualPosition());
         } else {
