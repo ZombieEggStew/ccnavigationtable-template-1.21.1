@@ -109,6 +109,7 @@ Monitor 为可动显示器：水平 `facing` + 偏航（yaw，-180..180）+ 俯�
 | `block/FluidCombustionChamberBlockEntity.java` | 流体燃烧室 BE：轻量 `BlockEntity`（供 Visual/BER 读活塞状态）；`getPistonOffset()` 当前恒 0（无动画），后续客户端 tick 模拟活塞往复 | 燃烧室活塞动画接入 |
 | `block/FluidCombustionChamberVisual.java` / `block/FluidCombustionChamberRenderer.java` | 流体燃烧室渲染：腔体由 blockstate 静态模型渲染；**活塞 = 一个 `OrientedInstance`/SuperByteBuffer（PartialModel `FLUID_COMBUSTION_CHAMBER_PISTON`），默认 pivot 0.5 绕方块中心做 blockstate FACING 旋转**（四元数同 `AicBlockEntity.getBaseQuaternion`：`rotateYXZ(−y·rad, −x·rad, 0)`），活塞沿 FACING 方向伸出；参考 AicVisual/AicRenderer | 活塞渲染/朝向、未来动画平移 |
 | `block/SteamPowerChamberBlock.java` / `block/SteamPowerChamberBlockEntity.java` / `block/SteamPowerChamberVisual.java` / `block/SteamPowerChamberRenderer.java` | 蒸汽动力室（`ccpe:steam_power_chamber`）：**模式照抄流体燃烧室**（6 向贴附式 blockstate + 腔体静态渲染 + 活塞 Flywheel/BER 叠加，`getPistonOffset()` 占位 0；IWrenchable 默认扳手 + SoundType.NETHERITE_BLOCK） | 与流体燃烧室相同 |
+| `block/QuickFillFluidTankBlock.java` | 快速装填流体储罐（`ccpe:quick_fill_fluid_tank`）：**6 向贴附式纯静态方块**（无方块实体/无动态渲染，blockstate 结构照抄 fluid_port 去掉 OPEN；物品模型 = block 模型）；IWrenchable 默认扳手（潜行右键拆除掉包、右键无旋转）；音效对齐 fluid_port（SoundType.COPPER） | 储罐朝向/碰撞、blockstate `assets/ccpe/blockstates/quick_fill_fluid_tank.json` |
 
 ### 控制台模型布局（北向基准）
 

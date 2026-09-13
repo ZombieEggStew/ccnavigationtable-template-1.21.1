@@ -164,6 +164,14 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 快速装填流体储罐（quick_fill_fluid_tank）：6 向贴附式纯静态方块（无 BE，见 QuickFillFluidTankBlock）；音效对齐 fluid_port（SoundType.COPPER） */
+    public static final DeferredBlock<QuickFillFluidTankBlock> quick_fill_fluid_tank =
+            registerBlocks("quick_fill_fluid_tank", () -> new QuickFillFluidTankBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.COPPER).
+                    strength(5.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {
         DeferredBlock<T> blocks = BLOCKS.register(name , block);
         MyModItems.registerBlockItems(name , blocks);
