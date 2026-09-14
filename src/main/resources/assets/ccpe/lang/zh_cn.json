@@ -61,6 +61,8 @@
   "tooltip.ccpe.engine.temperature": "温度：",
   "tooltip.ccpe.engine.overheated": "过热停机！",
   "tooltip.ccpe.engine.efficiency": "效率：",
+  "tooltip.ccpe.engine.mixture": "混合比：",
+  "tooltip.ccpe.engine.mixture_actual": "高空实际：",
   "tooltip.ccpe.engine.lua_control": "Lua控制：",
   "tooltip.ccpe.engine.lua_connected": "已连接",
   "tooltip.ccpe.engine.lua_disconnected": "未连接",

@@ -74,7 +74,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>蒸汽动力室：水（1mb/s/室，从源罐 drain）+ 燃料（burnTick 制，1 tick 烧 1 个 burnTick，等价熔炉速率）——
  *       固体燃料从室邻居容器抽取（+物品 burnTime），流体燃料按 burn_ticks_per_bucket 从源罐抽；
  *       水不可用时暂停（不烧）；</li>
- *   <li>转速固定 {@link #GENERATED_SPEED} = 256；总容量 = 两类运行室贡献之和。</li>
+ *   <li>定距桨单杆模型（P4 定稿）：转速 = 油门 × {@link #GENERATED_SPEED}（0~256 线性，100% 油门 = 256rpm/满应力）；
+ *       总容量 = 两类运行室贡献之和 × 油门，与转速同比例缩放（过载比例不随油门变）。</li>
  * </ul>
  * 参考来源：CDG {@code ModularDieselEngineBlockEntity}；Create {@code ConnectivityHandler} / {@code IMultiBlockEntityContainer}。
  */
@@ -85,7 +86,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 调试日志开关：定位"引擎没反应"问题时置 true，定位后改回 false */
     public static boolean DEBUG = true;
 
-    /** 发电转速（RPM）：有运行中的燃烧室且燃料可用时输出（P1 起） */
+    /** 最大发电转速（RPM，油门 100% 时输出）；转速 = 油门 × GENERATED_SPEED（0~256 线性，定距桨模型） */
     public static final float GENERATED_SPEED = 256;
 
     /** 每个流体燃烧室的基础应力贡献（SU） */
@@ -190,6 +191,25 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 是否有电脑已连接本外设（Peripheral.attach/detach 维护；仅同步客户端供 Goggle 显示，不落盘） */
     protected boolean luaConnected = false;
 
+    // ---- P5：混合比（经济性/热管理杆 + 高空自动富油；方案见 memo/engine-module.md 关键机制 7）----
+    /** 混合比杆范围（setMixture 越界钳制） */
+    public static final float MIXTURE_MIN = 0.6f;
+    public static final float MIXTURE_MAX = 1.4f;
+    /** 自动富油系数（气压自变量）：1 + K×(1 − 气压)，钳制 [1, MIXTURE_ALT_MAX]。
+     *  气压 = getPressureForEngine(engineAltitude)（与冷却模型同源同曲线，海平面 1.0 → 高空降，Y=320 为 0）。
+     *  起步 K=0.45：Y≈200（云层）≈×1.19，Y≈260 ≈×1.25 达上限（游戏高度就 0~320，不能再按"10km"标定）。 */
+    public static final float MIXTURE_PRESSURE_K = 0.45f;
+    public static final float MIXTURE_ALT_MAX = 1.25f;
+    /** 热因子凸曲线：稀侧 1 + A×(1−m)²（加速惩罚防"永远拉稀"驻点），浓侧 1 − B×(m−1)（平缓收敛，下限 RICH_FLOOR） */
+    public static final float MIXTURE_LEAN_K = 2.0f;
+    public static final float MIXTURE_RICH_K = 0.5f;
+    public static final float MIXTURE_RICH_FLOOR = 0.7f;
+
+    /** 混合比杆（0.6~1.4，默认 1.0；只影响油耗与温度，不影响应力/转速）。NBT 持久化。 */
+    protected float mixture = 1.0f;
+    /** 服务端每 tick 的实际混合比（杆 × 高空自动富油），NBT 同步给客户端供 Goggle 显示——客户端无法可靠获得运动体真实高度，必须以服务端值为准 */
+    protected float lastEffectiveMixture = 1f;
+
     /** CC:T 外设实例（懒加载），不直接在 BE 上实现 IPeripheral 以避免 getType() 与 BlockEntity.getType() 冲突 */
     @Nullable
     private IPeripheral peripheral;
@@ -237,14 +257,19 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // P4：Lua 开关 enabled 与过热同为"整机停摆"门控（不发电不消耗）
         boolean heatAllowed = enabled && !overheated;
 
-        // 流体燃烧室（P1）：燃料表第一个可用流体；每室 consumption mb/s × 效率
+        // P5：混合比（实际 = 杆 × 高空自动富油；热因子凸曲线、与油耗反向——稀=省油但更热，浓=费油但降温）
+        float effectiveMixture = mixture * autoRichness();
+        lastEffectiveMixture = effectiveMixture;
+        float mixtureHeatFactor = heatFactor(effectiveMixture);
+
+        // 流体燃烧室（P1）：燃料表第一个可用流体；每室 consumption mb/s × 效率 × 混合比
         int runningFluid = 0;
         float fluidCapacity = 0;
         EngineFuels.Entry fluidFuel = heatAllowed ? findFuel(neighbors) : null;
         if (!scan.fluidChambers.isEmpty() && fluidFuel != null && !overstressed) {
             runningFluid = scan.fluidChambers.size();
             fluidCapacity = runningFluid * BASE_STRESS_PER_CHAMBER * fluidFuel.stress();
-            fuelDebt += runningFluid * fluidFuel.consumption() * efficiency / 20f;
+            fuelDebt += runningFluid * fluidFuel.consumption() * efficiency * effectiveMixture / 20f;
             while (fuelDebt >= 1f) {
                 if (drainFuel(1)) {
                     fuelDebt -= 1f;
@@ -267,9 +292,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             for (BlockPos sp : scan.steamChambers) {
                 if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
                     continue;
-                // 流体燃料：每 tick 每室消耗 1000/burn_ticks_per_bucket × 效率 mb（≈效率 个 burnTick/tick），
+                // 流体燃料：每 tick 每室消耗 1000/burn_ticks_per_bucket × 效率 × 混合比 mb（≈效率 个 burnTick/tick），
                 // 累计 ≥1mb 从源罐抽；每抽 1mb → burn_ticks_per_bucket/1000 个 burnTick（熔岩 20 tick/mb）
-                be.fluidFuelDebt += 1000f / steamFuel.burnTicksPerBucket() * efficiency;
+                be.fluidFuelDebt += 1000f / steamFuel.burnTicksPerBucket() * efficiency * effectiveMixture;
                 while (be.fluidFuelDebt >= 1f) {
                     if (drainSteamFluidFuel(1)) {
                         be.fluidFuelDebt -= 1f;
@@ -309,9 +334,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         float heat = 0;
         if (running && !overheated) {
             if (runningFluid > 0 && fluidFuel != null)
-                heat += runningFluid * efficiency * fluidFuel.heat() * BASE_HEAT_FLUID;
+                heat += runningFluid * efficiency * fluidFuel.heat() * BASE_HEAT_FLUID * mixtureHeatFactor;
             if (runningSteam > 0 && steamFuelEntry != null)
-                heat += runningSteam * efficiency * steamFuelEntry.heat() * BASE_HEAT_FLUID * STEAM_HEAT_FACTOR;
+                heat += runningSteam * efficiency * steamFuelEntry.heat() * BASE_HEAT_FLUID * STEAM_HEAT_FACTOR * mixtureHeatFactor;
         }
         float tAmb = ambientTemp();
         float kTotal = (K_CORE * length + K_AMBIENT * runningTotal + K_DUCT * scan.coolingDucts)
@@ -626,6 +651,24 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return Math.max(T_AMB_SEA - T_AMB_LAPSE * aboveSea, T_AMB_FLOOR);
     }
 
+    // ---- P5：混合比辅助（方案见 memo/engine-module.md 关键机制 7）----
+
+    /** 自动富油系数：实际混合比 = 杆 × autoRichness()。真实：化油器按进气体积配油 → 气压低（空气稀）→ 天然变浓 */
+    protected float autoRichness() {
+        double p = SensorSystemAPI.getPressureForEngine(engineAltitude());
+        return Mth.clamp(1f + MIXTURE_PRESSURE_K * (float) (1d - p), 1f, MIXTURE_ALT_MAX);
+    }
+
+    /**
+     * 混合比热因子（凸曲线，与油耗反向——核心矛盾：发热不能跟烧油量走，否则永远拉稀）：
+     * 稀侧 1 + A×(1−m)² 加速惩罚（防"永远拉稀"驻点），浓侧 1 − B×(m−1) 平缓收敛（富油吸热降温，下限 RICH_FLOOR）。
+     */
+    protected float heatFactor(float m) {
+        if (m < 1f)
+            return 1f + MIXTURE_LEAN_K * (1f - m) * (1f - m);
+        return Math.max(MIXTURE_RICH_FLOOR, 1f - MIXTURE_RICH_K * (m - 1f));
+    }
+
     /** 热容：C_TH_BASE × 节数（模块越大热得越慢） */
     protected float thermalCapacity() {
         return C_TH_BASE * Math.max(1, length);
@@ -732,7 +775,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      *   print(t.fluid, t.amount, t.remaining, t.capacity)
      * end
      * e.setEnabled(false)                    -- Lua 开关（默认 true；false = 整机停摆：不发电不消耗）
-     * e.setThrottle(0.5)                     -- 油门（效率 0..1；同时缩出力和热量和燃料消耗；0 = 停机）
+     * e.setThrottle(0.5)                     -- 油门（0..1；应力与转速同比例：50% = 半应力 + 128rpm；0 = 停机）
+     * e.setMixture(0.8)                      -- 混合比（0.6~1.4；只影响油耗与温度：稀=省油但更热，浓=费油但降温）
+     * e.getEffectiveMixture()                -- 实际混合比（杆 × 高空自动富油，气压驱动；高空 > 杆值）
      * }</pre>
      * 读方法 mainThread=false 直读 controller 缓存状态（每 tick 由 controller 刷新，最多滞后 1 tick）；
      * 写方法 / 需要扫描世界的 `getFluidTanks` 为 mainThread=true 服务端权威。
@@ -839,15 +884,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return true;
         }
 
-        /** 当前油门（效率 0..1；默认 0.25——静态无风道不过热的既有定标值） */
+        /** 当前油门（0..1；默认 0.25——静态无风道不过热的既有定标值）。定距桨单杆模型：转速 = 油门 × 256 */
         @LuaFunction
         public final double getThrottle() {
             return efficiency;
         }
 
         /**
-         * 设置油门（效率 0..1，越界钳制；非法参数返回 false）。
-         * 油门同时缩放出力、发热和燃料消耗（0 = 停机）；P3 起默认 0.25。
+         * 设置油门（0..1，越界钳制；非法参数返回 false）。
+         * 定距桨单杆模型（P4 定稿）：油门同时线性缩放<b>应力输出与转速</b>（100% = 满应力 + 256rpm，
+         * 50% = 半应力 + 128rpm，0 = 停机），发热与燃料消耗 ∝ 油门；与转速控制器组合不会产生作弊
+         * （预算 = 应力×转速 恒随油门缩放，外部变速无法放大）。
          */
         @LuaFunction(mainThread = true)
         public final boolean setThrottle(double value) {
@@ -858,6 +905,41 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 return true;
             efficiency = clamped;
             reActivateSource = true;
+            setChanged();
+            sendData();
+            return true;
+        }
+
+        /** 当前混合比杆（0.6~1.4，默认 1.0；只影响油耗与温度，不影响应力/转速） */
+        @LuaFunction
+        public final double getMixture() {
+            return mixture;
+        }
+
+        /**
+         * 当前<b>实际</b>混合比（杆 × 自动富油，服务端每 tick 计算）：
+         * 高空/低压下 > 杆值（天然变浓），可用作自动拉稀校正的反馈读数；海平面 = 杆值。
+         */
+        @LuaFunction
+        public final double getEffectiveMixture() {
+            return lastEffectiveMixture;
+        }
+
+        /**
+         * 设置混合比（0.6~1.4，越界钳制；非法参数返回 false）。
+         * P5 经济性/热管理杆：只影响<b>油耗</b>（×实际混合比）与<b>温度</b>（×凸热因子，与油耗反向）——
+         * 稀=省油但更热，浓=费油但降温；应力/转速完全不受影响。
+         * 高空自动富油：实际混合比 = 杆 × autoRichness（气压驱动，海平面 1.0，Y≈260 ≈×1.25 上限），
+         * 高空不拉稀 = 白烧油；可用 {@link #getEffectiveMixture()} 读实际值做自动校正。
+         */
+        @LuaFunction(mainThread = true)
+        public final boolean setMixture(double value) {
+            if (!Double.isFinite(value))
+                return false;
+            float clamped = (float) Mth.clamp(value, MIXTURE_MIN, MIXTURE_MAX);
+            if (Mth.equal(mixture, clamped))
+                return true;
+            mixture = clamped;
             setChanged();
             sendData();
             return true;
@@ -1042,6 +1124,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             efficiency = compound.getFloat("Efficiency");
         // P4：旧存档（P0–P3）无 Enabled 字段 → 默认开启，保持既有行为
         enabled = !compound.contains("Enabled") || compound.getBoolean("Enabled");
+        // P5：旧存档无 Mixture 字段 → 默认 1.0（海平面杆 1.0 = 现状）
+        mixture = compound.contains("Mixture") ? compound.getFloat("Mixture") : 1f;
+        // P5：实际混合比（服务端同步；旧存档/首个 tick 前 → 1.0）
+        lastEffectiveMixture = compound.contains("EffectiveMixture") ? compound.getFloat("EffectiveMixture") : 1f;
         // Lua 连接状态：磁盘加载无此字段 → false（服务端启动时无电脑挂载）；客户端包带真实值
         luaConnected = compound.getBoolean("LuaConnected");
 
@@ -1079,6 +1165,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putFloat("Temperature", temperature);
         compound.putFloat("Efficiency", efficiency);
         compound.putBoolean("Enabled", enabled);
+        compound.putFloat("Mixture", mixture);
+        // 实际混合比（含高空自动富油）服务端权威值，同步给客户端 Goggle 显示
+        compound.putFloat("EffectiveMixture", lastEffectiveMixture);
         // Lua 连接状态是运行时瞬态（电脑挂载），只同步客户端供 Goggle 显示，不落盘
         if (clientPacket)
             compound.putBoolean("LuaConnected", luaConnected);
@@ -1127,6 +1216,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.efficiency").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
+        // P5：混合比（杆值；高空自动富油使实际值不同时追加一行——实际值用服务端同步值，客户端无法可靠算运动体高度）
+        float mEff = lastEffectiveMixture;
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.mixture").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.format(Locale.ROOT, "%.2f", (double) mixture))
+                        .withStyle(ChatFormatting.AQUA)));
+        if (Math.abs(mEff - mixture) >= 0.005f)
+            tooltip.add(Component.literal("     ")
+                    .append(Component.translatable("tooltip.ccpe.engine.mixture_actual").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(String.format(Locale.ROOT, "%.2f", (double) mEff))
+                            .withStyle(ChatFormatting.GOLD)));
         // Lua 控制连接状态（Peripheral.attach/detach 维护，经 NBT 同步客户端）
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.lua_control").withStyle(ChatFormatting.GRAY))
@@ -1140,7 +1240,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public float getGeneratedSpeed() {
         if (!isController() || !running)
             return 0;
-        return GENERATED_SPEED;
+        // 定距桨模型（P4 定稿）：转速 = 油门 × 最大转速（0~256 线性；0 油门 = 停机）
+        return GENERATED_SPEED * efficiency;
     }
 
     /**

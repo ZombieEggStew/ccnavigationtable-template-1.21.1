@@ -1,6 +1,6 @@
 # 引擎模块（aero_engine：engine_core + 燃烧室 + 冷却风道）— 方案设计
 
-> 状态：**方案已定稿；P0 已实现并编译通过**（引擎核心排成一排 + 延伸放置 + 存档重组）；**P1 已实现并编译通过**（流体燃烧室烧水：JSON 燃料表、零缓存抽罐、发电 256rpm、Create STEAM 音效、活塞动画+对置/轴向交替相位）；**P2 已实现并编译通过**（蒸汽室：水 + 流体燃料熔岩 burnTick 制 + 活塞动画同款；固体燃料暂缓）；**P3 已实现并编译通过**（温度/冷却：牛顿冷却、过热硬停+滞回、效率同缩出力/热量/消耗、冷却风道计数、冲压冷却+Sable 气压/速度复用、Goggle 标题行+温度平滑外推显示、核心自身散热 K_CORE）；**P4 已实现并编译通过**（Lua 外设 `ccpe.engine`：enabled 开关 + throttle 油门 + getTemperature/isOverheated/getFluidTanks 状态读，外设挂在 controller，包裹任意核心节均委托到 controller；默认 enabled=true 保持既有行为，throttle=0 停机；Goggle 显示状态行 + Lua 控制连接行）。
+> 状态：**方案已定稿；P0 已实现并编译通过**（引擎核心排成一排 + 延伸放置 + 存档重组）；**P1 已实现并编译通过**（流体燃烧室烧水：JSON 燃料表、零缓存抽罐、发电 256rpm、Create STEAM 音效、活塞动画+对置/轴向交替相位）；**P2 已实现并编译通过**（蒸汽室：水 + 流体燃料熔岩 burnTick 制 + 活塞动画同款；固体燃料暂缓）；**P3 已实现并编译通过**（温度/冷却：牛顿冷却、过热硬停+滞回、效率同缩出力/热量/消耗、冷却风道计数、冲压冷却+Sable 气压/速度复用、Goggle 标题行+温度平滑外推显示、核心自身散热 K_CORE）；**P4 已实现并编译通过**（Lua 外设 `ccpe.engine`：enabled 开关 + throttle 油门（**定距桨单杆模型**：转速 = 油门×256 线性，0 油门=停机）+ getTemperature/isOverheated/getFluidTanks 状态读，外设挂在 controller，包裹任意核心节均委托到 controller；默认 enabled=true 保持既有行为；Goggle 显示状态行 + Lua 控制连接行）；**P5 已实现并编译通过**（混合比 mixture：`setMixture(0.6~1.4)` 经济性/热管理杆 + 高空自动富油 + 凸热曲线 + Goggle 混合比行，见「关键机制 7」）。
 > 设计封闭（本会话内用户确认）：蒸汽室=水+燃料（无蒸汽流体）、冷却风道=过热约束、各燃烧室独立配方可混烧、严格零流体缓存、固体燃料从周围容器自动抽取、水走 drain 管线、**无红石控制，末段做 Lua 控制**。
 > 实现前先读参考源码（见文末「参考来源」）。
 
@@ -9,11 +9,12 @@
 1. **引擎核心排成一排组成一个整体**：参考 CDG 模块化引擎（large_diesel_engine）——拿着引擎物品右键已有引擎，沿轴自动延伸放置（`PoleHelper`）；整条共享同一套运行状态。
 2. **引擎核心没有流体缓存**：自动从周围流体储罐中抽取所需流体（零内部缓存，直接 capability drain）。
 3. **燃烧室并入**：在核心周围放置燃烧室（蒸汽动力室 `steam_power_chamber` / 流体燃烧室 `fluid_combustion_chamber`）即并入引擎模块。
-4. **出力**：有可用燃料即启动；**流体燃烧室每室贡献 4096 应力（×燃料 stress 倍率），蒸汽动力室每室 3072**；引擎核心计算总应力，转速 **256**。
+4. **出力**：有可用燃料即启动；**流体燃烧室每室贡献 4096 应力（×燃料 stress 倍率），蒸汽动力室每室 3072**；引擎核心计算总应力，转速 = **油门 × 256**（0~256 线性，定距桨单杆模型）。
 5. **配方消耗**：按配方消耗流体（如 CDG 汽油：每个流体燃烧室 1mb/s）。
 6. **蒸汽室**：不直接消耗蒸汽，而是消耗原料——**水**（原版水，1mb/s/室）+ **燃料**（固体/流体均可，燃烧时长按原版熔炉 `burnTime`）。
 7. **冷却风道**：过热约束，不足则降效/停摆。
 8. **无红石控制**；控制最终通过 CC:Tweaked Lua 外设（末段阶段）。
+9. **混合比（P5）**：`setMixture(0.6~1.4)` 经济性/热管理杆——**只影响油耗与温度**（应力/转速不变）；自动富油（实际混合比 = 杆 × 气压系数，气压低 = 空气稀 = 天然变浓），拉稀省油但更热，富油费油但降温。
 
 ## 决策记录（用户确认）
 
@@ -22,13 +23,19 @@
 | 蒸汽来源 | 无"蒸汽流体"；蒸汽室吃原料：水 + 燃料 |
 | 水 | 原版水（minecraft:water），每蒸汽室 1mb/s，**从周围储罐 drain**（与流体燃料同一管线） |
 | 燃料效率 | 按原版熔炉 `burnTime`：固体物品 burnTime tick → 烧 burnTime/20 秒（煤=1600tick→80s）；流体按 datapack `burn_ticks_per_bucket`（熔岩桶 20000tick → 1000mB 烧 1000s） |
-| 冷却风道 | 过热约束：C 个**运行中**燃烧室需 ≥ ceil(C/N) 个冷却风道（N 默认 4）；不足则容量 × min(1, D/D_req)，**< 0.5 停摆**（0 风道=直接停） |
+| 冷却风道 | 过热约束：C 个**运行中**燃烧室需 ≥ ceil(C/N) 个冷却风道（N 默认 4）；不足则容量 × min(1, D/D_req)，**< 0.5 停摆**（0 风道=直接停）（**实现时被牛顿冷却取代**：风道 → 散热系数 K_DUCT，过热由温度滞回判定，见节 6；「容量×D/D_req、<0.5 停摆」未落地） |
 | 燃料规则 | **各燃烧室按自己配方独立消耗，可混烧**：流体室吃流体燃料、蒸汽室吃水+燃料，互不干扰 |
 | 流体缓存 | **严格零缓存**：所有消耗 = controller 每 tick 直接从源储罐 capability drain，无罐无液位显示 |
 | 固体燃料输入 | 从周围容器**自动抽取**（蒸汽室 6 邻居的 `IItemHandler`，`extractItem`），零 UI；可加 tag `ccpe:engine_fuel_sources` 白名单（默认不启用） |
 | 红石 | 不要；末段做 Lua 控制（见「Lua 控制」节） |
 | 过热行为 | T ≥ T_max 硬停（不烧油）；T ≤ 0.8×T_max（滞回）才允许重启，防启停振荡 |
-| 效率语义 | 效率 = 油门：**同时缩出力和热量和燃料消耗**（P4 Lua 控制；P3 默认 0.25——静态无风道不过热，现有无风道测试机继续可用） |
+| 效率语义 | 效率 = 油门（P4 定稿：**定距桨单杆模型**）：**线性缩放应力输出与转速**（100% = 满应力 + 256rpm，50% = 半应力 + 128rpm，0 = 停机）；发热/油耗 ∝ 油门；P3 默认 0.25——静态无风道不过热，现有无风道测试机继续可用（默认档转速 = 64rpm，多数机器可工作） |
+| 转速-油门耦合 | **转速 = 油门 × 256（0~256 线性）**；应力与转速同比例缩放 → 同一条网络**过载比例不随油门变**（定距桨特性：油门只改整体快慢）；外部转速控制器无法作弊（预算 = 应力×转速 恒随油门缩放，50% 油门 + ×2 变速 → 下游 256rpm 但预算减半 → 必过载） |
+| 混合比范围 | `setMixture(0.6~1.4)`，默认 1.0，NBT 持久化，引擎级（两类燃烧室统一生效）；油门 0 = 停机时混合比无意义 |
+| 混合比与功率 | **不影响应力/转速**（油门是唯一功率杆；混合比只管经济性与热管理） |
+| 混合比热曲线 | **凸曲线**（防"永远拉稀"驻点）：稀侧热惩罚加速上升 `×1+A(1−m)²`（A≈2.0 起步），浓侧平缓收敛 `×1−B(m−1)`（B≈0.5，下限 ~0.7） |
+| 自动富油 | **建模（方案 B，气压自变量）**：实际混合比 = 杆 × autoRichness(P)，P = `getPressureForEngine(高度)`（与冷却模型同源同曲线，海平面 1.0、Y=320 为 0）；`autoRichness = 1 + K×(1−P)` 钳 [1, 1.25]，K=0.45 起步 → Y≈200（云层）≈×1.19、Y≈260 ≈×1.25 达上限；高空不拉稀 = 白烧油（真实：化油器按进气体积配油，空气稀 → 天然变浓）。**不用高度线性标定——游戏高度仅 0~320 格，"10km"标定跑不满** |
+| 过稀失火 | 之后再加（加入计划，P5 后单独阶段；P5 先靠凸曲线防驻点） |
 | 蒸汽室热量 | 基础热比流体室**低 20%**（吃水 = 天然冷却） |
 | 冲压冷却 | **连续曲线**：10→30 m/s 线性爬升，30 m/s 达满（ram_max = 2.0） |
 
@@ -94,7 +101,9 @@ FuelType：datapack JSON（流体燃料表 + 蒸汽室流体燃料表 + 各室 p
 - **贴附虚影（P1 已实现）**：`ChamberAttachPlacementHelper`（`IPlacementHelper`，流体/蒸汽室共用）——手持燃烧室对准引擎核心时 catnip `PlacementClient` 自动渲染虚影（位置 = 核心点击面相邻格，FACING = 点击面，与放置一致）；右键放置走默认 BlockItem（`getStateForPlacement` 正好背贴核心），无需额外代码。
 - **固体燃料计时器**：水在才走（熔炉"产物满停烧"语义，避免白烧煤）；归零时 controller 从该室 6 邻居容器 `extractItem(slot,1,simulate)` 找第一个 `burnTime>0` 的物品，真实抽取 1 个，`burnTicks = burnTime`。**（暂缓：用户要求先做流体燃料；`tryPullSolidFuel` 保留未调用，恢复时在 burnTicks≤0 时先于流体燃料尝试）**
 
-### 4. 冷却过热（P3）
+### 4. 冷却过热（原草案，已被 P3 牛顿冷却取代）
+
+> 本节是 P3 初版草案（风道按「容量×D/D_req、<0.5 停摆」约束）。**实际实现改为牛顿冷却模型**：风道计入散热系数 K_DUCT、过热由温度滞回判定（见节 6）。本节仅保留作设计参考；其中"风道计数范围（核心成员 ∪ 燃烧室邻居）"沿用至今。
 
 - D = 贴在**任意核心成员或燃烧室**上的 `cooling_duct` blockstate 计数（无 BE，纯 blockstate 判定）。
 - C = **运行中**燃烧室数（停摆的室不产热、不占冷却）。
@@ -109,7 +118,10 @@ FuelType：datapack JSON（流体燃料表 + 蒸汽室流体燃料表 + 各室 p
   - `isOverheated()` → 是否过热锁定（T≥200 硬停，T≤160 滞回解锁）
   - `getFluidTanks()` → 数组：所有连接储罐（模块邻居中带流体能力的方块，含燃料/水源罐，经 seen 去重），每罐一项 `{fluid=流体id|nil, amount=当前量mb, remaining=剩余量mb, capacity=总量mb}`；mainThread=true 现场扫描模块邻居
   - `getEnabled()` / `setEnabled(bool)`：引擎开关（默认 true；setEnabled 返回是否发生变更）
-  - `getThrottle()` / `setThrottle(0~1)`：油门 = 效率（同时缩出力和热量和燃料消耗，越界钳制）；**0 = 停机**（不发电不烧油，与 setEnabled(false) 等效）
+  - `getThrottle()` / `setThrottle(0~1)`：油门（定距桨单杆）：**线性缩放应力输出与转速**（100% = 满应力+256rpm，50% = 半应力+128rpm），发热/油耗 ∝ 油门，越界钳制；**0 = 停机**（不发电不烧油，与 setEnabled(false) 等效）
+  - `getMixture()` / `setMixture(0.6~1.4)` / `getEffectiveMixture()`：混合比（P5，见节 7 与节 8 速查表）
+- **运行条件**（全部满足才发电）：≥1 运行中的燃烧室（流体室有燃料 / 蒸汽室有水+燃料）&& `enabled` && `efficiency>0` && 未过载 && 未过热锁定。停机原因：缺燃料/缺水、`setEnabled(false)`、油门 0、过载、过热（滞回 T≤160 才恢复）。
+- **变速/变容不会像 transmission_peripheral 那样出 flicker 问题**：引擎是源本身（Creative Motor 同款 `updateGeneratedRotation → applyNewSpeed` 路径），1~256 同向变速不触发 flicker 惩罚、无 `RotationPropagator.handleRemoved` 级联；唯一要避免的是高频启停（油门 0↔1 反复或过载临界振荡 = 零穿越 → flicker 惩罚，Create 自带兜底）。
 - 注：早期草案的 `getStatus`（running/speed/chamberCount/coolingFactor/fuelSources/consumptionRates 聚合表）与 `getCapacity` **未采用**，状态读改为按需单字段 + `getFluidTanks`——P3 实际为牛顿冷却（风道走散热系数 K_DUCT，无「容量 ×D/D_req」缩放），无 coolingFactor 可报。
 - 语义：Lua 是唯一控制入口（对应 CDG 的红石/模拟油门位，全部由 Lua 承担）。
 - 实施记录：实现按项目外设模式（`MyBearingBlockEntity` / `TransmissionPeripheralBlockEntity` 内嵌 Peripheral 类 + `CCPeripheralCapabilities` capability 注册）；Goggle 自定义信息 = **状态行**（正常 / 即将过热 T≥0.8×T_max / 过热，lang 键 `tooltip.ccpe.engine.status*`，红/金/绿三色）+ 温度行 + 效率行 + **Lua 控制连接行**（`Peripheral.attach/detach` 维护 `luaConnected`，NBT 仅同步客户端不落盘，lang 键 `tooltip.ccpe.engine.lua_*`）；已移除「已禁用（Lua）」行。
@@ -165,6 +177,113 @@ altitude    ：运动体取 getSubLevelWorldPos().y，静态取方块自身 Y
 - **Goggle**：Create overlay 把 tooltip **第一行当标题行**（后有间距）→ 首行加 `tooltip.ccpe.engine.header`（en_us/zh_cn 已加），内容行 5 空格缩进对齐 MyBearing 惯例；温度用 `displayedTemperature`（客户端平滑值）
 - **模块 tooltip 代理**：流体/蒸汽燃烧室与冷却风道方块实现 `IProxyHoveringInformation`，`getInformationSource` 经 `EngineCoreBlockEntity.engineControllerPos` 把 tooltip 源代理到整条引擎 controller——与看核心**完全共用**同一 tooltip（含无护目镜悬停的传动信息）；未连接核心时返回自身坐标 → 无 BE/goggle 信息 → 不显示
 
+### 7. 混合比 mixture（P5，已实现并编译通过）
+
+**现实依据**：化油器/机械燃油喷射按「进气**体积**」配油，发动机实际需要的是进气**质量**——高度升高空气密度降 → 同样体积油偏多 → 混合气**天然变浓（自动富油）**。混合比杆的真实职责 = **海拔补偿**（高空手动拉稀把多给的油补回来）。真实 CHT 与油量**反向**：富油 = 多余燃油汽化吸热（油多但缸温低），贫油 = 燃烧接近完全（油少但缸温高）。
+
+**核心矛盾（设计地基）**：发热**不能**跟「烧了多少油」走（否则拉稀 = 省油又降温 → 永远拉稀，机制塌掉）。必须**解耦且反向**：
+
+```
+油耗  ×= 实际混合比 m_eff          // 稀=省油，浓=费油
+发热  ×= heatFactor(m_eff)        // 与油反着走（凸曲线）
+```
+
+**模型公式**（已落地 controller tick；`engineAltitude()` 已有，移动装置取物理体原点高度，与冷却同源）：
+
+```
+autoRichness(P)  = 1 + K_P × (1 − P)，钳制 [1.0, 1.25]     // P = getPressureForEngine(engineAltitude)
+                                                           // （与冷却同源同曲线；海平面 1.0，Y≈260 ≈0.45 → ×1.25 达上限）
+                                                           // K_P = 0.45 起步：Y≈200（云层）≈×1.19
+m_eff            = 杆 × autoRichness(P)                    // 高空不拉稀 = 实际变浓 = 白烧油（真实）
+heatFactor(m)：
+   m < 1.0 : 1 + A×(1 − m)²       // 稀侧凸（A≈2.0 起步：m=0.8→×1.08，m=0.6→×1.32）
+   m ≥ 1.0 : 1 − B×(m − 1)        // 浓侧平缓（B≈0.5：m=1.3→×0.85，下限 ~0.7）
+
+油耗落地：fuelDebt += running × consumption × efficiency × m_eff / 20
+         蒸汽室流体  fluidFuelDebt += 1000/burn_ticks_per_bucket × efficiency × m_eff
+发热落地：heat += running × efficiency × fuel.heat × heatFactor(m_eff) × 类型基础热
+         水不受混合比影响（水是冷却剂/蒸汽原料，固定 1mb/s/室）
+应力/转速：完全不动（getGeneratedSpeed / capacity 与 P4 定距桨逐字节一致）
+```
+
+**P5 常量（当前值，进游戏可调）**：
+
+| 常量（代码名） | 值 | 说明 |
+|---|---|---|
+| `MIXTURE_MIN` / `MIXTURE_MAX` | 0.6 / 1.4 | 杆范围（setMixture 钳制） |
+| `MIXTURE_PRESSURE_K` | 0.45 | 自动富油：×K×(1−P)；Y≈200（云层）≈×1.19 |
+| `MIXTURE_ALT_MAX` | 1.25 | 自动富油上限（Y≈260 达上限，至 Y=320 维持） |
+| `MIXTURE_LEAN_K` | 2.0 | 稀侧凸惩罚 A（m=0.8→×1.08，m=0.6→×1.32） |
+| `MIXTURE_RICH_K` | 0.5 | 浓侧降温 B（m=1.3→×0.85） |
+| `MIXTURE_RICH_FLOOR` | 0.7 | 浓侧热因子下限 |
+
+**进游戏已验证**：定距桨油门（应力/转速同比例）、混合比油耗与温度变化、Goggle「高空实际」随高度同步——均正常。
+
+**设计张力（高空三方博弈）**——高空冷却本就更差（压力项主导，见节 6 高空结论），自动富油部分抵消：
+
+| 高空策略 | 油耗 | 温度 | 结果 |
+|---|---|---|---|
+| 不拉稀（杆=1.0，实际≈1.25） | 费油 | 偏凉（富油吸热） | 安全但浪费 |
+| 主动拉稀省油 | 省油 | 偏热 + 高空散热更差 | 高技巧高回报，双倍过热风险 |
+
+- **环境联动**：低空 + 高速（冲压 ×2）+ 风道 → 冷却富余 → 大胆拉稀省油；高空 / 静态 / 轻量化 → 富油买安全或降油门。Goggle 状态行（正常/即将过热）天然成为「混合比是否过稀」的仪表。
+- **富油是预防药不是急救药**：过热为滞回锁存（T≥200 硬停，≤160 解锁），已过热停机时拉富油不会立即重启。
+- **默认 = 现状**：海平面杆 = 1.0 时油耗/发热与 P3/P4 逐字节一致，不破坏既有定标与存档；高空自动富油是新增的「海拔成本」。
+- **玩家收益闭环**：轻量化设计（少风道/少水冷）用富油换安全（油费贵）；精良冷却（风道/冲压/低空高速）拉稀省油。同一引擎两种流派，与定距桨单杆正交。
+
+**实施要点（P5 已落地）**：
+- `mixture` 字段（默认 1.0），NBT 读写（同 efficiency 模式，旧存档无字段按 1.0）
+- Lua：`getMixture()` / `setMixture(0.6~1.4)`（mainThread=true，越界钳制，非法返回 false）；**不需要 reActivateSource**（混合比不影响转速/容量），setChanged+sendData 同步；**`getEffectiveMixture()`** 读实际混合比（杆 × 自动富油，服务端每 tick 计算，供自动拉稀校正反馈）
+- Goggle 新增「混合比」行（显示杆值，高空自动富油使实际值不同时追加「高空实际」行）；lang 键 `tooltip.ccpe.engine.mixture` / `.mixture_actual`
+- 凸曲线防「永远拉稀」驻点：最优混合比落在中间某处、随冷却能力变化（稀侧惩罚加速 → 极端不划算）
+- 过稀失火（**后续阶段**）：m_eff < 下限 → 随机断续掉功率/停摆，作为极端下限惩罚；P5 暂不做，靠凸曲线即可
+
+### 8. Lua API 速查与玩家行为（wiki 用：ccpe:engine）
+
+`peripheral.wrap("...")` 任意引擎核心节（外设挂在 controller）。读方法直读 controller 缓存（≤1 tick 滞后）；写方法与 `getFluidTanks` 为 mainThread=true 服务端权威。
+
+| 方法 | mainThread | 返回 | 说明 |
+|---|---|---|---|
+| `getTemperature()` | false | number | 温度 °C（服务端实时值；Goggle 显示客户端趋势外推平滑值，可能有 ≤1°C 差异） |
+| `isOverheated()` | false | boolean | 过热锁定（T≥200 硬停，T≤160 滞回解锁） |
+| `getFluidTanks()` | true | table[] | 所有连接储罐，每项 `{fluid=id\|nil, amount, remaining, capacity}`（mb） |
+| `getEnabled()` | false | boolean | 引擎开关（默认 true） |
+| `setEnabled(bool)` | true | boolean | 开关引擎（false = 整机停摆：不发电不消耗，温度自然冷却） |
+| `getThrottle()` | false | number | 油门 0..1（定距桨单杆：= 应力与转速因子） |
+| `setThrottle(x)` | true | boolean | 油门：应力与转速同比例（100%=满应力+256rpm、50%=半应力+128rpm、0=停机）；越界钳制，非法返回 false |
+| `getMixture()` | false | number | 混合比杆 0.6..1.4（默认 1.0） |
+| `setMixture(x)` | true | boolean | 混合比：只影响油耗（×实际混合比）与温度（×凸热因子）；稀=省油但更热、浓=费油但降温；越界钳制 |
+| `getEffectiveMixture()` | false | number | 实际混合比 = 杆 × 自动富油（气压驱动，高空 > 杆值；自动拉稀校正反馈用） |
+
+**Goggle 显示布局**（戴 Create 护目镜悬停任意引擎模块方块，模块 tooltip 代理到 controller）：
+
+```
+发动机状态                       ← 标题行（Create 视为首行，其后有间距）
+[Create 默认传动信息：转速/容量/应力]
+状态：正常 / 即将过热 / 过热     ← 绿/金/红（即将过热 = T≥0.8×T_max = 160°C）
+温度：XX.X°C                     ← 客户端趋势外推平滑值
+过热停机！                      （仅过热锁定，红）
+效率：25%                        ← 油门（AQUA）
+混合比：0.80                     ← 杆值（AQUA）
+高空实际：0.95                   （仅 |实际−杆|≥0.005 时，金）
+Lua控制：已连接 / 未连接          ← 绿/深灰
+```
+
+**玩家操作要点**：
+- 一个杆（油门）就够起飞：油门同时定应力与转速（定距桨）；转速不够带动机器时推油门。
+- 巡航省油：轻载 / 冷却富余（低空、高速冲压、多风道）时拉稀 `setMixture(0.6~1.0)`；冷却吃紧（高空、静态、轻量化）时富油 `setMixture(1.0~1.4)` 或降油门。
+- 高空不拉稀 = 白烧油（自动富油）；`getEffectiveMixture()` 可做自动拉稀校正闭环。
+
+### 9. 气压模型技术细节（wiki 用：空气模型来源）
+
+引擎冷却（`pressureFactor`）与混合比自动富油（`autoRichness`）共用**同一套气压模型**，来源 = Sable 的维度大气曲线：
+
+- **Sable 现成方法**：`DimensionPhysicsData.getAirPressure(Level, Vector3dc pos)` → `basePressure × BezierResourceFunction.evaluateFunction(pos.y())`（位置 + 维度感知；Sable 自己 `FloatingBlockData` 也用）。
+- **本 mod 的 `SensorSystemAPI.evaluatePressure(y)`**：**镜像同一条公式**（锚点间三次 Hermite `f(t)=((c·t+q)·t+l)·t+v1` + basePressure）作用在**静态曲线快照**上——因为 Lua API（`getPressureFromAltitude`/`getAltitudeFromPressure`）必须 `mainThread=false`（电脑线程零 Level 访问），且引擎要**无门控 + 高度自变量**（`getPressureForEngine(y)`，静态方块/任意机床可用）。公式与回退链与 Sable 严格一致。
+- **曲线**：维度数据包 `dimension_physics` 的锚点，分段三次 Hermite；主世界默认（basePressure=1.0，海平面 63）：(−38, 1.5)/(63, 1.0)/(263, 0.4493)/(280, 0.4198)/(320, 0)；Y=320 以上为 0（建筑高度上限无空气）。
+- **快照刷新时机**：服务器启动（按主世界）+ 放置/加载 FMC 或 AIC（`onLoad`）；`/reload` 维度数据包后需重放/重载 FMC/AIC。多维度共存时取最后一次加载的维度曲线。
+- **引擎侧用法**：`getPressureForEngine(engineAltitude())`——运动体高度 = `SableCompat.getSubLevelWorldPos().y`（冷却与混合比同源；客户端显示一律用服务端同步值，见踩坑记录 10）。
+
 ## 消耗模型
 
 | 输入 | 规则 |
@@ -183,26 +302,24 @@ altitude    ：运动体取 getSubLevelWorldPos().y，静态取方块自身 Y
 - `fluid`：流体 id；`consumption`：消耗速度（mb/s/室）；`heat`：发热倍率（P3 用过热，P1 只解析不消费）；`stress`：产生应力倍率（容量 = 燃烧室数 × 4096 × stress）；`priority`：可选，多燃料可用时的选择优先级（越大越优先）。
 - 燃料表只加载在服务端（`AddReloadListenerEvent`），客户端只消费同步的 `Running` 状态 → 无需同步燃料表。
 
-## controller tick 数据流
+## controller tick 数据流（当前实现：P1~P5）
 
 ```
-1. 枚举（缓存+脏标记）：
-   ├─ 燃烧室列表（按类型分：流体室/蒸汽室）
-   ├─ 冷却风道数 D（核心成员/燃烧室邻居 cooling_duct blockstate 计数）
-   └─ 可用流体源集合（capability 收集 + tag 过滤）
-2. 逐室评估（配方优先序）：
-   ├─ 流体室：燃料表第一个可用流体 → 运行
-   └─ 蒸汽室：水可用 且 燃料可用（计时器>0 / 能抽到固体 / 流体燃料命中）→ 运行
-3. C_active = 运行室数；D_req = ceil(C_active/N)；coolingFactor = min(1, D/D_req)
-   ├─ coolingFactor < 0.5 → 过热停摆（消耗也停）
-   └─ 否则 capacity = (流体室数 × 4096 × stress + 蒸汽室数 × 3072) × coolingFactor
-4. speed = (C_active>0 && !过热停) ? 256 : 0
-5. 消耗（每类输入一个 fuelDebt 累加器，≥1mb 才 drain）：
-   ├─ 水       ：蒸汽室数 × 1mb/s
-   ├─ 流体燃料X：烧X的室数 × rate_X
-   └─ 固体燃料 ：各蒸汽室计时器 1tick/1tick 递减（水在才走）
-6. isOverStressed → 跳过消耗（不白烧油，CDG 同款）
-7. 状态变化 → sendData（燃烧室 Visual 读父核心驱动活塞动画）
+1. 枚举：燃烧室列表（流体/蒸汽，按 FACING 反面贴核心归属，去重）+ 冷却风道数 D（blockstate）+ 去重邻居（源罐范围）
+2. 门控：enabled && !overheated（滞回）→ heatAllowed
+3. P5 混合比：m_eff = 杆 × autoRichness(气压)；heatFactor(m_eff)（凸曲线）
+4. 逐室评估：流体室（燃料表第一个可用）→ runningFluid；蒸汽室（水可用 && 燃料可用）→ runningSteam
+5. running = (runningFluid+runningSteam > 0) && !过载 && !过热 && enabled && efficiency>0
+6. speed = running ? 256×efficiency : 0（定距桨单杆：转速 = 油门×256）
+7. capacity = (流体室数×4096×stress + 蒸汽室数×3072) × efficiency（混合比不影响）
+8. 消耗（fuelDebt / fluidFuelDebt 累加器，≥1mb 才 drain，零缓存）：
+   ├─ 水       ：蒸汽室数 × 1mb/s × efficiency（混合比不影响水）
+   ├─ 流体燃料X：烧X的室数 × rate_X × efficiency × m_eff
+   └─ 蒸汽流体燃料：× efficiency × m_eff（burnTick 制，1 抽 1mb → burn_ticks_per_bucket/1000 tick）
+9. 过载（isOverStressed）→ 跳过消耗（不白烧油，CDG 同款）
+10. 温度（牛顿冷却）：Q_heat = Σ室×efficiency×燃料.heat×heatFactor(m_eff)×类型基础热；
+    K_total = (K_CORE×length + K_AMB×运行室 + K_DUCT×D) × ram(空速) × 气压因子；过热滞回 T≥200 硬停 / ≤160 解锁
+11. 状态变化 / 温度差量 ≥1°C → sendData（活塞动画读父核心运行态；温度客户端趋势外推显示）
 ```
 
 ## 边界清单（实现时逐条守住）
@@ -228,6 +345,7 @@ altitude    ：运动体取 getSubLevelWorldPos().y，静态取方块自身 Y
 7. **追赶式 lerp → 平台台阶**：温度显示初版向同步目标 lerp（20%/tick），包之间收敛完就"平台期"等下一包 → 视觉"爬一段→停→再爬"。修复：**趋势外推**（最近两采样点斜率继续走 + ±10°C 外推带钳制）。对比 simulated velocity_sensor 是**每 tick `sendData()`（20Hz）发包、客户端零插值**——"看起来平滑"靠 20Hz 高频刷新，代价是 20 包/秒/方块；我们低频差量 + 客户端外推，同视觉、1/20 带宽（Create ServerSpeedProvider 同思路）。
 8. **Sable 速度读取坑（复用现有结论）**：**不要裸读 `Sable.HELPER.getVelocity`**——内部 = ω×r + 裸读物理 handle，世界静止的机体上仍返回非零"幻影值"（约 −0.03 m/s，见 SensorSystemAPI 注释/FlightDataRecorder 诊断）。冷却模型用 `SableCompat.getWorldLinearVelocity(sub)`（Sable 每 tick pose 位置差分 ×20，静止严格 0）。
 9. **`overheated` 漏同步（P4 状态行暴露）**：`overheated` 是服务端滞回锁存，但 P3 的 NBT 同步**从未写/读该字段**——客户端恒 false → Goggle 状态行 T≥200 仍显示「即将过热」（走 `temperature≥0.8×T_max` 分支），温度行也不变红、「过热停机」行不出现。修复：`write()` 加 `putBoolean("Overheated", ...)`、`read()` 加对应读取（与 Running 同级无条件读写，随存档持久化）。**新增客户端要显示的服务端布尔状态，务必同时加 write/read 两处，并进游戏验证两种状态**。
+10. **客户端算高度 = 永远错误（P5 混合比显示暴露）**：Goggle「高空实际」初版在客户端调 `autoRichness()`（用 `engineAltitude()`）——Sable 子次元（运动体）上客户端拿不到真实世界高度（`SableCompat.getContainingSubLevel` 客户端返回 null → 回退 plot 局部坐标 Y≈64 → autoRichness≈1.0000x）→ 显示值恒等于混合比、不随飞行高度变（服务端其实在正确应用自动富油）。修复：服务端每 tick 把 `lastEffectiveMixture = mixture × autoRichness()` 同步进 NBT（`EffectiveMixture`），Goggle 直读同步值（与温度「服务端权威」同思路）；显示阈值 `|实际−杆| ≥ 0.005` 才显示（消除 2 位小数下无意义的相同值行）。**依赖真实高度的客户端显示，一律用服务端同步值，不要客户端自算**。
 
 ## 实施阶段
 
@@ -237,7 +355,8 @@ altitude    ：运动体取 getSubLevelWorldPos().y，静态取方块自身 Y
 | P1 ✅ | 流体室 + 核心 tick | 燃料 datapack、罐 drain、fuelDebt、发电（4096/室、256rpm）+ 活塞动画 | 低 |
 | P2 ✅ | 蒸汽室 | 水 + 流体燃料（熔岩，burnTick 制，**固体燃料暂缓**）+ 暂停规则 + 活塞动画 | 中（双输入） |
 | P3 ✅ | 温度/冷却 | 牛顿冷却温度模型（过热硬停+滞回）、效率同缩出力/热量/消耗、冷却风道计数、核心自身散热 K_CORE、冲压冷却+Sable 气压/速度复用、Goggle 标题行+温度趋势外推显示 | 中（跨 Sable 集成） |
-| P4 ✅ | Lua 外设 | `ccpe.engine` 外设（enabled/throttle 控制 + getStatus 状态读，挂 controller，包裹任意核心节委托；默认 enabled=true、throttle=0 停机） | 中（已落地） |
+| P4 ✅ | Lua 外设 | `ccpe.engine` 外设（enabled/throttle 控制 + getTemperature/isOverheated/getFluidTanks 状态读，挂 controller，包裹任意核心节委托；**定距桨单杆**：转速 = 油门×256，默认 enabled=true、throttle=0 停机） | 中（已落地） |
+| P5 ✅ | 混合比 | `setMixture(0.6~1.4)` 经济性/热管理杆（只影响油耗与温度）+ 自动富油（实际混合比 = 杆×气压系数，与冷却同曲线）+ 凸热曲线 + Goggle 混合比行 + `getEffectiveMixture`；过稀失火后续阶段 | 中（已落地，热曲线/气压系数待进游戏调） |
 
 ## 参考来源
 

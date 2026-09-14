@@ -61,6 +61,8 @@
   "tooltip.ccpe.engine.temperature": "Temperature:",
   "tooltip.ccpe.engine.overheated": "Overheated!",
   "tooltip.ccpe.engine.efficiency": "Efficiency:",
+  "tooltip.ccpe.engine.mixture": "Mixture:",
+  "tooltip.ccpe.engine.mixture_actual": "Actual at altitude:",
   "tooltip.ccpe.engine.lua_control": "Lua Control:",
   "tooltip.ccpe.engine.lua_connected": "Connected",
   "tooltip.ccpe.engine.lua_disconnected": "Not Connected",
