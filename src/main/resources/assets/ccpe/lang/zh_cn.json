@@ -54,9 +54,16 @@
   "tooltip.ccpe.aero_bearing.target_angle": "目标角度：",
 
   "tooltip.ccpe.engine.header": "发动机状态",
+  "tooltip.ccpe.engine.status": "状态：",
+  "tooltip.ccpe.engine.status.normal": "正常",
+  "tooltip.ccpe.engine.status.warning": "即将过热",
+  "tooltip.ccpe.engine.status.overheated": "过热",
   "tooltip.ccpe.engine.temperature": "温度：",
-  "tooltip.ccpe.engine.overheated": "过热停机！需加强冷却",
+  "tooltip.ccpe.engine.overheated": "过热停机！",
   "tooltip.ccpe.engine.efficiency": "效率：",
+  "tooltip.ccpe.engine.lua_control": "Lua控制：",
+  "tooltip.ccpe.engine.lua_connected": "已连接",
+  "tooltip.ccpe.engine.lua_disconnected": "未连接",
 
   "gui.ccpe.monitor.module_info": "%s 位于 (%s, %s) 尺寸 %s×%s",
   "gui.ccpe.monitor_menu.done": "完成",

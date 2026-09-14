@@ -9,6 +9,9 @@ import com.simibubi.create.foundation.blockEntity.IMultiBlockEntityContainer;
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.compat.cc.SensorSystemAPI;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
+import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.peripheral.IComputerAccess;
+import dan200.computercraft.api.peripheral.IPeripheral;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.createmod.catnip.nbt.NBTHelper;
 import net.createmod.catnip.platform.CatnipServices;
@@ -37,14 +40,18 @@ import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.items.IItemHandler;
 
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 发动机核心方块实体：Create 动力源骨架 + 多方块组网（P0）+ 燃烧发电（P1：流体燃烧室；P2：蒸汽动力室）。
@@ -177,6 +184,16 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     @OnlyIn(Dist.CLIENT)
     protected long lastTempSampleTime, newTempSampleTime;
 
+    // ---- P4：Lua 控制（ccpe.engine 外设，挂 controller；方案见 memo/engine-module.md 关键机制 5） ----
+    /** Lua 引擎开关（默认 true 保持 P0–P3 行为；false = 整机停摆：不发电、不消耗，温度自然冷却）。NBT 持久化。 */
+    protected boolean enabled = true;
+    /** 是否有电脑已连接本外设（Peripheral.attach/detach 维护；仅同步客户端供 Goggle 显示，不落盘） */
+    protected boolean luaConnected = false;
+
+    /** CC:T 外设实例（懒加载），不直接在 BE 上实现 IPeripheral 以避免 getType() 与 BlockEntity.getType() 冲突 */
+    @Nullable
+    private IPeripheral peripheral;
+
     /** 客户端：流体燃烧室活塞"噗嗤"音效池（每引擎一个，音量 = Config.ENGINE_FLUID_PUFF_VOLUME） */
     @OnlyIn(Dist.CLIENT)
     protected SoundPool fluidPistonSoundPool;
@@ -217,7 +234,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         } else if (temperature >= OVERHEAT_TEMP) {
             overheated = true;
         }
-        boolean heatAllowed = !overheated;
+        // P4：Lua 开关 enabled 与过热同为"整机停摆"门控（不发电不消耗）
+        boolean heatAllowed = enabled && !overheated;
 
         // 流体燃烧室（P1）：燃料表第一个可用流体；每室 consumption mb/s × 效率
         int runningFluid = 0;
@@ -283,7 +301,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
 
         int runningTotal = runningFluid + runningSteam;
-        running = runningTotal > 0 && !overstressed && !overheated;
+        // P4：enabled=false 或 throttle=0（效率=0）→ 停机（不发电；throttle=0 时容量/消耗/发热全为 0，避免"空转"假象）
+        running = runningTotal > 0 && !overstressed && !overheated && enabled && efficiency > 0f;
         moduleCapacity = (fluidCapacity + runningSteam * STEAM_STRESS_PER_CHAMBER) * efficiency;
 
         // ---- P3：温度更新（牛顿冷却） ----
@@ -683,6 +702,168 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return running;
     }
 
+    // ═══════════════ CC:T 外设（P4，Lua 控制；方案见 memo/engine-module.md 关键机制 5） ═══════════════
+
+    /**
+     * 获取此外设的 CC:T IPeripheral 实例（懒加载；非 controller 委托给整条引擎的 controller——
+     * 外设"挂在 controller"上，包裹任意核心节都返回同一外设实例）。
+     * <p>Capability 查询发生在主线程（CC 外设挂载路径：BlockCapabilityCache + ServerLevel.getBlockEntity），
+     * 此处跨 BE 解析 controller 是安全的；controller 暂不可达（拆解重组中）返回 null = 暂时无外设。</p>
+     * 注册见 {@code compat/cc/CCPeripheralCapabilities.java}。
+     */
+    @Nullable
+    public IPeripheral getPeripheral() {
+        if (!isController()) {
+            EngineCoreBlockEntity controllerBE = getControllerBE();
+            return controllerBE != null ? controllerBE.getPeripheral() : null;
+        }
+        if (peripheral == null)
+            peripheral = new Peripheral();
+        return peripheral;
+    }
+
+    /**
+     * 内嵌外设类（同 TransmissionPeripheralBlockEntity / MyBearingBlockEntity 模式）：引擎唯一控制入口（无红石）。
+     * <pre>{@code
+     * local e = peripheral.wrap("front")     -- 包裹任意引擎核心节（外设挂在整条引擎的 controller 上）
+     * print(e.getTemperature())              -- 温度（°C）
+     * print(e.isOverheated())                -- 过热锁定
+     * for _, t in ipairs(e.getFluidTanks()) do -- 所有连接储罐：fluid/amount/remaining/capacity
+     *   print(t.fluid, t.amount, t.remaining, t.capacity)
+     * end
+     * e.setEnabled(false)                    -- Lua 开关（默认 true；false = 整机停摆：不发电不消耗）
+     * e.setThrottle(0.5)                     -- 油门（效率 0..1；同时缩出力和热量和燃料消耗；0 = 停机）
+     * }</pre>
+     * 读方法 mainThread=false 直读 controller 缓存状态（每 tick 由 controller 刷新，最多滞后 1 tick）；
+     * 写方法 / 需要扫描世界的 `getFluidTanks` 为 mainThread=true 服务端权威。
+     * 电脑 attach/detach 发生在主线程（CC 外设挂载路径），在此维护 {@code luaConnected} 供 Goggle 显示。
+     */
+    private class Peripheral implements IPeripheral {
+        /** 当前连接的电脑集合（attach/detach 维护；非空 = Lua 控制已连接） */
+        private final Set<IComputerAccess> attachedComputers = ConcurrentHashMap.newKeySet();
+
+        @Override
+        public String getType() {
+            return "ccpe:engine";
+        }
+
+        @Override
+        public boolean equals(@Nullable IPeripheral other) {
+            if (this == other) return true;
+            if (other instanceof EngineCoreBlockEntity.Peripheral that) {
+                return EngineCoreBlockEntity.this.worldPosition
+                        .equals(EngineCoreBlockEntity.this.worldPosition);
+            }
+            return false;
+        }
+
+        @Override
+        public void attach(IComputerAccess computer) {
+            attachedComputers.add(computer);
+            updateLuaConnected();
+        }
+
+        @Override
+        public void detach(IComputerAccess computer) {
+            attachedComputers.remove(computer);
+            updateLuaConnected();
+        }
+
+        /** 把「是否有电脑连接」写入 BE 并同步客户端（供 Goggle 显示 Lua 控制连接状态） */
+        private void updateLuaConnected() {
+            boolean connected = !attachedComputers.isEmpty();
+            if (connected == luaConnected)
+                return;
+            luaConnected = connected;
+            setChanged();
+            sendData();
+        }
+
+        // ═══════════════ Lua API ═══════════════
+
+        /** 引擎温度（°C，服务端权威值；客户端 Goggle 显示的是趋势外推平滑值，此处为实时服务端值） */
+        @LuaFunction
+        public final double getTemperature() {
+            return temperature;
+        }
+
+        /** 是否过热锁定（T≥OVERHEAT_TEMP 硬停，T≤OVERHEAT_RESUME 滞回解锁） */
+        @LuaFunction
+        public final boolean isOverheated() {
+            return overheated;
+        }
+
+        /**
+         * 所有连接的流体储罐内容（模块邻居中带流体能力且方块 tag 过滤通过的方块，含燃料/水源罐，经 seen 去重）：
+         * 每个储罐一项：{@code fluid}（流体 id，空罐为 nil）、{@code amount}（当前量 mb）、
+         * {@code remaining}（剩余可装量 mb = capacity − amount）、{@code capacity}（总量 mb）。
+         * mainThread=true：需要现场扫描模块邻居并做 capability 查询。
+         */
+        @LuaFunction(mainThread = true)
+        public final List<Map<String, Object>> getFluidTanks() {
+            List<Map<String, Object>> tanks = new ArrayList<>();
+            for (BlockPos neighbor : scanModule().neighbors()) {
+                IFluidHandler handler = fluidHandlerAt(neighbor);
+                if (handler == null)
+                    continue;
+                for (int tank = 0; tank < handler.getTanks(); tank++) {
+                    FluidStack stack = handler.getFluidInTank(tank);
+                    Map<String, Object> entry = new LinkedHashMap<>();
+                    entry.put("fluid", stack.isEmpty() ? null
+                            : BuiltInRegistries.FLUID.getKey(stack.getFluid()).toString());
+                    entry.put("amount", (double) stack.getAmount());
+                    int capacity = handler.getTankCapacity(tank);
+                    entry.put("remaining", (double) Math.max(0, capacity - stack.getAmount()));
+                    entry.put("capacity", (double) capacity);
+                    tanks.add(entry);
+                }
+            }
+            return tanks;
+        }
+
+        /** 引擎开关（默认 true；false = 整机停摆：不发电、不消耗，温度自然冷却） */
+        @LuaFunction
+        public final boolean getEnabled() {
+            return enabled;
+        }
+
+        /** 开关引擎（Lua 唯一控制入口，无红石）。返回是否发生变更。 */
+        @LuaFunction(mainThread = true)
+        public final boolean setEnabled(boolean value) {
+            if (enabled == value)
+                return true;
+            enabled = value;
+            reActivateSource = true;
+            setChanged();
+            sendData();
+            return true;
+        }
+
+        /** 当前油门（效率 0..1；默认 0.25——静态无风道不过热的既有定标值） */
+        @LuaFunction
+        public final double getThrottle() {
+            return efficiency;
+        }
+
+        /**
+         * 设置油门（效率 0..1，越界钳制；非法参数返回 false）。
+         * 油门同时缩放出力、发热和燃料消耗（0 = 停机）；P3 起默认 0.25。
+         */
+        @LuaFunction(mainThread = true)
+        public final boolean setThrottle(double value) {
+            if (!Double.isFinite(value))
+                return false;
+            float clamped = (float) Mth.clamp(value, 0.0, 1.0);
+            if (Mth.equal(efficiency, clamped))
+                return true;
+            efficiency = clamped;
+            reActivateSource = true;
+            setChanged();
+            sendData();
+            return true;
+        }
+    }
+
     /** 重新组网：只有 controller 触发 formMulti（服务端执行，客户端直接跳过） */
     public void updateConnectivity() {
         updateConnectivity = false;
@@ -854,10 +1035,15 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (isController())
             length = compound.getInt("Height");
         running = compound.getBoolean("Running");
+        overheated = compound.getBoolean("Overheated");
         if (compound.contains("Temperature"))
             temperature = compound.getFloat("Temperature");
         if (compound.contains("Efficiency"))
             efficiency = compound.getFloat("Efficiency");
+        // P4：旧存档（P0–P3）无 Enabled 字段 → 默认开启，保持既有行为
+        enabled = !compound.contains("Enabled") || compound.getBoolean("Enabled");
+        // Lua 连接状态：磁盘加载无此字段 → false（服务端启动时无电脑挂载）；客户端包带真实值
+        luaConnected = compound.getBoolean("LuaConnected");
 
         if (!clientPacket)
             return;
@@ -889,8 +1075,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (isController())
             compound.putInt("Height", length);
         compound.putBoolean("Running", running);
+        compound.putBoolean("Overheated", overheated);
         compound.putFloat("Temperature", temperature);
         compound.putFloat("Efficiency", efficiency);
+        compound.putBoolean("Enabled", enabled);
+        // Lua 连接状态是运行时瞬态（电脑挂载），只同步客户端供 Goggle 显示，不落盘
+        if (clientPacket)
+            compound.putBoolean("LuaConnected", luaConnected);
     }
 
     /** Goggle 提示：非 controller 委托给 controller；首行标题（Create overlay 视为标题行，其后有间距）→ 内容整体下移一行 */
@@ -908,6 +1099,23 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
         boolean added = super.addToGoggleTooltip(tooltip, isPlayerSneaking);
 
+        // 状态行：正常 / 即将过热（T ≥ 0.8×T_max）/ 过热锁定
+        String statusKey;
+        ChatFormatting statusColor;
+        if (overheated) {
+            statusKey = "tooltip.ccpe.engine.status.overheated";
+            statusColor = ChatFormatting.RED;
+        } else if (temperature >= OVERHEAT_TEMP * 0.8f) {
+            statusKey = "tooltip.ccpe.engine.status.warning";
+            statusColor = ChatFormatting.GOLD;
+        } else {
+            statusKey = "tooltip.ccpe.engine.status.normal";
+            statusColor = ChatFormatting.GREEN;
+        }
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.status").withStyle(ChatFormatting.GRAY))
+                .append(Component.translatable(statusKey).withStyle(statusColor)));
+
         float shownTemp = level != null && level.isClientSide ? displayedTemperature : temperature;
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.temperature").withStyle(ChatFormatting.GRAY))
@@ -919,6 +1127,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.efficiency").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
+        // Lua 控制连接状态（Peripheral.attach/detach 维护，经 NBT 同步客户端）
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.lua_control").withStyle(ChatFormatting.GRAY))
+                .append(Component.translatable(luaConnected ? "tooltip.ccpe.engine.lua_connected"
+                        : "tooltip.ccpe.engine.lua_disconnected")
+                        .withStyle(luaConnected ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)));
         return true;
     }
 

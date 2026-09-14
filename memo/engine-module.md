@@ -1,6 +1,6 @@
 # 引擎模块（aero_engine：engine_core + 燃烧室 + 冷却风道）— 方案设计
 
-> 状态：**方案已定稿；P0 已实现并编译通过**（引擎核心排成一排 + 延伸放置 + 存档重组）；**P1 已实现并编译通过**（流体燃烧室烧水：JSON 燃料表、零缓存抽罐、发电 256rpm、Create STEAM 音效、活塞动画+对置/轴向交替相位）；**P2 已实现并编译通过**（蒸汽室：水 + 流体燃料熔岩 burnTick 制 + 活塞动画同款；固体燃料暂缓）；**P3 已实现并编译通过**（温度/冷却：牛顿冷却、过热硬停+滞回、效率同缩出力/热量/消耗、冷却风道计数、冲压冷却+Sable 气压/速度复用、Goggle 标题行+温度平滑外推显示、核心自身散热 K_CORE）；**P4 待做**（Lua 外设 ccpe.engine，控制效率）。
+> 状态：**方案已定稿；P0 已实现并编译通过**（引擎核心排成一排 + 延伸放置 + 存档重组）；**P1 已实现并编译通过**（流体燃烧室烧水：JSON 燃料表、零缓存抽罐、发电 256rpm、Create STEAM 音效、活塞动画+对置/轴向交替相位）；**P2 已实现并编译通过**（蒸汽室：水 + 流体燃料熔岩 burnTick 制 + 活塞动画同款；固体燃料暂缓）；**P3 已实现并编译通过**（温度/冷却：牛顿冷却、过热硬停+滞回、效率同缩出力/热量/消耗、冷却风道计数、冲压冷却+Sable 气压/速度复用、Goggle 标题行+温度平滑外推显示、核心自身散热 K_CORE）；**P4 已实现并编译通过**（Lua 外设 `ccpe.engine`：enabled 开关 + throttle 油门 + getTemperature/isOverheated/getFluidTanks 状态读，外设挂在 controller，包裹任意核心节均委托到 controller；默认 enabled=true 保持既有行为，throttle=0 停机；Goggle 显示状态行 + Lua 控制连接行）。
 > 设计封闭（本会话内用户确认）：蒸汽室=水+燃料（无蒸汽流体）、冷却风道=过热约束、各燃烧室独立配方可混烧、严格零流体缓存、固体燃料从周围容器自动抽取、水走 drain 管线、**无红石控制，末段做 Lua 控制**。
 > 实现前先读参考源码（见文末「参考来源」）。
 
@@ -100,14 +100,19 @@ FuelType：datapack JSON（流体燃料表 + 蒸汽室流体燃料表 + 各室 p
 - C = **运行中**燃烧室数（停摆的室不产热、不占冷却）。
 - `D_req = ceil(C/N)`（N 默认 4）；`coolingFactor = min(1, D/D_req)`；容量 × coolingFactor；**coolingFactor < 0.5 → 整机停摆**（消耗也停）。
 
-### 5. Lua 控制（末段，设计草案）
+### 5. Lua 控制（P4，已实现：ccpe.engine 外设，挂 controller）
 
-- 无红石状态；`enabled()` 改为 Lua 可控（后续接入项目现有 CC 外设基建）。
-- 外设草案（`ccpe.engine`，挂 controller）：
-  - 状态读：`getStatus()` → running / speed / capacity / chamberCount / coolingFactor / fuelSources / consumptionRates
-  - 控制：`setEnabled(bool)`、`setThrottle(0~1)`（可选）
-  - 语义：Lua 是唯一控制入口（对应 CDG 的红石/模拟油门位，全部由 Lua 承担）
-- 待末段阶段按项目外设模式（参考 `my_bearing` 的 CC 外设控制、`transmission_peripheral`、`short-range link`）细化。
+- 无红石状态；`enabled` 是 Lua 专属开关（**默认 true** 保持 P0–P3 行为；false = 整机停摆：不发电、不消耗，温度自然冷却；NBT 持久化，旧存档无该字段按开启处理）。
+- 接入方式：`compat/cc/CCPeripheralCapabilities` 把 `engine_core` 注册为 CC:T 外设（`PeripheralCapability`），`peripheral.wrap` 直接包裹任意核心节；**非 controller 经 `getPeripheral()` 委托到整条引擎 controller**（Capability 查询发生在主线程——CC 外设挂载路径 BlockCapabilityCache + ServerLevel.getBlockEntity，跨 BE 取 controller 安全）。外设类型 `ccpe:engine`。
+- Lua API（读方法 mainThread=false 直读 controller 缓存状态，≤1 tick 滞后；`getFluidTanks` 与写方法 mainThread=true 服务端权威）：
+  - `getTemperature()` → 温度 °C（服务端权威值；Goggle 显示的是客户端趋势外推平滑值，两者可能略有差异）
+  - `isOverheated()` → 是否过热锁定（T≥200 硬停，T≤160 滞回解锁）
+  - `getFluidTanks()` → 数组：所有连接储罐（模块邻居中带流体能力的方块，含燃料/水源罐，经 seen 去重），每罐一项 `{fluid=流体id|nil, amount=当前量mb, remaining=剩余量mb, capacity=总量mb}`；mainThread=true 现场扫描模块邻居
+  - `getEnabled()` / `setEnabled(bool)`：引擎开关（默认 true；setEnabled 返回是否发生变更）
+  - `getThrottle()` / `setThrottle(0~1)`：油门 = 效率（同时缩出力和热量和燃料消耗，越界钳制）；**0 = 停机**（不发电不烧油，与 setEnabled(false) 等效）
+- 注：早期草案的 `getStatus`（running/speed/chamberCount/coolingFactor/fuelSources/consumptionRates 聚合表）与 `getCapacity` **未采用**，状态读改为按需单字段 + `getFluidTanks`——P3 实际为牛顿冷却（风道走散热系数 K_DUCT，无「容量 ×D/D_req」缩放），无 coolingFactor 可报。
+- 语义：Lua 是唯一控制入口（对应 CDG 的红石/模拟油门位，全部由 Lua 承担）。
+- 实施记录：实现按项目外设模式（`MyBearingBlockEntity` / `TransmissionPeripheralBlockEntity` 内嵌 Peripheral 类 + `CCPeripheralCapabilities` capability 注册）；Goggle 自定义信息 = **状态行**（正常 / 即将过热 T≥0.8×T_max / 过热，lang 键 `tooltip.ccpe.engine.status*`，红/金/绿三色）+ 温度行 + 效率行 + **Lua 控制连接行**（`Peripheral.attach/detach` 维护 `luaConnected`，NBT 仅同步客户端不落盘，lang 键 `tooltip.ccpe.engine.lua_*`）；已移除「已禁用（Lua）」行。
 
 ### 6. 温度与过热冷却（P3，已实现）
 
@@ -222,6 +227,7 @@ altitude    ：运动体取 getSubLevelWorldPos().y，静态取方块自身 Y
 6. **停机温度定格（P3）**：散热项 `K_AMB×N` 绑定"**运行中**室数"——停机后 N=0、无风道时 K_total=0 → 温度冻结。修复：加 `K_CORE×length`（核心自身辐射，τ≈50s），停机仍缓慢降温。**冷却公式的"自然散热"项不能只挂在运行状态上**。
 7. **追赶式 lerp → 平台台阶**：温度显示初版向同步目标 lerp（20%/tick），包之间收敛完就"平台期"等下一包 → 视觉"爬一段→停→再爬"。修复：**趋势外推**（最近两采样点斜率继续走 + ±10°C 外推带钳制）。对比 simulated velocity_sensor 是**每 tick `sendData()`（20Hz）发包、客户端零插值**——"看起来平滑"靠 20Hz 高频刷新，代价是 20 包/秒/方块；我们低频差量 + 客户端外推，同视觉、1/20 带宽（Create ServerSpeedProvider 同思路）。
 8. **Sable 速度读取坑（复用现有结论）**：**不要裸读 `Sable.HELPER.getVelocity`**——内部 = ω×r + 裸读物理 handle，世界静止的机体上仍返回非零"幻影值"（约 −0.03 m/s，见 SensorSystemAPI 注释/FlightDataRecorder 诊断）。冷却模型用 `SableCompat.getWorldLinearVelocity(sub)`（Sable 每 tick pose 位置差分 ×20，静止严格 0）。
+9. **`overheated` 漏同步（P4 状态行暴露）**：`overheated` 是服务端滞回锁存，但 P3 的 NBT 同步**从未写/读该字段**——客户端恒 false → Goggle 状态行 T≥200 仍显示「即将过热」（走 `temperature≥0.8×T_max` 分支），温度行也不变红、「过热停机」行不出现。修复：`write()` 加 `putBoolean("Overheated", ...)`、`read()` 加对应读取（与 Running 同级无条件读写，随存档持久化）。**新增客户端要显示的服务端布尔状态，务必同时加 write/read 两处，并进游戏验证两种状态**。
 
 ## 实施阶段
 
@@ -231,7 +237,7 @@ altitude    ：运动体取 getSubLevelWorldPos().y，静态取方块自身 Y
 | P1 ✅ | 流体室 + 核心 tick | 燃料 datapack、罐 drain、fuelDebt、发电（4096/室、256rpm）+ 活塞动画 | 低 |
 | P2 ✅ | 蒸汽室 | 水 + 流体燃料（熔岩，burnTick 制，**固体燃料暂缓**）+ 暂停规则 + 活塞动画 | 中（双输入） |
 | P3 ✅ | 温度/冷却 | 牛顿冷却温度模型（过热硬停+滞回）、效率同缩出力/热量/消耗、冷却风道计数、核心自身散热 K_CORE、冲压冷却+Sable 气压/速度复用、Goggle 标题行+温度趋势外推显示 | 中（跨 Sable 集成） |
-| P4 | Lua 外设 | `ccpe.engine` 外设（状态读 + 控制），按项目外设模式 | 中（末段） |
+| P4 ✅ | Lua 外设 | `ccpe.engine` 外设（enabled/throttle 控制 + getStatus 状态读，挂 controller，包裹任意核心节委托；默认 enabled=true、throttle=0 停机） | 中（已落地） |
 
 ## 参考来源
 
