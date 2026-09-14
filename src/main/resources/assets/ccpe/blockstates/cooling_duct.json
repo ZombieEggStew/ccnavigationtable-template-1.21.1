@@ -1,49 +1,53 @@
 {
   "variants": {
-    "facing=down,roll=0": {
+    "axis_along_first=false,facing=down": {
       "model": "ccpe:block/aero_engine/cooling_duct/block",
       "x": 180
     },
-    "facing=down,roll=1": {
+    "axis_along_first=false,facing=east": {
+      "model": "ccpe:block/aero_engine/cooling_duct/block_v",
+      "y": 90
+    },
+    "axis_along_first=false,facing=north": {
+      "model": "ccpe:block/aero_engine/cooling_duct/block_v"
+    },
+    "axis_along_first=false,facing=south": {
+      "model": "ccpe:block/aero_engine/cooling_duct/block_v",
+      "y": 180
+    },
+    "axis_along_first=false,facing=up": {
+      "model": "ccpe:block/aero_engine/cooling_duct/block"
+    },
+    "axis_along_first=false,facing=west": {
+      "model": "ccpe:block/aero_engine/cooling_duct/block_v",
+      "y": 270
+    },
+    "axis_along_first=true,facing=down": {
       "model": "ccpe:block/aero_engine/cooling_duct/block",
       "x": 180,
       "y": 90
     },
-    "facing=east,roll=0": {
-      "model": "ccpe:block/aero_engine/cooling_duct/block_v",
+    "axis_along_first=true,facing=east": {
+      "model": "ccpe:block/aero_engine/cooling_duct/block",
+      "x": 90,
       "y": 90
     },
-    "facing=east,roll=1": {
-      "model": "ccpe:block/aero_engine/cooling_duct/block_v",
-      "y": 90
+    "axis_along_first=true,facing=north": {
+      "model": "ccpe:block/aero_engine/cooling_duct/block",
+      "x": 90
     },
-    "facing=north,roll=0": {
-      "model": "ccpe:block/aero_engine/cooling_duct/block_v"
-    },
-    "facing=north,roll=1": {
-      "model": "ccpe:block/aero_engine/cooling_duct/block_v"
-    },
-    "facing=south,roll=0": {
-      "model": "ccpe:block/aero_engine/cooling_duct/block_v",
+    "axis_along_first=true,facing=south": {
+      "model": "ccpe:block/aero_engine/cooling_duct/block",
+      "x": 90,
       "y": 180
     },
-    "facing=south,roll=1": {
-      "model": "ccpe:block/aero_engine/cooling_duct/block_v",
-      "y": 180
-    },
-    "facing=up,roll=0": {
-      "model": "ccpe:block/aero_engine/cooling_duct/block"
-    },
-    "facing=up,roll=1": {
+    "axis_along_first=true,facing=up": {
       "model": "ccpe:block/aero_engine/cooling_duct/block",
       "y": 90
     },
-    "facing=west,roll=0": {
-      "model": "ccpe:block/aero_engine/cooling_duct/block_v",
-      "y": 270
-    },
-    "facing=west,roll=1": {
-      "model": "ccpe:block/aero_engine/cooling_duct/block_v",
+    "axis_along_first=true,facing=west": {
+      "model": "ccpe:block/aero_engine/cooling_duct/block",
+      "x": 90,
       "y": 270
     }
   }

@@ -1,12 +1,14 @@
 package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
+import com.simibubi.create.api.equipment.goggles.IProxyHoveringInformation;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import net.createmod.catnip.placement.PlacementHelpers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.DirectionalBlock;
 import net.minecraft.world.level.block.EntityBlock;
@@ -40,7 +42,7 @@ import java.util.Map;
  * 扳手：{@link IWrenchable} 默认处理（同 AIC/FMC）——潜行右键拆除并掉包；右键无旋转操作
  * （默认 {@code getRotatedBlockState} 不处理原版 {@code FACING}，如需旋转行为再覆写）。
  */
-public class FluidCombustionChamberBlock extends DirectionalBlock implements IWrenchable, EntityBlock {
+public class FluidCombustionChamberBlock extends DirectionalBlock implements IWrenchable, EntityBlock, IProxyHoveringInformation {
 
     public static final MapCodec<FluidCombustionChamberBlock> CODEC = simpleCodec(FluidCombustionChamberBlock::new);
 
@@ -120,6 +122,16 @@ public class FluidCombustionChamberBlock extends DirectionalBlock implements IWr
     @Override
     public @Nullable BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
         return new FluidCombustionChamberBlockEntity(pos, state);
+    }
+
+    /**
+     * goggle tooltip 代理：燃烧室贴附在引擎核心上时，共享整条引擎的 tooltip（与看核心完全相同，
+     * 含无护目镜悬停的传动信息）；未贴附任何核心（独立放置）时返回自身（无 goggle/hover 信息 → 不显示）。
+     */
+    @Override
+    public BlockPos getInformationSource(Level level, BlockPos pos, BlockState state) {
+        BlockPos controller = EngineCoreBlockEntity.engineControllerPos(level, pos);
+        return controller != null ? controller : pos;
     }
 
     @Override

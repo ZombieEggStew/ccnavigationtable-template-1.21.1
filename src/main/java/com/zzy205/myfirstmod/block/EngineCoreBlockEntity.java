@@ -23,6 +23,8 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.DirectionalBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -323,6 +325,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /**
      * 扫描本条引擎（全部成员）：统计贴附的流体/蒸汽燃烧室（仅计入背面 FACING 反方向正贴核心的，
      * 避免双计），并收集模块全部邻居（core 成员 ∪ 燃烧室，去重）——水和流体燃料的源罐查找范围。
+     * 冷却风道计数范围 = 贴在核心成员 ∪ 燃烧室上（blockstate 计数，经 seen 去重防重复计）。
      */
     protected ModuleScan scanModule() {
         List<BlockPos> fluidChambers = new ArrayList<>();
@@ -351,11 +354,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 addNeighbor(seen, neighbors, neighbor);
             }
         }
-        // 燃烧室自己的邻居（罐/容器可能贴着燃烧室）
+        // 燃烧室自己的邻居（罐/容器可能贴着燃烧室；冷却风道贴在燃烧室旁同样计入冷却）
         for (BlockPos chamber : fluidChambers)
-            addNeighbors(seen, neighbors, chamber);
+            coolingDucts += scanChamberNeighbors(seen, neighbors, chamber);
         for (BlockPos chamber : steamChambers)
-            addNeighbors(seen, neighbors, chamber);
+            coolingDucts += scanChamberNeighbors(seen, neighbors, chamber);
         return new ModuleScan(fluidChambers, steamChambers, neighbors, coolingDucts);
     }
 
@@ -367,6 +370,21 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     private void addNeighbors(Set<BlockPos> seen, List<BlockPos> list, BlockPos pos) {
         for (Direction dir : Direction.values())
             addNeighbor(seen, list, pos.relative(dir));
+    }
+
+    /**
+     * 扫描 pos（燃烧室）的 6 邻居：冷却风道计入冷却计数（返回新计入数，经 seen 去重防核心/燃烧室间重复计），
+     * 其余邻居并入模块邻居列表（水和流体燃料的源罐/容器查找范围）。
+     */
+    private int scanChamberNeighbors(Set<BlockPos> seen, List<BlockPos> neighbors, BlockPos pos) {
+        int ducts = 0;
+        for (Direction dir : Direction.values()) {
+            BlockPos neighbor = pos.relative(dir);
+            if (level.getBlockState(neighbor).is(MyModBlocks.cooling_duct.get()) && seen.add(neighbor))
+                ducts++;
+            addNeighbor(seen, neighbors, neighbor);
+        }
+        return ducts;
     }
 
     /** 找流体燃烧室当前可用燃料：优先复用缓存的源罐；失效则按优先级全量重扫（带冷却） */
@@ -674,6 +692,50 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         BlockEntity be = level.getBlockEntity(controller);
         if (be instanceof EngineCoreBlockEntity)
             return (EngineCoreBlockEntity) be;
+        return null;
+    }
+
+    /**
+     * 从引擎任一模块方块位置（核心成员 / 燃烧室 / 冷却风道）解析整条引擎 controller 坐标；
+     * 该方块不属于任何已组网引擎（未连接核心）时返回 null。
+     * <p>供模块方块（燃烧室 / 冷却风道）的 goggle tooltip 代理使用（{@code IProxyHoveringInformation}）。</p>
+     */
+    public static BlockPos engineControllerPos(Level level, BlockPos modulePos) {
+        // 方块本身是核心成员
+        if (level.getBlockEntity(modulePos) instanceof EngineCoreBlockEntity)
+            return controllerOfCoreAt(level, modulePos);
+
+        // 燃烧室：背面（FACING 反方向）= 贴附的核心
+        BlockState state = level.getBlockState(modulePos);
+        if (state.is(MyModBlocks.fluid_combustion_chamber.get()) || state.is(MyModBlocks.steam_power_chamber.get())) {
+            Direction facing = state.getValue(DirectionalBlock.FACING);
+            return controllerOfCoreAt(level, modulePos.relative(facing.getOpposite()));
+        }
+
+        // 冷却风道：与冷却计数同范围（核心成员 ∪ 燃烧室邻居）
+        for (Direction dir : Direction.values()) {
+            BlockPos neighbor = modulePos.relative(dir);
+            BlockState ns = level.getBlockState(neighbor);
+            if (ns.is(MyModBlocks.engine_core.get())) {
+                BlockPos controller = controllerOfCoreAt(level, neighbor);
+                if (controller != null)
+                    return controller;
+            } else if (ns.is(MyModBlocks.fluid_combustion_chamber.get()) || ns.is(MyModBlocks.steam_power_chamber.get())) {
+                Direction facing = ns.getValue(DirectionalBlock.FACING);
+                BlockPos controller = controllerOfCoreAt(level, neighbor.relative(facing.getOpposite()));
+                if (controller != null)
+                    return controller;
+            }
+        }
+        return null;
+    }
+
+    /** 核心成员位置 → 整条引擎 controller 坐标；该位置不是核心或 controller 不可达时返回 null */
+    private static BlockPos controllerOfCoreAt(Level level, BlockPos corePos) {
+        if (level.getBlockEntity(corePos) instanceof EngineCoreBlockEntity core) {
+            EngineCoreBlockEntity controller = core.getControllerBE();
+            return controller != null ? controller.getBlockPos() : null;
+        }
         return null;
     }
 

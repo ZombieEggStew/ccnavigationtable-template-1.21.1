@@ -95,7 +95,7 @@ FuelType：datapack JSON（流体燃料表 + 蒸汽室流体燃料表 + 各室 p
 
 ### 4. 冷却过热（P3）
 
-- D = 贴在**任意核心成员**上的 `cooling_duct` blockstate 计数（无 BE，纯 blockstate 判定）。
+- D = 贴在**任意核心成员或燃烧室**上的 `cooling_duct` blockstate 计数（无 BE，纯 blockstate 判定）。
 - C = **运行中**燃烧室数（停摆的室不产热、不占冷却）。
 - `D_req = ceil(C/N)`（N 默认 4）；`coolingFactor = min(1, D/D_req)`；容量 × coolingFactor；**coolingFactor < 0.5 → 整机停摆**（消耗也停）。
 
@@ -153,10 +153,11 @@ altitude    ：运动体取 getSubLevelWorldPos().y，静态取方块自身 Y
 - `temperature` 存 controller NBT 持久化；`efficiency` 字段默认 0.25（P4 Lua 控制）
 - **效率=油门，出力和热量和消耗同缩**：`capacity = Σ室×base×efficiency`、`fuelDebt += ...×efficiency`、蒸汽室 burnTicks 改为 **float** 每 tick 减 efficiency（25% 效率下 1 个 burnTick 烧 4 tick，燃料耐用 4 倍）
 - 燃料 JSON 的 `heat` 字段 P3 接入 Q_heat
-- 冷却风道计数沿用模块扫描（贴在核心成员，blockstate 计数，无 BE）
+- 冷却风道计数沿用模块扫描（贴在核心成员**或燃烧室**，blockstate 计数，无 BE；与储罐抽油同范围）
 - 过载（isOverStressed）与过热独立：过载停烧照旧；过热是温度机制（滞回锁定 `overheated`）
 - **温度同步（性能最优方案）**：服务端权威 → 差量发包（≥1°C 才 `sendData`，约 1/20 频率）→ 客户端**趋势外推**显示（最近两采样点斜率继续走 + ±10°C 外推带钳制，`displayedTemperature`）。对比 simulated velocity_sensor 每 tick `sendData()` 20Hz 发包换"看起来平滑"——我们同视觉效果、1/20 带宽（见踩坑记录 7）
 - **Goggle**：Create overlay 把 tooltip **第一行当标题行**（后有间距）→ 首行加 `tooltip.ccpe.engine.header`（en_us/zh_cn 已加），内容行 5 空格缩进对齐 MyBearing 惯例；温度用 `displayedTemperature`（客户端平滑值）
+- **模块 tooltip 代理**：流体/蒸汽燃烧室与冷却风道方块实现 `IProxyHoveringInformation`，`getInformationSource` 经 `EngineCoreBlockEntity.engineControllerPos` 把 tooltip 源代理到整条引擎 controller——与看核心**完全共用**同一 tooltip（含无护目镜悬停的传动信息）；未连接核心时返回自身坐标 → 无 BE/goggle 信息 → 不显示
 
 ## 消耗模型
 
@@ -181,7 +182,7 @@ altitude    ：运动体取 getSubLevelWorldPos().y，静态取方块自身 Y
 ```
 1. 枚举（缓存+脏标记）：
    ├─ 燃烧室列表（按类型分：流体室/蒸汽室）
-   ├─ 冷却风道数 D（核心成员邻居 cooling_duct blockstate 计数）
+   ├─ 冷却风道数 D（核心成员/燃烧室邻居 cooling_duct blockstate 计数）
    └─ 可用流体源集合（capability 收集 + tag 过滤）
 2. 逐室评估（配方优先序）：
    ├─ 流体室：燃料表第一个可用流体 → 运行
