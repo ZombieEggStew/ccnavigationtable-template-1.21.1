@@ -88,7 +88,7 @@ FuelType：datapack JSON（流体燃料表 + 蒸汽室流体燃料表 + 各室 p
 - **逐室评估**（每 tick）：
   - 流体室：datapack 燃料表**第一个可用流体**（源罐中有）→ 运行；消耗 rate mb/s/室。
   - 蒸汽室：**水可用 且 燃料可用**（固体：计时器>0 或能从容器抽到；流体：燃料表命中且源罐有）→ 运行。
-- **动画**：燃烧室 Visual 每帧直接读父核心"是否运行"字段（客户端 1 次方块查询/帧），不推送。**P1 已实现（流体室）**：`FluidCombustionChamberBlockEntity#getPistonOffset(partialTick)` —— 父引擎（FACING 反方向贴的核心，经 getControllerBE 解析整条 controller）运行时，活塞沿 FACING 方向 ±2/16 块正弦往复（`PISTON_STROKE=2/16`、`PISTON_PERIOD=8tick`），停止时回中间位；Visual/Renderer 用 partialTick 平滑插值。
+- **动画**：燃烧室 Visual 每帧直接读父核心"是否运行"字段（客户端 1 次方块查询/帧），不推送。**P1 已实现（流体室，P2 同款）**：`FluidCombustionChamberBlockEntity#getPistonOffset(partialTick)` —— 父引擎（FACING 反方向贴的核心，经 getControllerBE 解析整条 controller）运行时，活塞沿 FACING 方向 ±2/16 块正弦往复（`PISTON_STROKE=2/16`），**角度随引擎输出转速推进**（照 Create SteamEngine `getTargetAngle`：每 tick 推进 `speed×3/10` 度，1 圈 = 1 往复 → 动画速度与转速挂钩；停机回中间位）；Visual/Renderer 用 partialTick 平滑插值。
 - **性能现状（P1）**：燃烧室计数为每 tick 全量扫描 blockstate（length×6 次，短排无压力）；**脏标记缓存（neighborChanged 置脏 → 只重建一次列表）列为最后优化（P3）**，不提前做。
 - **贴附虚影（P1 已实现）**：`ChamberAttachPlacementHelper`（`IPlacementHelper`，流体/蒸汽室共用）——手持燃烧室对准引擎核心时 catnip `PlacementClient` 自动渲染虚影（位置 = 核心点击面相邻格，FACING = 点击面，与放置一致）；右键放置走默认 BlockItem（`getStateForPlacement` 正好背贴核心），无需额外代码。
 - **固体燃料计时器**：水在才走（熔炉"产物满停烧"语义，避免白烧煤）；归零时 controller 从该室 6 邻居容器 `extractItem(slot,1,simulate)` 找第一个 `burnTime>0` 的物品，真实抽取 1 个，`burnTicks = burnTime`。**（暂缓：用户要求先做流体燃料；`tryPullSolidFuel` 保留未调用，恢复时在 burnTicks≤0 时先于流体燃料尝试）**

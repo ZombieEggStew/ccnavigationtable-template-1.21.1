@@ -19,7 +19,9 @@ import net.minecraft.world.level.block.state.BlockState;
  * 水不可用时 controller 暂停消耗（burnTicks 冻结，不烧燃料）。burnTicks 持久化到 NBT。
  * <p>
  * <b>客户端（活塞动画）</b>：父引擎（FACING 反方向贴的核心）运行时，活塞伸出量在
- * ±{@link #PISTON_STROKE}（±2/16 块，默认模型活塞在中间位）间按游戏时间正弦往复；停止时回中间位。
+ * ±{@link #PISTON_STROKE}（±2/16 块，默认模型活塞在中间位）间正弦往复；<b>角度随引擎输出转速推进</b>
+ * （照 Create SteamEngine：每 tick 推进 speed×3/10 度，1 圈 = 1 往复，动画速度与转速挂钩）；
+ * 停止时回中间位。
  * 相位规则同流体燃烧室（方案 B）：对置面差半周期 + 沿引擎轴向相邻核心交替。
  * <p>
  * 参考来源：{@code FluidPortBlockEntity}（普通 BlockEntity，无 Create SmartBlockEntity 依赖）。
@@ -28,8 +30,6 @@ public class SteamPowerChamberBlockEntity extends BlockEntity {
 
     /** 活塞行程半幅（块）：默认模型活塞在中间位，往复 ±2/16 */
     public static final float PISTON_STROKE = 2f / 16f;
-    /** 活塞往复周期（tick，一个完整往返） */
-    public static final float PISTON_PERIOD = 8f;
 
     /** 剩余燃烧时长（burnTick 制，float 支持效率小数递减；服务端，仅 controller 读写；持久化） */
     public float burnTicks = 0f;
@@ -59,26 +59,26 @@ public class SteamPowerChamberBlockEntity extends BlockEntity {
 
     /**
      * 活塞伸出量（块单位，沿活塞轴 = FACING 方向）：引擎运行时在 ±{@link #PISTON_STROKE} 间正弦往复，
-     * 停止时为 0（模型中间位）。客户端按游戏时间 + partialTick 计算，无服务端状态。
+     * 停止时为 0（模型中间位）。角度随引擎输出转速推进（每 tick speed×3/10 度，1 圈 = 1 往复），
+     * 动画速度与转速挂钩；客户端按游戏时间 + partialTick 计算，无服务端状态。
      */
     public float getPistonOffset(float partialTick) {
         Direction facing = getBlockState().getValue(SteamPowerChamberBlock.FACING);
         BlockPos parent = worldPosition.relative(facing.getOpposite());
-        if (!isEngineRunning(parent))
+        EngineCoreBlockEntity controller = engineController(parent);
+        if (controller == null || !controller.isRunning())
             return 0;
-        float phase = (float) ((level.getGameTime() + partialTick) / PISTON_PERIOD * Math.PI * 2)
-                + directionPhase(facing)
-                + axisParityPhase(parent);
+        float angle = (float) ((level.getGameTime() + partialTick) * controller.getSpeed() * 3f / 10)
+                % 360 / 180f * (float) Math.PI;
+        float phase = angle + directionPhase(facing) + axisParityPhase(parent);
         return (float) (Math.sin(phase) * PISTON_STROKE);
     }
 
-    /** 父引擎（FACING 反方向贴的核心）是否在运行：解析到整条引擎 controller 读 running（客户端同步状态） */
-    protected boolean isEngineRunning(BlockPos parent) {
-        if (level.getBlockEntity(parent) instanceof EngineCoreBlockEntity core) {
-            EngineCoreBlockEntity controller = core.getControllerBE();
-            return controller != null && controller.isRunning();
-        }
-        return false;
+    /** 父引擎（FACING 反方向贴的核心）整条引擎 controller；未贴核心返回 null */
+    protected EngineCoreBlockEntity engineController(BlockPos parent) {
+        if (level.getBlockEntity(parent) instanceof EngineCoreBlockEntity core)
+            return core.getControllerBE();
+        return null;
     }
 
     /** 对置相位偏移：负方向贴附面返回 π，正方向返回 0（对置面 = 方向取反 → 相差 π） */
