@@ -150,8 +150,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 蒸汽室基础热倍率（P3 旧模型：吃水 = 天然冷却，比流体室低 20%）——P6 Plan B 已退役：
      *  蒸汽温度改为「运行中钉在 BOILER_T_OPT」的自调节模型（燃料热量用于产汽=功率而非升温），此倍率不再参与温度计算 */
     public static final float STEAM_HEAT_FACTOR = 0.8f;
-    /** 蒸汽锅炉暖机收敛速率（1/s）：运行中有水时温度向 BOILER_T_OPT 收敛（τ≈1s，3~4s 到设计点） */
-    public static final float STEAM_WARMUP_RATE = 1.0f;
+    /** 蒸汽锅炉升温速率（1/s）：点火时温度向 BOILER_T_OPT 指数收敛（τ=4s；20→100°C 阈值约 4s，~20s 基本到设计点）。进游戏可调 */
+    public static final float STEAM_WARMUP_RATE = 0.25f;
+    /** 蒸汽机最低工作温度（°C）：低于此值锅炉压力不足，无法驱动（暖机阶段只烧不发电）；高于才「开始工作」。
+     *  真实：饱和蒸汽 <100°C 无蒸汽压力（常压沸点） */
+    public static final float STEAM_MIN_WORK_TEMP = 100f;
     /** 环境散热系数（°C/s/°C/室）——静态 eff25% 不过热 ⇒ K_AMB ≥ 0.25×H0/ΔT_max */
     public static final float K_AMBIENT = 0.05f;
     /** 每个整合气道散热系数（°C/s/°C）——静态 eff50% + 1风道/室 ⇒ K_AMB+K_DUCT ≥ 0.5×H0/ΔT_max */
@@ -225,6 +228,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /** 当前是否蒸汽引擎（tick 仲裁后：模块燃烧室为蒸汽型；流体/蒸汽物理排斥 → 互斥）。服务端权威，NBT 同步客户端供 Goggle。 */
     protected boolean steamEngine = false;
+    /** 蒸汽暖机中（tick 服务端计算：点火燃烧但温度 < STEAM_MIN_WORK_TEMP，只烧不发电）。NBT 同步客户端供 Goggle。 */
+    protected boolean warmingUp = false;
     /** 是否已装整合气道（tick 扫描；P6 门控：解锁经济区/拉稀权/风门）。NBT 同步客户端。 */
     protected boolean hasAirDuct = false;
     /** 服务端每 tick 的当前经济系数（0.8~1.0；无整合气道/停机 → 1.0），NBT 同步客户端 Goggle 显示 */
@@ -384,17 +389,22 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
 
         int runningTotal = runningFluid + runningSteam;
+        // P6 Plan B：蒸汽锅炉暖机门控——T ≥ STEAM_MIN_WORK_TEMP 才「开始工作」（低于阈值只烧不发电，热机过程）
+        boolean steamReady = !steamEngine || temperature >= STEAM_MIN_WORK_TEMP;
         // P4：enabled=false 或 throttle=0（效率=0）→ 停机（不发电；throttle=0 时容量/消耗/发热全为 0，避免"空转"假象）
-        running = runningTotal > 0 && !overstressed && !overheated && enabled && efficiency > 0f;
-        moduleCapacity = (fluidCapacity + runningSteam * STEAM_STRESS_PER_CHAMBER) * efficiency;
+        running = runningTotal > 0 && steamReady && !overstressed && !overheated && enabled && efficiency > 0f;
+        moduleCapacity = (fluidCapacity + (steamReady ? runningSteam : 0) * STEAM_STRESS_PER_CHAMBER) * efficiency;
 
         // ---- P3/P6 Plan B：温度更新 ----
         float tAmb = ambientTemp();
         if (steamEngine) {
-            // 蒸汽 = 闭式锅炉：运行中有水 → 收敛并钉在 BOILER_T_OPT（饱和温度；燃料热量用于产汽=功率而非升温，
-            // 与气压/环境/冲压无关，永不过热——缺水 = 停烧，waterOk 门控已预先防干烧）；
-            // 停机 → 牛顿冷却缓慢降温（K_CORE 自散热）。
-            if (running && waterOk) {
+            // 蒸汽 = 闭式锅炉：点火燃烧（runningSteam>0，含暖机阶段）→ 温度指数收敛到 BOILER_T_OPT
+            // （饱和温度；燃料热量用于产汽=功率而非升温，与气压/环境/冲压无关，永不过热——
+            //  缺水 = 停烧，waterOk 门控已预先防干烧；暖机 = T < STEAM_MIN_WORK_TEMP 只烧不发电）；
+            // 停火 → 牛顿冷却缓慢降温（K_CORE 自散热）。
+            // 注意：runningSteam 计的是「有燃料储备（burnTicks>0）的室」；油门 0（efficiency=0）时 burnTicks 冻结、
+            // 不抽油，必须加 efficiency>0 才视为点火——否则「不转不耗油但温度钉住」。
+            if (runningSteam > 0 && efficiency > 0f) {
                 temperature += (BOILER_T_OPT - temperature) * STEAM_WARMUP_RATE / 20f;
             } else {
                 float kCool = K_CORE * length + K_AMBIENT * runningTotal
@@ -417,6 +427,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // P6 Plan B：当前经济系数（仅流体引擎；蒸汽无经济区恒 1.0；停机/油门 0 → 1.0 无意义）
         lastEconomyFactor = (!steamEngine && running && runningFluid > 0 && fluidFuel != null)
                 ? economyFactor(temperature, fluidFuel.optimalTemp(), airDuct) : 1f;
+        // P6 Plan B：蒸汽暖机标志（点火燃烧但未达工作温度；油门 0 不点火 → false；供 Goggle 状态行 / Lua isWarmingUp）
+        warmingUp = steamEngine && runningSteam > 0 && efficiency > 0f && temperature < STEAM_MIN_WORK_TEMP;
         // P6：getActiveFuel 缓存（当前活动燃料 + 其 T_opt）
         if (runningFluid > 0 && fluidFuel != null) {
             activeFuelType = "fluid";
@@ -1069,6 +1081,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return hasAirDuct;
         }
 
+        /** P6 Plan B：蒸汽锅炉是否暖机中（点火燃烧但 T < STEAM_MIN_WORK_TEMP，只烧不发电；暖机完成前无输出） */
+        @LuaFunction
+        public final boolean isWarmingUp() {
+            return warmingUp;
+        }
+
         /**
          * P6：当前活动燃料（服务端 tick 缓存，读缓存 ≤1 tick 滞后）。
          * 流体 → {@code {type="fluid", fluid=<流体id>, optimalTemp=..}}；蒸汽 → {@code {type="steam", optimalTemp=BOILER_T_OPT}}（无混合比）；
@@ -1321,6 +1339,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         lastEffectiveMixture = compound.contains("EffectiveMixture") ? compound.getFloat("EffectiveMixture") : 1f;
         // P6：蒸汽类型 / 整合气道 / 经济系数（服务端权威；旧存档无字段 → 默认值）
         steamEngine = compound.getBoolean("SteamEngine");
+        warmingUp = compound.getBoolean("WarmingUp");
         hasAirDuct = compound.getBoolean("AirDuct");
         lastEconomyFactor = compound.contains("EconomyFactor") ? compound.getFloat("EconomyFactor") : 1f;
         coolingStrength = compound.contains("CoolingStrength") ? compound.getFloat("CoolingStrength") : 1f;
@@ -1366,6 +1385,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putFloat("EffectiveMixture", lastEffectiveMixture);
         // P6：蒸汽类型 / 整合气道 / 当前经济系数（服务端每 tick 计算，同步客户端 Goggle；客户端不重算）
         compound.putBoolean("SteamEngine", steamEngine);
+        compound.putBoolean("WarmingUp", warmingUp);
         compound.putBoolean("AirDuct", hasAirDuct);
         compound.putFloat("EconomyFactor", lastEconomyFactor);
         compound.putFloat("CoolingStrength", coolingStrength);
@@ -1395,6 +1415,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (overheated) {
             statusKey = "tooltip.ccpe.engine.status.overheated";
             statusColor = ChatFormatting.RED;
+        } else if (warmingUp) {
+            // 蒸汽锅炉暖机中（点火燃烧但未达工作温度，只烧不发电）
+            statusKey = "tooltip.ccpe.engine.status.warming";
+            statusColor = ChatFormatting.GOLD;
         } else if (temperature >= OVERHEAT_TEMP * 0.8f) {
             statusKey = "tooltip.ccpe.engine.status.warning";
             statusColor = ChatFormatting.GOLD;
