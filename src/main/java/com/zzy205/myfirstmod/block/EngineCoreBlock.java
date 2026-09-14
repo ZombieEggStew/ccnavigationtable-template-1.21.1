@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.simibubi.create.api.connectivity.ConnectivityHandler;
+import com.simibubi.create.api.equipment.goggles.IProxyHoveringInformation;
 import com.simibubi.create.api.schematic.requirement.SpecialBlockItemRequirement;
 import com.simibubi.create.content.kinetics.base.RotatedPillarKineticBlock;
 import com.simibubi.create.content.schematics.requirement.ItemRequirement;
@@ -48,7 +49,7 @@ import java.util.function.Predicate;
  * </ul>
  * 参考来源：CDG {@code ModularDieselEngineBlock}；Create {@code ConnectivityHandler} / {@code PoleHelper}。
  */
-public class EngineCoreBlock extends RotatedPillarKineticBlock implements IBE<EngineCoreBlockEntity>, SpecialBlockItemRequirement {
+public class EngineCoreBlock extends RotatedPillarKineticBlock implements IBE<EngineCoreBlockEntity>, SpecialBlockItemRequirement, IProxyHoveringInformation {
 
     /** 延伸放置助手 id：拿引擎物品右键已有引擎，沿 AXIS 自动延伸放置（组网成一条） */
     private static final int placementHelperId = PlacementHelpers.register(new PlacementHelper());
@@ -126,6 +127,22 @@ public class EngineCoreBlock extends RotatedPillarKineticBlock implements IBE<En
     @Override
     public Direction.Axis getRotationAxis(BlockState state) {
         return state.getValue(AXIS);
+    }
+
+    /**
+     * goggle tooltip 代理：悬停任意核心节 → tooltip 源统一到整条引擎 controller（与模块方块同模式，
+     * 悬停非 controller 成员也显示整条引擎状态）。代理时在 controller 上记录悬停方块
+     * （{@link EngineCoreBlockEntity#markHoveredModule}），供 {@code addToGoggleTooltip} 按悬停方块分流——
+     * 核心自身记录自己 → 核心 tooltip（同时覆盖模块记录，消除跨帧残留）。
+     */
+    @Override
+    public BlockPos getInformationSource(Level level, BlockPos pos, BlockState state) {
+        BlockPos controller = EngineCoreBlockEntity.engineControllerPos(level, pos);
+        if (controller != null && level.isClientSide
+                && level.getBlockEntity(controller) instanceof EngineCoreBlockEntity core) {
+            core.markHoveredModule(this);
+        }
+        return controller != null ? controller : pos;
     }
 
     // ================= 延伸放置助手 =================

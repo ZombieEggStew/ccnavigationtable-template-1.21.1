@@ -180,7 +180,7 @@ altitude    ：运动体取 getSubLevelWorldPos().y，静态取方块自身 Y
 - 过载（isOverStressed）与过热独立：过载停烧照旧；过热是温度机制（滞回锁定 `overheated`）
 - **温度同步（性能最优方案）**：服务端权威 → 差量发包（≥1°C 才 `sendData`，约 1/20 频率）→ 客户端**趋势外推**显示（最近两采样点斜率继续走 + ±10°C 外推带钳制，`displayedTemperature`）。对比 simulated velocity_sensor 每 tick `sendData()` 20Hz 发包换"看起来平滑"——我们同视觉效果、1/20 带宽（见踩坑记录 7）
 - **Goggle**：Create overlay 把 tooltip **第一行当标题行**（后有间距）→ 首行加 `tooltip.ccpe.engine.header`（en_us/zh_cn 已加），内容行 5 空格缩进对齐 MyBearing 惯例；温度用 `displayedTemperature`（客户端平滑值）
-- **模块 tooltip 代理**：流体/蒸汽燃烧室与冷却风道方块实现 `IProxyHoveringInformation`，`getInformationSource` 经 `EngineCoreBlockEntity.engineControllerPos` 把 tooltip 源代理到整条引擎 controller——与看核心**完全共用**同一 tooltip（含无护目镜悬停的传动信息）；未连接核心时返回自身坐标 → 无 BE/goggle 信息 → 不显示
+- **模块 tooltip 代理**：流体/蒸汽燃烧室、整合气道与**引擎核心自身**均实现 `IProxyHoveringInformation`，`getInformationSource` 经 `EngineCoreBlockEntity.engineControllerPos` 把 tooltip 源代理到整条引擎 controller——**代理时在 controller 上记录悬停方块（`hoveredSourceBlock`）**，`addToGoggleTooltip` 按悬停方块分流三套 tooltip（核心 / 蒸汽动力室 / 流体燃烧室+整合气道全量），渲染后复位防串帧；核心自身也记录自己 → 核心 tooltip（消除模块记录的跨帧残留）；未连接核心时返回自身坐标 → 无 BE/goggle 信息 → 不显示
 
 ### 7. 混合比 mixture（P5，已实现并编译通过）
 
@@ -266,22 +266,41 @@ heatFactor(m)：
 | `setCooling(x)` | true | boolean | P6 风门 0..1：只缩放风道散热分量（冲压/气压/环境不动），只能降；**蒸汽引擎或无整合气道拒绝返回 false**；越界钳制 |
 | `isWarmingUp()` | false | boolean | P6 蒸汽锅炉暖机中（点火燃烧但 T<100°C，只烧不发电） |
 
-**Goggle 显示布局**（戴 Create 护目镜悬停任意引擎模块方块，模块 tooltip 代理到 controller；蒸汽引擎不显示经济/风门/混合比行）：
+**Goggle 显示布局**（戴 Create 护目镜悬停引擎方块；tooltip 代理到 controller 后**按悬停方块分流**——
+核心/模块方块 `getInformationSource` 代理时在 controller 上记录悬停方块，`addToGoggleTooltip` 按方块分流，渲染后复位）：
+
+引擎核心（悬停 engine_core，只显示以下五项）：
 
 ```
 发动机状态                       ← 标题行（Create 视为首行，其后有间距）
-[Create 默认传动信息：转速/容量/应力]
-状态：正常 / 即将过热 / 过热 / 暖机中
-                                 ← 绿/金/红/金（暖机中仅蒸汽 T<100°C 点火时）
-温度：XX.X°C                     ← 客户端趋势外推平滑值
-过热停机！                      （仅流体过热锁定，红）
-效率：25%                        ← 油门（AQUA）
-经济：×0.88                      ← 仅流体：绿(<1 在带内)/灰(=1.0)；未装整合气道显示「未装整合气道」（金）
-风门：100%                       ← 仅流体+整合气道：青(<1 关小保热)/灰
-混合比：0.80                     ← 仅流体：杆值（AQUA）
-高空实际：0.95                   （仅流体，|实际−杆|≥0.005 时，金）
+温度：XX.X°C                     ← 客户端趋势外推平滑值（金；过热锁定时红）
 Lua控制：已连接 / 未连接          ← 绿/深灰
+总应力输出：8192 SU              ← 服务端同步 moduleCapacity（客户端拿不到燃料表 stress 倍率，不自算；AQUA）
+目前转速：128 RPM                ← 定距桨：油门×256，停机 0（AQUA）
+连接的模块：
+- 蒸汽动力室 x2                  ← blockstate 轻扫（与服务端 scanModule 同判定），只列数量>0 的类型；无模块显示「无」
+- 整合气道 x1
 ```
+
+蒸汽动力室（悬停 steam_power_chamber）：
+
+```
+发动机状态
+状态：正常 / 暖机中 / 停机        ← 绿/金/灰（暖机中 = 蒸汽 T<100°C 点火只烧不发电）
+温度：XX.X°C                     ← 客户端趋势外推平滑值（金）
+油门：50%                        ← = 效率百分比（AQUA）
+```
+
+整合气道（悬停 integrated_air_duct，只显示温度与效率）：
+
+```
+发动机状态
+温度：XX.X°C                     ← 客户端趋势外推平滑值（金；过热锁定时红）
+效率：100%                       ← = setCooling 风门百分比（冷却强度 coolingStrength；<1 = 已关小保热，青）
+```
+
+流体燃烧室：**全量引擎状态，保持既有行为不变**（状态/温度/过热/效率/经济/风门/混合比/Lua 行全部保留；
+蒸汽引擎不显示经济/风门/混合比行）。
 
 **玩家操作要点**：
 - 一个杆（油门）就够起飞：油门同时定应力与转速（定距桨）；转速不够带动机器时推油门；**油门 0 = 停机不烧油**。

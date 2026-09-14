@@ -146,12 +146,18 @@ public class FluidCombustionChamberBlock extends DirectionalBlock implements IWr
     }
 
     /**
-     * goggle tooltip 代理：燃烧室贴附在引擎核心上时，共享整条引擎的 tooltip（与看核心完全相同，
-     * 含无护目镜悬停的传动信息）；未贴附任何核心（独立放置）时返回自身（无 goggle/hover 信息 → 不显示）。
+     * goggle tooltip 代理：燃烧室贴附在引擎核心上时，tooltip 源代理到整条引擎 controller；未贴附任何核心
+     * （独立放置）时返回自身（无 goggle/hover 信息 → 不显示）。
+     * <p>代理时在 controller 上记录悬停方块（{@link EngineCoreBlockEntity#markHoveredModule}），
+     * 供 {@code addToGoggleTooltip} 按悬停方块分流——流体燃烧室显示全量引擎 tooltip（保持既有行为）。</p>
      */
     @Override
     public BlockPos getInformationSource(Level level, BlockPos pos, BlockState state) {
         BlockPos controller = EngineCoreBlockEntity.engineControllerPos(level, pos);
+        if (controller != null && level.isClientSide
+                && level.getBlockEntity(controller) instanceof EngineCoreBlockEntity core) {
+            core.markHoveredModule(this);
+        }
         return controller != null ? controller : pos;
     }
 

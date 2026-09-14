@@ -121,12 +121,18 @@ public class IntegratedAirDuctBlock extends DirectionalBlock implements IWrencha
     }
 
     /**
-     * goggle tooltip 代理：整合气道贴附在引擎模块（核心成员 / 燃烧室）上时，共享整条引擎的 tooltip
-     * （与看核心完全相同，含无护目镜悬停的传动信息）；未连接任何核心时返回自身（无 BE → 不显示）。
+     * goggle tooltip 代理：整合气道贴附在引擎模块（核心成员 / 燃烧室）上时，tooltip 源代理到整条引擎
+     * controller；未连接任何核心时返回自身（无 BE → 不显示）。
+     * <p>代理时在 controller 上记录悬停方块（{@link EngineCoreBlockEntity#markHoveredModule}），
+     * 供 {@code addToGoggleTooltip} 按悬停方块分流——整合气道显示全量引擎 tooltip（保持既有行为）。</p>
      */
     @Override
     public BlockPos getInformationSource(Level level, BlockPos pos, BlockState state) {
         BlockPos controller = EngineCoreBlockEntity.engineControllerPos(level, pos);
+        if (controller != null && level.isClientSide
+                && level.getBlockEntity(controller) instanceof EngineCoreBlockEntity core) {
+            core.markHoveredModule(this);
+        }
         return controller != null ? controller : pos;
     }
 

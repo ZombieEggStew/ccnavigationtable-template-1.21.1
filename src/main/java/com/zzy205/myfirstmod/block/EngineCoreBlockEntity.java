@@ -27,6 +27,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.DirectionalBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -196,6 +197,18 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected boolean enabled = true;
     /** 是否有电脑已连接本外设（Peripheral.attach/detach 维护；仅同步客户端供 Goggle 显示，不落盘） */
     protected boolean luaConnected = false;
+
+    /** 客户端：当前 goggle 悬停的引擎方块（核心 / 模块方块的 {@code IProxyHoveringInformation.getInformationSource}
+     *  代理到本 controller 时记录——核心记录自身、蒸汽室记录蒸汽室、流体室/气道记录各自方块）。
+     *  仅用于 {@link #addToGoggleTooltip} 按悬停方块分流三套 tooltip（核心 / 蒸汽动力室 / 流体燃烧室+整合气道全量）；
+     *  每次 tooltip 渲染后复位（防跨帧串味）。 */
+    @OnlyIn(Dist.CLIENT)
+    private Block hoveredSourceBlock;
+
+    /** 客户端：记录当前 goggle 悬停的模块方块（由模块方块的 getInformationSource 代理调用，调用方需已判 level.isClientSide） */
+    void markHoveredModule(Block block) {
+        hoveredSourceBlock = block;
+    }
 
     // ---- P5：混合比（经济性/热管理杆 + 高空自动富油；方案见 memo/engine-module.md 关键机制 7）----
     /** 混合比杆范围（setMixture 越界钳制） */
@@ -1327,6 +1340,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             length = compound.getInt("Height");
         running = compound.getBoolean("Running");
         overheated = compound.getBoolean("Overheated");
+        moduleCapacity = compound.getFloat("Capacity");
         if (compound.contains("Temperature"))
             temperature = compound.getFloat("Temperature");
         if (compound.contains("Efficiency"))
@@ -1377,6 +1391,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             compound.putInt("Height", length);
         compound.putBoolean("Running", running);
         compound.putBoolean("Overheated", overheated);
+        // 总应力输出（SU，当前转速下）：客户端 Goggle「总应力输出」行——客户端拿不到燃料表 stress 倍率，必须以服务端值为准
+        compound.putFloat("Capacity", moduleCapacity);
         compound.putFloat("Temperature", temperature);
         compound.putFloat("Efficiency", efficiency);
         compound.putBoolean("Enabled", enabled);
@@ -1394,7 +1410,15 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             compound.putBoolean("LuaConnected", luaConnected);
     }
 
-    /** Goggle 提示：非 controller 委托给 controller；首行标题（Create overlay 视为标题行，其后有间距）→ 内容整体下移一行 */
+    /**
+     * Goggle 提示：非 controller 委托给 controller；按悬停方块分流四套 tooltip——引擎核心（温度 / Lua 控制 /
+     * 总应力输出 / 目前转速 / 连接的模块）、蒸汽动力室（状态 / 温度 / 油门）、整合气道（温度 / 效率=风门）、
+     * 流体燃烧室（全量引擎状态，行为不变）。
+     * 首行标题（Create overlay 视为标题行，其后有间距）→ 内容整体下移一行。
+     * <p>悬停方块由各引擎方块（核心 {@code EngineCoreBlock} / 模块方块）的 {@code IProxyHoveringInformation.getInformationSource}
+     * 代理到本 controller 时记录在 {@link #hoveredSourceBlock}：模块记录自身 → 按类型分流；核心记录自身 → 核心 tooltip。
+     * 每次渲染后复位防串帧。</p>
+     */
     @Override
     public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
         if (!isController()) {
@@ -1403,6 +1427,130 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 return false;
             return controller.addToGoggleTooltip(tooltip, isPlayerSneaking);
         }
+        try {
+            Block hovered = level != null && level.isClientSide ? hoveredSourceBlock : null;
+            if (hovered == MyModBlocks.steam_power_chamber.get()) {
+                addSteamChamberTooltip(tooltip);
+            } else if (hovered == MyModBlocks.integrated_air_duct.get()) {
+                addAirDuctTooltip(tooltip);
+            } else if (hovered == MyModBlocks.fluid_combustion_chamber.get()) {
+                addFullEngineTooltip(tooltip, isPlayerSneaking);
+            } else {
+                // 引擎核心（含核心自身代理记录）→ 核心精简 tooltip
+                addCoreTooltip(tooltip);
+            }
+        } finally {
+            // 复位悬停记录：下一帧由代理重新设置
+            if (level != null && level.isClientSide)
+                hoveredSourceBlock = null;
+        }
+        return true;
+    }
+
+    /** 引擎核心 tooltip：温度 + Lua 控制状态 + 总应力输出 + 目前转速 + 连接的模块清单 */
+    private void addCoreTooltip(List<Component> tooltip) {
+        tooltip.add(Component.literal("    ")
+                .append(Component.translatable("tooltip.ccpe.engine.header")
+                        .withStyle(ChatFormatting.WHITE)));
+        // 温度（客户端趋势外推平滑值；过热锁定时红色）
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.temperature").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.format(Locale.ROOT, "%.1f°C", tooltipTemp()))
+                        .withStyle(overheated ? ChatFormatting.RED : ChatFormatting.GOLD)));
+        // Lua 控制连接状态（Peripheral.attach/detach 维护，经 NBT 同步客户端）
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.lua_control").withStyle(ChatFormatting.GRAY))
+                .append(Component.translatable(luaConnected ? "tooltip.ccpe.engine.lua_connected"
+                        : "tooltip.ccpe.engine.lua_disconnected")
+                        .withStyle(luaConnected ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)));
+        // 总应力输出（服务端同步 moduleCapacity；客户端拿不到燃料表 stress 倍率，不自算）
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.stress_output").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(Math.round(moduleCapacity) + " SU").withStyle(ChatFormatting.AQUA)));
+        // 目前转速（定距桨：油门 × 256；停机 = 0）
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.speed").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(Math.round(getGeneratedSpeed()) + " RPM").withStyle(ChatFormatting.AQUA)));
+        // 连接的模块清单（显示用：blockstate 轻扫，与服务端 scanModule 同判定；燃烧室按 FACING 反面贴核心归属，不双计）
+        ModuleScan scan = scanModule();
+        int fluid = scan.fluidChambers().size();
+        int steam = scan.steamChambers().size();
+        int ducts = scan.coolingDucts;
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.modules").withStyle(ChatFormatting.GRAY)));
+        if (fluid + steam + ducts == 0) {
+            tooltip.add(Component.literal("     ")
+                    .append(Component.literal("- ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.translatable("tooltip.ccpe.engine.modules_none").withStyle(ChatFormatting.DARK_GRAY)));
+        } else {
+            if (fluid > 0)
+                addModuleLine(tooltip, MyModBlocks.fluid_combustion_chamber.get().getName(), fluid);
+            if (steam > 0)
+                addModuleLine(tooltip, MyModBlocks.steam_power_chamber.get().getName(), steam);
+            if (ducts > 0)
+                addModuleLine(tooltip, MyModBlocks.integrated_air_duct.get().getName(), ducts);
+        }
+    }
+
+    /** 模块清单行：- 名称 x数量 */
+    private static void addModuleLine(List<Component> tooltip, Component name, int count) {
+        tooltip.add(Component.literal("     ")
+                .append(Component.literal("- ").withStyle(ChatFormatting.GRAY))
+                .append(name.copy().withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(" x" + count).withStyle(ChatFormatting.GRAY)));
+    }
+
+    /** tooltip 温度值：客户端用趋势外推平滑值，服务端用权威值 */
+    private float tooltipTemp() {
+        return level != null && level.isClientSide ? displayedTemperature : temperature;
+    }
+
+    /** 蒸汽动力室 tooltip：状态（停机 / 正常 / 暖机中）+ 温度 + 油门（= 效率百分比） */
+    private void addSteamChamberTooltip(List<Component> tooltip) {
+        tooltip.add(Component.literal("    ")
+                .append(Component.translatable("tooltip.ccpe.engine.header")
+                        .withStyle(ChatFormatting.WHITE)));
+        String statusKey;
+        ChatFormatting statusColor;
+        if (warmingUp) {
+            statusKey = "tooltip.ccpe.engine.status.warming";
+            statusColor = ChatFormatting.GOLD;
+        } else if (running) {
+            statusKey = "tooltip.ccpe.engine.status.normal";
+            statusColor = ChatFormatting.GREEN;
+        } else {
+            statusKey = "tooltip.ccpe.engine.status.stopped";
+            statusColor = ChatFormatting.GRAY;
+        }
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.status").withStyle(ChatFormatting.GRAY))
+                .append(Component.translatable(statusKey).withStyle(statusColor)));
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.temperature").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.format(Locale.ROOT, "%.1f°C", tooltipTemp()))
+                        .withStyle(ChatFormatting.GOLD)));
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.throttle").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
+    }
+
+    /** 整合气道 tooltip：温度 + 效率（= setCooling 风门百分比） */
+    private void addAirDuctTooltip(List<Component> tooltip) {
+        tooltip.add(Component.literal("    ")
+                .append(Component.translatable("tooltip.ccpe.engine.header")
+                        .withStyle(ChatFormatting.WHITE)));
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.temperature").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.format(Locale.ROOT, "%.1f°C", tooltipTemp()))
+                        .withStyle(overheated ? ChatFormatting.RED : ChatFormatting.GOLD)));
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.efficiency").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(Math.round(coolingStrength * 100) + "%")
+                        .withStyle(coolingStrength < 1f ? ChatFormatting.AQUA : ChatFormatting.GRAY)));
+    }
+
+    /** 全量引擎 tooltip（流体燃烧室悬停，保持既有行为不变） */
+    private void addFullEngineTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
         tooltip.add(Component.literal("    ")
                 .append(Component.translatable("tooltip.ccpe.engine.header")
                         .withStyle(ChatFormatting.WHITE)));
@@ -1430,7 +1578,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 .append(Component.translatable("tooltip.ccpe.engine.status").withStyle(ChatFormatting.GRAY))
                 .append(Component.translatable(statusKey).withStyle(statusColor)));
 
-        float shownTemp = level != null && level.isClientSide ? displayedTemperature : temperature;
+        float shownTemp = tooltipTemp();
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.temperature").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(String.format(Locale.ROOT, "%.1f°C", shownTemp))
@@ -1481,7 +1629,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 .append(Component.translatable(luaConnected ? "tooltip.ccpe.engine.lua_connected"
                         : "tooltip.ccpe.engine.lua_disconnected")
                         .withStyle(luaConnected ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)));
-        return true;
     }
 
     @Override
