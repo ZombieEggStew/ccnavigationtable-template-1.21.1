@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.AllSoundEvents;
+import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.simibubi.create.content.fluids.tank.CreativeFluidTankBlockEntity;
 import com.simibubi.create.content.fluids.tank.FluidTankBlockEntity;
 import com.simibubi.create.foundation.fluid.FluidHelper;
@@ -61,8 +62,11 @@ import java.util.Map;
  *   <li>传输成功后 {@code pulseOpen()}：OPEN=true（模型切到 block_open）+ 播放 Item Hatch 开启音效，
  *       调度 tick 在 OPEN_TICKS 后自动关闭（模型切回 block_close）。</li>
  * </ul>
+ * <p>
+ * 扳手：{@link IWrenchable} 默认处理（同 AIC/FMC/燃烧室/快速装填储罐）——潜行右键拆除掉包；
+ * 右键无旋转操作（默认 {@code getRotatedBlockState} 不处理原版 {@code FACING}）。
  */
-public class FluidPortBlock extends DirectionalBlock implements EntityBlock {
+public class FluidPortBlock extends DirectionalBlock implements IWrenchable, EntityBlock {
 
     public static final MapCodec<FluidPortBlock> CODEC = simpleCodec(FluidPortBlock::new);
 
