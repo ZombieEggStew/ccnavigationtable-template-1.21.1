@@ -219,6 +219,11 @@
   "ccpe.configuration.joystickOverlayEnabled": "虚拟摇杆 HUD",
   "ccpe.configuration.joystickOverlayEnabled.tooltip": "坐垫操作模式下显示虚拟摇杆 HUD（默认关闭，避免破坏沉浸感；需要时在客户端配置中开启）。",
 
+  "ccpe.configuration.engineFluidPuffVolume": "流体燃烧室活塞噗嗤音量",
+  "ccpe.configuration.engineFluidPuffVolume.tooltip": "流体燃烧室活塞'噗嗤'音效音量（0.0-2.0，0 = 关闭该音效逻辑节省性能）。默认：0.05（Create STEAM 声，每活塞周期触发一次，频率随转速）。",
+  "ccpe.configuration.engineSteamPuffVolume": "蒸汽动力室活塞噗嗤音量",
+  "ccpe.configuration.engineSteamPuffVolume.tooltip": "蒸汽动力室活塞'噗嗤'音效音量（0.0-2.0，0 = 关闭该音效逻辑节省性能）。默认：0.1（Create STEAM 声，每活塞周期触发一次，频率随转速）。",
+
   "ccpe.configuration.section.ccpe.client.toml": "CC 外设扩展 设置（客户端）",
   "ccpe.configuration.section.ccpe.client.toml.title": "CC 外设扩展 设置（客户端）"
 

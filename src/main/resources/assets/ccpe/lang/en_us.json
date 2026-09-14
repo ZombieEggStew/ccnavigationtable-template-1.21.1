@@ -217,6 +217,11 @@
   "ccpe.configuration.joystickOverlayEnabled": "Joystick HUD Overlay",
   "ccpe.configuration.joystickOverlayEnabled.tooltip": "Show the virtual joystick HUD while operating from a seat (default off to keep immersion; enable in client config when needed).",
 
+  "ccpe.configuration.engineFluidPuffVolume": "Fluid Chamber Piston Puff Volume",
+  "ccpe.configuration.engineFluidPuffVolume.tooltip": "Volume of the piston 'puff' sound on fluid combustion chambers (0.0-2.0, 0 = disable this sound logic). Default: 0.05 (Create STEAM sound, once per piston cycle; rate tied to RPM).",
+  "ccpe.configuration.engineSteamPuffVolume": "Steam Chamber Piston Puff Volume",
+  "ccpe.configuration.engineSteamPuffVolume.tooltip": "Volume of the piston 'puff' sound on steam power chambers (0.0-2.0, 0 = disable this sound logic). Default: 0.1 (Create STEAM sound, once per piston cycle; rate tied to RPM).",
+
   "ccpe.configuration.section.ccpe.client.toml": "CC Peripheral Extender Config (Client)",
   "ccpe.configuration.section.ccpe.client.toml.title": "CC Peripheral Extender Config (Client)"
 

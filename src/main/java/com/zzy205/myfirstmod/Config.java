@@ -88,6 +88,15 @@ public class Config {
             .comment("坐垫操作模式下显示虚拟摇杆 HUD（默认关闭，避免破坏沉浸感；需要时在客户端配置中开启）。")
             .define("joystickOverlayEnabled", false);
 
+    // ── 客户端：引擎活塞"噗嗤"音效 ──
+    public static final ModConfigSpec.DoubleValue ENGINE_FLUID_PUFF_VOLUME = CLIENT_BUILDER
+            .comment("流体燃烧室活塞'噗嗤'音效音量 (0.0-2.0，0 = 关闭该音效逻辑节省性能)。默认: 0.05（每活塞周期触发一次，Create STEAM 声，频率随转速）。")
+            .defineInRange("engineFluidPuffVolume", 0.05, 0.0, 2.0);
+
+    public static final ModConfigSpec.DoubleValue ENGINE_STEAM_PUFF_VOLUME = CLIENT_BUILDER
+            .comment("蒸汽动力室活塞'噗嗤'音效音量 (0.0-2.0，0 = 关闭该音效逻辑节省性能)。默认: 0.1（每活塞周期触发一次，Create STEAM 声，频率随转速）。")
+            .defineInRange("engineSteamPuffVolume", 0.1, 0.0, 2.0);
+
     static final ModConfigSpec SPEC = BUILDER.build();
     static final ModConfigSpec CLIENT_SPEC = CLIENT_BUILDER.build();
 }

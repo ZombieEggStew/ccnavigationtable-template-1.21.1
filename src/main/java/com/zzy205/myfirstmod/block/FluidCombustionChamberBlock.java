@@ -14,6 +14,8 @@ import net.minecraft.world.level.block.DirectionalBlock;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
@@ -122,6 +124,18 @@ public class FluidCombustionChamberBlock extends DirectionalBlock implements IWr
     @Override
     public @Nullable BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
         return new FluidCombustionChamberBlockEntity(pos, state);
+    }
+
+    /** 客户端 tick：活塞"噗嗤"音效触发（见 {@code FluidCombustionChamberBlockEntity#tickClient}）；服务端不 tick */
+    @Override
+    public <T extends BlockEntity> @Nullable BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state,
+                                                                            @NotNull BlockEntityType<T> type) {
+        if (!level.isClientSide)
+            return null;
+        return (l, p, s, be) -> {
+            if (be instanceof FluidCombustionChamberBlockEntity chamber)
+                chamber.tickClient();
+        };
     }
 
     /**

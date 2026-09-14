@@ -3,15 +3,16 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.logging.LogUtils;
 import com.simibubi.create.AllSoundEvents;
 import com.simibubi.create.api.connectivity.ConnectivityHandler;
+import com.simibubi.create.content.fluids.tank.SoundPool;
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.IMultiBlockEntityContainer;
+import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.compat.cc.SensorSystemAPI;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.createmod.catnip.nbt.NBTHelper;
 import net.createmod.catnip.platform.CatnipServices;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -19,7 +20,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeType;
@@ -177,8 +177,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     @OnlyIn(Dist.CLIENT)
     protected long lastTempSampleTime, newTempSampleTime;
 
+    /** 客户端：流体燃烧室活塞"噗嗤"音效池（每引擎一个，音量 = Config.ENGINE_FLUID_PUFF_VOLUME） */
     @OnlyIn(Dist.CLIENT)
-    protected EngineSoundInstance soundInstance;
+    protected SoundPool fluidPistonSoundPool;
+
+    /** 客户端：蒸汽动力室活塞"噗嗤"音效池（每引擎一个，音量 = Config.ENGINE_STEAM_PUFF_VOLUME） */
+    @OnlyIn(Dist.CLIENT)
+    protected SoundPool steamPistonSoundPool;
 
     public EngineCoreBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.engine_core_entity.get(), pos, state);
@@ -624,8 +629,40 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return level.getCapability(Capabilities.FluidHandler.BLOCK, pos, null);
     }
 
+    /**
+     * 流体燃烧室"噗嗤"音效池（每引擎一个，懒创建）：音量 = {@link Config#ENGINE_FLUID_PUFF_VOLUME}
+     * （播放时读取，改配置即时生效）。照 Create {@code BoilerData/SoundPool}：
+     * mergeTicks 合并窗口 + maxConcurrent 并发上限（超出随机截断）+ 各自坐标发声。
+     */
+    @OnlyIn(Dist.CLIENT)
+    public SoundPool getFluidPistonSoundPool() {
+        if (fluidPistonSoundPool == null)
+            fluidPistonSoundPool = new SoundPool(4, 2,
+                    (level, pos) -> AllSoundEvents.STEAM.playAt(level, pos,
+                            Config.ENGINE_FLUID_PUFF_VOLUME.get().floatValue(), 0.8f + level.random.nextFloat() * 0.4f, false));
+        return fluidPistonSoundPool;
+    }
+
+    /** 蒸汽动力室"噗嗤"音效池（每引擎一个，懒创建）：音量 = {@link Config#ENGINE_STEAM_PUFF_VOLUME}，其余同流体室 */
+    @OnlyIn(Dist.CLIENT)
+    public SoundPool getSteamPistonSoundPool() {
+        if (steamPistonSoundPool == null)
+            steamPistonSoundPool = new SoundPool(4, 2,
+                    (level, pos) -> AllSoundEvents.STEAM.playAt(level, pos,
+                            Config.ENGINE_STEAM_PUFF_VOLUME.get().floatValue(), 0.8f + level.random.nextFloat() * 0.4f, false));
+        return steamPistonSoundPool;
+    }
+
     @OnlyIn(Dist.CLIENT)
     protected void tickClient() {
+        // 活塞"噗嗤"音效池：本 tick 播放燃烧室/动力室入队的脉冲（空队列直接返回；对应音量=0 时不创建/不播放，省性能）
+        if (isController()) {
+            if (Config.ENGINE_FLUID_PUFF_VOLUME.get() > 0)
+                getFluidPistonSoundPool().play(level);
+            if (Config.ENGINE_STEAM_PUFF_VOLUME.get() > 0)
+                getSteamPistonSoundPool().play(level);
+        }
+
         // 温度显示：沿最近两个采样点的斜率外推（服务端差量发包低频 → 外推让显示连续无台阶/平台）
         long now = level.getGameTime();
         if (lastTempSampleTime < newTempSampleTime) {
@@ -638,28 +675,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             displayedTemperature = Mth.clamp(extrapolated, lo, hi);
         } else {
             displayedTemperature = newTempSample;
-        }
-
-        if (isController() && running && !isOverStressed()) {
-            Vec3 pos = Vec3.atCenterOf(getBlockPos());
-            switch (getMainConnectionAxis()) {
-                case X -> pos = pos.add((double) length / 2 - 0.5, 0, 0);
-                case Z -> pos = pos.add(0, 0, (double) length / 2 - 0.5);
-                case Y -> pos = pos.add(0, (double) length / 2 - 0.5, 0);
-            }
-            if (soundInstance == null || soundInstance.isStopped()) {
-                Minecraft.getInstance().getSoundManager()
-                        .play(soundInstance = new EngineSoundInstance(AllSoundEvents.STEAM.getMainEvent(), SoundSource.BLOCKS, pos, 0.1f));
-            } else if (soundInstance.active()) {
-                soundInstance.keepAlive();
-                soundInstance.setPitch(1f);
-                soundInstance.setVolume(0.6f);
-            }
-        } else {
-            if (soundInstance != null) {
-                soundInstance.fadeOut();
-                soundInstance = null;
-            }
         }
     }
 
