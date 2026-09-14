@@ -66,6 +66,7 @@
   "tooltip.ccpe.engine.lua_control": "Lua控制：",
   "tooltip.ccpe.engine.lua_connected": "已连接",
   "tooltip.ccpe.engine.lua_disconnected": "未连接",
+  "tooltip.ccpe.engine.chamber_type_conflict": "该引擎已装配另一种燃烧室，流体/蒸汽不能混用",
 
   "gui.ccpe.monitor.module_info": "%s 位于 (%s, %s) 尺寸 %s×%s",
   "gui.ccpe.monitor_menu.done": "完成",

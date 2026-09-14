@@ -105,6 +105,13 @@ public class FluidCombustionChamberBlock extends DirectionalBlock implements IWr
 
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
+        // P6 物理排斥（兜底层，主拦截在 ChamberBlockItem#place）：放置格背后的方块 = 贴附核心，
+        // 该引擎已挂蒸汽室 → 放不上去。注意：getClickedPos() 点击不可替换方块（核心）时返回的是
+        // 放置格（replaceClicked=false → relativePos），须用 getClickedFace().getOpposite() 反推核心。
+        BlockPos attachCore = context.getClickedPos().relative(context.getClickedFace().getOpposite());
+        if (context.getLevel().getBlockState(attachCore).is(MyModBlocks.engine_core.get())
+                && EngineCoreBlockEntity.moduleHasSteamChambers(context.getLevel(), attachCore))
+            return null;
         // 同 fluid_port/display_link：模型"开口"（顶面）朝点击面
         return defaultBlockState().setValue(FACING, context.getClickedFace());
     }

@@ -245,6 +245,21 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
         boolean overstressed = isOverStressed();
         ModuleScan scan = scanModule();
+        // P6 单燃料制：流体/蒸汽物理排斥 —— 模块同时挂有两类燃烧室（旧档/蓝图/命令残留）时，
+        // 只让多数派类型工作，少数派忽略（不发电/不消耗/不产热/不计容量）；平局流体优先。
+        List<BlockPos> fluidChambers = scan.fluidChambers();
+        List<BlockPos> steamChambers = scan.steamChambers();
+        if (!fluidChambers.isEmpty() && !steamChambers.isEmpty()) {
+            if (steamChambers.size() > fluidChambers.size()) {
+                LOGGER.warn("[EngineCore] {} 混合流体+蒸汽模块 steam={} > fluid={} → 仅蒸汽工作",
+                        worldPosition, steamChambers.size(), fluidChambers.size());
+                fluidChambers = List.of();
+            } else {
+                LOGGER.warn("[EngineCore] {} 混合流体+蒸汽模块 fluid={} >= steam={} → 仅流体工作",
+                        worldPosition, fluidChambers.size(), steamChambers.size());
+                steamChambers = List.of();
+            }
+        }
         List<BlockPos> neighbors = scan.neighbors();
 
         // 过热锁定（滞回）：T≥OVERHEAT_TEMP 停机锁定，T≤OVERHEAT_RESUME 解锁
@@ -266,8 +281,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         int runningFluid = 0;
         float fluidCapacity = 0;
         EngineFuels.Entry fluidFuel = heatAllowed ? findFuel(neighbors) : null;
-        if (!scan.fluidChambers.isEmpty() && fluidFuel != null && !overstressed) {
-            runningFluid = scan.fluidChambers.size();
+        if (!fluidChambers.isEmpty() && fluidFuel != null && !overstressed) {
+            runningFluid = fluidChambers.size();
             fluidCapacity = runningFluid * BASE_STRESS_PER_CHAMBER * fluidFuel.stress();
             fuelDebt += runningFluid * fluidFuel.consumption() * efficiency * effectiveMixture / 20f;
             while (fuelDebt >= 1f) {
@@ -287,9 +302,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // 蒸汽动力室（P2）：水 + 流体燃料（burnTick 制，水在才烧；水不可用整类暂停；固体燃料抽取暂缓见 tryPullSolidFuel）
         int runningSteam = 0;
         boolean waterOk = !overstressed && heatAllowed && waterAvailable(neighbors);
-        EngineFuels.Entry steamFuel = heatAllowed && !scan.steamChambers.isEmpty() ? findSteamFluidFuel(neighbors) : null;
+        EngineFuels.Entry steamFuel = heatAllowed && !steamChambers.isEmpty() ? findSteamFluidFuel(neighbors) : null;
         if (waterOk && steamFuel != null) {
-            for (BlockPos sp : scan.steamChambers) {
+            for (BlockPos sp : steamChambers) {
                 if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
                     continue;
                 // 流体燃料：每 tick 每室消耗 1000/burn_ticks_per_bucket × 效率 × 混合比 mb（≈效率 个 burnTick/tick），
@@ -360,7 +375,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                         fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterOk, temperature, overheated, moduleCapacity);
             } else if (!running && level.getGameTime() % 40 == 0) {
                 LOGGER.info("[EngineCore] {} idle | fluid={} steam={} fuel={} water={} T={}℃ overheated={} ducts={} len={} speed={}",
-                        worldPosition, scan.fluidChambers.size(), scan.steamChambers.size(),
+                        worldPosition, fluidChambers.size(), steamChambers.size(),
                         fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterOk, temperature, overheated,
                         scan.coolingDucts, length, getSpeed());
             }
@@ -1015,6 +1030,32 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return controller != null ? controller.getBlockPos() : null;
         }
         return null;
+    }
+
+    /**
+     * P6 物理排斥：以 corePos 为核心成员的引擎模块是否已挂有<b>流体燃烧室</b>（供蒸汽动力室放置时拒绝）。
+     * corePos 不是引擎核心成员或模块无控制器时返回 false。
+     */
+    public static boolean moduleHasFluidChambers(Level level, BlockPos corePos) {
+        BlockPos controllerPos = controllerOfCoreAt(level, corePos);
+        if (controllerPos == null)
+            return false;
+        if (level.getBlockEntity(controllerPos) instanceof EngineCoreBlockEntity controller)
+            return !controller.scanModule().fluidChambers().isEmpty();
+        return false;
+    }
+
+    /**
+     * P6 物理排斥：以 corePos 为核心成员的引擎模块是否已挂有<b>蒸汽动力室</b>（供流体燃烧室放置时拒绝）。
+     * corePos 不是引擎核心成员或模块无控制器时返回 false。
+     */
+    public static boolean moduleHasSteamChambers(Level level, BlockPos corePos) {
+        BlockPos controllerPos = controllerOfCoreAt(level, corePos);
+        if (controllerPos == null)
+            return false;
+        if (level.getBlockEntity(controllerPos) instanceof EngineCoreBlockEntity controller)
+            return !controller.scanModule().steamChambers().isEmpty();
+        return false;
     }
 
     @Override

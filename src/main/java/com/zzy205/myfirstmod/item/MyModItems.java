@@ -56,7 +56,15 @@ public class MyModItems {
     }
 
     public static <T extends Block> void registerBlockItems(String name, DeferredBlock<T> block) {
-        ITEMS.register(name, () -> new BlockItem(block.get(), new Item.Properties()));
+        ITEMS.register(name, () -> {
+            Block b = block.get();
+            // P6 物理排斥：燃烧室用自定义物品（ChamberBlockItem#place 拦截「流体/蒸汽混装」放置，
+            // DENY 音效 + 状态条提示，同 create:factory_gauge 的 FactoryPanelBlockItem#place 模式）
+            if (b instanceof com.zzy205.myfirstmod.block.FluidCombustionChamberBlock
+                    || b instanceof com.zzy205.myfirstmod.block.SteamPowerChamberBlock)
+                return new ChamberBlockItem(b, new Item.Properties());
+            return new BlockItem(b, new Item.Properties());
+        });
     }
 
     public static void register(IEventBus modEventBus) {

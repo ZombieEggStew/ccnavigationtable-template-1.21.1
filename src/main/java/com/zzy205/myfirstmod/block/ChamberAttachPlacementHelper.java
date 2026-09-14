@@ -50,6 +50,17 @@ public class ChamberAttachPlacementHelper implements IPlacementHelper {
 
     @Override
     public PlacementOffset getOffset(Player player, Level world, BlockState state, BlockPos pos, BlockHitResult ray) {
+        // P6 物理排斥：对准的引擎核心所属模块已挂另一种燃烧室 → 不显示虚影
+        // （实际放置也会被对应 ChamberBlock#getStateForPlacement 拒绝，双保险）
+        if (state.is(MyModBlocks.engine_core.get())) {
+            ItemStack held = player.getMainHandItem();
+            boolean holdingSteam = held.is(MyModBlocks.steam_power_chamber.get().asItem());
+            boolean blocked = holdingSteam
+                    ? EngineCoreBlockEntity.moduleHasFluidChambers(world, pos)
+                    : EngineCoreBlockEntity.moduleHasSteamChambers(world, pos);
+            if (blocked)
+                return PlacementOffset.fail();
+        }
         Direction face = ray.getDirection();
         BlockPos newPos = pos.relative(face);
         if (world.getBlockState(newPos).canBeReplaced())
