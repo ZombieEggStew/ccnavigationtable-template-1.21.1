@@ -31,6 +31,7 @@ import java.util.Map;
  *   "heat": 1.0,                  // 发热倍率（P3 过热逻辑用；P1 只解析不消费）
  *   "stress": 1.0,                // 产生应力倍率（容量 = 燃烧室数 × 4096 × stress）
  *   "burn_ticks_per_bucket": 0,   // 可选：蒸汽室流体燃料的燃烧时长（1 桶烧多少 tick，如熔岩 20000）；>0 才可作蒸汽室燃料
+ *   "optimal_temp": 155.0,        // 可选：最佳工作温度（°C，P6 经济区曲线目标值，仅流体引擎；缺省 155）
  *   "priority": 0.0               // 可选：多个燃料可用时的选择优先级（越大越优先）
  * }
  * </pre>
@@ -48,9 +49,12 @@ public class EngineFuels {
     private static final Map<ResourceLocation, Entry> FUELS = new HashMap<>();
     private static List<Entry> sorted = List.of();
 
+    /** P6：燃料数据包缺省 `optimal_temp`（°C）——旧燃料包/第三方包无该字段时按此值 */
+    public static final float DEFAULT_OPTIMAL_TEMP = 155f;
+
     /** 单个燃料条目 */
     public record Entry(ResourceLocation fluid, float consumption, float heat, float stress,
-                        int burnTicksPerBucket, float priority) {}
+                        int burnTicksPerBucket, float priority, float optimalTemp) {}
 
     public static void registerAddReloadListener(AddReloadListenerEvent event) {
         event.addListener(new ReloadListener());
@@ -96,7 +100,8 @@ public class EngineFuels {
                     float stress = json.has("stress") ? json.get("stress").getAsFloat() : 1f;
                     int burnTicksPerBucket = json.has("burn_ticks_per_bucket") ? json.get("burn_ticks_per_bucket").getAsInt() : 0;
                     float priority = json.has("priority") ? json.get("priority").getAsFloat() : 0f;
-                    parsed.put(fluid, new Entry(fluid, consumption, heat, stress, burnTicksPerBucket, priority));
+                    float optimalTemp = json.has("optimal_temp") ? json.get("optimal_temp").getAsFloat() : DEFAULT_OPTIMAL_TEMP;
+                    parsed.put(fluid, new Entry(fluid, consumption, heat, stress, burnTicksPerBucket, priority, optimalTemp));
                 } catch (Exception ex) {
                     LOGGER.error("Failed to parse engine fuel {}", e.getKey(), ex);
                 }

@@ -37,7 +37,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.engine_core); // 发动机核心（Create 动力源骨架）
                 output.accept(MyModBlocks.fluid_combustion_chamber); // 流体燃烧室（活塞动态渲染）
                 output.accept(MyModBlocks.steam_power_chamber); // 蒸汽动力室（活塞动态渲染）
-                output.accept(MyModBlocks.cooling_duct); // 冷却风道（12 态，单模型）
+                output.accept(MyModBlocks.integrated_air_duct); // 整合气道（12 态；散热+进气，装 ≥1 个解锁经济区/拉稀权/风门）
                 // 3. 控制台
                 output.accept(MyModBlocks.my_control_desk);
                 output.accept(MyModItems.CONTROL_PEDAL);

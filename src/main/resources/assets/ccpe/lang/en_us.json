@@ -17,7 +17,7 @@
   "block.ccpe.fluid_combustion_chamber": "Fluid Combustion Chamber",
   "block.ccpe.steam_power_chamber": "Steam Power Chamber",
   "block.ccpe.quick_fill_fluid_tank": "Quick-Fill Fluid Tank",
-  "block.ccpe.cooling_duct": "Cooling Duct",
+  "block.ccpe.integrated_air_duct": "Integrated Air Duct",
   "block.ccpe.static_port": "Static Port",
   "block.ccpe.pitot_tube": "Pitot Tube",
   "block.ccpe.ins": "Inertial Navigation System",
@@ -67,6 +67,9 @@
   "tooltip.ccpe.engine.lua_connected": "Connected",
   "tooltip.ccpe.engine.lua_disconnected": "Not Connected",
   "tooltip.ccpe.engine.chamber_type_conflict": "This engine already has a different chamber type — chamber types cannot be mixed",
+  "tooltip.ccpe.engine.economy": "Economy:",
+  "tooltip.ccpe.engine.no_air_duct": "No integrated air duct",
+  "tooltip.ccpe.engine.cowling": "Cooling Shutters:",
 
   "gui.ccpe.monitor.module_info": "%s at (%s, %s) size %s×%s",
   "gui.ccpe.monitor_menu.done": "Done",

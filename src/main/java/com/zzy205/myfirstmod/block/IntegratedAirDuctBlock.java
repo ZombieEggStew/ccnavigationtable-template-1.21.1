@@ -25,7 +25,14 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * 冷却风道（aero_engine / cooling_duct）：6 面贴附 × 每面 2 旋转 = <b>12 个 blockstate</b>。
+ * 整合气道（aero_engine / integrated_air_duct）：6 面贴附 × 每面 2 旋转 = <b>12 个 blockstate</b>。
+ * <p>
+ * P6 设计（见 memo/engine-module.md 节 10）：<b>散热气道 + 进气气道综合模块</b>——直接替换原冷却风道。
+ * <ul>
+ *   <li><b>散热</b>：每块计入引擎散热系数 K_DUCT（原冷却风道职责，计数范围 = 贴在核心成员 ∪ 燃烧室上）；</li>
+ *   <li><b>进气（拉稀权）</b>：装 ≥1 块解锁经济区 / 混合比拉稀（0.6~1.4）/ 风门冷却强度控制
+ *       （未装 → 有效混合比钳 ≥1.0、经济系数恒 1.0、`setCooling` 拒绝）；</li>
+ * </ul>
  * <p>
  * 朝向由两个属性表达（结构参考 {@code PitotTubeBlock} / simulated:rope_connector 的
  * {@code AbstractDirectionalAxisBlock}）：
@@ -43,9 +50,9 @@ import java.util.Map;
  * （任何朝向都响应，地板/天花板/墙面通用）；右键其他面走 Create 默认（换贴面/转朝向）；
  * 潜行右键 = 默认拆除掉包。
  */
-public class CoolingDuctBlock extends DirectionalBlock implements IWrenchable, IProxyHoveringInformation {
+public class IntegratedAirDuctBlock extends DirectionalBlock implements IWrenchable, IProxyHoveringInformation {
 
-    public static final MapCodec<CoolingDuctBlock> CODEC = simpleCodec(CoolingDuctBlock::new);
+    public static final MapCodec<IntegratedAirDuctBlock> CODEC = simpleCodec(IntegratedAirDuctBlock::new);
 
     /** 贴附面（放置时 = 点击面） */
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
@@ -72,7 +79,7 @@ public class CoolingDuctBlock extends DirectionalBlock implements IWrenchable, I
         return map;
     }
 
-    public CoolingDuctBlock(BlockBehaviour.Properties properties) {
+    public IntegratedAirDuctBlock(BlockBehaviour.Properties properties) {
         super(properties);
         registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(AXIS_ALONG_FIRST, false));
     }
@@ -114,7 +121,7 @@ public class CoolingDuctBlock extends DirectionalBlock implements IWrenchable, I
     }
 
     /**
-     * goggle tooltip 代理：冷却风道贴附在引擎模块（核心成员 / 燃烧室）上时，共享整条引擎的 tooltip
+     * goggle tooltip 代理：整合气道贴附在引擎模块（核心成员 / 燃烧室）上时，共享整条引擎的 tooltip
      * （与看核心完全相同，含无护目镜悬停的传动信息）；未连接任何核心时返回自身（无 BE → 不显示）。
      */
     @Override

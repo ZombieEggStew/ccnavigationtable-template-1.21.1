@@ -11,11 +11,11 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "ccpe:cooling_duct"
+          "name": "ccpe:integrated_air_duct"
         }
       ],
       "rolls": 1.0
     }
   ],
-  "random_sequence": "ccpe:blocks/cooling_duct"
+  "random_sequence": "ccpe:blocks/integrated_air_duct"
 }

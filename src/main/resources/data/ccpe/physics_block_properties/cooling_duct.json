@@ -1,6 +1,0 @@
-{
-  "selector": "ccpe:cooling_duct",
-  "properties": {
-    "sable:mass": 0.25
-  }
-}

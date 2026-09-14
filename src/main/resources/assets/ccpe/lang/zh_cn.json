@@ -17,7 +17,7 @@
   "block.ccpe.fluid_combustion_chamber": "流体燃烧室",
   "block.ccpe.steam_power_chamber": "蒸汽动力室",
   "block.ccpe.quick_fill_fluid_tank": "快速装填流体储罐",
-  "block.ccpe.cooling_duct": "冷却风道",
+  "block.ccpe.integrated_air_duct": "整合气道",
   "block.ccpe.static_port": "静压孔",
   "block.ccpe.pitot_tube": "皮托管",
   "block.ccpe.ins": "惯性导航系统",
@@ -67,6 +67,9 @@
   "tooltip.ccpe.engine.lua_connected": "已连接",
   "tooltip.ccpe.engine.lua_disconnected": "未连接",
   "tooltip.ccpe.engine.chamber_type_conflict": "该引擎已装配另一种燃烧室，流体/蒸汽不能混用",
+  "tooltip.ccpe.engine.economy": "经济：",
+  "tooltip.ccpe.engine.no_air_duct": "未装整合气道",
+  "tooltip.ccpe.engine.cowling": "风门：",
 
   "gui.ccpe.monitor.module_info": "%s 位于 (%s, %s) 尺寸 %s×%s",
   "gui.ccpe.monitor_menu.done": "完成",

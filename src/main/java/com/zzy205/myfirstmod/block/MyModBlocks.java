@@ -172,9 +172,9 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
-    /** 冷却风道（cooling_duct）：6 面贴附 × 每面 2 旋转 = 12 态纯静态方块（无 BE，见 CoolingDuctBlock）；音效对齐发动机核心（SoundType.NETHERITE_BLOCK） */
-    public static final DeferredBlock<CoolingDuctBlock> cooling_duct =
-            registerBlocks("cooling_duct", () -> new CoolingDuctBlock(BlockBehaviour.Properties.of().
+    /** 整合气道（integrated_air_duct）：6 面贴附 × 每面 2 旋转 = 12 态纯静态方块（无 BE，见 IntegratedAirDuctBlock）；P6 散热+进气综合模块（直接替换冷却风道；装 ≥1 个解锁经济区/拉稀权/风门）；音效对齐发动机核心（SoundType.NETHERITE_BLOCK） */
+    public static final DeferredBlock<IntegratedAirDuctBlock> integrated_air_duct =
+            registerBlocks("integrated_air_duct", () -> new IntegratedAirDuctBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
                     strength(5.0f, 6.0f).
                     noOcclusion()
