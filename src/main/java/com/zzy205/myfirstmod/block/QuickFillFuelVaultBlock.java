@@ -10,6 +10,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -169,12 +170,49 @@ public class QuickFillFuelVaultBlock extends DirectionalBlock implements IWrench
             return ItemInteractionResult.FAIL;
         }
 
+        // 空手右键：自动存入背包/物品栏中与燃料箱同种的物品，每次只存一组（燃料箱为空则不触发）
+        QuickFillFuelVaultBlockEntity vault = getVault(level, pos);
+        if (vault == null || vault.isEmpty())
+            return ItemInteractionResult.FAIL;
+        if (depositOneGroupFromInventory(player, vault)) {
+            pulseOpen(level, pos);
+            return ItemInteractionResult.SUCCESS;
+        }
         return ItemInteractionResult.FAIL;
     }
 
     @Nullable
     private static QuickFillFuelVaultBlockEntity getVault(Level level, BlockPos pos) {
         return level.getBlockEntity(pos) instanceof QuickFillFuelVaultBlockEntity vault ? vault : null;
+    }
+
+    /**
+     * 空手右键自动存入：每次只存入<b>一组</b>（该物品最大堆叠数）同种物品，
+     * 从背包/物品栏按序跨槽收集；燃料箱剩余容量不足一组时按剩余容量部分存入；
+     * 背包同种物品总量不足一组时存入能收集到的全部。
+     *
+     * @return 是否实际存入了任何物品
+     */
+    private static boolean depositOneGroupFromInventory(Player player, QuickFillFuelVaultBlockEntity vault) {
+        ItemStack storedType = vault.getStored();
+        int need = Math.min(storedType.getMaxStackSize(),
+                QuickFillFuelVaultBlockEntity.CAPACITY - vault.getStoredCount());
+        if (need <= 0)
+            return false;
+
+        int depositedTotal = 0;
+        Inventory inventory = player.getInventory();
+        for (int i = 0; i < inventory.items.size() && need > 0; i++) {
+            ItemStack slot = inventory.getItem(i);
+            if (slot.isEmpty() || !ItemStack.isSameItemSameComponents(storedType, slot))
+                continue;
+            int take = Math.min(slot.getCount(), need);
+            ItemStack part = slot.split(take); // split 从背包槽拆出并减少槽内数量
+            vault.deposit(part);
+            need -= take;
+            depositedTotal += take;
+        }
+        return depositedTotal > 0;
     }
 
     // ── 扳手拆除（调试日志，确认拆除调用链；定位后移除） ──
