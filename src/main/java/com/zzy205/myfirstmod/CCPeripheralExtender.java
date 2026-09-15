@@ -6,6 +6,7 @@ import com.zzy205.myfirstmod.block.EngineFuels;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.block.QuickFillFluidTankBlockEntity;
+import com.zzy205.myfirstmod.block.QuickFillFuelVaultBlockEntity;
 import com.zzy205.myfirstmod.block.TrailingWheelMountBlockEntity;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralCapabilities;
@@ -120,11 +121,17 @@ public class CCPeripheralExtender {
         FlightDataRecorder.closeAll();
     }
 
-    /** 注册方块流体能力：快速装填流体储罐暴露 4000mb 单槽 FluidHandler.BLOCK（供流体管道/goggle tooltip 等读取）。 */
+    /** 注册方块能力：快速装填流体储罐暴露 4000mb 单槽 FluidHandler.BLOCK（供流体管道/goggle tooltip 等读取）；
+     *  快速装填燃料箱暴露单槽 ItemHandler.BLOCK（供引擎蒸汽室自动抽取固体燃料——只走 capability，见
+     *  {@code EngineCoreBlockEntity#tryPullSolidFuel}）。 */
     private static void registerBlockCapabilities(RegisterCapabilitiesEvent event) {
         event.registerBlockEntity(
                 Capabilities.FluidHandler.BLOCK,
                 MyModBlockEntities.quick_fill_fluid_tank_entity.get(),
                 (be, side) -> ((QuickFillFluidTankBlockEntity) be).getTank());
+        event.registerBlockEntity(
+                Capabilities.ItemHandler.BLOCK,
+                MyModBlockEntities.quick_fill_fuel_vault_entity.get(),
+                (be, side) -> ((QuickFillFuelVaultBlockEntity) be).getItemHandler());
     }
 }

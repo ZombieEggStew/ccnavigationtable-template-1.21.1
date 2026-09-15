@@ -6,12 +6,16 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.items.IItemHandler;
 
 /**
  * 快速装填燃料箱（quick_fill_fuel_vault）方块实体：单一物品类型库存（无 GUI）。
  * <p>
  * 整个燃料箱<b>只能存一种物品</b>，最多 {@value CAPACITY} 个（16 组 × 64）。
- * 不实现 {@code Container}（无外部管道/漏斗/界面交互需求，仅手动右键存取）。
+ * 不实现 {@code Container}（无手动 GUI 交互需求，仅右键存取）；
+ * 但暴露 {@link IItemHandler} 能力（{@code ItemHandler.BLOCK}，注册见
+ * {@code CCPeripheralExtender#registerBlockCapabilities}）——供引擎蒸汽室在流体燃料
+ * 不可用时自动抽取固体燃料（只走 capability，绝不直接改容器 BE）。
  * <p>
  * <b>存储表示</b>：类型用 count=1 的 {@link ItemStack} 占位（{@link #storedItem}），
  * 数量单独存 {@link #storedCount}（0..CAPACITY）。不能直接用 count&gt;64 的单个 ItemStack
@@ -32,8 +36,83 @@ public class QuickFillFuelVaultBlockEntity extends BlockEntity {
     /** 实际库存数量（0..CAPACITY），可超过物品最大堆叠数 */
     private int storedCount = 0;
 
+    /**
+     * ItemHandler 能力视图（单槽）：槽内栈 = 库存类型占位（数量钳到最大堆叠，真实数量在 {@link #storedCount}）。
+     * 存入遵守单物品类型语义（异种拒绝、超容量拒绝）；取出直接扣 {@link #storedCount}（可连续取出超过 64 个）。
+     * 供引擎蒸汽室固体燃料自动抽取（{@code extractItem(slot, 1, false)}）等外部读取，不经手动右键交互。
+     */
+    private final IItemHandler itemHandler = new IItemHandler() {
+        @Override
+        public int getSlots() {
+            return 1;
+        }
+
+        @Override
+        public ItemStack getStackInSlot(int slot) {
+            if (slot != 0 || storedCount == 0)
+                return ItemStack.EMPTY;
+            return storedItem.copyWithCount(Math.min(storedCount, storedItem.getMaxStackSize()));
+        }
+
+        @Override
+        public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
+            if (slot != 0 || stack.isEmpty())
+                return stack;
+            // 单物品类型：已有库存时异种拒绝（同 canDeposit 语义）
+            if (storedCount > 0 && !ItemStack.isSameItemSameComponents(storedItem, stack))
+                return stack;
+            int space = CAPACITY - storedCount;
+            if (space <= 0)
+                return stack;
+            int inserted = Math.min(stack.getCount(), space);
+            if (!simulate) {
+                if (storedCount == 0) {
+                    storedItem = stack.copy();
+                    storedItem.setCount(1);
+                }
+                storedCount += inserted;
+                setChanged();
+            }
+            if (inserted >= stack.getCount())
+                return ItemStack.EMPTY;
+            ItemStack remainder = stack.copy();
+            remainder.shrink(inserted);
+            return remainder;
+        }
+
+        @Override
+        public ItemStack extractItem(int slot, int amount, boolean simulate) {
+            if (slot != 0 || storedCount == 0 || amount <= 0)
+                return ItemStack.EMPTY;
+            int take = Math.min(amount, Math.min(storedCount, storedItem.getMaxStackSize()));
+            ItemStack result = storedItem.copyWithCount(take);
+            if (!simulate) {
+                storedCount -= take;
+                if (storedCount == 0)
+                    storedItem = ItemStack.EMPTY;
+                setChanged();
+            }
+            return result;
+        }
+
+        @Override
+        public int getSlotLimit(int slot) {
+            return storedItem.isEmpty() ? 64 : storedItem.getMaxStackSize();
+        }
+
+        @Override
+        public boolean isItemValid(int slot, ItemStack stack) {
+            return slot == 0 && (stack.isEmpty() || canDeposit(stack));
+        }
+    };
+
     public QuickFillFuelVaultBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.quick_fill_fuel_vault_entity.get(), pos, state);
+    }
+
+    /** ItemHandler 能力实例（{@code ItemHandler.BLOCK} 查询返回；引擎蒸汽室固体燃料自动抽取用）。 */
+    public IItemHandler getItemHandler() {
+        return itemHandler;
     }
 
     /** 库存类型占位（count=1）；EMPTY 表示空仓。 */
