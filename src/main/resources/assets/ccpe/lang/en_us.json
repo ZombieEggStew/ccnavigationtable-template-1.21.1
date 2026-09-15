@@ -75,7 +75,7 @@
   "tooltip.ccpe.engine.modules": "Modules:",
   "tooltip.ccpe.engine.modules_none": "None",
   "tooltip.ccpe.engine.chamber_type_conflict": "This engine already has a different chamber type — chamber types cannot be mixed",
-  "tooltip.ccpe.engine.economy": "Economy:",
+  "tooltip.ccpe.engine.economy": "Fuel:",
   "tooltip.ccpe.engine.no_air_duct": "No integrated air duct",
   "tooltip.ccpe.engine.cowling": "Cooling Shutters:",
   "tooltip.ccpe.engine.optimal_temp": "Optimal Temp:",

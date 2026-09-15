@@ -1518,7 +1518,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return true;
     }
 
-    /** 引擎核心 tooltip：温度 + Lua 控制状态 + 总应力输出 + 目前转速 + 连接的模块清单 */
+    /** 引擎核心 tooltip：温度 + 总应力输出 + 目前转速 + 连接的模块清单 */
     private void addCoreTooltip(List<Component> tooltip) {
         tooltip.add(Component.literal("    ")
                 .append(Component.translatable("tooltip.ccpe.engine.header")
@@ -1528,13 +1528,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 .append(Component.translatable("tooltip.ccpe.engine.temperature").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(String.format(Locale.ROOT, "%.1f°C", tooltipTemp()))
                         .withStyle(overheated ? ChatFormatting.RED : ChatFormatting.GOLD)));
-        // Lua 控制连接状态（Peripheral.attach/detach 维护，经 NBT 同步客户端）
-        tooltip.add(Component.literal("     ")
-                .append(Component.translatable("tooltip.ccpe.engine.lua_control").withStyle(ChatFormatting.GRAY))
-                .append(Component.translatable(luaConnected ? "tooltip.ccpe.engine.lua_connected"
-                        : "tooltip.ccpe.engine.lua_disconnected")
-                        .withStyle(luaConnected ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)));
-        // 总应力输出（服务端同步 moduleCapacity；客户端拿不到燃料表 stress 倍率，不自算）
+        // 总应力输出（用户要求显示产生的总应力；服务端同步 moduleCapacity——客户端拿不到燃料表 stress 倍率，不自算）
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.stress_output").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(Math.round(moduleCapacity) + " SU").withStyle(ChatFormatting.AQUA)));
@@ -1626,9 +1620,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 .append(Component.translatable("tooltip.ccpe.engine.header")
                         .withStyle(ChatFormatting.WHITE)));
 
-        boolean added = super.addToGoggleTooltip(tooltip, isPlayerSneaking);
-
-        // 状态行：正常 / 即将过热（T ≥ 0.8×T_max）/ 过热锁定
+        // 不调用 super.addToGoggleTooltip：Create 动力方默认 goggle 会加「容量提供 / 应力影响」行，
+        // 用户要求精简 tooltip —— 全部应力条目移除（核心 tooltip 的应力行也已移除）。
+        // 状态行：正常 / 即将过热（T ≥ 0.8×T_max）/ 过热锁定 / 过冷（BLUE）
         String statusKey;
         ChatFormatting statusColor;
         if (overheated) {
@@ -1684,20 +1678,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                         .append(Component.translatable("tooltip.ccpe.engine.economy").withStyle(ChatFormatting.GRAY))
                         .append(Component.translatable("tooltip.ccpe.engine.no_air_duct").withStyle(ChatFormatting.GOLD)));
             }
-            // 风门（整合气道解锁；未装不显示——<1 = 已关小保热）
-            if (hasAirDuct) {
-                tooltip.add(Component.literal("     ")
-                        .append(Component.translatable("tooltip.ccpe.engine.cowling").withStyle(ChatFormatting.GRAY))
-                        .append(Component.literal(Math.round(coolingStrength * 100) + "%")
-                                .withStyle(coolingStrength < 1f ? ChatFormatting.AQUA : ChatFormatting.GRAY)));
-            }
-            // P7：过冷提示（cold>1 = 温度低于目标（如刚开机），油耗惩罚中——先小油门暖机再推油门）
-            if (lastColdFactor > 1.01f) {
-                tooltip.add(Component.literal("     ")
-                        .append(Component.translatable("tooltip.ccpe.engine.cold").withStyle(ChatFormatting.GRAY))
-                        .append(Component.literal("×" + String.format(Locale.ROOT, "%.2f", (double) lastColdFactor))
-                                .withStyle(ChatFormatting.GOLD)));
-            }
+            // 过冷状态已由状态行（status.cold）显示，不再单独列数值行；风门行同样移除（用户要求精简 tooltip）
         }
         // P5：混合比（仅流体引擎；蒸汽引擎无混合比轴，不显示——杆值/高空实际都用服务端同步值，客户端无法可靠算运动体高度）
         if (!steamEngine) {
@@ -1712,12 +1693,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                         .append(Component.literal(String.format(Locale.ROOT, "%.2f", (double) mEff))
                                 .withStyle(ChatFormatting.GOLD)));
         }
-        // Lua 控制连接状态（Peripheral.attach/detach 维护，经 NBT 同步客户端）
-        tooltip.add(Component.literal("     ")
-                .append(Component.translatable("tooltip.ccpe.engine.lua_control").withStyle(ChatFormatting.GRAY))
-                .append(Component.translatable(luaConnected ? "tooltip.ccpe.engine.lua_connected"
-                        : "tooltip.ccpe.engine.lua_disconnected")
-                        .withStyle(luaConnected ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)));
+        // Lua 控制行已移除（用户要求精简 tooltip；luaConnected 字段/NBT 同步保留备用）
     }
 
     @Override

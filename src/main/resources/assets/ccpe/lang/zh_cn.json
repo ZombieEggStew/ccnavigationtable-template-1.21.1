@@ -75,7 +75,7 @@
   "tooltip.ccpe.engine.modules": "连接的模块：",
   "tooltip.ccpe.engine.modules_none": "无",
   "tooltip.ccpe.engine.chamber_type_conflict": "该引擎已装配另一种燃烧室，流体/蒸汽不能混用",
-  "tooltip.ccpe.engine.economy": "经济：",
+  "tooltip.ccpe.engine.economy": "油耗：",
   "tooltip.ccpe.engine.no_air_duct": "未装整合气道",
   "tooltip.ccpe.engine.cowling": "风门：",
   "tooltip.ccpe.engine.optimal_temp": "最佳温度：",
