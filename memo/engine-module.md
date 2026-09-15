@@ -293,6 +293,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 状态：正常 / 暖机中 / 停机
 温度：XX.X°C
 油门：50%
+燃料：熔岩 / 煤炭（剩余 1m 20s）/ 无      ← 参考 simulated portable_engine：流体只显示名称不显示时间；固体显示剩余燃烧时间（burnTicks 总和 ÷20 秒，getTime 格式）；无储备显示红"无"
 ```
 
 **整合气道**（悬停 integrated_air_duct）：

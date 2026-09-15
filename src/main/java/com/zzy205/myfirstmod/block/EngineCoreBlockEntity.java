@@ -138,6 +138,16 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 固体燃料源重扫冷却 */
     protected int solidFuelRescanCooldown = 0;
 
+    // ---- 蒸汽室燃料显示（Goggle 燃料行；服务端每 tick 计算，NBT 同步客户端，参考 simulated portable_engine）----
+    /** 蒸汽室当前燃料类型（服务端权威）："none"（无储备）/"fluid"（最后靠流体 feed 补燃料）/"solid"（最后靠固体 pull 补燃料） */
+    protected String steamFuelType = "none";
+    /** 当前蒸汽燃料的显示翻译键（流体 = 流体描述 id，如 block.minecraft.lava；固体 = 物品描述 id，如 item.minecraft.coal） */
+    protected String steamFuelKey = "";
+    /** 蒸汽室固体燃料剩余总燃烧 tick（各室 burnTicks 之和；仅固体类型显示剩余时间，流体不显示） */
+    protected float steamBurnTicksRemaining = 0f;
+    /** 最近一次固体 pull 成功的物品翻译键（储备来源为固体时显示用；pull 时更新） */
+    protected String steamSolidFuelKey = "";
+
     // ---- P3：温度/冷却（牛顿冷却模型，方案见 memo/engine-module.md 关键机制 6） ----
     /** 过热阈值（°C）：T ≥ 此值硬停 */
     public static final float OVERHEAT_TEMP = 200f;
@@ -416,6 +426,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                         if (drainSteamFluidFuel(1)) {
                             be.fluidFuelDebt -= 1f;
                             be.burnTicks += Math.max(1, Math.round(steamFuelBurnTicks / 1000f));
+                            steamFuelType = "fluid"; // 储备来源 = 流体（Goggle 燃料行）
                             be.setChanged();
                         } else {
                             be.fluidFuelDebt = 0;
@@ -446,6 +457,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 }
             }
         }
+
+        // 蒸汽室燃料显示数据（服务端每 tick；同步客户端 Goggle 燃料行）
+        updateSteamFuelDisplay(steamChambers);
 
         int runningTotal = runningFluid + runningSteam;
         // P6 Plan B：蒸汽锅炉暖机门控——T ≥ STEAM_MIN_WORK_TEMP 才「开始工作」（低于阈值只烧不发电，热机过程）
@@ -797,6 +811,41 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
+     * 蒸汽室燃料显示数据（服务端每 tick，同步客户端 Goggle 燃料行，参考 simulated portable_engine）：
+     * 储备来源 = 最后一次补燃料的方式（流体 feed / 固体 pull），由 {@link #steamFuelType} 标记；
+     * 任何室有储备（burnTicks>0）才显示燃料，否则"无"。
+     * 固体显示剩余总燃烧 tick（各室 burnTicks 之和，客户端换算秒数）；流体不显示时间（用户要求）。
+     */
+    private void updateSteamFuelDisplay(List<BlockPos> steamChambers) {
+        float total = 0f;
+        boolean anyReserve = false;
+        for (BlockPos sp : steamChambers) {
+            if (level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be) {
+                total += be.burnTicks;
+                if (be.burnTicks > 0)
+                    anyReserve = true;
+            }
+        }
+        if (!anyReserve) {
+            steamFuelType = "none";
+            steamFuelKey = "";
+            steamBurnTicksRemaining = 0f;
+            return;
+        }
+        if (steamFuelType.equals("fluid") && !steamFuelFluid.isEmpty()) {
+            steamFuelKey = steamFuelFluid.getFluid().getFluidType().getDescriptionId();
+            steamBurnTicksRemaining = 0f;
+        } else if (steamFuelType.equals("solid")) {
+            steamFuelKey = steamSolidFuelKey;
+            steamBurnTicksRemaining = total;
+        } else {
+            // 有储备但来源未知（旧档/首个 tick 前）→ 显示"无"（下一 tick 补燃料后立即修正）
+            steamFuelKey = "";
+            steamBurnTicksRemaining = 0f;
+        }
+    }
+
+    /**
      * 从缓存的固体燃料箱抽 1 个熔炉燃料物品（burnTime > 0），burnTicks += 物品 burnTime；抽到返回 true。
      * <p>调用前提：流体燃料不可用（流体优先）且本室 burnTicks 耗尽；油门 0 不抽（停机不烧油）。
      * 源已空/已拆 → 失效缓存（下一 tick {@link #solidFuelAvailable} 重扫）。只走 capability，
@@ -821,6 +870,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             if (extracted.isEmpty())
                 continue;
             be.burnTicks += burnTime;
+            steamFuelType = "solid"; // 储备来源 = 固体（Goggle 燃料行）
+            steamSolidFuelKey = extracted.getDescriptionId();
             be.setChanged();
             return true;
         }
@@ -1333,6 +1384,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         waterSourcePos = donor.waterSourcePos;
         steamFuelSourcePos = donor.steamFuelSourcePos;
         solidFuelSourcePos = donor.solidFuelSourcePos;
+        steamFuelType = donor.steamFuelType;
+        steamFuelKey = donor.steamFuelKey;
+        steamBurnTicksRemaining = donor.steamBurnTicksRemaining;
+        steamSolidFuelKey = donor.steamSolidFuelKey;
         activeFuelType = donor.activeFuelType;
         activeFuelId = donor.activeFuelId;
         activeFuelTopt = donor.activeFuelTopt;
@@ -1547,6 +1602,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         lastColdFactor = compound.contains("ColdFactor") ? compound.getFloat("ColdFactor") : 1f;
         lastFuelFactor = compound.contains("FuelFactor") ? compound.getFloat("FuelFactor") : 1f;
         lastHeatFactor = compound.contains("HeatFactor") ? compound.getFloat("HeatFactor") : 1f;
+        // 蒸汽室燃料显示（服务端每 tick 计算；旧存档无字段 → 默认值）
+        steamFuelType = compound.contains("SteamFuelType") ? compound.getString("SteamFuelType") : "none";
+        steamFuelKey = compound.contains("SteamFuelKey") ? compound.getString("SteamFuelKey") : "";
+        steamBurnTicksRemaining = compound.contains("SteamBurnTicks") ? compound.getFloat("SteamBurnTicks") : 0f;
+        steamSolidFuelKey = compound.contains("SteamSolidFuelKey") ? compound.getString("SteamSolidFuelKey") : "";
         // Lua 连接状态：磁盘加载无此字段 → false（服务端启动时无电脑挂载）；客户端包带真实值
         luaConnected = compound.getBoolean("LuaConnected");
 
@@ -1600,6 +1660,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putFloat("ColdFactor", lastColdFactor);
         compound.putFloat("FuelFactor", lastFuelFactor);
         compound.putFloat("HeatFactor", lastHeatFactor);
+        // 蒸汽室燃料显示（服务端每 tick 计算，同步客户端 Goggle 燃料行；客户端不重算）
+        compound.putString("SteamFuelType", steamFuelType);
+        compound.putString("SteamFuelKey", steamFuelKey);
+        compound.putFloat("SteamBurnTicks", steamBurnTicksRemaining);
+        compound.putString("SteamSolidFuelKey", steamSolidFuelKey);
         // Lua 连接状态是运行时瞬态（电脑挂载），只同步客户端供 Goggle 显示，不落盘
         if (clientPacket)
             compound.putBoolean("LuaConnected", luaConnected);
@@ -1721,6 +1786,47 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.throttle").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
+        // 燃料（正在使用的燃料；固体显示剩余燃烧时间，流体不显示——参考 simulated portable_engine）
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.fuel").withStyle(ChatFormatting.GRAY))
+                .append(steamFuelValueComponent()));
+    }
+
+    /** 蒸汽室燃料行值：无储备 → 红"无"；流体 → 绿燃料名（不显示时间）；固体 → 绿燃料名 + 青"（剩余 Xh Ym Zs）"。
+     *  数据全部来自服务端同步（steamFuelType/steamFuelKey/steamBurnTicksRemaining，客户端不重算）。 */
+    private Component steamFuelValueComponent() {
+        if (steamFuelType.equals("fluid") && !steamFuelKey.isEmpty())
+            return Component.translatable(steamFuelKey).withStyle(ChatFormatting.GREEN);
+        if (steamFuelType.equals("solid") && !steamFuelKey.isEmpty()) {
+            Component name = Component.translatable(steamFuelKey).withStyle(ChatFormatting.GREEN);
+            if (steamBurnTicksRemaining > 0) {
+                // 剩余时间 = 总燃烧 tick / 20（原版熔炉速率秒，参考 portable_engine.getTime；与效率无关）
+                int seconds = Math.max(0, Math.round(steamBurnTicksRemaining / 20f));
+                name = name.copy().append(Component.translatable("tooltip.ccpe.engine.fuel_remaining",
+                        formatBurnTime(seconds)).withStyle(ChatFormatting.AQUA));
+            }
+            return name;
+        }
+        return Component.translatable("tooltip.ccpe.engine.fuel_none").withStyle(ChatFormatting.RED);
+    }
+
+    /** 秒数格式化（照抄 simulated portable_engine 的 getTime）：Xh Ym Zs（小时/分钟省略前导零规则一致） */
+    private static String formatBurnTime(int sec) {
+        String s = "";
+        int min = sec / 60;
+        int hour = min / 60;
+        sec = Math.floorMod(sec, 60);
+        min = Math.floorMod(min, 60);
+        if (hour > 0)
+            s += hour + "h ";
+        if (min < 10 && hour > 0)
+            s += 0;
+        if (min > 0 || hour > 0)
+            s += min + "m ";
+        if (sec < 10 && min > 0)
+            s += 0;
+        s += sec + "s";
+        return s;
     }
 
     /** 整合气道 tooltip：温度 + 冷却（= setCooling 风门百分比） */
