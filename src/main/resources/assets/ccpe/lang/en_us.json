@@ -61,6 +61,7 @@
   "tooltip.ccpe.engine.status.warming": "Warming up",
   "tooltip.ccpe.engine.status.stopped": "Stopped",
   "tooltip.ccpe.engine.status.cold": "Cold",
+  "tooltip.ccpe.engine.status.efficient": "Efficient",
   "tooltip.ccpe.engine.temperature": "Temperature:",
   "tooltip.ccpe.engine.overheated": "Overheated!",
   "tooltip.ccpe.engine.efficiency": "Efficiency:",
@@ -76,8 +77,10 @@
   "tooltip.ccpe.engine.modules_none": "None",
   "tooltip.ccpe.engine.chamber_type_conflict": "This engine already has a different chamber type — chamber types cannot be mixed",
   "tooltip.ccpe.engine.economy": "Fuel:",
+  "tooltip.ccpe.engine.heat_factor": "Heat Factor:",
   "tooltip.ccpe.engine.no_air_duct": "No integrated air duct",
   "tooltip.ccpe.engine.cowling": "Cooling Shutters:",
+  "tooltip.ccpe.engine.cooling": "Cooling:",
   "tooltip.ccpe.engine.optimal_temp": "Optimal Temp:",
   "tooltip.ccpe.engine.cold": "Cold:",
 

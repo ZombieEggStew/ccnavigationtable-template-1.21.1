@@ -3,6 +3,5 @@
   "consumption": 1.0,
   "heat": 1.0,
   "stress": 1.0,
-  "burn_ticks_per_bucket": 20000,
   "priority": 0.0
 }

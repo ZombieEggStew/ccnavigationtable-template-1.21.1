@@ -126,9 +126,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected int waterRescanCooldown = 0;
     /** 水消耗累加器（每蒸汽室 1mb/s = 0.05mb/t，≥1 才 drain 1mb） */
     protected float waterDebt = 0f;
-    /** 蒸汽室当前流体燃料条目（缓存） */
-    protected EngineFuels.Entry steamFuelEntry;
-    /** 蒸汽室当前流体燃料（缓存，供 drain 使用） */
+    /** 蒸汽室当前流体燃料（缓存，供 drain 使用；P7 = 纯原版解析，无 datapack 条目） */
     protected FluidStack steamFuelFluid = FluidStack.EMPTY;
     /** 蒸汽室流体燃料源罐位置（缓存，失效重扫） */
     protected BlockPos steamFuelSourcePos;
@@ -138,8 +136,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     // ---- P3：温度/冷却（牛顿冷却模型，方案见 memo/engine-module.md 关键机制 6） ----
     /** 过热阈值（°C）：T ≥ 此值硬停 */
     public static final float OVERHEAT_TEMP = 200f;
-    /** 滞回恢复阈值（°C）：T ≤ 此值才允许重启（0.8×OVERHEAT_TEMP） */
-    public static final float OVERHEAT_RESUME = 160f;
+    /** 滞回恢复阈值（°C）：T ≤ 此值才允许重启（0.9×OVERHEAT_TEMP；与「即将过热」预警阈值同值 180） */
+    public static final float OVERHEAT_RESUME = 180f;
     /** 海平面环境温度（°C） */
     public static final float T_AMB_SEA = 20f;
     /** 对流层环境温度递减率（°C/m，按海平面高度） */
@@ -240,9 +238,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final float ECO_UNLOCK_RATE = 1f / 15f;
     /** 经济流失速率（/s）：不达标时 ecoProgress −= 此值/20，6s 归零（离开窗口快速失去折扣） */
     public static final float ECO_DECAY_RATE = 1f / 6f;
-    /** T_opt 随油门：T_opt(eff) = optimal_temp × (T_OPT_IDLE_RATIO + (1−T_OPT_IDLE_RATIO)×油门)（满油门 = 现状，怠速 ×0.6） */
-    public static final float T_OPT_IDLE_RATIO = 0.6f;
-    /** 过冷惩罚系数：cold = 1 + COLD_K × max(0, T_opt(eff) − ECO_FLAT − T) / T_opt(eff)（20°C 满油门 ≈×1.24） */
+    /** P7 修订：流体引擎设计工作温度（°C，经济目标）——全部引擎固定（不随燃料、不随油门），真实 = 引擎设计点/节温器恒定 */
+    public static final float ENGINE_T_OPT = 155f;
+    /** 过冷阈值（°C，引擎最低工作温度；与蒸汽暖机门槛 STEAM_MIN_WORK_TEMP 同值）：T < 此值 = 过冷油耗惩罚，先小油门暖机 */
+    public static final float ENGINE_MIN_WORK_TEMP = 100f;
+    /** 过冷惩罚系数：cold = 1 + COLD_K × max(0, ENGINE_MIN_WORK_TEMP − T) / ENGINE_MIN_WORK_TEMP（20°C ≈×1.24） */
     public static final float COLD_K = 0.3f;
     /** 蒸汽引擎固定最佳工作温度（°C，锅炉设计温度，不随燃料变——真实：蒸汽效率 ∝ 蒸汽温度/压力 [卡诺]） */
     public static final float BOILER_T_OPT = 155f;
@@ -258,11 +258,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** P7：经济解锁进度（0~1，服务端权威：双因素持续达标缓慢累积、离开窗口快速流失）。NBT 同步客户端 Goggle 经济行渐入显示 */
     protected float ecoProgress = 0f;
     /** P7：当前最佳工作温度目标（随油门，服务端每 tick 计算）。NBT 同步客户端 Goggle */
-    protected float lastOptimalTemp = EngineFuels.DEFAULT_OPTIMAL_TEMP;
+    protected float lastOptimalTemp = ENGINE_T_OPT;
     /** P7：当前过冷系数（cold ≥ 1；>1 = 温度低于目标、油耗惩罚中，只乘油耗）。NBT 同步客户端 Goggle */
     protected float lastColdFactor = 1f;
     /** P7：最终油耗系数（杆值 × 经济系数 × 过冷惩罚，服务端每 tick 计算；停机/蒸汽 → 1.0 无意义）。NBT 同步客户端 Goggle 经济行 */
     protected float lastFuelFactor = 1f;
+    /** P7：最终发热系数（heatFactor(m_eff)，m_eff = 杆 × 高空自动富油；稀=热 >1 / 富油=凉 <1；蒸汽恒 1.0）。NBT 同步客户端 Goggle */
+    protected float lastHeatFactor = 1f;
     /** 冷却强度（风门，0~1，默认 1.0 = 全开；只缩放 K_DUCT 风道散热分量，冲压/气压/环境不动；仅装整合气道后可调，只能降——真实 cowl flap）。NBT 持久化。 */
     protected float coolingStrength = 1f;
 
@@ -272,7 +274,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 当前活动流体燃料 id（蒸汽引擎为空串） */
     protected String activeFuelId = "";
     /** 当前活动燃料的最佳工作温度（°C） */
-    protected float activeFuelTopt = EngineFuels.DEFAULT_OPTIMAL_TEMP;
+    protected float activeFuelTopt = ENGINE_T_OPT;
 
     /** CC:T 外设实例（懒加载），不直接在 BE 上实现 IPeripheral 以避免 getType() 与 BlockEntity.getType() 冲突 */
     @Nullable
@@ -353,6 +355,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         float effectiveMixture = steamEngine ? 1f : leverMixture * autoRichness(); // 实际混合比（发热/eco 窗口/显示用）
         lastEffectiveMixture = effectiveMixture;
         float mixtureHeatFactor = steamEngine ? 1f : heatFactor(effectiveMixture);
+        lastHeatFactor = mixtureHeatFactor; // P7：同步给 Goggle 发热系数行（服务端权威）
 
         // 流体燃烧室（P1）：燃料表第一个可用流体；每室 consumption mb/s × 效率 × 杆值 × 经济 × 过冷（P7，蒸汽引擎无流体室 → 跳过扫描）
         int runningFluid = 0;
@@ -362,10 +365,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             runningFluid = fluidChambers.size();
             fluidCapacity = runningFluid * BASE_STRESS_PER_CHAMBER * fluidFuel.stress();
             // P7 经济区（只省油耗、绝不反哺 Q_heat）：eco = 双因素 AND 门控 + 解锁进度（上 tick 值，1 tick 滞后可忽略）
-            // P7 过冷惩罚：cold = 1 + COLD_K×(T_opt(eff)−10−T)/T_opt(eff)（刚开机低温 = 油耗惩罚，小油门暖机玩法；只乘油耗）
+            // P7 过冷惩罚：cold = 1 + COLD_K×(ENGINE_MIN_WORK_TEMP−T)/ENGINE_MIN_WORK_TEMP（刚开机低温 = 油耗惩罚，小油门暖机；只乘油耗）
             // P7 奖励驱动：油耗 = 杆值 × eco × cold（自动富油/heatFactor 不进油耗；高空不拉稀 = ×1.0 无惩罚）
-            float tOptEff = optimalTempForThrottle(fluidFuel.optimalTemp(), efficiency);
-            float coldPen = coldPenalty(temperature, tOptEff);
+            float coldPen = coldPenalty(temperature);
             fuelDebt += runningFluid * fluidFuel.consumption() * efficiency * leverMixture
                     * (1f - (1f - ECO_MIN) * ecoProgress) * coldPen / 20f;
             while (fuelDebt >= 1f) {
@@ -385,19 +387,19 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // 蒸汽动力室（P2）：水 + 流体燃料（burnTick 制，水在才烧；水不可用整类暂停；固体燃料抽取暂缓见 tryPullSolidFuel）
         int runningSteam = 0;
         boolean waterOk = !overstressed && heatAllowed && waterAvailable(neighbors);
-        EngineFuels.Entry steamFuel = heatAllowed && !steamChambers.isEmpty() ? findSteamFluidFuel(neighbors) : null;
-        if (waterOk && steamFuel != null) {
+        int steamFuelBurnTicks = heatAllowed && !steamChambers.isEmpty() ? findSteamFuelBurnTicks(neighbors) : 0;
+        if (waterOk && steamFuelBurnTicks > 0) {
             // P6 Plan B：蒸汽无经济区（温度钉在 BOILER_T_OPT 自调节 → 无折扣无惩罚，系数恒 1.0）
             for (BlockPos sp : steamChambers) {
                 if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
                     continue;
-                // 流体燃料：每 tick 每室消耗 1000/burn_ticks_per_bucket × 效率 mb（≈效率 个 burnTick/tick），
-                // 累计 ≥1mb 从源罐抽；每抽 1mb → burn_ticks_per_bucket/1000 个 burnTick（熔岩 20 tick/mb）
-                be.fluidFuelDebt += 1000f / steamFuel.burnTicksPerBucket() * efficiency * effectiveMixture;
+                // 流体燃料（P7 纯原版解析）：每 tick 每室消耗 1000/原版桶燃烧时长 × 效率 mb（≈效率 个 burnTick/tick），
+                // 累计 ≥1mb 从源罐抽；每抽 1mb → 原版桶燃烧时长/1000 个 burnTick（熔岩桶 20000 → 20 tick/mb）
+                be.fluidFuelDebt += 1000f / steamFuelBurnTicks * efficiency * effectiveMixture;
                 while (be.fluidFuelDebt >= 1f) {
                     if (drainSteamFluidFuel(1)) {
                         be.fluidFuelDebt -= 1f;
-                        be.burnTicks += Math.max(1, Math.round(steamFuel.burnTicksPerBucket() / 1000f));
+                        be.burnTicks += Math.max(1, Math.round(steamFuelBurnTicks / 1000f));
                         be.setChanged();
                     } else {
                         be.fluidFuelDebt = 0;
@@ -461,13 +463,14 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         temperature = Mth.clamp(temperature, tAmb, OVERHEAT_TEMP * 1.2f);
 
         // P7：经济系数（双因素 AND 门控 + 解锁进度；仅流体引擎；蒸汽无经济区恒 1.0；停机/油门 0 → 进度流失、1.0 无意义）
+        // P7 修订：温度阈值全部引擎固定（经济 ENGINE_T_OPT=155 / 过冷 ENGINE_MIN_WORK_TEMP=100），不随燃料/油门
         if (!steamEngine && running && runningFluid > 0 && fluidFuel != null) {
-            lastOptimalTemp = optimalTempForThrottle(fluidFuel.optimalTemp(), efficiency);
-            lastColdFactor = coldPenalty(temperature, lastOptimalTemp);
-            ecoProgress = updateEcoProgress(ecoProgress, temperature, lastOptimalTemp, effectiveMixture, true, airDuct);
+            lastOptimalTemp = ENGINE_T_OPT;
+            lastColdFactor = coldPenalty(temperature);
+            ecoProgress = updateEcoProgress(ecoProgress, temperature, ENGINE_T_OPT, effectiveMixture, true);
         } else {
             lastColdFactor = 1f;
-            ecoProgress = updateEcoProgress(ecoProgress, temperature, lastOptimalTemp, effectiveMixture, false, airDuct);
+            ecoProgress = updateEcoProgress(ecoProgress, temperature, ENGINE_T_OPT, effectiveMixture, false);
         }
         lastEconomyFactor = 1f - (1f - ECO_MIN) * ecoProgress;
         // P7：最终油耗系数（= 杆值 × 经济 × 过冷，服务端权威同步给 Goggle 经济行；停机/蒸汽 → 1.0 无意义）
@@ -479,7 +482,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (runningFluid > 0 && fluidFuel != null) {
             activeFuelType = "fluid";
             activeFuelId = fluidFuel.fluid().toString();
-            activeFuelTopt = fluidFuel.optimalTemp();
+            activeFuelTopt = ENGINE_T_OPT;
         } else if (runningSteam > 0) {
             activeFuelType = "steam";
             activeFuelId = "";
@@ -487,7 +490,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         } else {
             activeFuelType = "none";
             activeFuelId = "";
-            activeFuelTopt = EngineFuels.DEFAULT_OPTIMAL_TEMP;
+            activeFuelTopt = ENGINE_T_OPT;
         }
 
         // P7：tooltip 数据（经济解锁进度/过冷/最佳温度/混合比实际值等）改为<b>每 tick 同步</b>（20Hz，照 simulated velocity_sensor）——
@@ -669,18 +672,18 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return handler.drain(new FluidStack(Fluids.WATER, mb), IFluidHandler.FluidAction.EXECUTE).getAmount() >= mb;
     }
 
-    /** 找蒸汽室当前可用流体燃料（burn_ticks_per_bucket > 0）：缓存优先，失效重扫（带冷却） */
-    protected EngineFuels.Entry findSteamFluidFuel(List<BlockPos> neighbors) {
+    /** 找蒸汽室当前可用流体燃料（P7 纯原版解析：桶物品原版熔炉燃烧时长 > 0）：缓存优先，失效重扫（带冷却）。
+     *  返回每桶燃烧 tick 数（熔岩桶 = 20000）；无可用燃料返回 0。不查 engine_fuel datapack（那是流体燃烧室的燃料表）。 */
+    protected int findSteamFuelBurnTicks(List<BlockPos> neighbors) {
         if (steamFuelSourcePos != null) {
             IFluidHandler handler = fluidHandlerAt(steamFuelSourcePos);
             if (handler != null) {
                 FluidStack stack = handler.getFluidInTank(0);
                 if (!stack.isEmpty()) {
-                    EngineFuels.Entry entry = EngineFuels.get(stack.getFluid());
-                    if (entry != null && entry.burnTicksPerBucket() > 0) {
-                        steamFuelEntry = entry;
+                    int burn = EngineFuels.vanillaBucketBurnTicks(BuiltInRegistries.FLUID.getKey(stack.getFluid()));
+                    if (burn > 0) {
                         steamFuelFluid = stack.copy();
-                        return entry;
+                        return burn;
                     }
                 }
             }
@@ -689,29 +692,27 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
         if (steamFuelRescanCooldown > 0) {
             steamFuelRescanCooldown--;
-            return null;
+            return 0;
         }
         steamFuelRescanCooldown = 10;
 
-        for (EngineFuels.Entry entry : EngineFuels.sortedByPriority()) {
-            if (entry.burnTicksPerBucket() <= 0)
+        // 扫模块邻居储罐：桶物品熔炉燃烧时长 > 0 的流体中，选燃烧最久者（原版燃料值权威）
+        int bestBurn = 0;
+        for (BlockPos pos : neighbors) {
+            IFluidHandler handler = fluidHandlerAt(pos);
+            if (handler == null)
                 continue;
-            for (BlockPos pos : neighbors) {
-                IFluidHandler handler = fluidHandlerAt(pos);
-                if (handler == null)
-                    continue;
-                FluidStack stack = handler.getFluidInTank(0);
-                if (stack.isEmpty())
-                    continue;
-                if (BuiltInRegistries.FLUID.getKey(stack.getFluid()).equals(entry.fluid())) {
-                    steamFuelSourcePos = pos;
-                    steamFuelEntry = entry;
-                    steamFuelFluid = stack.copy();
-                    return entry;
-                }
+            FluidStack stack = handler.getFluidInTank(0);
+            if (stack.isEmpty())
+                continue;
+            int burn = EngineFuels.vanillaBucketBurnTicks(BuiltInRegistries.FLUID.getKey(stack.getFluid()));
+            if (burn > bestBurn) {
+                bestBurn = burn;
+                steamFuelSourcePos = pos;
+                steamFuelFluid = stack.copy();
             }
         }
-        return null;
+        return bestBurn;
     }
 
     /** 从蒸汽室流体燃料源罐 drain 指定量（mb）；源罐失效返回 false */
@@ -822,23 +823,15 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
-     * P7 最佳工作温度随油门：T_opt(eff) = base × (T_OPT_IDLE_RATIO + (1−T_OPT_IDLE_RATIO)×油门)。
-     * 满油门 = 燃料 optimal_temp（现状向后兼容），怠速 ≈×0.6——低油门巡航也有可达经济目标，
-     * 且过冷惩罚自对齐（低温大油门 = 目标高差距大 → 重罚；小油门暖机 = 目标低差距小 → 轻罚）。
-     */
-    protected float optimalTempForThrottle(float tOptBase, float eff) {
-        return tOptBase * (T_OPT_IDLE_RATIO + (1f - T_OPT_IDLE_RATIO) * Mth.clamp(eff, 0f, 1f));
-    }
-
-    /**
      * P7 经济解锁进度（双因素 AND 门控 + 时间积分）：温度与混合比<b>同时</b>持续在平底窗内
-     * （|T−T_opt(eff)|≤ECO_FLAT ∧ |m_eff−1|≤ECO_MIX_FLAT）→ 缓慢累积（ECO_UNLOCK_RATE，15s 满）；
-     * 离开窗口/停机/无整合气道 → 快速流失（ECO_DECAY_RATE，6s 归零）。保持才奖励、快速掠过不奖励；
+     * （|T−ENGINE_T_OPT|≤ECO_FLAT ∧ |m_eff−1|≤ECO_MIX_FLAT）→ 缓慢累积（ECO_UNLOCK_RATE，15s 满）；
+     * 离开窗口/停机 → 快速流失（ECO_DECAY_RATE，6s 归零）。保持才奖励、快速掠过不奖励；
      * 混合比不对 = 无奖励也无惩罚（温度控得再好也没用）。
+     * P7 修订：经济系数<b>不以整合气道为门控</b>（无气道同样生效）——整合气道只门控 setMixture/setCooling Lua。
      */
     protected float updateEcoProgress(float progress, float temp, float tOptEff, float mEff,
-                                      boolean runningFluid, boolean airDuctInstalled) {
-        boolean satisfied = runningFluid && airDuctInstalled
+                                      boolean runningFluid) {
+        boolean satisfied = runningFluid
                 && Math.abs(temp - tOptEff) <= ECO_FLAT
                 && Math.abs(mEff - 1f) <= ECO_MIX_FLAT;
         if (satisfied)
@@ -847,12 +840,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
-     * P7 过冷惩罚（只乘油耗、绝不反哺 Q_heat）：cold = 1 + COLD_K × max(0, T_opt(eff) − ECO_FLAT − T) / T_opt(eff)。
-     * 经济平底窗内无惩罚；刚开机 20°C 满油门 ≈×1.24——玩家先小油门暖机（目标随油门下调、差距小惩罚轻）再推油门。
+     * P7 过冷惩罚（只乘油耗、绝不反哺 Q_heat）：cold = 1 + COLD_K × max(0, ENGINE_MIN_WORK_TEMP − T) / ENGINE_MIN_WORK_TEMP。
+     * T ≥ 100°C（引擎最低工作温度，引擎固定）无惩罚；刚开机 20°C ≈×1.24——玩家先小油门暖机（绝对油耗小、损失轻）再推油门。
+     * 阈值引擎固定（不随燃料/油门），真实 = 最低工作油温。
      */
-    protected float coldPenalty(float temp, float tOptEff) {
-        float gap = Math.max(0f, tOptEff - ECO_FLAT - temp);
-        return 1f + COLD_K * gap / tOptEff;
+    protected float coldPenalty(float temp) {
+        float gap = Math.max(0f, ENGINE_MIN_WORK_TEMP - temp);
+        return 1f + COLD_K * gap / ENGINE_MIN_WORK_TEMP;
     }
 
     /** 热容：C_TH_BASE × 节数（模块越大热得越慢） */
@@ -1164,7 +1158,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
          * P6：当前活动燃料（服务端 tick 缓存，读缓存 ≤1 tick 滞后）。
          * 流体 → {@code {type="fluid", fluid=<流体id>, optimalTemp=..}}；蒸汽 → {@code {type="steam", optimalTemp=BOILER_T_OPT}}（无混合比）；
          * 停机/无燃料 → {@code {type="none"}}。
-         * P7：optimalTemp 为<b>满油门基准值</b>；实际经济目标 = optimalTemp × (0.6 + 0.4×油门)（T_opt 随油门）。
+         * P7 修订：optimalTemp = 引擎固定设计点（流体 ENGINE_T_OPT=155；蒸汽 BOILER_T_OPT=155），不随燃料/油门。
          */
         @LuaFunction
         public final Map<String, Object> getActiveFuel() {
@@ -1420,9 +1414,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         coolingStrength = compound.contains("CoolingStrength") ? compound.getFloat("CoolingStrength") : 1f;
         // P7：经济解锁进度 / 最佳温度 / 过冷系数（旧存档无字段 → 默认值）
         ecoProgress = compound.contains("EcoProgress") ? compound.getFloat("EcoProgress") : 0f;
-        lastOptimalTemp = compound.contains("OptimalTemp") ? compound.getFloat("OptimalTemp") : EngineFuels.DEFAULT_OPTIMAL_TEMP;
+        lastOptimalTemp = compound.contains("OptimalTemp") ? compound.getFloat("OptimalTemp") : ENGINE_T_OPT;
         lastColdFactor = compound.contains("ColdFactor") ? compound.getFloat("ColdFactor") : 1f;
         lastFuelFactor = compound.contains("FuelFactor") ? compound.getFloat("FuelFactor") : 1f;
+        lastHeatFactor = compound.contains("HeatFactor") ? compound.getFloat("HeatFactor") : 1f;
         // Lua 连接状态：磁盘加载无此字段 → false（服务端启动时无电脑挂载）；客户端包带真实值
         luaConnected = compound.getBoolean("LuaConnected");
 
@@ -1476,6 +1471,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putFloat("OptimalTemp", lastOptimalTemp);
         compound.putFloat("ColdFactor", lastColdFactor);
         compound.putFloat("FuelFactor", lastFuelFactor);
+        compound.putFloat("HeatFactor", lastHeatFactor);
         // Lua 连接状态是运行时瞬态（电脑挂载），只同步客户端供 Goggle 显示，不落盘
         if (clientPacket)
             compound.putBoolean("LuaConnected", luaConnected);
@@ -1599,7 +1595,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
     }
 
-    /** 整合气道 tooltip：温度 + 效率（= setCooling 风门百分比） */
+    /** 整合气道 tooltip：温度 + 冷却（= setCooling 风门百分比） */
     private void addAirDuctTooltip(List<Component> tooltip) {
         tooltip.add(Component.literal("    ")
                 .append(Component.translatable("tooltip.ccpe.engine.header")
@@ -1609,7 +1605,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 .append(Component.literal(String.format(Locale.ROOT, "%.1f°C", tooltipTemp()))
                         .withStyle(overheated ? ChatFormatting.RED : ChatFormatting.GOLD)));
         tooltip.add(Component.literal("     ")
-                .append(Component.translatable("tooltip.ccpe.engine.efficiency").withStyle(ChatFormatting.GRAY))
+                .append(Component.translatable("tooltip.ccpe.engine.cooling").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(Math.round(coolingStrength * 100) + "%")
                         .withStyle(coolingStrength < 1f ? ChatFormatting.AQUA : ChatFormatting.GRAY)));
     }
@@ -1622,7 +1618,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
         // 不调用 super.addToGoggleTooltip：Create 动力方默认 goggle 会加「容量提供 / 应力影响」行，
         // 用户要求精简 tooltip —— 全部应力条目移除（核心 tooltip 的应力行也已移除）。
-        // 状态行：正常 / 即将过热（T ≥ 0.8×T_max）/ 过热锁定 / 过冷（BLUE）
+        // 状态行档位（仅流体引擎；蒸汽走暖机/正常）：过冷(<~97) / 正常(97~145) / 高效(145~165 经济带) /
+        // 正常(165~180) / 即将过热(180~200) / 过热锁定(≥200，滞回 180 解锁)
         String statusKey;
         ChatFormatting statusColor;
         if (overheated) {
@@ -1632,11 +1629,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             // 蒸汽锅炉暖机中（点火燃烧但未达工作温度，只烧不发电）
             statusKey = "tooltip.ccpe.engine.status.warming";
             statusColor = ChatFormatting.GOLD;
-        } else if (temperature >= OVERHEAT_TEMP * 0.8f) {
+        } else if (temperature >= OVERHEAT_TEMP * 0.9f) {
+            // 即将过热：T ≥ 180（0.9×200），与过热滞回解锁阈值同值
             statusKey = "tooltip.ccpe.engine.status.warning";
             statusColor = ChatFormatting.GOLD;
+        } else if (!steamEngine && temperature >= ENGINE_T_OPT - ECO_FLAT
+                && temperature <= ENGINE_T_OPT + ECO_FLAT) {
+            // P7：高效 = 经济带 |T−155|≤10（145~165），仅流体引擎
+            statusKey = "tooltip.ccpe.engine.status.efficient";
+            statusColor = ChatFormatting.AQUA;
         } else if (!steamEngine && lastColdFactor > 1.01f) {
-            // P7：过冷状态（温度低于目标、油耗惩罚中——先小油门暖机；仅流体引擎；与预警/过热温度区互斥）
+            // P7：过冷状态（温度低于最低工作温度、油耗惩罚中——先小油门暖机；仅流体引擎）
             statusKey = "tooltip.ccpe.engine.status.cold";
             statusColor = ChatFormatting.BLUE;
         } else {
@@ -1656,42 +1659,22 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             tooltip.add(Component.literal("     ")
                     .append(Component.translatable("tooltip.ccpe.engine.overheated").withStyle(ChatFormatting.RED)));
         tooltip.add(Component.literal("     ")
-                .append(Component.translatable("tooltip.ccpe.engine.efficiency").withStyle(ChatFormatting.GRAY))
+                .append(Component.translatable("tooltip.ccpe.engine.throttle").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
-        // P6：经济区 / 风门（仅流体引擎；蒸汽 Plan B = 恒温自调节、无经济区无风门——经济区行/未装气道提示行都不显示）
+        // 油耗 / 发热系数（仅流体引擎；蒸汽 Plan B = 恒温自调节、无这两行）
         if (!steamEngine) {
-            // 经济区（服务端同步「最终油耗系数」= 杆值 × 经济系数 × 过冷惩罚，即除油门/自动富油外的全部油耗因子；<1 = 省油中）
-            if (hasAirDuct) {
-                tooltip.add(Component.literal("     ")
-                        .append(Component.translatable("tooltip.ccpe.engine.economy").withStyle(ChatFormatting.GRAY))
-                        .append(Component.literal("×" + String.format(Locale.ROOT, "%.2f", (double) lastFuelFactor))
-                                .withStyle(lastFuelFactor < 1f ? ChatFormatting.GREEN : ChatFormatting.GRAY)));
-                // P7：最佳温度（随油门的当前目标值）——帮助玩家追经济窗口
-                if (running) {
-                    tooltip.add(Component.literal("     ")
-                            .append(Component.translatable("tooltip.ccpe.engine.optimal_temp").withStyle(ChatFormatting.GRAY))
-                            .append(Component.literal(String.format(Locale.ROOT, "%.0f°C", (double) lastOptimalTemp))
-                                    .withStyle(ChatFormatting.AQUA)));
-                }
-            } else {
-                tooltip.add(Component.literal("     ")
-                        .append(Component.translatable("tooltip.ccpe.engine.economy").withStyle(ChatFormatting.GRAY))
-                        .append(Component.translatable("tooltip.ccpe.engine.no_air_duct").withStyle(ChatFormatting.GOLD)));
-            }
-            // 过冷状态已由状态行（status.cold）显示，不再单独列数值行；风门行同样移除（用户要求精简 tooltip）
-        }
-        // P5：混合比（仅流体引擎；蒸汽引擎无混合比轴，不显示——杆值/高空实际都用服务端同步值，客户端无法可靠算运动体高度）
-        if (!steamEngine) {
-            float mEff = lastEffectiveMixture;
+            // 油耗（服务端同步「最终油耗系数」= 杆值 × 经济系数 × 过冷惩罚，即除油门/自动富油外的全部油耗因子；<1 = 省油中）
+            // P7 修订：经济系数/油耗不以整合气道为门控（无气道同样生效，过冷/经济区无气道可达）——气道只门控 setMixture/setCooling Lua
             tooltip.add(Component.literal("     ")
-                    .append(Component.translatable("tooltip.ccpe.engine.mixture").withStyle(ChatFormatting.GRAY))
-                    .append(Component.literal(String.format(Locale.ROOT, "%.2f", (double) mixture))
-                            .withStyle(ChatFormatting.AQUA)));
-            if (Math.abs(mEff - mixture) >= 0.005f)
-                tooltip.add(Component.literal("     ")
-                        .append(Component.translatable("tooltip.ccpe.engine.mixture_actual").withStyle(ChatFormatting.GRAY))
-                        .append(Component.literal(String.format(Locale.ROOT, "%.2f", (double) mEff))
-                                .withStyle(ChatFormatting.GOLD)));
+                    .append(Component.translatable("tooltip.ccpe.engine.economy").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal("×" + String.format(Locale.ROOT, "%.2f", (double) lastFuelFactor))
+                            .withStyle(lastFuelFactor < 1f ? ChatFormatting.GREEN : ChatFormatting.GRAY)));
+            // P7：发热系数（heatFactor(m_eff)，m_eff = 杆 × 高空自动富油；稀=热 >1，富油=凉 <1）
+            tooltip.add(Component.literal("     ")
+                    .append(Component.translatable("tooltip.ccpe.engine.heat_factor").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal("×" + String.format(Locale.ROOT, "%.2f", (double) lastHeatFactor))
+                            .withStyle(lastHeatFactor > 1f ? ChatFormatting.GOLD : ChatFormatting.AQUA)));
+            // 过冷状态已由状态行（status.cold）显示，不再单独列数值行；风门/最佳温度/混合比行均移除（用户要求精简 tooltip）
         }
         // Lua 控制行已移除（用户要求精简 tooltip；luaConnected 字段/NBT 同步保留备用）
     }

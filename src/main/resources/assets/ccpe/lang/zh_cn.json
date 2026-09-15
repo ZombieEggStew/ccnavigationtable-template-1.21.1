@@ -61,6 +61,7 @@
   "tooltip.ccpe.engine.status.warming": "暖机中",
   "tooltip.ccpe.engine.status.stopped": "停机",
   "tooltip.ccpe.engine.status.cold": "过冷",
+  "tooltip.ccpe.engine.status.efficient": "高效",
   "tooltip.ccpe.engine.temperature": "温度：",
   "tooltip.ccpe.engine.overheated": "过热停机！",
   "tooltip.ccpe.engine.efficiency": "效率：",
@@ -76,8 +77,10 @@
   "tooltip.ccpe.engine.modules_none": "无",
   "tooltip.ccpe.engine.chamber_type_conflict": "该引擎已装配另一种燃烧室，流体/蒸汽不能混用",
   "tooltip.ccpe.engine.economy": "油耗：",
+  "tooltip.ccpe.engine.heat_factor": "发热系数：",
   "tooltip.ccpe.engine.no_air_duct": "未装整合气道",
   "tooltip.ccpe.engine.cowling": "风门：",
+  "tooltip.ccpe.engine.cooling": "冷却：",
   "tooltip.ccpe.engine.optimal_temp": "最佳温度：",
   "tooltip.ccpe.engine.cold": "过冷：",
 
