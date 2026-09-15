@@ -136,6 +136,7 @@ EngineCoreBlockEntity（仅 controller 干活；非 controller 的 getGeneratedS
 - **"噗嗤"音效**：客户端 tick 检测相位回绕 → 入队 controller 音效池（mergeTicks=2 + maxConcurrent=4），Create `AllSoundEvents.STEAM`（pitch 0.8±0.2）；流体室音量 0.05、蒸汽室 0.1（音量=0 则跳过，省性能）。
 - **贴附虚影**：`ChamberAttachPlacementHelper` 手持燃烧室对准核心自动渲染虚影。
 - 固体燃料（P2.5）：水在才走；**流体燃料不可用** → `tryPullSolidFuel` 从缓存的燃料箱（quick_fill_fuel_vault 等 ItemHandler 容器）抽 1 个熔炉燃料物品（+burnTime）；燃料箱缓存逻辑 = 自动抽取流缓存储罐同款（源坐标 + 冷却重扫，`solidFuelSourcePos`/`solidFuelRescanCooldown`）；油门 0 不抽（停机不烧油）。
+- **燃烧倒计时独立于燃料源**：蒸汽室循环门控 = 水 OK 且（流体可用 || 固体可用 || 任一室仍有储备 `burnTicks>0`）——燃料箱/源罐被拆时已有储备继续燃烧（不冻结不停机），倒计时结束才尝试再抽，抽不到才停烧（停烧 = 停止加热，温度开始牛顿冷却）。
 
 ### 7.4 出力模型：定距桨单杆（P4）
 
@@ -211,7 +212,8 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 
 ### 7.7 蒸汽引擎（P6 Plan B）
 
-**闭式锅炉自调节 + 暖机门控**：点火燃烧（有水+燃料）→ 温度指数收敛并钉 `BOILER_T_OPT=155`（饱和温度，与气压/环境/冲压无关 → 高度免疫）；**T<100°C 只烧不发电**（暖机，Goggle「暖机中」/ Lua `isWarmingUp`），≥ 阈值才出力；缺水 → 停烧（防干烧）→ 永不过热；停火 → 牛顿冷却。无经济区/混合比/风门/整合气道需求。常量：`STEAM_MIN_WORK_TEMP=100`、`STEAM_WARMUP_RATE=0.25`（τ=4s）。
+**闭式锅炉自调节 + 暖机门控**：点火燃烧（有水+燃料）→ 温度指数收敛并钉 `BOILER_T_OPT=155`（饱和温度，与气压/环境/冲压无关 → 高度免疫）；**T<100°C 只烧不发电**（暖机，Goggle「暖机中」/ Lua `isWarmingUp`），≥ 阈值才出力；缺水 → 停烧（防干烧）→ 永不过热；停火 → 牛顿冷却。
+**P2.5 运行条件 = 油门开启且 T ≥ 100°C**（不再要求有燃料储备）：燃料耗尽但锅炉仍热时靠余热继续发电（容量 = 全部蒸汽室满出力），温度冷却到 100°C 以下才停机；燃烧倒计时独立于燃料源（燃料箱被拆储备烧完为止，见 7.3）。无经济区/混合比/风门/整合气道需求。常量：`STEAM_MIN_WORK_TEMP=100`、`STEAM_WARMUP_RATE=0.25`（τ=4s）。
 
 ### 7.8 气压模型（wiki 用：空气模型来源）
 
@@ -241,9 +243,9 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 3. 门控：!overheated（滞回仅流体）→ heatAllowed
 4. 混合比（仅流体）：m_eff = 杆 × autoRichness（无气道杆钳 ≥1.0）；油耗因子 = 杆 × eco(T,m_eff) × cold(T)
 5. 流体室评估：findFuel 按 priority 选一种 → runningFluid；消耗 ×效率 × 杆 × eco × cold
-6. 蒸汽室评估：waterOk（水+燃料）→ 逐室 burnTick 消耗（×效率）；steamFuelBurnTicks 原版解析；**流体不可用 → 固体燃料兜底**（从缓存的燃料箱抽 1 个物品 +burnTime）
-7. running = 有燃烧室 && steamReady（蒸汽 T≥100°C）&& !过载 && !过热 && 效率>0
-8. speed = running ? 256×效率 : 0；capacity = 室数×base×效率
+6. 蒸汽室评估：门控 = 水OK 且（流体可用 || 固体可用 || 任一室有储备）；逐室 burnTick 消耗（×效率）；steamFuelBurnTicks 原版解析；**流体不可用 → 固体燃料兜底**（从缓存的燃料箱抽 1 个物品 +burnTime）；**储备倒计时独立于燃料源**（源被拆仍烧完）
+7. running：流体 = 有运行燃烧室；**蒸汽 = 油门开启且 T≥100°C（无燃料余热也运转）**；均需 !过载 && !过热 && 效率>0
+8. speed = running ? 256×效率 : 0；capacity = 室数×base×效率（**蒸汽余热运转 = 全部蒸汽室满出力**）
 9. 消耗：水 1mb/s/室×效率；流体燃料 ×杆 ×eco ×cold（零缓存累加器 ≥1mb drain）
 10. 温度：流体 = 牛顿冷却（过热滞回 200/180）；蒸汽 = 收敛钉 155 / 停火冷却
 11. 同步：tooltip 数据（温度/经济/过冷/发热系数/混合比实际值等）每 tick sendData（20Hz）
@@ -373,6 +375,9 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 - 经济系数只乘消耗、绝不反哺 Q_heat
 - 整合气道只门控混合比拉稀权 + 冷却风门；经济/油耗/过冷不门控
 - 蒸汽 Plan B：永不过热、无经济区/混合比/风门、高度免疫
+- **蒸汽运行 = 油门开启且 T≥100°C**（无燃料余热也运转，容量 = 全部蒸汽室）；燃料只影响加热不影响发电
+- **燃烧倒计时独立于燃料源**：燃料箱/源罐被拆 → 储备 burnTicks 继续烧完；耗尽且抽不到才停烧
+- 蒸汽容量 = 运行态全部蒸汽室（余热运转满出力）；暖机/停机 = 0
 - P7 奖励驱动：自动富油/heatFactor 绝不进油耗
 - P7 eco AND 门控 + 时间解锁；混合比不对无奖励无惩罚
 - P7 温度全部引擎固定（155/100/200）

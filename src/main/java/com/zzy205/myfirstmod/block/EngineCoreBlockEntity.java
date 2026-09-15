@@ -406,6 +406,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // 蒸汽动力室（P2/P2.5）：水 + 燃料（burnTick 制，水在才烧；水不可用整类暂停）。
         // 燃料来源：流体燃料优先（P7 纯原版解析：桶物品熔炉燃烧时长）；流体不可用 → 从模块邻居
         // 燃料箱（quick_fill_fuel_vault 等 ItemHandler 容器）自动抽取 1 个熔炉燃料物品（固体兜底）。
+        // 燃烧倒计时独立于燃料源：燃料箱/源罐被拆时，已有储备（burnTicks）仍继续燃烧，
+        // 倒计时结束才尝试再抽，抽不到才停烧（不因源消失立即停机）。
         int runningSteam = 0;
         boolean waterOk = !overstressed && heatAllowed && waterAvailable(neighbors);
         int steamFuelBurnTicks = heatAllowed && !steamChambers.isEmpty() ? findSteamFuelBurnTicks(neighbors) : 0;
@@ -413,7 +415,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // （源坐标 + 冷却重扫，见 solidFuelAvailable）
         boolean steamSolidFuelOk = steamFuelBurnTicks <= 0 && heatAllowed && !steamChambers.isEmpty()
                 && solidFuelAvailable(neighbors);
-        if (waterOk && (steamFuelBurnTicks > 0 || steamSolidFuelOk)) {
+        // 门控 = 水 OK 且（流体可用 || 固体可用 || 任一室仍有储备）——储备倒计时独立于燃料源存在性
+        boolean steamHasReserve = hasSteamReserve(steamChambers);
+        if (waterOk && (steamFuelBurnTicks > 0 || steamSolidFuelOk || steamHasReserve)) {
             // P6 Plan B：蒸汽无经济区（温度钉在 BOILER_T_OPT 自调节 → 无折扣无惩罚，系数恒 1.0）
             for (BlockPos sp : steamChambers) {
                 if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
@@ -464,9 +468,15 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         int runningTotal = runningFluid + runningSteam;
         // P6 Plan B：蒸汽锅炉暖机门控——T ≥ STEAM_MIN_WORK_TEMP 才「开始工作」（低于阈值只烧不发电，热机过程）
         boolean steamReady = !steamEngine || temperature >= STEAM_MIN_WORK_TEMP;
+        // P2.5：蒸汽运行条件 = 油门开启且温度 > 100（不再要求有燃料储备）——燃料耗尽但锅炉仍热
+        // （T ≥ 100°C）时靠余热继续发电，温度冷却到阈值以下才停机；流体引擎维持原条件（有运行燃烧室）。
         // P4：throttle=0（效率=0）→ 停机（不发电；throttle=0 时容量/消耗/发热全为 0，避免"空转"假象）
-        running = runningTotal > 0 && steamReady && !overstressed && !overheated && efficiency > 0f;
-        moduleCapacity = (fluidCapacity + (steamReady ? runningSteam : 0) * STEAM_STRESS_PER_CHAMBER) * efficiency;
+        running = !overstressed && !overheated && efficiency > 0f && steamReady
+                && (runningTotal > 0 || steamEngine);
+        // 蒸汽容量 = 运行状态下的全部蒸汽室（余热运转同样满出力，容量不受燃料储备限制）；暖机/停机 = 0
+        float steamCapacityChambers = steamEngine && running ? steamChambers.size()
+                : (steamReady ? runningSteam : 0);
+        moduleCapacity = (fluidCapacity + steamCapacityChambers * STEAM_STRESS_PER_CHAMBER) * efficiency;
 
         // ---- P3/P6 Plan B：温度更新 ----
         float tAmb = ambientTemp();
@@ -806,6 +816,18 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 solidFuelSourcePos = pos;
                 return true;
             }
+        }
+        return false;
+    }
+
+    /**
+     * 任一蒸汽室是否仍有燃料储备（burnTicks > 0）。储备 = 燃烧倒计时，独立于燃料源存在性——
+     * 燃料箱/源罐被拆或无源时，储备仍应继续燃烧；倒计时结束且抽不到燃料才停烧。
+     */
+    private boolean hasSteamReserve(List<BlockPos> steamChambers) {
+        for (BlockPos sp : steamChambers) {
+            if (level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be && be.burnTicks > 0)
+                return true;
         }
         return false;
     }
