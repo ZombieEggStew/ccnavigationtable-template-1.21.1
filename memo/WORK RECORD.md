@@ -1,6 +1,9 @@
-## 📝 本次工作记录 / 注意事项
+# 📝 WORK RECORD — 工作记录 / 实施总结
 
-### 引擎 P7 奖励驱动重构（2026-08 实施）
+> 各功能的实施总结与设计要点。踩坑与注意事项见 `memo/ATTENTION.md`。
+
+## 引擎 P7 奖励驱动重构（2026-08 实施）
+
 - **油耗 = 杆值 × 经济系数 × 过冷惩罚**；自动富油只降温不进油耗（m_eff = 杆×autoRichness 只进 heatFactor 与 eco 窗口）。高空不拉稀 = ×1.0 无惩罚（原 ×1.25 效率税移除）。
 - **经济系数 = 双因素 AND 门控 + 时间解锁进度**：|T−155|≤10 ∧ |m_eff−1|≤0.05 持续达标 → 15s 缓慢解锁 ×0.75（`ECO_MIN=0.75`，省 25%）；离开窗口 6s 流失；混合比不对无奖励无惩罚。
 - **温度阈值全部引擎固定**：经济目标 `ENGINE_T_OPT=155`、过冷 `ENGINE_MIN_WORK_TEMP=100`、过热 200——均不随燃料/油门（真实 = 引擎设计点/节温器恒定，如塞斯纳 172 CHT 工作带固定；油门只决定实际温度与冷却压力）。
@@ -14,20 +17,22 @@
 - **后续计划**：① tooltip 差量/批量同步优化（温度 ≥SYNC_TEMP_DELTA 才发包 + 趋势外推，恢复 1/20 带宽）；② 过稀失火（m_eff<0.8 概率掉出力 / <0.6 熄火）；③ 进游戏调参（ECO_MIN/δ/COLD_K/ENGINE_T_OPT/ENGINE_MIN_WORK_TEMP/解锁流失速率）。
 - 详见 `memo/engine-module.md`（最终版：核心玩法节 2、混合比/经济节 7.6、Lua 节 10、Goggle 节 11、数据文件节 13、玩家操作节 14）。
 
-### 惯性导航系统（my_aero_sensor，INS，2026-08 实施）
+## 惯性导航系统（my_aero_sensor，INS，2026-08 实施）
+
 - 新方块 `ccpe:ins`「惯性导航系统」：物理体姿态指示器（滚转/俯仰/偏航指北），视觉照抄 `simulated:gimbal_sensor` 的重力摆动画，进游戏验证通过。
 - **部件层级（外→内）：test(Y 偏航指北) → gimbal(Z 滚转) → compass(X 俯仰)**，四元数 `Y / Y·Z / Y·Z·X` 各自独立实例——比 simulated（needle(Y) 最内）更进一步；动画三处逆变换（重力/指北/外壳角速度）必须与渲染层级一致。
 - 简化：无红石、无 blockstate 旋转（base 恒单位）、限位固定 90°、无滚轮/护目镜 tooltip；空手右键/扳手触发 `randomNudge()` 扰动。
-- **randomNudge 坑**：不能 `eulerAngles.z = random×2π`（瞬移大角度）也不能归零（指北大角度瞬间跳回）；只保留 z 角 + 给 ±0.15 rad/tick 随机角速度。
 - 转动部件 `PIVOT_DROP` 3.5px 下移（Visual 与 Renderer 两处）；模型以方块中心 (8,8,8) 为原点。
 - 服务端逻辑：INS 注册进 `BodySensorRegistry`（ATTITUDE 传感器，onLoad/setRemoved/每 20 tick 复核 UUID），`ccpe.sensor_system.getAngles()` 已实现——返回 {pitch, roll, yaw}（度：pitch 正=抬头 / roll 正=右翼下压 / yaw 0=局部 −Z 指北、正=右转 −180..180），**门控 = 机体（含约束链）上有 ≥1 INS**；姿态由 SensorSystemAPI 每 tick 直接算自机体姿态（gimbal_sensor 重力投影 + 世界北水平方位），BE 的 `XAngle/ZAngle` 兼容保留。`getPosition()` 已实现——最后放置的 INS 的世界坐标 {x, y, z}（`SableCompat.projectOutOfSubLevel` 投影，门控同 getAngles）。`getOrientation()`/`getAngularVelocity()` 已实现——机体四元数 {x,y,z,w} 与机体局部系角速率 {x,y,z} rad/s（绕机体自身 X/Y/Z 轴；世界系刚体角速度经同一 tick 姿态四元数逆旋转得到，姿态恒等时=世界系；门控同 getAngles）。`getBodyPosition()` 已实现——物理体原点世界坐标（`SableCompat.getSubLevelWorldPos`，门控同 getAngles）。另新增不门控物理数据（只要在物理体上就有值）：`getPhysicsCenterOfMassRel()`（重心相对电脑，机体局部系 plot 帧差值）、`getPhysicsMass()`/`getPhysicsChainMass()`（kg）、`getPhysicsGravityForce()`/`getPhysicsChainGravityForce()`（pN = 质量×11）。**待进游戏验证**。详见 `memo/my_aero_sensor.md`。
 
-### FMC 附着方块应力网络（getStressRemaining / getStressCapacity，2026-08 实施）
+## FMC 附着方块应力网络（getStressRemaining / getStressCapacity，2026-08 实施）
+
 - `ccpe.sensor_system.getStressRemaining()` 已实现——最后放置的 FMC（含 AIC）的附着面方块所在 Create 应力网络的**剩余应力**（su = 总容量 − 当前总应力，过载时为负）；`getStressCapacity()` 已实现——网络**总容量**（su）。两方法门控相同，不可读时返回 nil。
 - **门控 = 机体（含约束链）上有 ≥1 FMC 且附着面方块是 Create 动力方块（KineticBlockEntity）**；附着面 = FMC 的 FACE/FACING 支撑方向 / AIC 的 FACING 背面。
 - 读数：Create 6.x 的 `KineticBlockEntity.stress/capacity` 无公开 getter（protected，仅子类可见）→ 新建 `compat/create/CreateStressReadout.java` 反射读这两个稳定缓存字段；`FmcBlock` 抽出公共静态 `supportDirectionOf(BlockState)`。**待进游戏验证**（FMC 贴在动力方块上读剩余应力；已实测原表形式输出正常，改名后待复测）。
 
-### 屏幕渲染重构（方案三：格子模型，2026-08-22 实施）
+## 屏幕渲染重构（方案三：格子模型，2026-08-22 实施）
+
 - 文本层改为定长格子数组（char[] + 前景/背景色，LCD 帧缓冲语义），体积固定不再增长；`write` 从光标处逐格覆盖，背景色不被覆盖（fill 与 write 可叠加「色块 + 文字」）。
 - Lua API：新增 `setGrid/getGrid`、`fill`、`fillField(col,row,width,count,colour,align?)`（定宽填充，区域内其余清透明）、`draw(batch)`（cells+shapes 两段式，原子替换）、`drawCells(batch)`/`drawShapes(batch)`（单层替换，另一层保持不变）、`writeField(col,row,width,text,align?)`（定宽字段，区域内未写部分自动清空、背景保留）；`setCursorPos` 改格子坐标（1 起）；`write` 去掉 z 参数；`setTextScale` 保留为 setGrid 别名（可传可选高宽比参数）。
 - 移除 monitor 背景平面绘制通道：`MonitorBlockEntity.monitorDisplayText`、`MonitorPeripheral` 背景平面 API 全部删除，内容只能在 screen 模块上绘制。
@@ -36,10 +41,10 @@
 - 旧存档屏幕文本（自由定位格式，无 "cols" 字段）加载时清空重置（破坏性变更，已确认接受）。
 - 已删除：`setFillPadding`（LED 内缩，用户要求移除）；`fill` 背景格曾短暂移除后又按用户要求恢复。
 
-### 测试 Monitor 变换方案（facing + offset + yaw + pitch）
+## 测试 Monitor 变换方案（facing + offset + yaw + pitch）
+
 - **模型层级**：底座（固定）→ bearing（偏航支架）→ case（头部，含屏幕/棋盘）。
-- **变换顺序**（PoseStack 后调为内层、先作用于顶点）：`facing(方块中心,Y) → offset(前后平移,Z) → yaw(颈部,Y) → pitch(铰链,X)`。
-  - facing 作用于整体；offset/yaw 作用于 bearing+case；pitch 只作用于 case。
+- **变换顺序**（PoseStack 后调为内层、先作用于顶点）：`facing(方块中心,Y) → offset(前后平移,Z) → yaw(颈部,Y) → pitch(铰链,X)`；facing 作用于整体；offset/yaw 作用于 bearing+case；pitch 只作用于 case。
 - **枢轴静态常量（定义在 `PitchMonitorTestBlock`，单位=模型像素，微调只改这里）**：
   - `HINGE_Y=9`、`HINGE_Z=8`（俯仰铰链，case 侧轴承中心）
   - `NECK_X=8`、`NECK_Z=8`（偏航颈部，bearing 水平中心）
@@ -48,21 +53,3 @@
 - **yaw 语义**：相对 facing（yaw=0 即当前朝向）。
 - **命中检测**：世界/plot → 模型空间逆序 `facing逆 → offset逆 → yaw逆 → pitch逆`（正向的逆序、旋转取负、平移取反）。
 - **万向锁**：不处理，模组介绍中提示玩家避免 pitch=±90° 相关表现。
-
-### 需要注意的坑
-- 测试 monitor 的 `getShape` 不要每帧动态重算（`VoxelShaper.forHorizontal` + 12 切片 `Shapes.or` 很贵，会造成视角对准时掉帧）；已改为按 (facing,pitch) 懒缓存，碰撞 `getCollisionShape` 只用底座。
-- **Sable 子次元坐标不一致**：`blockEntity.getBlockPos()` 是 plot（局部）坐标，玩家视线是 world 坐标，必须用 `SableCompat.toLocalPosition/toLocalDirection`（即 `Pose3dc.transformPositionInverse/transformNormalInverse`）把射线投回 plot 再求交，否则悬停高亮错位。Sable 的选择框描边已由 Sable 自己的 mixin 处理，不用额外适配。
-- **渲染与检测必须严格互逆**：正向（PoseStack）与逆向（射线求交）的变换顺序、枢轴常量必须一致；集中在 `PitchMonitorTransform` 单一来源，避免各写各的导致镜像/错位。
-- **旋转顺序不可交换**：三维旋转不满足交换律，facing/yaw/pitch 顺序不能乱；PoseStack 后调用的 `mulPose` 是内层（先作用于顶点）。
-- **单位约定**：枢轴常量存像素（1/16 块），PoseStack 里用 `/16f` 转块；`createPitchedCaseShape` 直接用像素算。
-- 测试 monitor 的 `my_monitor_case.json` 没有 `"render_type": "minecraft:cutout"`（静态 monitor 的 `my_monitor.json` 有），case 前脸会不透明、挡住 z=5 的 screen 面板；棋盘画在 z=3.99 前面不受影响。若要 screen 面板透出，需给 case 模型加 cutout。
-- `GridState.trySetId` 改 ID 时必须同步 re-key：`modules`、`grid[][]`、`pressedModules`、`knobAngles`、`moduleConfigs`（新增字段时别漏）。
-- section 实例由 `ModuleConfigSections` 工厂**每次新建**，不要做成单例（内部持有控件引用）。
-- 屏幕(`name == "screen"`)和未注册类型都走 `ModuleConfigSection.Empty`，不进注册表。
-- `MonitorBlockEntity` 必须重写 `getUpdatePacket()`（默认返回 null），否则 `sendBlockUpdated` 不会推 BE 数据到客户端。
-- 扳手右键模块：交互检测需排除 `holdingWrench`，否则拆卸前会先触发一次按下。
-- 模块 ID 命名空间已包含屏幕，`GridState.getOccupiedIds()` 返回二者并集，菜单滚轮跳过时要用它。
-- tooltip 显示开关存于模块配置的 `showTooltip`；旧存档无此字段时按开启处理。
-
----
-

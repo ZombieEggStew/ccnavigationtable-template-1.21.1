@@ -494,7 +494,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
 
         // P7：tooltip 数据（经济解锁进度/过冷/最佳温度/混合比实际值等）改为<b>每 tick 同步</b>（20Hz，照 simulated velocity_sensor）——
-        // 差量发包优化（温度 ≥SYNC_TEMP_DELTA 才 sendData + 客户端趋势外推，原 1/20 带宽方案）列入后续计划（见 .TO DO.md）。
+        // 差量发包优化（温度 ≥SYNC_TEMP_DELTA 才 sendData + 客户端趋势外推，原 1/20 带宽方案）列入后续计划（见 memo/WORK RECORD.md）。
         // reActivateSource 只在运行态/容量变化时置位（避免每 tick 触发传动网络重激活）；sendData 每 tick 保证 tooltip 实时
         if (running != prevRunning || !Mth.equal(moduleCapacity, prevCapacity)) {
             reActivateSource = true;
