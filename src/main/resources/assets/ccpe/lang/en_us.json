@@ -77,6 +77,8 @@
   "tooltip.ccpe.engine.economy": "Economy:",
   "tooltip.ccpe.engine.no_air_duct": "No integrated air duct",
   "tooltip.ccpe.engine.cowling": "Cooling Shutters:",
+  "tooltip.ccpe.engine.optimal_temp": "Optimal Temp:",
+  "tooltip.ccpe.engine.cold": "Cold:",
 
   "gui.ccpe.monitor.module_info": "%s at (%s, %s) size %s×%s",
   "gui.ccpe.monitor_menu.done": "Done",

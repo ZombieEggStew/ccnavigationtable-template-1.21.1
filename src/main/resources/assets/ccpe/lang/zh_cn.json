@@ -77,6 +77,8 @@
   "tooltip.ccpe.engine.economy": "经济：",
   "tooltip.ccpe.engine.no_air_duct": "未装整合气道",
   "tooltip.ccpe.engine.cowling": "风门：",
+  "tooltip.ccpe.engine.optimal_temp": "最佳温度：",
+  "tooltip.ccpe.engine.cold": "过冷：",
 
   "gui.ccpe.monitor.module_info": "%s 位于 (%s, %s) 尺寸 %s×%s",
   "gui.ccpe.monitor_menu.done": "完成",
