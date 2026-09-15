@@ -58,6 +58,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.transmission_peripheral);
                 output.accept(MyModBlocks.aero_bearing);
                 output.accept(MyModBlocks.quick_fill_fluid_tank); // 快速装填流体储罐（纯静态）
+                output.accept(MyModBlocks.quick_fill_fuel_vault); // 快速装填燃料箱（单物品库存 1024，右键存入/蹲下空手取出，默认闭盖）
                 output.accept(MyModBlocks.fluid_port);
                 output.accept(MyModBlocks.trailing_wheel_mount); // 从动轮悬架（单轮无动力）
             })

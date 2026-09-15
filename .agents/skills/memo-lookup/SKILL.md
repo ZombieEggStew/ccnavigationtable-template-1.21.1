@@ -1,6 +1,6 @@
 ---
 name: memo-lookup
-description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首要入口。memo 目录还包含项目进度（.TO DO.md）以及关键技术参考文档。当需要定位应修改的 Java 文件、了解项目整体状态、当前开发的功能、或查阅 OBJ 模型、旋转、Catnip、物品栏渲染等技术要点时使用此技能。'
+description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首要入口。memo 目录还包含项目进度以及关键技术参考文档。当需要定位应修改的 Java 文件、了解项目整体状态、当前开发的功能、或查阅 OBJ 模型、旋转、Catnip、物品栏渲染等技术要点时使用此技能。'
 ---
 
 # 项目 Memo 查阅
@@ -75,7 +75,6 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 
 - **定位/修改 Java 源码** → `code-map.md`（首要入口）
 - **查外部依赖 API（Sable/Flywheel/Catnip/Create/CC/JEI）** → `api-code-map.md`（首要入口）
-- **项目进度相关** → `.TO DO.md`
 - **添加新元件** → `add-monitor-module` skill
 - **3D 线框/高亮** → `catnip-outliner` skill
 - **OBJ 模型或模型烘焙** → `neoforge-model-rendering` skill

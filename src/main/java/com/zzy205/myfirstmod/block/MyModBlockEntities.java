@@ -32,6 +32,8 @@ public final class MyModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FluidCombustionChamberBlockEntity>> fluid_combustion_chamber_entity = BLOCK_ENTITY_TYPES.register("fluid_combustion_chamber", () -> BlockEntityType.Builder.of(FluidCombustionChamberBlockEntity::new, MyModBlocks.fluid_combustion_chamber.get()).build(null));
     /** 蒸汽动力室 BE：轻量 BlockEntity（同流体燃烧室模式） */
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SteamPowerChamberBlockEntity>> steam_power_chamber_entity = BLOCK_ENTITY_TYPES.register("steam_power_chamber", () -> BlockEntityType.Builder.of(SteamPowerChamberBlockEntity::new, MyModBlocks.steam_power_chamber.get()).build(null));
+    /** 快速装填燃料箱 BE：单物品类型库存（容量 1024，无 GUI）；开盖动画由 Block tick 驱动（对齐 item_hatch/fluid_port） */
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<QuickFillFuelVaultBlockEntity>> quick_fill_fuel_vault_entity = BLOCK_ENTITY_TYPES.register("quick_fill_fuel_vault", () -> BlockEntityType.Builder.of(QuickFillFuelVaultBlockEntity::new, MyModBlocks.quick_fill_fuel_vault.get()).build(null));
 
     public static void register(IEventBus bus) {
         BLOCK_ENTITY_TYPES.register(bus);

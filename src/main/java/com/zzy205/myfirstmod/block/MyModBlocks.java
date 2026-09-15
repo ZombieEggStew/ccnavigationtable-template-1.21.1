@@ -172,6 +172,14 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 快速装填燃料箱（quick_fill_fuel_vault）：6 向贴附式台阶状方块，blockstate/选择框照抄 fluid_port（FACING × OPEN，默认 OPEN=false 即模型 closed.json，见 QuickFillFuelVaultBlock）；带 BE（单物品类型库存，容量 1024，无 GUI，灵感参考 create:item_hatch）；音效对齐 fluid_port（SoundType.COPPER） */
+    public static final DeferredBlock<QuickFillFuelVaultBlock> quick_fill_fuel_vault =
+            registerBlocks("quick_fill_fuel_vault", () -> new QuickFillFuelVaultBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.COPPER).
+                    strength(5.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     /** 整合气道（integrated_air_duct）：6 面贴附 × 每面 2 旋转 = 12 态纯静态方块（无 BE，见 IntegratedAirDuctBlock）；P6 散热+进气综合模块（直接替换冷却风道；装 ≥1 个解锁经济区/拉稀权/风门）；音效对齐发动机核心（SoundType.NETHERITE_BLOCK） */
     public static final DeferredBlock<IntegratedAirDuctBlock> integrated_air_duct =
             registerBlocks("integrated_air_duct", () -> new IntegratedAirDuctBlock(BlockBehaviour.Properties.of().

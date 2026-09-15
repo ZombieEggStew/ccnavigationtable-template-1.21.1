@@ -1,6 +1,6 @@
 ---
 name: memo-lookup
-description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首要入口。memo 目录还包含项目进度（.TO DO.md）以及关键技术参考文档。当需要定位应修改的 Java 文件、了解项目整体状态、当前开发的功能、或查阅 OBJ 模型、旋转、Catnip、物品栏渲染等技术要点时使用此技能。'
+description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首要入口。memo 目录还包含项目进度以及关键技术参考文档。当需要定位应修改的 Java 文件、了解项目整体状态、当前开发的功能、或查阅 OBJ 模型、旋转、Catnip、物品栏渲染等技术要点时使用此技能。'
 ---
 
 # 项目 Memo 查阅
@@ -42,7 +42,6 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 |------|------|---------|
 | `code-map.md` | Java 源码职责、核心数据流、修改入口和已知边界 | 需要定位或修改 Java 文件时（首要入口，先查它） |
 | `api-code-map.md` | **api/ 依赖源码代码地图**（全部为 Java 源码 `-sources`）：Sable Companion / Flywheel / Catnip（核心三件套，项目根基）与 Create / CC:Tweaked / Ponder 的包级地图、import 前缀→路径对照、项目内使用文件清单；JEI / Registrate 未提取（标注为不在 api/） | 需要查外部依赖 API 的包路径/类位置/签名（先查它，再进 api/ 搜索）；涉及渲染、物理、子次元、Outliner、GUI 控件时尤其有用 |
-| `.TO DO.md` | 项目整体进度清单 | 了解已完成/待完成功能、规划下一步工作 |
 | `record_screen_module.md` | 可变尺寸屏幕实现记录 | 修改屏幕数据、渲染、放置或拆卸行为时 |
 | `record_screen_text.md` | 屏幕字符/矩形渲染实现记录（位图字体、UV 环绕、镜像/深度坑） | 修改屏幕文本/图形渲染或 `ScreenTextRenderer` 时 |
 | `knob-interaction.md` | 旋钮交互数据流 | 修改旋钮拖拽、角度同步或音效时 |
@@ -59,7 +58,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 
 ## 最小上下文原则
 
-- 不要在每次任务开始时读取 `.TO DO.md` 或全部 memo。
+- 不要在每次任务开始时读取全部 memo。
 - 只读取与当前请求直接对应的一份 memo；仅当它引用了另一个必须的文档时再读取下一份。
 - 与项目进度或设计取舍没有直接关系时，不加载 memo。
 - 需要定位 Java 文件职责、模块边界或修改入口时，查阅 `code-map.md`；需要定位外部依赖 API 时查阅 `api-code-map.md`。不要因此读取全部其他 memo。
@@ -72,7 +71,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 
 - **定位/修改 Java 源码** → `code-map.md`（首要入口）
 - **查外部依赖 API（Sable/Flywheel/Catnip/Create/CC/JEI）** → `api-code-map.md`（首要入口）
-- **项目进度相关** → `.TO DO.md`
+
 - **添加新元件** → `add-monitor-module` skill
 - **3D 线框/高亮** → `catnip-outliner` skill
 - **OBJ 模型或模型烘焙** → `neoforge-model-rendering` skill
@@ -96,5 +95,5 @@ memo 文档提供了关键 API 速查和代码模板，结合项目现有代码�
 
 ## 注意事项
 
-- `.TO DO.md` 中的 checkbox 状态是项目进度的重要参考
+
 - 如果 memo 和相关 skill 都无法回答当前 API 问题，再回退到 `minecraft-research` skill。
