@@ -18,6 +18,7 @@
   "block.ccpe.steam_power_chamber": "Steam Power Chamber",
   "block.ccpe.quick_fill_fluid_tank": "Quick-Fill Fluid Tank",
   "block.ccpe.quick_fill_fuel_vault": "Quick-Fill Fuel Vault",
+  "config.jade.plugin_ccpe.quick_fill_fuel_vault": "Quick-Fill Fuel Vault",
   "block.ccpe.integrated_air_duct": "Integrated Air Duct",
   "block.ccpe.static_port": "Static Port",
   "block.ccpe.pitot_tube": "Pitot Tube",

@@ -95,6 +95,14 @@ versionRange = "[19,)"
 ordering = "NONE"
 side = "BOTH"
 
+# Jade (optional — quick_fill_fuel_vault 内容物 tooltip 显示)
+[[dependencies.ccpe]]
+modId = "jade"
+type = "optional"
+versionRange = "[15,)"
+ordering = "NONE"
+side = "CLIENT"
+
 # =========================================================================
 # Mixins
 # =========================================================================

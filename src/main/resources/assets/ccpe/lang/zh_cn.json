@@ -18,6 +18,7 @@
   "block.ccpe.steam_power_chamber": "蒸汽动力室",
   "block.ccpe.quick_fill_fluid_tank": "快速装填流体储罐",
   "block.ccpe.quick_fill_fuel_vault": "快速装填燃料箱",
+  "config.jade.plugin_ccpe.quick_fill_fuel_vault": "快速装填燃料箱",
   "block.ccpe.integrated_air_duct": "整合气道",
   "block.ccpe.static_port": "静压孔",
   "block.ccpe.pitot_tube": "皮托管",
