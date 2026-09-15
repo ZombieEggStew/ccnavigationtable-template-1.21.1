@@ -72,7 +72,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *   <li>流体燃烧室：每室消耗燃料表流体的 consumption mb/s（fuelDebt 累加器 → 从源罐 drain 1mb）；
  *       容量 = 室数 × 4096 × stress 倍率；</li>
- *   <li>蒸汽动力室：水（1mb/s/室，从源罐 drain）+ 燃料（burnTick 制，1 tick 烧 1 个 burnTick，等价熔炉速率）——
+ *   <li>蒸汽动力室：水（1mb/s/室 × 油门，从源罐 drain）+ 燃料（burnTick 制，每秒烧 油门 个 burnTick，
+ *       25% 油门燃料耐用 4 倍——真实蒸汽车节流阀语义：消耗 ∝ 蒸汽流量）——
  *       流体燃料按 burn_ticks_per_bucket 从源罐抽；<b>流体燃料优先，流体不可用时</b>从模块邻居燃料箱
  *       （quick_fill_fuel_vault 等 ItemHandler 容器）自动抽取固体燃料（+物品 burnTime，缓存源坐标 + 冷却重扫，
  *       参考流体源罐模式）；水不可用时暂停（不烧）；</li>
@@ -421,61 +422,53 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             // P6 Plan B：蒸汽无经济区（温度钉在 BOILER_T_OPT 自调节 → 无折扣无惩罚，系数恒 1.0）
             // P2.5 并行燃烧：N = 蒸汽室个数，一次抽 N 个燃料（不足不抽），每室 1 个同燃同熄——
             // 燃烧时长 = 单个燃料的时长（每室独立 burnTicks 倒计时，节奏相同）。
-            // 蒸汽消耗固定（不随油门缩放，memo §8："1 tick 烧 1 burnTick" + 水 1mb/s/室，无折扣）：
-            // 油门只缩出力（容量/转速）；油门 0 = 停机不烧油（储备冻结，不烧不抽不耗水）。
-            if (efficiency > 0f) {
-                if (steamFuelBurnTicks > 0) {
-                    // 流体燃料（P7 纯原版解析）：固定熔炉速率——每 tick 每室消耗 1000/原版桶燃烧时长 mb
-                    // （熔岩桶 20000 → 0.05mb/t = 1mb/s，1mb = 20 burnTick）；累计 ≥1mb 从源罐抽
-                    for (BlockPos sp : steamChambers) {
-                        if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
-                            continue;
-                        be.fluidFuelDebt += 1000f / steamFuelBurnTicks;
-                        while (be.fluidFuelDebt >= 1f) {
-                            if (drainSteamFluidFuel(1)) {
-                                be.fluidFuelDebt -= 1f;
-                                be.burnTicks += Math.max(1, Math.round(steamFuelBurnTicks / 1000f));
-                                steamFuelType = "fluid"; // 储备来源 = 流体（Goggle 燃料行）
-                                be.setChanged();
-                            } else {
-                                be.fluidFuelDebt = 0;
-                                break;
-                            }
-                        }
-                    }
-                } else if (steamAllChambersEmpty(steamChambers)) {
-                    // 固体燃料并行补料（流体不可用 + 全部室同时空炉）：一次抽 N 个熔炉燃料物品，
-                    // 每室 +1 个物品的 burnTime；源不足 N 个 → 不抽取（整组断供不拆零）
-                    tryPullSolidFuelBatch(steamChambers);
-                }
-                // 燃烧：各室并行倒计时（固定 1 个 burnTick/tick = 原版熔炉速率，同燃同熄；
-                // Goggle 燃料行剩余秒数 = burnTicks/20 即真实墙钟秒数）
+            // 真实蒸汽车节流阀语义：消耗 ∝ 油门（蒸汽流量）——每秒烧 油门 个 burnTick、
+            // 水/流体同缩（25% 油门 = 1/4 蒸汽流量 = 燃料耐用 4 倍）；油门 0 = 停机不烧油（冻结）。
+            if (steamFuelBurnTicks > 0) {
+                // 流体燃料（P7 纯原版解析）：每 tick 每室消耗 1000/原版桶燃烧时长 × 油门 mb
+                // （熔岩桶 20000 → 100% 油门 0.05mb/t = 1mb/s，1mb = 20 burnTick）；累计 ≥1mb 从源罐抽
                 for (BlockPos sp : steamChambers) {
                     if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
                         continue;
-                    if (be.burnTicks > 0) {
-                        be.burnTicks -= 1f;
-                        if (be.burnTicks <= 0)
+                    be.fluidFuelDebt += 1000f / steamFuelBurnTicks * efficiency;
+                    while (be.fluidFuelDebt >= 1f) {
+                        if (drainSteamFluidFuel(1)) {
+                            be.fluidFuelDebt -= 1f;
+                            be.burnTicks += Math.max(1, Math.round(steamFuelBurnTicks / 1000f));
+                            steamFuelType = "fluid"; // 储备来源 = 流体（Goggle 燃料行）
                             be.setChanged();
-                        runningSteam++;
-                    }
-                }
-                if (runningSteam > 0) {
-                    waterDebt += runningSteam * 0.05f; // 固定 1mb/s/室 = 0.05mb/t（不随油门缩放）
-                    while (waterDebt >= 1f) {
-                        if (drainWater(1)) {
-                            waterDebt -= 1f;
                         } else {
-                            waterDebt = 0;
+                            be.fluidFuelDebt = 0;
                             break;
                         }
                     }
                 }
-            } else {
-                // 油门 0：停机不烧油——储备冻结（不烧不抽不耗水），仅统计有储备的室数（状态显示用）
-                for (BlockPos sp : steamChambers) {
-                    if (level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be && be.burnTicks > 0)
-                        runningSteam++;
+            } else if (steamAllChambersEmpty(steamChambers) && efficiency > 0f) {
+                // 固体燃料并行补料（流体不可用 + 全部室同时空炉）：一次抽 N 个熔炉燃料物品，
+                // 每室 +1 个物品的 burnTime；源不足 N 个 → 不抽取（整组断供不拆零）；油门 0 不抽
+                tryPullSolidFuelBatch(steamChambers);
+            }
+            // 燃烧：各室并行倒计时（每秒烧 油门 个 burnTick → 25% 油门燃料耐用 4 倍，同燃同熄；
+            // Goggle 燃料行显示墙钟剩余秒 = burnTicks/(油门×20)）
+            for (BlockPos sp : steamChambers) {
+                if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
+                    continue;
+                if (be.burnTicks > 0) {
+                    be.burnTicks -= efficiency;
+                    if (be.burnTicks <= 0)
+                        be.setChanged();
+                    runningSteam++;
+                }
+            }
+            if (runningSteam > 0) {
+                waterDebt += runningSteam * 0.05f * efficiency; // 1mb/s/室 × 油门（蒸汽流量 ∝ 油门）
+                while (waterDebt >= 1f) {
+                    if (drainWater(1)) {
+                        waterDebt -= 1f;
+                    } else {
+                        waterDebt = 0;
+                        break;
+                    }
                 }
             }
         }
@@ -1860,7 +1853,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /** 蒸汽室燃料行值：无储备 → 红"无"；流体 → 绿燃料名（不显示时间/数量）；固体 → 绿"燃料名 xN" + 青" (时间)"
-     *  （并行燃烧：数量 = 蒸汽室个数，时间 = 单个燃料剩余时长 burnTicks/20，各室同值）。
+     *  （并行燃烧：数量 = 蒸汽室个数；时间 = 墙钟剩余秒 = burnTicks/(油门×20)——消耗 ∝ 油门，
+     *   25% 油门燃料耐用 4 倍显示同步拉长；油门 0 停机不显示倒计时）。
      *  燃料名/时间来自服务端同步（客户端不重算），数量用客户端 scanModule 轻扫（同核心 tooltip 模块清单）。 */
     private Component steamFuelValueComponent() {
         if (steamFuelType.equals("fluid") && !steamFuelKey.isEmpty())
@@ -1870,9 +1864,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             Component name = Component.translatable(steamFuelKey)
                     .append(Component.literal(" x" + chambers))
                     .withStyle(ChatFormatting.GREEN);
-            if (steamBurnTicksRemaining > 0) {
-                // 剩余时间 = 单个燃料燃烧 tick / 20（原版熔炉速率秒，参考 portable_engine.getTime；与效率无关）
-                int seconds = Math.max(0, Math.round(steamBurnTicksRemaining / 20f));
+            if (steamBurnTicksRemaining > 0 && efficiency > 0f) {
+                int seconds = Math.max(0, Math.round(steamBurnTicksRemaining / efficiency / 20f));
                 name = name.copy().append(Component.literal(" (" + formatBurnTime(seconds) + ")")
                         .withStyle(ChatFormatting.AQUA));
             }
