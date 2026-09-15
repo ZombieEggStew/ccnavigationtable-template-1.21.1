@@ -421,50 +421,61 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             // P6 Plan B：蒸汽无经济区（温度钉在 BOILER_T_OPT 自调节 → 无折扣无惩罚，系数恒 1.0）
             // P2.5 并行燃烧：N = 蒸汽室个数，一次抽 N 个燃料（不足不抽），每室 1 个同燃同熄——
             // 燃烧时长 = 单个燃料的时长（每室独立 burnTicks 倒计时，节奏相同）。
-            if (steamFuelBurnTicks > 0) {
-                // 流体燃料（P7 纯原版解析）：每 tick 每室消耗 1000/原版桶燃烧时长 × 效率 mb（≈效率 个 burnTick/tick），
-                // 累计 ≥1mb 从源罐抽；每抽 1mb → 原版桶燃烧时长/1000 个 burnTick（熔岩桶 20000 → 20 tick/mb）
+            // 蒸汽消耗固定（不随油门缩放，memo §8："1 tick 烧 1 burnTick" + 水 1mb/s/室，无折扣）：
+            // 油门只缩出力（容量/转速）；油门 0 = 停机不烧油（储备冻结，不烧不抽不耗水）。
+            if (efficiency > 0f) {
+                if (steamFuelBurnTicks > 0) {
+                    // 流体燃料（P7 纯原版解析）：固定熔炉速率——每 tick 每室消耗 1000/原版桶燃烧时长 mb
+                    // （熔岩桶 20000 → 0.05mb/t = 1mb/s，1mb = 20 burnTick）；累计 ≥1mb 从源罐抽
+                    for (BlockPos sp : steamChambers) {
+                        if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
+                            continue;
+                        be.fluidFuelDebt += 1000f / steamFuelBurnTicks;
+                        while (be.fluidFuelDebt >= 1f) {
+                            if (drainSteamFluidFuel(1)) {
+                                be.fluidFuelDebt -= 1f;
+                                be.burnTicks += Math.max(1, Math.round(steamFuelBurnTicks / 1000f));
+                                steamFuelType = "fluid"; // 储备来源 = 流体（Goggle 燃料行）
+                                be.setChanged();
+                            } else {
+                                be.fluidFuelDebt = 0;
+                                break;
+                            }
+                        }
+                    }
+                } else if (steamAllChambersEmpty(steamChambers)) {
+                    // 固体燃料并行补料（流体不可用 + 全部室同时空炉）：一次抽 N 个熔炉燃料物品，
+                    // 每室 +1 个物品的 burnTime；源不足 N 个 → 不抽取（整组断供不拆零）
+                    tryPullSolidFuelBatch(steamChambers);
+                }
+                // 燃烧：各室并行倒计时（固定 1 个 burnTick/tick = 原版熔炉速率，同燃同熄；
+                // Goggle 燃料行剩余秒数 = burnTicks/20 即真实墙钟秒数）
                 for (BlockPos sp : steamChambers) {
                     if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
                         continue;
-                    be.fluidFuelDebt += 1000f / steamFuelBurnTicks * efficiency * effectiveMixture;
-                    while (be.fluidFuelDebt >= 1f) {
-                        if (drainSteamFluidFuel(1)) {
-                            be.fluidFuelDebt -= 1f;
-                            be.burnTicks += Math.max(1, Math.round(steamFuelBurnTicks / 1000f));
-                            steamFuelType = "fluid"; // 储备来源 = 流体（Goggle 燃料行）
+                    if (be.burnTicks > 0) {
+                        be.burnTicks -= 1f;
+                        if (be.burnTicks <= 0)
                             be.setChanged();
+                        runningSteam++;
+                    }
+                }
+                if (runningSteam > 0) {
+                    waterDebt += runningSteam * 0.05f; // 固定 1mb/s/室 = 0.05mb/t（不随油门缩放）
+                    while (waterDebt >= 1f) {
+                        if (drainWater(1)) {
+                            waterDebt -= 1f;
                         } else {
-                            be.fluidFuelDebt = 0;
+                            waterDebt = 0;
                             break;
                         }
                     }
                 }
-            } else if (steamAllChambersEmpty(steamChambers) && efficiency > 0f) {
-                // 固体燃料并行补料（流体不可用 + 全部室同时空炉）：一次抽 N 个熔炉燃料物品，
-                // 每室 +1 个物品的 burnTime；源不足 N 个 → 不抽取（整组断供不拆零）；油门 0 不抽
-                tryPullSolidFuelBatch(steamChambers);
-            }
-            // 燃烧：各室并行倒计时（同速递减 → 同燃同熄；1 个 burnTick 烧 1/efficiency tick）
-            for (BlockPos sp : steamChambers) {
-                if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
-                    continue;
-                if (be.burnTicks > 0) {
-                    be.burnTicks -= efficiency;
-                    if (be.burnTicks <= 0)
-                        be.setChanged();
-                    runningSteam++;
-                }
-            }
-            if (runningSteam > 0) {
-                waterDebt += runningSteam * 0.05f * efficiency; // 1mb/s/室 × 效率 = 0.05mb/t
-                while (waterDebt >= 1f) {
-                    if (drainWater(1)) {
-                        waterDebt -= 1f;
-                    } else {
-                        waterDebt = 0;
-                        break;
-                    }
+            } else {
+                // 油门 0：停机不烧油——储备冻结（不烧不抽不耗水），仅统计有储备的室数（状态显示用）
+                for (BlockPos sp : steamChambers) {
+                    if (level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be && be.burnTicks > 0)
+                        runningSteam++;
                 }
             }
         }
