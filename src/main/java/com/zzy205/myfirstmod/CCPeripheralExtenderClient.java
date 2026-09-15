@@ -96,6 +96,12 @@ public class CCPeripheralExtenderClient {
         TooltipModifier.REGISTRY.register(quickFillFuelVaultItem,
                 new ItemDescription.Modifier(quickFillFuelVaultItem, FontHelper.Palette.STANDARD_CREATE));
 
+        // 快速装填流体储罐物品 tooltip（同 fuel_vault 模式：ItemDescription，平时只显示"按住 SHIFT 查看"提示，
+        // 按住 SHIFT 展开 summary + 存入/空桶装满/潜行反向 3 组用法；Create ClientEvents 自动应用）。
+        Item quickFillFluidTankItem = MyModBlocks.quick_fill_fluid_tank.get().asItem();
+        TooltipModifier.REGISTRY.register(quickFillFluidTankItem,
+                new ItemDescription.Modifier(quickFillFluidTankItem, FontHelper.Palette.STANDARD_CREATE));
+
         // 从动轮悬架物品 tooltip（同 fluid_port 模式：ItemDescription，平时只显示"按住 SHIFT 查看"提示，
         // 按住 SHIFT 展开 summary + 从动/转向/重量说明；Create ClientEvents 自动应用）。
         Item trailingWheelMountItem = MyModBlocks.trailing_wheel_mount.get().asItem();

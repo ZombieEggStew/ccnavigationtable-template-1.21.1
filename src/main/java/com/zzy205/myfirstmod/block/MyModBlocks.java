@@ -164,7 +164,7 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
-    /** 快速装填流体储罐（quick_fill_fluid_tank）：6 向贴附式纯静态方块（无 BE，见 QuickFillFluidTankBlock）；音效对齐 fluid_port（SoundType.COPPER） */
+    /** 快速装填流体储罐（quick_fill_fluid_tank）：6 向贴附式方块，自带 4000mb 单槽流体存储（见 QuickFillFluidTankBlock / QuickFillFluidTankBlockEntity：右键存入/空桶装满 1 桶 + create:fluid_tank 同款 goggle tooltip）；音效对齐 fluid_port（SoundType.COPPER） */
     public static final DeferredBlock<QuickFillFluidTankBlock> quick_fill_fluid_tank =
             registerBlocks("quick_fill_fluid_tank", () -> new QuickFillFluidTankBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.COPPER).

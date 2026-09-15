@@ -1,28 +1,54 @@
 {
   "variants": {
-    "facing=down": {
-      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/block",
+    "facing=down,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/closed",
       "x": 180
     },
-    "facing=east": {
-      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/block",
+    "facing=down,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/open",
+      "x": 180
+    },
+    "facing=east,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/closed",
       "x": 90,
       "y": 90
     },
-    "facing=north": {
-      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/block",
+    "facing=east,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/open",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/closed",
       "x": 90
     },
-    "facing=south": {
-      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/block",
+    "facing=north,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/open",
+      "x": 90
+    },
+    "facing=south,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/closed",
       "x": 90,
       "y": 180
     },
-    "facing=up": {
-      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/block"
+    "facing=south,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/open",
+      "x": 90,
+      "y": 180
     },
-    "facing=west": {
-      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/block",
+    "facing=up,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/closed"
+    },
+    "facing=up,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/open"
+    },
+    "facing=west,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/closed",
+      "x": 90,
+      "y": 270
+    },
+    "facing=west,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fluid_tank/open",
       "x": 90,
       "y": 270
     }
