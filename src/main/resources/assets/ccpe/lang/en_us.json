@@ -84,7 +84,6 @@
   "tooltip.ccpe.engine.throttle": "Throttle:",
   "tooltip.ccpe.engine.fuel": "Fuel:",
   "tooltip.ccpe.engine.fuel_none": "None",
-  "tooltip.ccpe.engine.fuel_remaining": " (%s remaining)",
   "tooltip.ccpe.engine.mixture": "Mixture:",
   "tooltip.ccpe.engine.mixture_actual": "Actual at altitude:",
   "tooltip.ccpe.engine.lua_control": "Lua Control:",

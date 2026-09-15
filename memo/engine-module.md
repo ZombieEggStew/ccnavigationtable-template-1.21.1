@@ -64,7 +64,7 @@
 | 燃料规则 | 全引擎单燃料制：controller 按 priority 统一选一种，不混烧（priority 相同按文件名升序） |
 | 引擎类型 | 流体/蒸汽物理排斥：`ChamberBlockItem#place` 拦截 + `getStateForPlacement` null 兜底 + 虚影拒绝 + controller 多数派仲裁 |
 | 流体缓存 | 严格零缓存：每 tick 从源储罐 capability drain，无罐无液位显示 |
-| 固体燃料 | 从模块邻居燃料箱（quick_fill_fuel_vault 等 ItemHandler 容器）自动抽取（物品 burnTime，缓存源 + 冷却重扫，参考流体源罐模式）；**流体燃料优先，流体不可用才烧固体** |
+| 固体燃料 | 从模块邻居燃料箱（quick_fill_fuel_vault 等 ItemHandler 容器）自动抽取（物品 burnTime，缓存源 + 冷却重扫，参考流体源罐模式）；**流体燃料优先**；**并行燃烧**：一次抽 N 个（N = 蒸汽室个数），不足 N 不抽，每室 1 个同燃同熄，燃烧时长 = 单个燃料时长 |
 | 红石 | 不要；末段 Lua 控制 |
 | 过热行为 | T ≥ 200°C 硬停（不烧油）；**T ≤ 180°C 滞回解锁**；仅流体引擎 |
 | 效率语义 | 效率 = 油门（定距桨单杆）：线性缩放应力输出与转速；发热/油耗 ∝ 油门；默认 0.25（64rpm） |
@@ -135,7 +135,8 @@ EngineCoreBlockEntity（仅 controller 干活；非 controller 的 getGeneratedS
 - **活塞动画**：父引擎运行时活塞沿 FACING ±2/16 块正弦往复，角度随转速推进（`speed×3/10` 度/tick，1 圈 = 1 往复）；停机回中间位。
 - **"噗嗤"音效**：客户端 tick 检测相位回绕 → 入队 controller 音效池（mergeTicks=2 + maxConcurrent=4），Create `AllSoundEvents.STEAM`（pitch 0.8±0.2）；流体室音量 0.05、蒸汽室 0.1（音量=0 则跳过，省性能）。
 - **贴附虚影**：`ChamberAttachPlacementHelper` 手持燃烧室对准核心自动渲染虚影。
-- 固体燃料（P2.5）：水在才走；**流体燃料不可用** → `tryPullSolidFuel` 从缓存的燃料箱（quick_fill_fuel_vault 等 ItemHandler 容器）抽 1 个熔炉燃料物品（+burnTime）；燃料箱缓存逻辑 = 自动抽取流缓存储罐同款（源坐标 + 冷却重扫，`solidFuelSourcePos`/`solidFuelRescanCooldown`）；油门 0 不抽（停机不烧油）。
+- 固体燃料（P2.5）：水在才走；**流体燃料不可用** → `tryPullSolidFuelBatch` 从缓存的燃料箱（quick_fill_fuel_vault 等 ItemHandler 容器）**一次抽 N 个**（N = 蒸汽室个数，不足 N 不抽取），每室 +1 个物品 burnTime；燃料箱缓存逻辑 = 自动抽取流缓存储罐同款（源坐标 + 冷却重扫，`solidFuelSourcePos`/`solidFuelRescanCooldown`）；油门 0 不抽（停机不烧油）。
+- **并行燃烧**：N 个燃料同时烧（每室 1 个，同燃同熄），燃烧时长 = 单个燃料时长（各室 burnTicks 同值）；全室空炉才批量补料。
 - **燃烧倒计时独立于燃料源**：蒸汽室循环门控 = 水 OK 且（流体可用 || 固体可用 || 任一室仍有储备 `burnTicks>0`）——燃料箱/源罐被拆时已有储备继续燃烧（不冻结不停机），倒计时结束才尝试再抽，抽不到才停烧（停烧 = 停止加热，温度开始牛顿冷却）。
 
 ### 7.4 出力模型：定距桨单杆（P4）
@@ -230,7 +231,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 |---|---|
 | 流体燃料（流体室） | datapack `engine_fuel/*.json`；单燃料制；每室 consumption mb/s（默认 1） |
 | 水（蒸汽室） | 固定 1mb/s/室，从模块邻居水源罐 drain；水不可用整类暂停 |
-| 固体燃料（蒸汽室） | 物品原版 `burnTime` → 1 tick 烧 1 burnTick；**流体不可用**时从模块邻居燃料箱（quick_fill_fuel_vault 等）自动抽取，流体优先 |
+| 固体燃料（蒸汽室） | 物品原版 `burnTime` → 1 tick 烧 1 burnTick；**流体不可用**时从模块邻居燃料箱（quick_fill_fuel_vault 等）**一次抽 N 个并行燃烧**（N = 蒸汽室数，不足不抽，每室 1 个同燃同熄），流体优先 |
 | 流体燃料（蒸汽室） | **纯原版解析**：桶物品原版熔炉燃烧时长（熔岩桶 20000 tick → 1mb 烧 20 tick）；`EngineFuels.vanillaBucketBurnTicks` 权威 |
 
 ---
@@ -243,7 +244,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 3. 门控：!overheated（滞回仅流体）→ heatAllowed
 4. 混合比（仅流体）：m_eff = 杆 × autoRichness（无气道杆钳 ≥1.0）；油耗因子 = 杆 × eco(T,m_eff) × cold(T)
 5. 流体室评估：findFuel 按 priority 选一种 → runningFluid；消耗 ×效率 × 杆 × eco × cold
-6. 蒸汽室评估：门控 = 水OK 且（流体可用 || 固体可用 || 任一室有储备）；逐室 burnTick 消耗（×效率）；steamFuelBurnTicks 原版解析；**流体不可用 → 固体燃料兜底**（从缓存的燃料箱抽 1 个物品 +burnTime）；**储备倒计时独立于燃料源**（源被拆仍烧完）
+6. 蒸汽室评估：门控 = 水OK 且（流体可用 || 固体可用 || 任一室有储备）；逐室 burnTick 消耗（×效率）；steamFuelBurnTicks 原版解析；**流体不可用 → 固体批量兜底**（全室空炉时一次抽 N 个，不足 N 不抽，并行燃烧）；**储备倒计时独立于燃料源**（源被拆仍烧完）
 7. running：流体 = 有运行燃烧室；**蒸汽 = 油门开启且 T≥100°C（无燃料余热也运转）**；均需 !过载 && !过热 && 效率>0
 8. speed = running ? 256×效率 : 0；capacity = 室数×base×效率（**蒸汽余热运转 = 全部蒸汽室满出力**）
 9. 消耗：水 1mb/s/室×效率；流体燃料 ×杆 ×eco ×cold（零缓存累加器 ≥1mb drain）
@@ -295,7 +296,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 状态：正常 / 暖机中 / 停机
 温度：XX.X°C
 油门：50%
-燃料：熔岩 / 煤炭（剩余 1m 20s）/ 无      ← 参考 simulated portable_engine：流体只显示名称不显示时间；固体显示剩余燃烧时间（burnTicks 总和 ÷20 秒，getTime 格式）；无储备显示红"无"
+燃料：熔岩 / 煤炭 x3 (1m 20s) / 无      ← 参考 simulated portable_engine：流体只显示名称不显示时间；固体并行燃烧 = 数量 xN（N = 蒸汽室个数）+ 单个燃料剩余时间（burnTicks÷20 秒，getTime 格式，英文括号无"剩余"）；无储备显示红"无"
 ```
 
 **整合气道**（悬停 integrated_air_duct）：

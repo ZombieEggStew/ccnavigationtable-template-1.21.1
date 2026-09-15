@@ -16,7 +16,8 @@ import net.neoforged.api.distmarker.OnlyIn;
  * <b>服务端（由引擎 controller 驱动，本 BE 不 tick）</b>：{@link #burnTicks} = 剩余燃烧时长
  * （burnTick 制，1 tick 烧 1 burnTick，等价原版熔炉速率）。来源：
  * <ul>
- *   <li>固体燃料：controller 从本室 6 邻居容器抽取 1 个熔炉燃料物品 → +物品 burnTime；</li>
+ *   <li>固体燃料：controller 并行燃烧批量抽取——全室空炉时一次从燃料箱抽 N 个（N = 蒸汽室个数，
+ *       不足 N 不抽），每室 +1 个物品 burnTime（同燃同熄，燃烧时长 = 单个燃料时长）；</li>
  *   <li>流体燃料：controller 从源罐 drain（1mb = burn_ticks_per_bucket/1000 burnTick，如熔岩 20 tick/mb）。</li>
  * </ul>
  * 水不可用时 controller 暂停消耗（burnTicks 冻结，不烧燃料）。burnTicks 持久化到 NBT。

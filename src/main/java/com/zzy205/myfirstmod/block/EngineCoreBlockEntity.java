@@ -143,7 +143,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected String steamFuelType = "none";
     /** 当前蒸汽燃料的显示翻译键（流体 = 流体描述 id，如 block.minecraft.lava；固体 = 物品描述 id，如 item.minecraft.coal） */
     protected String steamFuelKey = "";
-    /** 蒸汽室固体燃料剩余总燃烧 tick（各室 burnTicks 之和；仅固体类型显示剩余时间，流体不显示） */
+    /** 蒸汽室固体燃料剩余燃烧 tick（并行燃烧各室同值 = 单个燃料剩余时长；仅固体类型显示剩余时间，流体不显示） */
     protected float steamBurnTicksRemaining = 0f;
     /** 最近一次固体 pull 成功的物品翻译键（储备来源为固体时显示用；pull 时更新） */
     protected String steamSolidFuelKey = "";
@@ -419,12 +419,14 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         boolean steamHasReserve = hasSteamReserve(steamChambers);
         if (waterOk && (steamFuelBurnTicks > 0 || steamSolidFuelOk || steamHasReserve)) {
             // P6 Plan B：蒸汽无经济区（温度钉在 BOILER_T_OPT 自调节 → 无折扣无惩罚，系数恒 1.0）
-            for (BlockPos sp : steamChambers) {
-                if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
-                    continue;
-                if (steamFuelBurnTicks > 0) {
-                    // 流体燃料（P7 纯原版解析）：每 tick 每室消耗 1000/原版桶燃烧时长 × 效率 mb（≈效率 个 burnTick/tick），
-                    // 累计 ≥1mb 从源罐抽；每抽 1mb → 原版桶燃烧时长/1000 个 burnTick（熔岩桶 20000 → 20 tick/mb）
+            // P2.5 并行燃烧：N = 蒸汽室个数，一次抽 N 个燃料（不足不抽），每室 1 个同燃同熄——
+            // 燃烧时长 = 单个燃料的时长（每室独立 burnTicks 倒计时，节奏相同）。
+            if (steamFuelBurnTicks > 0) {
+                // 流体燃料（P7 纯原版解析）：每 tick 每室消耗 1000/原版桶燃烧时长 × 效率 mb（≈效率 个 burnTick/tick），
+                // 累计 ≥1mb 从源罐抽；每抽 1mb → 原版桶燃烧时长/1000 个 burnTick（熔岩桶 20000 → 20 tick/mb）
+                for (BlockPos sp : steamChambers) {
+                    if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
+                        continue;
                     be.fluidFuelDebt += 1000f / steamFuelBurnTicks * efficiency * effectiveMixture;
                     while (be.fluidFuelDebt >= 1f) {
                         if (drainSteamFluidFuel(1)) {
@@ -437,13 +439,18 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                             break;
                         }
                     }
-                } else if (be.burnTicks <= 0 && efficiency > 0f) {
-                    // 固体燃料兜底（流体不可用 + 本室储备耗尽）：从缓存的燃料箱抽 1 个熔炉燃料物品（+物品 burnTime）。
-                    // 油门 0 不抽（停机不烧油，抽了也烧不掉 = 白耗 1 个物品）
-                    tryPullSolidFuel(be);
                 }
+            } else if (steamAllChambersEmpty(steamChambers) && efficiency > 0f) {
+                // 固体燃料并行补料（流体不可用 + 全部室同时空炉）：一次抽 N 个熔炉燃料物品，
+                // 每室 +1 个物品的 burnTime；源不足 N 个 → 不抽取（整组断供不拆零）；油门 0 不抽
+                tryPullSolidFuelBatch(steamChambers);
+            }
+            // 燃烧：各室并行倒计时（同速递减 → 同燃同熄；1 个 burnTick 烧 1/efficiency tick）
+            for (BlockPos sp : steamChambers) {
+                if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
+                    continue;
                 if (be.burnTicks > 0) {
-                    be.burnTicks -= efficiency; // 1 个 burnTick 烧 1/efficiency tick（25% 效率 = 4× 时长）
+                    be.burnTicks -= efficiency;
                     if (be.burnTicks <= 0)
                         be.setChanged();
                     runningSteam++;
@@ -834,16 +841,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /**
      * 蒸汽室燃料显示数据（服务端每 tick，同步客户端 Goggle 燃料行，参考 simulated portable_engine）：
-     * 储备来源 = 最后一次补燃料的方式（流体 feed / 固体 pull），由 {@link #steamFuelType} 标记；
+     * 储备来源 = 最后一次补燃料的方式（流体 feed / 固体批量 pull），由 {@link #steamFuelType} 标记；
      * 任何室有储备（burnTicks>0）才显示燃料，否则"无"。
-     * 固体显示剩余总燃烧 tick（各室 burnTicks 之和，客户端换算秒数）；流体不显示时间（用户要求）。
+     * 并行燃烧：各室 burnTicks 同值，剩余时间 = 单个燃料的时长（取最大即可，客户端换算秒数）；
+     * 数量 = 蒸汽室个数（客户端 scanModule 算）。流体不显示时间（用户要求）。
      */
     private void updateSteamFuelDisplay(List<BlockPos> steamChambers) {
-        float total = 0f;
+        float maxBurn = 0f;
         boolean anyReserve = false;
         for (BlockPos sp : steamChambers) {
             if (level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be) {
-                total += be.burnTicks;
+                maxBurn = Math.max(maxBurn, be.burnTicks);
                 if (be.burnTicks > 0)
                     anyReserve = true;
             }
@@ -859,7 +867,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             steamBurnTicksRemaining = 0f;
         } else if (steamFuelType.equals("solid")) {
             steamFuelKey = steamSolidFuelKey;
-            steamBurnTicksRemaining = total;
+            steamBurnTicksRemaining = maxBurn; // 并行燃烧：各室同值，取最大 = 单个燃料剩余时长
         } else {
             // 有储备但来源未知（旧档/首个 tick 前）→ 显示"无"（下一 tick 补燃料后立即修正）
             steamFuelKey = "";
@@ -868,12 +876,28 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
-     * 从缓存的固体燃料箱抽 1 个熔炉燃料物品（burnTime > 0），burnTicks += 物品 burnTime；抽到返回 true。
-     * <p>调用前提：流体燃料不可用（流体优先）且本室 burnTicks 耗尽；油门 0 不抽（停机不烧油）。
-     * 源已空/已拆 → 失效缓存（下一 tick {@link #solidFuelAvailable} 重扫）。只走 capability，
-     * 绝不直接改容器 BE；源范围 = 模块邻居（core 成员 ∪ 燃烧室 6 邻居），quick_fill_fuel_vault 贴室即被扫到。</p>
+     * 全部蒸汽室是否同时空炉（burnTicks 全部 ≤ 0）——并行燃烧的补料时机：同燃同熄，
+     * 一整个并行周期结束才批量补料（每室 1 个，数量 = 蒸汽室个数）。
      */
-    protected boolean tryPullSolidFuel(SteamPowerChamberBlockEntity be) {
+    private boolean steamAllChambersEmpty(List<BlockPos> steamChambers) {
+        for (BlockPos sp : steamChambers) {
+            if (level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be && be.burnTicks > 0)
+                return false;
+        }
+        return true;
+    }
+
+    /**
+     * 并行燃烧批量补固体燃料：全部蒸汽室同时空炉时，一次从燃料箱抽 N 个（N = 蒸汽室个数）
+     * 熔炉燃料物品（burnTime > 0），每个室 +1 个物品的 burnTime——各室并行燃烧同一燃料，
+     * 燃烧时长 = 单个燃料的时长；<b>源不足 N 个 → 不抽取</b>（整组断供不拆零，下一 tick 重试）。
+     * <p>调用前提：流体燃料不可用（流体优先）且全室空炉；油门 0 不抽（停机不烧油）。
+     * 只走 capability，绝不直接改容器 BE；源 = 缓存的燃料箱（{@code solidFuelSourcePos}，
+     * 由 {@link #solidFuelAvailable} 维护）。源已空/已拆 → 失效缓存（下一 tick 重扫）。</p>
+     */
+    protected boolean tryPullSolidFuelBatch(List<BlockPos> steamChambers) {
+        if (steamChambers.isEmpty())
+            return false;
         if (solidFuelSourcePos == null)
             return false;
         IItemHandler handler = itemHandlerAt(solidFuelSourcePos);
@@ -881,6 +905,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             solidFuelSourcePos = null;
             return false;
         }
+        int need = steamChambers.size();
         for (int slot = 0; slot < handler.getSlots(); slot++) {
             ItemStack stack = handler.getStackInSlot(slot);
             if (stack.isEmpty())
@@ -888,17 +913,26 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             int burnTime = stack.getBurnTime(RecipeType.SMELTING);
             if (burnTime <= 0)
                 continue;
-            ItemStack extracted = handler.extractItem(slot, 1, false);
-            if (extracted.isEmpty())
-                continue;
-            be.burnTicks += burnTime;
+            // 不足 N 个不抽取（模拟先验；不足 → 视为断供，不拆零）
+            ItemStack simulated = handler.extractItem(slot, need, true);
+            if (simulated.getCount() < need)
+                return false;
+            ItemStack extracted = handler.extractItem(slot, need, false);
+            if (extracted.getCount() < need) { // 竞态兜底
+                solidFuelSourcePos = null;
+                return false;
+            }
+            // 每室 +1 个物品的 burnTime（并行燃烧：每室 1 个，同燃同熄）
+            for (BlockPos sp : steamChambers) {
+                if (level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be) {
+                    be.burnTicks += burnTime;
+                    be.setChanged();
+                }
+            }
             steamFuelType = "solid"; // 储备来源 = 固体（Goggle 燃料行）
             steamSolidFuelKey = extracted.getDescriptionId();
-            be.setChanged();
             return true;
         }
-        // 源已空（无燃料物品）→ 失效，下一 tick 重扫
-        solidFuelSourcePos = null;
         return false;
     }
 
@@ -1814,18 +1848,22 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 .append(steamFuelValueComponent()));
     }
 
-    /** 蒸汽室燃料行值：无储备 → 红"无"；流体 → 绿燃料名（不显示时间）；固体 → 绿燃料名 + 青"（剩余 Xh Ym Zs）"。
-     *  数据全部来自服务端同步（steamFuelType/steamFuelKey/steamBurnTicksRemaining，客户端不重算）。 */
+    /** 蒸汽室燃料行值：无储备 → 红"无"；流体 → 绿燃料名（不显示时间/数量）；固体 → 绿"燃料名 xN" + 青" (时间)"
+     *  （并行燃烧：数量 = 蒸汽室个数，时间 = 单个燃料剩余时长 burnTicks/20，各室同值）。
+     *  燃料名/时间来自服务端同步（客户端不重算），数量用客户端 scanModule 轻扫（同核心 tooltip 模块清单）。 */
     private Component steamFuelValueComponent() {
         if (steamFuelType.equals("fluid") && !steamFuelKey.isEmpty())
             return Component.translatable(steamFuelKey).withStyle(ChatFormatting.GREEN);
         if (steamFuelType.equals("solid") && !steamFuelKey.isEmpty()) {
-            Component name = Component.translatable(steamFuelKey).withStyle(ChatFormatting.GREEN);
+            int chambers = scanModule().steamChambers().size();
+            Component name = Component.translatable(steamFuelKey)
+                    .append(Component.literal(" x" + chambers))
+                    .withStyle(ChatFormatting.GREEN);
             if (steamBurnTicksRemaining > 0) {
-                // 剩余时间 = 总燃烧 tick / 20（原版熔炉速率秒，参考 portable_engine.getTime；与效率无关）
+                // 剩余时间 = 单个燃料燃烧 tick / 20（原版熔炉速率秒，参考 portable_engine.getTime；与效率无关）
                 int seconds = Math.max(0, Math.round(steamBurnTicksRemaining / 20f));
-                name = name.copy().append(Component.translatable("tooltip.ccpe.engine.fuel_remaining",
-                        formatBurnTime(seconds)).withStyle(ChatFormatting.AQUA));
+                name = name.copy().append(Component.literal(" (" + formatBurnTime(seconds) + ")")
+                        .withStyle(ChatFormatting.AQUA));
             }
             return name;
         }
