@@ -19,6 +19,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -43,6 +44,9 @@ import java.util.Map;
 public class SteamPowerChamberBlock extends DirectionalBlock implements IWrenchable, EntityBlock, IProxyHoveringInformation {
 
     public static final MapCodec<SteamPowerChamberBlock> CODEC = simpleCodec(SteamPowerChamberBlock::new);
+
+    /** 运行状态（父引擎 controller {@code isRunning()} 时 true）：true 切 heated.json 底座，false 用 block.json */
+    public static final BooleanProperty HEATED = BooleanProperty.create("heated");
 
     /** 贴附虚影助手 id：手持蒸汽动力室对准引擎核心时显示虚影（见 ChamberAttachPlacementHelper） */
     private static final int placementHelperId = PlacementHelpers.register(
@@ -87,6 +91,9 @@ public class SteamPowerChamberBlock extends DirectionalBlock implements IWrencha
 
     public SteamPowerChamberBlock(BlockBehaviour.Properties properties) {
         super(properties);
+        registerDefaultState(defaultBlockState()
+                .setValue(FACING, Direction.NORTH)
+                .setValue(HEATED, false));
     }
 
     /**
@@ -96,7 +103,7 @@ public class SteamPowerChamberBlock extends DirectionalBlock implements IWrencha
      */
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING);
+        builder.add(FACING, HEATED);
     }
 
     @Override
@@ -108,8 +115,10 @@ public class SteamPowerChamberBlock extends DirectionalBlock implements IWrencha
         if (context.getLevel().getBlockState(attachCore).is(MyModBlocks.engine_core.get())
                 && EngineCoreBlockEntity.moduleHasFluidChambers(context.getLevel(), attachCore))
             return null;
-        // 同 fluid_port/display_link：模型"开口"（顶面）朝点击面
-        return defaultBlockState().setValue(FACING, context.getClickedFace());
+        // 同 fluid_port/display_link：模型"开口"（顶面）朝点击面；默认未加热（HEATED=false → block.json）
+        return defaultBlockState()
+                .setValue(FACING, context.getClickedFace())
+                .setValue(HEATED, false);
     }
 
     @Override
@@ -129,15 +138,20 @@ public class SteamPowerChamberBlock extends DirectionalBlock implements IWrencha
         return new SteamPowerChamberBlockEntity(pos, state);
     }
 
-    /** 客户端 tick：活塞"噗嗤"音效触发（见 {@code SteamPowerChamberBlockEntity#tickClient}）；服务端不 tick */
+    /**
+     * 客户端 tick：活塞"噗嗤"音效触发（见 {@code SteamPowerChamberBlockEntity#tickClient}）；
+     * 服务端 tick：父引擎运行状态 → 底座模型 HEATED 同步（见 {@code SteamPowerChamberBlockEntity#tickServer}）。
+     */
     @Override
     public <T extends BlockEntity> @Nullable BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state,
                                                                             @NotNull BlockEntityType<T> type) {
-        if (!level.isClientSide)
-            return null;
         return (l, p, s, be) -> {
-            if (be instanceof SteamPowerChamberBlockEntity chamber)
-                chamber.tickClient();
+            if (be instanceof SteamPowerChamberBlockEntity chamber) {
+                if (l.isClientSide)
+                    chamber.tickClient();
+                else
+                    chamber.tickServer();
+            }
         };
     }
 

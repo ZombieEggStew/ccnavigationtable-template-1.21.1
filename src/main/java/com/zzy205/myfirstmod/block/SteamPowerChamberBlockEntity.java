@@ -62,6 +62,29 @@ public class SteamPowerChamberBlockEntity extends BlockEntity {
         burnTicks = tag.getFloat("BurnTicks");
     }
 
+    // ================= 服务端：底座加热状态同步（HEATED） =================
+
+    /**
+     * 服务端 tick：父引擎（FACING 反方向贴的核心）整条引擎 controller 运行时 → 本室 HEATED=true
+     * （底座切 heated.json 加热外观），否则 HEATED=false（block.json）。仅在状态变化时 setBlockAndUpdate
+     * （不逐 tick 刷方块更新）；未贴核心（独立放置）→ 恒 false。
+     */
+    public void tickServer() {
+        BlockState state = getBlockState();
+        boolean heated = isParentEngineRunning();
+        if (state.getValue(SteamPowerChamberBlock.HEATED) != heated) {
+            level.setBlockAndUpdate(worldPosition, state.setValue(SteamPowerChamberBlock.HEATED, heated));
+        }
+    }
+
+    /** 父引擎（FACING 反方向贴的核心）整条引擎 controller 是否运行；未贴核心返回 false */
+    private boolean isParentEngineRunning() {
+        Direction facing = getBlockState().getValue(SteamPowerChamberBlock.FACING);
+        BlockPos parent = worldPosition.relative(facing.getOpposite());
+        EngineCoreBlockEntity controller = engineController(parent);
+        return controller != null && controller.isRunning();
+    }
+
     // ================= 活塞动画（客户端） =================
 
     /**

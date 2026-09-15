@@ -1,28 +1,54 @@
 {
   "variants": {
-    "facing=down": {
+    "facing=down,heated=false": {
       "model": "ccpe:block/aero_engine/steam_power_chamber/block",
       "x": 180
     },
-    "facing=east": {
+    "facing=down,heated=true": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/heated",
+      "x": 180
+    },
+    "facing=east,heated=false": {
       "model": "ccpe:block/aero_engine/steam_power_chamber/block",
       "x": 90,
       "y": 90
     },
-    "facing=north": {
+    "facing=east,heated=true": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/heated",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north,heated=false": {
       "model": "ccpe:block/aero_engine/steam_power_chamber/block",
       "x": 90
     },
-    "facing=south": {
+    "facing=north,heated=true": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/heated",
+      "x": 90
+    },
+    "facing=south,heated=false": {
       "model": "ccpe:block/aero_engine/steam_power_chamber/block",
       "x": 90,
       "y": 180
     },
-    "facing=up": {
+    "facing=south,heated=true": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/heated",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up,heated=false": {
       "model": "ccpe:block/aero_engine/steam_power_chamber/block"
     },
-    "facing=west": {
+    "facing=up,heated=true": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/heated"
+    },
+    "facing=west,heated=false": {
       "model": "ccpe:block/aero_engine/steam_power_chamber/block",
+      "x": 90,
+      "y": 270
+    },
+    "facing=west,heated=true": {
+      "model": "ccpe:block/aero_engine/steam_power_chamber/heated",
       "x": 90,
       "y": 270
     }
