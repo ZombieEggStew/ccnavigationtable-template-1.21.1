@@ -1205,7 +1205,68 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return;
         if (!isController())
             return;
+        // 新放置的核心会以自身为锚点组网：放在原 controller 外侧时将成为新 controller，
+        // 必须先继承相邻引擎 controller 的运行状态，否则温度/油门/混合比等全部重置（见 adoptAdjacentEngineState）
+        adoptAdjacentEngineState();
         ConnectivityHandler.formMulti(this);
+    }
+
+    /**
+     * 延长引擎时，若本核心（新放置）将取代相邻引擎成为 controller，先继承其 controller 的运行状态。
+     * <p>Create {@code ConnectivityHandler.formMulti} 以调用它的方块为锚点、沿轴正方向扫描组网：
+     * 新核心放在原 controller 外侧（负方向端）时，其正方向扫描覆盖整条旧引擎 → 新核心成为新 controller；
+     * 而引擎运行状态只存在 controller BE 内存字段里、无迁移机制（未实现 getExtraData/setExtraData），
+     * 不继承就会全部重置。仅在 {@link #updateConnectivity()}（新放置核心路径）中调用；
+     * 两侧都有引擎（合并场景）时取更长的作为捐赠者。</p>
+     */
+    private void adoptAdjacentEngineState() {
+        if (level == null || level.isClientSide)
+            return;
+        EngineCoreBlockEntity donor = null;
+        for (Direction dir : Direction.values()) {
+            if (dir.getAxis() != getMainConnectionAxis())
+                continue;
+            if (!(level.getBlockEntity(worldPosition.relative(dir)) instanceof EngineCoreBlockEntity core))
+                continue;
+            EngineCoreBlockEntity controller = core.getControllerBE();
+            if (controller == null || controller == this)
+                continue;
+            if (donor == null || controller.length > donor.length)
+                donor = controller;
+        }
+        if (donor != null)
+            adoptStateFrom(donor);
+    }
+
+    /** 从捐赠者（旧 controller）拷贝整条引擎的运行状态到本核心（新 controller，刚放置、全默认值）。
+     *  不拷贝：running/moduleCapacity（本 tick 立即重算）、length（formMulti 设置）、
+     *  luaConnected（外设挂载是逐 BE 的运行时瞬态，新 controller 未挂电脑）、客户端温度外推字段。 */
+    private void adoptStateFrom(EngineCoreBlockEntity donor) {
+        temperature = donor.temperature;
+        efficiency = donor.efficiency;
+        mixture = donor.mixture;
+        coolingStrength = donor.coolingStrength;
+        ecoProgress = donor.ecoProgress;
+        lastEffectiveMixture = donor.lastEffectiveMixture;
+        lastEconomyFactor = donor.lastEconomyFactor;
+        lastColdFactor = donor.lastColdFactor;
+        lastFuelFactor = donor.lastFuelFactor;
+        lastHeatFactor = donor.lastHeatFactor;
+        lastOptimalTemp = donor.lastOptimalTemp;
+        overheated = donor.overheated;
+        warmingUp = donor.warmingUp;
+        steamEngine = donor.steamEngine;
+        hasAirDuct = donor.hasAirDuct;
+        fuelDebt = donor.fuelDebt;
+        waterDebt = donor.waterDebt;
+        fuelFluid = donor.fuelFluid.copy();
+        steamFuelFluid = donor.steamFuelFluid.copy();
+        fuelSourcePos = donor.fuelSourcePos;
+        waterSourcePos = donor.waterSourcePos;
+        steamFuelSourcePos = donor.steamFuelSourcePos;
+        activeFuelType = donor.activeFuelType;
+        activeFuelId = donor.activeFuelId;
+        activeFuelTopt = donor.activeFuelTopt;
     }
 
     // ================= IMultiBlockEntityContainer =================

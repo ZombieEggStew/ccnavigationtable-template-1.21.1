@@ -118,6 +118,7 @@ EngineCoreBlockEntity（仅 controller 干活；非 controller 的 getGeneratedS
 - `onPlace`→`formMulti`；`onRemove`→`splitMulti`（拆中段全体解体后自动重组）。
 - `PoleHelper` 沿轴延伸放置；`"Uninitialized"` NBT 标志 → 读档/蓝图后重组。
 - `hasShaftTowards` 沿 AXIS 双面 true → 相邻核心轴耦合成一个传动网络。
+- **运行状态继承**：新核心放在 controller 外侧会成为新 controller → `updateConnectivity` 在 `formMulti` 前 `adoptAdjacentEngineState` 从相邻引擎 controller 继承温度/油门/混合比/经济进度等（见踩坑 14）。
 - `getMaxLength=21`、`getMaxWidth=1`。
 
 ### 7.2 零缓存流体抽取（P1）
@@ -420,6 +421,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 11. **`BlockPlaceContext.getClickedPos()` 陷阱**：点击不可替换方块时返回放置格；贴附核心 = `getClickedPos().relative(getClickedFace().getOpposite())`。
 12. **`InteractionResult.FAIL.consumesAction() == false`**：方块 `useItemOn` 返回 FAIL 拦不住放置；正确模式 = 覆写 `BlockItem.place`（照 create:factory_gauge `FactoryPanelBlockItem`）。
 13. **蒸汽 `runningSteam` 计「有储备」→ 油门 0 温度钉住**：凡是「有储备 ≠ 在消耗」的状态量，挂到消耗/运行判定时必须加 efficiency 门控。
+14. **延长引擎在 controller 端放置 → 参数重置**：Create `formMulti` 以新核心为锚点沿轴正方向组网，新核心放在原 controller 外侧（负方向端）时正方向扫描覆盖整条旧引擎 → 新核心成为新 controller；引擎运行状态只存在 controller BE 内存字段、无迁移机制（未实现 `getExtraData/setExtraData`，CDG 参考实现同样没有）→ 温度/油门/混合比/经济进度等全重置。修复：`updateConnectivity` 在 `formMulti` 前 `adoptAdjacentEngineState`（沿轴找相邻引擎 controller 继承运行状态，两侧都有引擎取更长者）。**拆中段后不含原 controller 的那一半同样会重置（同根因，本次未修）**。参考：`api/create-.../api/connectivity/ConnectivityHandler.java`、`run/references/Create-Diesel-Generators-1.21.1 (1)/.../ModularDieselEngineBlockEntity.java`。
 
 ---
 
