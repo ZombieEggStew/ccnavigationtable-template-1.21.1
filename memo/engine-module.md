@@ -149,7 +149,7 @@ EngineCoreBlockEntity（仅 controller 干活；非 controller 的 getGeneratedS
 ```
 Q_heat   = Σ运行室 × efficiency × 燃料.heat × heatFactor(m_eff) × 类型基础热
 K_total  = (K_CORE×length + K_AMB×N + K_DUCT×D×风门) × ram(speed) × f(pressure)
-T_amb    = 20 − 0.0065×altitude，下限 −40℃
+T_amb    = 分段线性：Y≤63 → 20℃；63→200（云层）20→0℃；200→320（世界顶）0→−40℃；≥320 恒 −40℃
 T'       = (Q_heat − K_total×(T − T_amb)) / C_th
 T       += T'/20；钳制 [T_amb, T_max×1.2]
 overheat = T ≥ 200 → 硬停；resume = T ≤ 180（滞回）
@@ -167,7 +167,7 @@ altitude：运动体取 getSubLevelWorldPos().y，静态取方块 Y
 | K_AMB / K_DUCT / K_CORE | 0.05 / 0.05 / 0.02 | 环境(每室) / 气道(每个) / 核心自身(每节) |
 | RAM_START / RAM_FULL / RAM_MAX | 10 / 30 m/s / ×2.0 | 冲压冷却曲线 |
 | **OVERHEAT_TEMP / OVERHEAT_RESUME** | **200 / 180°C** | 过热硬停 / 滞回恢复（= 即将过热预警阈值） |
-| T_AMB_SEA / LAPSE / FLOOR | 20 / 0.0065°C/m / −40°C | 环境温度 |
+| T_AMB_SEA_Y / T_AMB_SEA / T_AMB_CLOUD_Y / T_AMB_CLOUD_TEMP / T_AMB_TOP_Y / T_AMB_FLOOR | 63 / 20°C / 200 / 0°C / 320 / −40°C | 环境温度（Minecraft 尺度分段线性：海平面→云层→世界顶；不再用真实对流层 0.0065°C/m） |
 | C_TH_BASE | 1.0 | 热容 ×length |
 | PRESSURE_FLOOR | 0.25 | 气压因子下限 |
 | **ENGINE_T_OPT** | **155°C** | 经济目标（引擎固定，不随燃料/油门） |
@@ -237,11 +237,11 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 ```
 1. 枚举：scanModule —— 两类燃烧室（FACING 反面贴核心归属，去重）+ 整合气道数 D + 去重邻居
 2. 仲裁：流体+蒸汽并存只让多数派工作（平局流体优先）；steamEngine 标志
-3. 门控：enabled && !overheated（滞回仅流体）→ heatAllowed
+3. 门控：!overheated（滞回仅流体）→ heatAllowed
 4. 混合比（仅流体）：m_eff = 杆 × autoRichness（无气道杆钳 ≥1.0）；油耗因子 = 杆 × eco(T,m_eff) × cold(T)
 5. 流体室评估：findFuel 按 priority 选一种 → runningFluid；消耗 ×效率 × 杆 × eco × cold
 6. 蒸汽室评估：waterOk（水+燃料）→ 逐室 burnTick 消耗（×效率）；steamFuelBurnTicks 原版解析
-7. running = 有燃烧室 && steamReady（蒸汽 T≥100°C）&& !过载 && !过热 && enabled && 效率>0
+7. running = 有燃烧室 && steamReady（蒸汽 T≥100°C）&& !过载 && !过热 && 效率>0
 8. speed = running ? 256×效率 : 0；capacity = 室数×base×效率
 9. 消耗：水 1mb/s/室×效率；流体燃料 ×杆 ×eco ×cold（零缓存累加器 ≥1mb drain）
 10. 温度：流体 = 牛顿冷却（过热滞回 200/180）；蒸汽 = 收敛钉 155 / 停火冷却
@@ -259,8 +259,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 | `getTemperature()` | false | number | 温度 °C |
 | `isOverheated()` | false | boolean | 过热锁定（仅流体；T≥200 硬停，T≤180 解锁） |
 | `getFluidTanks()` | true | table[] | 所有连接储罐 `{fluid, amount, remaining, capacity}` |
-| `getEnabled()` / `setEnabled(bool)` | false/true | boolean | 引擎开关（默认 true；false = 整机停摆） |
-| `getThrottle()` / `setThrottle(0~1)` | false/true | boolean | 油门：应力与转速同比例（0 = 停机不烧油） |
+| `getThrottle()` / `setThrottle(0~1)` | false/true | boolean | 油门：应力与转速同比例（0 = 停机不烧油，唯一启停控制；setEnabled/getEnabled 已移除） |
 | `getMixture()` | false | number | 混合比杆 0.6..1.4（仅流体；蒸汽恒 1.0） |
 | `setMixture(x)` | true | boolean | 混合比：油耗 ×杆值、温度 ×热因子；**蒸汽或无整合气道拒绝 false** |
 | `getEffectiveMixture()` | false | number | 实际混合比 = 杆 × 自动富油（eco 窗口与发热反馈） |
@@ -270,7 +269,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 | `getCooling()` / `setCooling(0~1)` | false/true | boolean | 风门：只缩 K_DUCT 分量，只能降；**蒸汽或无气道拒绝 false** |
 | `isWarmingUp()` | false | boolean | 蒸汽暖机中（T<100°C 只烧不发电） |
 
-**运行条件**（全满足才发电）：≥1 运行燃烧室 && enabled && 效率>0 && 未过载 && 未过热（仅流体）&& 蒸汽 T≥100°C。停机原因：缺燃料/缺水、setEnabled(false)、油门 0、过载、流体过热（滞回 T≤180 恢复）、蒸汽暖机未完成。
+**运行条件**（全满足才发电）：≥1 运行燃烧室 && 效率>0 && 未过载 && 未过热（仅流体）&& 蒸汽 T≥100°C。停机原因：缺燃料/缺水、油门 0、过载、流体过热（滞回 T≤180 恢复）、蒸汽暖机未完成。
 
 ---
 
@@ -307,7 +306,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 
 ```
 发动机状态
-状态：过冷 / 正常 / 高效 / 即将过热 / 过热
+状态：停机 / 过冷 / 正常 / 高效 / 即将过热 / 过热
 温度：XX.X°C
 油门：50%                    ← = 效率（定距桨单杆）
 油耗：×0.60                  ← 最终油耗系数 = 杆值 × 经济 × 过冷
@@ -322,6 +321,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 
 | 温度区间 | 状态 | 颜色 |
 |---|---|---|
+| —（!running） | 停机（油门 0 / 缺燃料 / 缺水 / 过载） | 灰 |
 | < ~97°C | 过冷（油耗惩罚中） | 蓝 |
 | 97 ~ 145 | 正常 | 绿 |
 | 145 ~ 165 | **高效**（经济带 |T−155|≤10） | 青 |
@@ -398,7 +398,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 | P1 | 流体燃烧室 + 核心 tick：燃料 datapack、罐 drain、fuelDebt、发电 256rpm + 活塞动画 | ✅ |
 | P2 | 蒸汽室：水 + 流体燃料 burnTick 制 + 活塞动画（固体燃料暂缓） | ✅ |
 | P3 | 温度/冷却：牛顿冷却、过热硬停+滞回、冲压/气压冷却、K_CORE、趋势外推显示 | ✅ |
-| P4 | Lua 外设 `ccpe.engine`：enabled/throttle + 状态读；定距桨单杆（转速 = 油门×256） | ✅ |
+| P4 | Lua 外设 `ccpe.engine`：throttle + 状态读；定距桨单杆（转速 = 油门×256） | ✅ |
 | P5 | 混合比：setMixture(0.6~1.4) + 自动富油 + 凸热曲线 + getEffectiveMixture | ✅ |
 | P6 | 回炉（单燃料制 + 物理排斥放置拦截）、eco(T) 经济区、整合气道替换风道、风门 setCooling、蒸汽 Plan B、Lua 扩展 | ✅ |
 | P7 | 奖励驱动重构：油耗 = 杆×eco×cold、eco 双因素 AND 门控 + 解锁进度、温度全部引擎固定、过冷惩罚、tooltip 每 tick 同步、燃料体系分家、Goggle 精简（油门/油耗/发热系数） | ✅ |

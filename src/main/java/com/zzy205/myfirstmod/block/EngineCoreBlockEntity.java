@@ -138,10 +138,16 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final float OVERHEAT_TEMP = 200f;
     /** 滞回恢复阈值（°C）：T ≤ 此值才允许重启（0.9×OVERHEAT_TEMP；与「即将过热」预警阈值同值 180） */
     public static final float OVERHEAT_RESUME = 180f;
+    /** 海平面高度（Y，主世界默认 63）：Y≤此值环境温度恒 T_AMB_SEA */
+    public static final float T_AMB_SEA_Y = 63f;
     /** 海平面环境温度（°C） */
     public static final float T_AMB_SEA = 20f;
-    /** 对流层环境温度递减率（°C/m，按海平面高度） */
-    public static final float T_AMB_LAPSE = 0.0065f;
+    /** 云层高度（Y，主世界默认 200）：环境温度在此降到 0°C 结冰层 */
+    public static final float T_AMB_CLOUD_Y = 200f;
+    /** 云层环境温度（°C） */
+    public static final float T_AMB_CLOUD_TEMP = 0f;
+    /** 世界顶高度（Y，主世界默认 320）：环境温度在此恰好到下限 T_AMB_FLOOR */
+    public static final float T_AMB_TOP_Y = 320f;
     /** 环境温度下限（°C） */
     public static final float T_AMB_FLOOR = -40f;
     /** 流体室基础热（°C/s，100% 效率下每室） */
@@ -191,8 +197,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected long lastTempSampleTime, newTempSampleTime;
 
     // ---- P4：Lua 控制（ccpe.engine 外设，挂 controller；方案见 memo/engine-module.md 关键机制 5） ----
-    /** Lua 引擎开关（默认 true 保持 P0–P3 行为；false = 整机停摆：不发电、不消耗，温度自然冷却）。NBT 持久化。 */
-    protected boolean enabled = true;
     /** 是否有电脑已连接本外设（Peripheral.attach/detach 维护；仅同步客户端供 Goggle 显示，不落盘） */
     protected boolean luaConnected = false;
 
@@ -341,8 +345,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         } else if (temperature >= OVERHEAT_TEMP) {
             overheated = true;
         }
-        // P4：Lua 开关 enabled 与过热同为"整机停摆"门控（不发电不消耗）
-        boolean heatAllowed = enabled && !overheated;
+        // 过热（流体）为"整机停摆"门控（不发电不消耗）；蒸汽引擎永不过热
+        boolean heatAllowed = !overheated;
 
         // P5/P7：混合比（仅流体引擎；蒸汽引擎无混合比轴——锁 1.0、无自动富油、发热不乘热因子）。
         // P6 进气=拉稀权：无整合气道 → 杆值钳 ≥1.0（不能拉稀省油）；装后开放 0.6~1.4。
@@ -429,8 +433,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         int runningTotal = runningFluid + runningSteam;
         // P6 Plan B：蒸汽锅炉暖机门控——T ≥ STEAM_MIN_WORK_TEMP 才「开始工作」（低于阈值只烧不发电，热机过程）
         boolean steamReady = !steamEngine || temperature >= STEAM_MIN_WORK_TEMP;
-        // P4：enabled=false 或 throttle=0（效率=0）→ 停机（不发电；throttle=0 时容量/消耗/发热全为 0，避免"空转"假象）
-        running = runningTotal > 0 && steamReady && !overstressed && !overheated && enabled && efficiency > 0f;
+        // P4：throttle=0（效率=0）→ 停机（不发电；throttle=0 时容量/消耗/发热全为 0，避免"空转"假象）
+        running = runningTotal > 0 && steamReady && !overstressed && !overheated && efficiency > 0f;
         moduleCapacity = (fluidCapacity + (steamReady ? runningSteam : 0) * STEAM_STRESS_PER_CHAMBER) * efficiency;
 
         // ---- P3/P6 Plan B：温度更新 ----
@@ -793,10 +797,26 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return (float) Math.pow(Math.max(p, PRESSURE_FLOOR), 0.8);
     }
 
-    /** 环境温度（°C）：海平面 20°C，对流层 −0.0065°C/m（按海平面高度），下限 T_AMB_FLOOR */
+    /**
+     * 环境温度（°C）：按 Minecraft 尺度分段线性（不再套真实对流层 0.0065°C/m —— 那在 63~320 的
+     * 世界里整段只降 ~1.7°C，高度几乎无温度差异）：
+     *   Y ≤ 63（海平面）    → 恒 20°C
+     *   63 → 200（云层）    → 20°C 线性降到 0°C（结冰层，云层生成高度）
+     *   200 → 320（世界顶） → 0°C 线性降到 −40°C（下限）
+     *   Y ≥ 320            → 恒 −40°C
+     */
     protected float ambientTemp() {
-        float aboveSea = Math.max(0, engineAltitude() - 63f);
-        return Math.max(T_AMB_SEA - T_AMB_LAPSE * aboveSea, T_AMB_FLOOR);
+        float y = engineAltitude();
+        if (y <= T_AMB_SEA_Y)
+            return T_AMB_SEA;
+        if (y >= T_AMB_TOP_Y)
+            return T_AMB_FLOOR;
+        if (y <= T_AMB_CLOUD_Y) {
+            float t = (y - T_AMB_SEA_Y) / (T_AMB_CLOUD_Y - T_AMB_SEA_Y);
+            return T_AMB_SEA + (T_AMB_CLOUD_TEMP - T_AMB_SEA) * t;
+        }
+        float t = (y - T_AMB_CLOUD_Y) / (T_AMB_TOP_Y - T_AMB_CLOUD_Y);
+        return T_AMB_CLOUD_TEMP + (T_AMB_FLOOR - T_AMB_CLOUD_TEMP) * t;
     }
 
     // ---- P5：混合比辅助（方案见 memo/engine-module.md 关键机制 7）----
@@ -954,7 +974,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * for _, t in ipairs(e.getFluidTanks()) do -- 所有连接储罐：fluid/amount/remaining/capacity
      *   print(t.fluid, t.amount, t.remaining, t.capacity)
      * end
-     * e.setEnabled(false)                    -- Lua 开关（默认 true；false = 整机停摆：不发电不消耗）
      * e.setThrottle(0.5)                     -- 油门（0..1；应力与转速同比例：50% = 半应力 + 128rpm；0 = 停机）
      * e.setMixture(0.8)                      -- 混合比（0.6~1.4；只影响油耗与温度：稀=省油但更热，浓=费油但降温）
      * e.getEffectiveMixture()                -- 实际混合比（杆 × 高空自动富油，气压驱动；高空 > 杆值）
@@ -1044,24 +1063,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 }
             }
             return tanks;
-        }
-
-        /** 引擎开关（默认 true；false = 整机停摆：不发电、不消耗，温度自然冷却） */
-        @LuaFunction
-        public final boolean getEnabled() {
-            return enabled;
-        }
-
-        /** 开关引擎（Lua 唯一控制入口，无红石）。返回是否发生变更。 */
-        @LuaFunction(mainThread = true)
-        public final boolean setEnabled(boolean value) {
-            if (enabled == value)
-                return true;
-            enabled = value;
-            reActivateSource = true;
-            setChanged();
-            sendData();
-            return true;
         }
 
         /** 当前油门（0..1；默认 0.25——静态无风道不过热的既有定标值）。定距桨单杆模型：转速 = 油门 × 256 */
@@ -1400,8 +1401,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             temperature = compound.getFloat("Temperature");
         if (compound.contains("Efficiency"))
             efficiency = compound.getFloat("Efficiency");
-        // P4：旧存档（P0–P3）无 Enabled 字段 → 默认开启，保持既有行为
-        enabled = !compound.contains("Enabled") || compound.getBoolean("Enabled");
         // P5：旧存档无 Mixture 字段 → 默认 1.0（海平面杆 1.0 = 现状）
         mixture = compound.contains("Mixture") ? compound.getFloat("Mixture") : 1f;
         // P5：实际混合比（服务端同步；旧存档/首个 tick 前 → 1.0）
@@ -1456,7 +1455,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putFloat("Capacity", moduleCapacity);
         compound.putFloat("Temperature", temperature);
         compound.putFloat("Efficiency", efficiency);
-        compound.putBoolean("Enabled", enabled);
         compound.putFloat("Mixture", mixture);
         // 实际混合比（含高空自动富油）服务端权威值，同步给客户端 Goggle 显示
         compound.putFloat("EffectiveMixture", lastEffectiveMixture);
@@ -1618,8 +1616,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
         // 不调用 super.addToGoggleTooltip：Create 动力方默认 goggle 会加「容量提供 / 应力影响」行，
         // 用户要求精简 tooltip —— 全部应力条目移除（核心 tooltip 的应力行也已移除）。
-        // 状态行档位（仅流体引擎；蒸汽走暖机/正常）：过冷(<~97) / 正常(97~145) / 高效(145~165 经济带) /
-        // 正常(165~180) / 即将过热(180~200) / 过热锁定(≥200，滞回 180 解锁)
+        // 状态行档位（仅流体引擎；蒸汽走暖机/正常）：停机（!running：油门 0/缺燃料/缺水/过载）/
+        // 过冷(<~97) / 正常(97~145) / 高效(145~165 经济带) / 正常(165~180) / 即将过热(180~200) / 过热锁定(≥200，滞回 180 解锁)
         String statusKey;
         ChatFormatting statusColor;
         if (overheated) {
@@ -1629,6 +1627,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             // 蒸汽锅炉暖机中（点火燃烧但未达工作温度，只烧不发电）
             statusKey = "tooltip.ccpe.engine.status.warming";
             statusColor = ChatFormatting.GOLD;
+        } else if (!running) {
+            // 停机：油门 0 / 缺燃料 / 缺水 / 过载等（不发电不消耗；温度档位无意义，优先显示停机）
+            statusKey = "tooltip.ccpe.engine.status.stopped";
+            statusColor = ChatFormatting.GRAY;
         } else if (temperature >= OVERHEAT_TEMP * 0.9f) {
             // 即将过热：T ≥ 180（0.9×200），与过热滞回解锁阈值同值
             statusKey = "tooltip.ccpe.engine.status.warning";
