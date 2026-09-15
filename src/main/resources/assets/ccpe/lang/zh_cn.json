@@ -60,6 +60,7 @@
   "tooltip.ccpe.engine.status.overheated": "过热",
   "tooltip.ccpe.engine.status.warming": "暖机中",
   "tooltip.ccpe.engine.status.stopped": "停机",
+  "tooltip.ccpe.engine.status.cold": "过冷",
   "tooltip.ccpe.engine.temperature": "温度：",
   "tooltip.ccpe.engine.overheated": "过热停机！",
   "tooltip.ccpe.engine.efficiency": "效率：",

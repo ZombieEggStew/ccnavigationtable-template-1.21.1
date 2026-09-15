@@ -261,6 +261,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected float lastOptimalTemp = EngineFuels.DEFAULT_OPTIMAL_TEMP;
     /** P7：当前过冷系数（cold ≥ 1；>1 = 温度低于目标、油耗惩罚中，只乘油耗）。NBT 同步客户端 Goggle */
     protected float lastColdFactor = 1f;
+    /** P7：最终油耗系数（杆值 × 经济系数 × 过冷惩罚，服务端每 tick 计算；停机/蒸汽 → 1.0 无意义）。NBT 同步客户端 Goggle 经济行 */
+    protected float lastFuelFactor = 1f;
     /** 冷却强度（风门，0~1，默认 1.0 = 全开；只缩放 K_DUCT 风道散热分量，冲压/气压/环境不动；仅装整合气道后可调，只能降——真实 cowl flap）。NBT 持久化。 */
     protected float coolingStrength = 1f;
 
@@ -468,6 +470,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             ecoProgress = updateEcoProgress(ecoProgress, temperature, lastOptimalTemp, effectiveMixture, false, airDuct);
         }
         lastEconomyFactor = 1f - (1f - ECO_MIN) * ecoProgress;
+        // P7：最终油耗系数（= 杆值 × 经济 × 过冷，服务端权威同步给 Goggle 经济行；停机/蒸汽 → 1.0 无意义）
+        lastFuelFactor = (!steamEngine && running && runningFluid > 0 && fluidFuel != null)
+                ? leverMixture * lastEconomyFactor * lastColdFactor : 1f;
         // P6 Plan B：蒸汽暖机标志（点火燃烧但未达工作温度；油门 0 不点火 → false；供 Goggle 状态行 / Lua isWarmingUp）
         warmingUp = steamEngine && runningSteam > 0 && efficiency > 0f && temperature < STEAM_MIN_WORK_TEMP;
         // P6：getActiveFuel 缓存（当前活动燃料 + 其 T_opt）
@@ -1417,6 +1422,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         ecoProgress = compound.contains("EcoProgress") ? compound.getFloat("EcoProgress") : 0f;
         lastOptimalTemp = compound.contains("OptimalTemp") ? compound.getFloat("OptimalTemp") : EngineFuels.DEFAULT_OPTIMAL_TEMP;
         lastColdFactor = compound.contains("ColdFactor") ? compound.getFloat("ColdFactor") : 1f;
+        lastFuelFactor = compound.contains("FuelFactor") ? compound.getFloat("FuelFactor") : 1f;
         // Lua 连接状态：磁盘加载无此字段 → false（服务端启动时无电脑挂载）；客户端包带真实值
         luaConnected = compound.getBoolean("LuaConnected");
 
@@ -1469,6 +1475,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putFloat("EcoProgress", ecoProgress);
         compound.putFloat("OptimalTemp", lastOptimalTemp);
         compound.putFloat("ColdFactor", lastColdFactor);
+        compound.putFloat("FuelFactor", lastFuelFactor);
         // Lua 连接状态是运行时瞬态（电脑挂载），只同步客户端供 Goggle 显示，不落盘
         if (clientPacket)
             compound.putBoolean("LuaConnected", luaConnected);
@@ -1634,6 +1641,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         } else if (temperature >= OVERHEAT_TEMP * 0.8f) {
             statusKey = "tooltip.ccpe.engine.status.warning";
             statusColor = ChatFormatting.GOLD;
+        } else if (!steamEngine && lastColdFactor > 1.01f) {
+            // P7：过冷状态（温度低于目标、油耗惩罚中——先小油门暖机；仅流体引擎；与预警/过热温度区互斥）
+            statusKey = "tooltip.ccpe.engine.status.cold";
+            statusColor = ChatFormatting.BLUE;
         } else {
             statusKey = "tooltip.ccpe.engine.status.normal";
             statusColor = ChatFormatting.GREEN;
@@ -1655,12 +1666,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
         // P6：经济区 / 风门（仅流体引擎；蒸汽 Plan B = 恒温自调节、无经济区无风门——经济区行/未装气道提示行都不显示）
         if (!steamEngine) {
-            // 经济区（服务端同步系数；未装整合气道 → 提示行；系数 <1 = 温度+混合比双达标且解锁进度渐入省油中）
+            // 经济区（服务端同步「最终油耗系数」= 杆值 × 经济系数 × 过冷惩罚，即除油门/自动富油外的全部油耗因子；<1 = 省油中）
             if (hasAirDuct) {
                 tooltip.add(Component.literal("     ")
                         .append(Component.translatable("tooltip.ccpe.engine.economy").withStyle(ChatFormatting.GRAY))
-                        .append(Component.literal("×" + String.format(Locale.ROOT, "%.2f", (double) lastEconomyFactor))
-                                .withStyle(lastEconomyFactor < 1f ? ChatFormatting.GREEN : ChatFormatting.GRAY)));
+                        .append(Component.literal("×" + String.format(Locale.ROOT, "%.2f", (double) lastFuelFactor))
+                                .withStyle(lastFuelFactor < 1f ? ChatFormatting.GREEN : ChatFormatting.GRAY)));
                 // P7：最佳温度（随油门的当前目标值）——帮助玩家追经济窗口
                 if (running) {
                     tooltip.add(Component.literal("     ")

@@ -60,6 +60,7 @@
   "tooltip.ccpe.engine.status.overheated": "Overheated",
   "tooltip.ccpe.engine.status.warming": "Warming up",
   "tooltip.ccpe.engine.status.stopped": "Stopped",
+  "tooltip.ccpe.engine.status.cold": "Cold",
   "tooltip.ccpe.engine.temperature": "Temperature:",
   "tooltip.ccpe.engine.overheated": "Overheated!",
   "tooltip.ccpe.engine.efficiency": "Efficiency:",
