@@ -43,7 +43,7 @@
 - **燃料体系分家**：蒸汽引擎 = 纯原版燃料解析（`EngineFuels.vanillaBucketBurnTicks`：桶物品原版熔炉燃烧时长，熔岩桶 20000tick；添加蒸汽燃料 = 按原版为熔炉加燃料）；流体燃烧室 = 纯 datapack（`engine_fuel/*.json` 唯一途径）；**已删除 `burn_ticks_per_bucket` 字段**（lava.json 同步清理），消耗速率仍随油门（定距桨）。
 - **自动富油只降温不进油耗**（m_eff = 杆×autoRichness 只进 heatFactor 与 eco 窗口）。高空不拉稀 = ×1.0 无惩罚（原 ×1.25 效率税移除）。
 - **温度阈值全部引擎固定**：经济目标 `ENGINE_T_OPT=155`、过冷 `ENGINE_MIN_WORK_TEMP=100`、过热 200——均不随燃料/油门（真实 = 引擎设计点/节温器恒定；油门只决定实际温度与冷却压力）。
-- **Goggle tooltip 改每 tick 同步（20Hz）**：P7 新增字段持续变化，差量发包下显示滞后；`reActivateSource` 仍只在运行态/容量变化时置位（不每 tick 触发网络重激活）。
+- **Goggle tooltip 改每 tick 同步（20Hz）**：P7 新增字段持续变化，差量发包下显示滞后；`reActivateSource` 仍只在运行态/容量变化时置位（不每 tick 触发网络重激活）。**P7+ 已优化（方案 A+B+D）**：事件差量 + 温度 ≥1°C 门控 + 慢字段 1Hz 心跳；经济/过冷/油耗系数客户端现算（`economyFactor()/coldFactor()/fuelFactor()`），蒸汽倒计时客户端线性外推（`steamBurnTicksDisplay()`，运行中才外推）；`setChanged` 仍每 tick 保温度持久化。
 - **过热滞回解锁 T≤180°C**（原 160）。
 
 ## 惯性导航系统（ccpe:ins）

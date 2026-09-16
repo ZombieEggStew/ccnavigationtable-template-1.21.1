@@ -100,7 +100,7 @@ EngineCoreBlockEntity（仅 controller 干活；非 controller 的 getGeneratedS
  ├─ 组网（P0）：IMultiBlockEntityContainer + ConnectivityHandler.formMulti/splitMulti
  │              + PoleHelper 延伸放置 + Uninitialized 存档重组
  ├─ 每 tick：枚举模块 → 源列表重建调度 → 逐燃烧室评估（储备补料/消耗）→ 汇总容量 → 发电 → 温度 → 同步
- └─ 同步：tooltip 数据每 tick sendData（20Hz）→ 燃烧室 Visual 读父核心 → 活塞动画
+ └─ 同步：tooltip 数据差量门控 + 1Hz 心跳（P7+ 方案 A+B+D，原 20Hz 全量广播）→ 燃烧室 Visual 读父核心 → 活塞动画
 
 燃烧室 BE：非动力、轻量（流体室无槽 drain；蒸汽室无槽，燃料由 controller 抽取）
 
@@ -189,7 +189,7 @@ altitude：运动体取 getSubLevelWorldPos().y，静态取方块 Y
 | **ENGINE_T_OPT** | **155°C** | 经济目标（引擎固定，不随燃料/油门） |
 | **ENGINE_MIN_WORK_TEMP** | **100°C** | 过冷阈值（引擎固定，与蒸汽暖机门槛同值） |
 
-**实现要点**：温度存 controller NBT 持久化；过载与过热独立；tooltip 数据每 tick `sendData()`（20Hz）；客户端趋势外推显示温度。
+**实现要点**：温度存 controller NBT 持久化；过载与过热独立；**tooltip 同步 P7+ 优化（方案 A+B+D）**——事件差量 + 温度 ≥1°C 门控 + 慢字段 20 tick（1Hz）心跳，稳态包量降到 1/20 以下；经济/过冷/油耗系数客户端按公式现算（`economyFactor()/coldFactor()/fuelFactor()`），蒸汽倒计时客户端线性外推（`steamBurnTicksDisplay()`）；客户端趋势外推显示温度。
 
 ### 7.6 混合比与经济（P5/P7 最终；仅流体引擎）
 
@@ -280,7 +280,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 8. running：流体 = 有运行燃烧室；**蒸汽 = 油门开启且 T≥100°C 且水储备>0（无燃料余热也运转，缺水停机）**；均需 !过载 && !过热 && 效率>0
 9. speed = running ? 256×效率 : 0；capacity = 室数×base×效率（**蒸汽余热运转 = 全部蒸汽室满出力**）
 10. 温度：流体 = 牛顿冷却（过热滞回 200/180）；蒸汽 = 收敛钉 155 / 停火冷却
-11. 同步：tooltip 数据（温度/经济/过冷/发热系数/混合比实际值等）每 tick sendData（20Hz）
+11. 同步：tooltip 数据**差量门控**（离散字段变化 / 温度 ≥1°C / 慢字段 20 tick 心跳，P7+ 方案 A+B+D）——经济/过冷/油耗系数客户端现算，蒸汽倒计时客户端线性外推
 ```
 
 ---
@@ -429,7 +429,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 ## 16. 后续计划
 
 1. **过稀失火**（方案已定）：m_eff<0.8 概率失火（本 tick 出力 ×0）；m_eff<0.6 熄火停机（拉富回安全区自动重启）；高空拉稀余量更大（自动富油垫稀）；只可能在流体引擎出现。
-2. **tooltip 差量/批量同步优化**：当前每 tick 20Hz；恢复「温度 ≥1°C 才发包 + 趋势外推」1/20 带宽方案（`SYNC_TEMP_DELTA` 常量保留备用）。
+2. ~~tooltip 差量/批量同步优化~~ **✅ 已实施（P7+ 方案 A+B+D）**：由每 tick 20Hz 全量广播改为（1）事件差量（running/overheated/warmingUp/steamEngine/airDuct/燃料类型/容量变化）；（2）温度 ≥1°C 门控（`SYNC_TEMP_DELTA`）；（3）慢字段（ecoProgress/EffectiveMixture/HeatFactor/SteamBurnTicks）20 tick（1Hz）心跳；可推导字段（经济/过冷/油耗系数）客户端按公式现算（`economyFactor()/coldFactor()/fuelFactor()`，不违反踩坑 10——高度相关量 EffectiveMixture/HeatFactor 仍随包同步）；蒸汽倒计时客户端线性外推（`steamBurnTicksDisplay()`，运行中才外推）；`setChanged` 仍每 tick 保温度持久化。稳态包量 ≈1/20 以下。
 3. **进游戏调参**：`ECO_MIN/ECO_FLAT/COLD_K/ENGINE_T_OPT/ENGINE_MIN_WORK_TEMP/解锁流失速率` 各值。
 4. **蒸汽进游戏调参**：`STEAM_WARMUP_RATE`、消耗∝油门幅度（水/燃料）、余热冷却速率（K_CORE 停机散热）——用户计划逐项实测。
 5. **移动装置（contraption）上的燃料箱/储罐**：当前源扫描只在静态世界方块上有效（v1 已知限制）。
@@ -451,6 +451,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 | P7 | 奖励驱动重构：油耗 = 杆×eco×cold、eco 双因素 AND 门控 + 解锁进度、温度全部引擎固定、过冷惩罚、tooltip 每 tick 同步、燃料体系分家、Goggle 精简（油门/油耗/发热系数） | ✅ |
 | P2.5（蒸汽燃料定稿） | 蒸汽固体燃料并行燃烧（一次抽 N×K、不足切下一箱、流体优先）+ 燃料箱 ItemHandler 能力 + 储备倒计时独立于燃料源（拆箱不停机）+ 余热运转（运行 = 油门+T≥100 且水储备>0）+ 真实蒸汽车节流阀消耗（∝油门 + 墙钟显示）+ Goggle 燃料行（xN + 墙钟秒） | ✅ |
 | P2.5b（源抽取重构） | 单源缓存+冷却重扫 → **四类源列表事件化重建**（onLoad / neighborChanged 去抖 10 / 连接性 / 全失败延迟 20 tick 重扫）+ **批量补料**（批次 = 室数×配置倍数 K，进游戏缓存；头罐失败即时切下一个；储备耗尽同 tick 补料防应力闪断）+ **删 priority 按查找顺序抽** + scanModule 方案 A（每 tick 枚举当安全网） | ✅ 进游戏验证通过（放罐/拆罐即生效、断供换罐不重启、全失败重扫恢复） |
+| P7+（tooltip 同步优化，方案 A+B+D） | 每 tick 20Hz 全量广播 → **事件差量 + 温度 ≥1°C 门控 + 慢字段 20 tick（1Hz）心跳**；**可推导字段下放客户端**（经济/过冷/油耗系数按公式现算，`economyFactor()/coldFactor()/fuelFactor()`；高度相关 EffectiveMixture/HeatFactor 仍服务端同步）；**蒸汽倒计时客户端线性外推**（`steamBurnTicksDisplay()`，运行中才外推）；setChanged 每 tick 保留保温度持久化；Lua 读缓存/活塞动画/应力网络重激活均不受影响 | ✅ 编译通过；待进游戏验证 tooltip 实时性/包量 |
 
 ---
 
@@ -462,7 +463,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 4. **燃料表多条目选择顺序**：按 priority 降序、其次文件名升序（同为 0 时 lava < water）。
 5. **burnTick 制换算**：蒸汽室每秒烧 油门 个 burnTick（100% 油门 = 1 tick 烧 1 burnTick = 原版熔炉速率）；固体 1 物品 = burnTime；流体 1mb = 原版桶时长/1000 burnTick。
 6. **停机温度定格（P3）**：散热项不能只挂运行状态；加 K_CORE×length（停机也缓慢降温）。
-7. **追赶式 lerp → 平台台阶**：温度显示用趋势外推（最近两采样点斜率 + ±10°C 钳制）；P7 起 tooltip 每 tick 同步（20Hz），差量优化列后续计划。
+7. **追赶式 lerp → 平台台阶**：温度显示用趋势外推（最近两采样点斜率 + ±10°C 钳制）；P7 起 tooltip 每 tick 同步（20Hz）保证实时，P7+ 改回差量门控（温度 ≥1°C + 1Hz 心跳），外推机制继续兜底显示连续性。
 8. **Sable 速度读取坑**：不要裸读 `Sable.HELPER.getVelocity`（静止机体有幻影值）；用 `SableCompat.getWorldLinearVelocity`（pose 差分，静止严格 0）。
 9. **`overheated` 漏同步**：新增客户端要显示的服务端布尔状态，务必同时加 write/read 两处。
 10. **客户端算高度 = 永远错误**：依赖真实高度的客户端显示，一律用服务端同步值，不要客户端自算。

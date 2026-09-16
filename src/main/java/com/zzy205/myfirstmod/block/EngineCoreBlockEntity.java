@@ -215,6 +215,16 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final float PRESSURE_FLOOR = 0.25f;
     /** 温度同步到客户端的阈值（°C，避免每 tick 发包） */
     public static final float SYNC_TEMP_DELTA = 1f;
+    /** 慢字段心跳间隔（tick）：经济进度/实际混合比/发热系数/蒸汽倒计时等低频字段每 20 tick（1Hz）无条件补发一次（校准 + 防漏） */
+    public static final int SYNC_HEARTBEAT_INTERVAL = 20;
+    /** 上次 sendData 时各离散 tooltip 字段快照（P7+ 方案 A 差量门控；温度用 {@link #lastSyncedTemp} 单独门控） */
+    protected boolean lastSyncedRunning, lastSyncedOverheated, lastSyncedWarmingUp, lastSyncedSteamEngine, lastSyncedAirDuct;
+    protected String lastSyncedSteamFuelType = "none", lastSyncedSteamFuelKey = "", lastSyncedSteamSolidFuelKey = "";
+    /** 慢字段心跳计数器：每次 sendData 归零，≥SYNC_HEARTBEAT_INTERVAL 强制补发一次 */
+    protected int syncHeartbeat;
+    /** 客户端：蒸汽倒计时外推基线时刻（最近一次 SteamBurnTicks 包到达时的 gameTime，方案 D：burnTicks 每 tick −效率 精确线性） */
+    @OnlyIn(Dist.CLIENT)
+    protected long steamBurnTicksSyncTime;
 
     /** 模块温度（°C，controller 持有；NBT 持久化 + 客户端同步显示） */
     protected float temperature = T_AMB_SEA;
@@ -294,17 +304,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected boolean warmingUp = false;
     /** 是否已装冷却气道（tick 扫描；信息用——风道散热分量消费 coolingStrength 的载体，setMixture/setCooling 均无门控）。NBT 同步客户端。 */
     protected boolean hasAirDuct = false;
-    /** 服务端每 tick 的当前经济系数（0.75~1.0；停机 → 1.0），NBT 同步客户端 Goggle 显示 */
+    /** 服务端当前经济系数（0.75~1.0；停机 → 1.0；Lua getFuelEconomyFactor 直读）。P7+ 方案 B 起不再随包同步——客户端由 ecoProgress 现算 */
     protected float lastEconomyFactor = 1f;
-    /** P7：经济解锁进度（0~1，服务端权威：双因素持续达标缓慢累积、离开窗口快速流失）。NBT 同步客户端 Goggle 经济行渐入显示 */
+    /** P7：经济解锁进度（0~1，服务端权威：双因素持续达标缓慢累积、离开窗口快速流失）。NBT 同步客户端，Goggle 经济行经它现算 */
     protected float ecoProgress = 0f;
-    /** P7：当前最佳工作温度目标（随油门，服务端每 tick 计算）。NBT 同步客户端 Goggle */
+    /** P7：当前最佳工作温度目标（P7 定稿后恒 = ENGINE_T_OPT/BOILER_T_OPT，无消费者，仅保留服务端字段） */
     protected float lastOptimalTemp = ENGINE_T_OPT;
-    /** P7：当前过冷系数（cold ≥ 1；>1 = 温度低于目标、油耗惩罚中，只乘油耗）。NBT 同步客户端 Goggle */
+    /** P7：服务端当前过冷系数（cold ≥ 1；>1 = 温度低于目标、油耗惩罚中，只乘油耗）。P7+ 方案 B 起不再随包同步——客户端由 coldPenalty(同步温度) 现算 */
     protected float lastColdFactor = 1f;
-    /** P7：最终油耗系数（杆值 × 经济系数 × 过冷惩罚，服务端每 tick 计算；停机/蒸汽 → 1.0 无意义）。NBT 同步客户端 Goggle 经济行 */
+    /** P7：服务端最终油耗系数（杆值 × 经济系数 × 过冷惩罚，服务端每 tick 计算；停机/蒸汽 → 1.0 无意义）。P7+ 方案 B 起不再随包同步——客户端现算 */
     protected float lastFuelFactor = 1f;
-    /** P7：最终发热系数（heatFactor(m_eff)，m_eff = 杆 × 高空自动富油；稀=热 >1 / 富油=凉 <1；蒸汽恒 1.0）。NBT 同步客户端 Goggle */
+    /** P7：最终发热系数（heatFactor(m_eff)，m_eff = 杆 × 高空自动富油；稀=热 >1 / 富油=凉 <1；蒸汽恒 1.0）。依赖运动体高度 → 必须随包同步（踩坑 10） */
     protected float lastHeatFactor = 1f;
     /** 冷却强度（风门，0~1，默认 1.0 = 全开；只缩放 K_DUCT 风道散热分量，冲压/气压/环境不动；仅装冷却气道后可调，只能降——真实 cowl flap）。NBT 持久化。 */
     protected float coolingStrength = 1f;
@@ -549,15 +559,37 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             activeFuelTopt = ENGINE_T_OPT;
         }
 
-        // P7：tooltip 数据（经济解锁进度/过冷/最佳温度/混合比实际值等）改为<b>每 tick 同步</b>（20Hz，照 simulated velocity_sensor）——
-        // 差量发包优化（温度 ≥SYNC_TEMP_DELTA 才 sendData + 客户端趋势外推，原 1/20 带宽方案）列入后续计划（见 memo/WORK RECORD.md）。
-        // reActivateSource 只在运行态/容量变化时置位（避免每 tick 触发传动网络重激活）；sendData 每 tick 保证 tooltip 实时
-        if (running != prevRunning || !Mth.equal(moduleCapacity, prevCapacity)) {
+        // P7+ 同步优化（方案 A+B+D）：tooltip 数据从「每 tick 20Hz 全量广播」改为「事件差量 + 温度 ≥1°C 门控
+        // + 慢字段 1Hz 心跳」——稳态包量降到 1/20 以下；可推导字段（经济/过冷/油耗系数）客户端按公式现算（方案 B），
+        // 蒸汽倒计时客户端线性外推（方案 D：burnTicks 每 tick −效率 精确线性，事件/心跳到来自动校准）。
+        // reActivateSource 只在运行态/容量变化时置位（避免每 tick 触发传动网络重激活，Create 基类 tick 消费）；
+        // setChanged 每 tick 保留（温度存 controller NBT 需持久化，与发包解耦）。
+        boolean capacityChanged = !Mth.equal(moduleCapacity, prevCapacity);
+        if (running != prevRunning || capacityChanged) {
             reActivateSource = true;
         }
+        boolean discreteChanged = running != lastSyncedRunning || overheated != lastSyncedOverheated
+                || warmingUp != lastSyncedWarmingUp || steamEngine != lastSyncedSteamEngine
+                || hasAirDuct != lastSyncedAirDuct || capacityChanged
+                || !Objects.equals(steamFuelType, lastSyncedSteamFuelType)
+                || !Objects.equals(steamFuelKey, lastSyncedSteamFuelKey)
+                || !Objects.equals(steamSolidFuelKey, lastSyncedSteamSolidFuelKey);
+        boolean tempChanged = Math.abs(temperature - lastSyncedTemp) >= SYNC_TEMP_DELTA;
+        boolean heartbeat = ++syncHeartbeat >= SYNC_HEARTBEAT_INTERVAL;
         setChanged();
-        lastSyncedTemp = temperature;
-        sendData();
+        if (discreteChanged || tempChanged || heartbeat) {
+            syncHeartbeat = 0;
+            lastSyncedTemp = temperature;
+            lastSyncedRunning = running;
+            lastSyncedOverheated = overheated;
+            lastSyncedWarmingUp = warmingUp;
+            lastSyncedSteamEngine = steamEngine;
+            lastSyncedAirDuct = hasAirDuct;
+            lastSyncedSteamFuelType = steamFuelType;
+            lastSyncedSteamFuelKey = steamFuelKey;
+            lastSyncedSteamSolidFuelKey = steamSolidFuelKey;
+            sendData();
+        }
 
         if (DEBUG) {
             if (running != prevRunning) {
@@ -1689,13 +1721,15 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         mixture = compound.contains("Mixture") ? compound.getFloat("Mixture") : 1f;
         // P5：实际混合比（服务端同步；旧存档/首个 tick 前 → 1.0）
         lastEffectiveMixture = compound.contains("EffectiveMixture") ? compound.getFloat("EffectiveMixture") : 1f;
-        // P6：蒸汽类型 / 冷却气道 / 经济系数（服务端权威；旧存档无字段 → 默认值）
+        // P6：蒸汽类型 / 冷却气道（服务端权威；旧存档无字段 → 默认值）
         steamEngine = compound.getBoolean("SteamEngine");
         warmingUp = compound.getBoolean("WarmingUp");
         hasAirDuct = compound.getBoolean("AirDuct");
+        // 经济/过冷/油耗系数：旧包/旧档兼容兜底（新包不再含此四字段，缺省即默认值，服务端每 tick 重算）
         lastEconomyFactor = compound.contains("EconomyFactor") ? compound.getFloat("EconomyFactor") : 1f;
         coolingStrength = compound.contains("CoolingStrength") ? compound.getFloat("CoolingStrength") : 1f;
-        // P7：经济解锁进度 / 最佳温度 / 过冷系数（旧存档无字段 → 默认值）
+        // P7：经济解锁进度（服务端权威，客户端据此推导经济系数）；P7+ 方案 B 起 EconomyFactor/OptimalTemp/
+        // ColdFactor/FuelFactor 不再随包同步——contains 兜底保留（旧包/旧档兼容，缺省即默认值）
         ecoProgress = compound.contains("EcoProgress") ? compound.getFloat("EcoProgress") : 0f;
         lastOptimalTemp = compound.contains("OptimalTemp") ? compound.getFloat("OptimalTemp") : ENGINE_T_OPT;
         lastColdFactor = compound.contains("ColdFactor") ? compound.getFloat("ColdFactor") : 1f;
@@ -1711,6 +1745,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
         if (!clientPacket)
             return;
+
+        // 方案 D：蒸汽倒计时外推基线（burnTicks 每 tick −效率 精确线性 → 客户端据此外推墙钟剩余秒）
+        steamBurnTicksSyncTime = hasLevel() ? level.getGameTime() : 0;
 
         // 温度采样滚动：新包到达时推进采样窗口（tickClient 沿最近两点斜率外推显示）
         lastTempSample = newTempSample;
@@ -1747,19 +1784,18 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putFloat("Mixture", mixture);
         // 实际混合比（含高空自动富油）服务端权威值，同步给客户端 Goggle 显示
         compound.putFloat("EffectiveMixture", lastEffectiveMixture);
-        // P6：蒸汽类型 / 冷却气道 / 当前经济系数（服务端每 tick 计算，同步客户端 Goggle；客户端不重算）
+        // P6：蒸汽类型 / 冷却气道（服务端每 tick 计算，同步客户端 Goggle；客户端不重算）
         compound.putBoolean("SteamEngine", steamEngine);
         compound.putBoolean("WarmingUp", warmingUp);
         compound.putBoolean("AirDuct", hasAirDuct);
-        compound.putFloat("EconomyFactor", lastEconomyFactor);
         compound.putFloat("CoolingStrength", coolingStrength);
-        // P7：经济解锁进度 / 最佳温度（随油门）/ 过冷系数（服务端每 tick 计算，同步客户端 Goggle；客户端不重算）
+        // P7+ 方案 B：经济解锁进度（服务端权威，同步客户端 Goggle）——经济系数/过冷系数/油耗系数均为其
+        // 纯函数（1−0.25×ecoProgress / coldPenalty(T) / 杆值×经济×过冷），客户端按公式现算，不再随包同步
+        // （EconomyFactor/OptimalTemp/ColdFactor/FuelFactor 已从客户端包移除，read 保留旧包兼容兜底）。
         compound.putFloat("EcoProgress", ecoProgress);
-        compound.putFloat("OptimalTemp", lastOptimalTemp);
-        compound.putFloat("ColdFactor", lastColdFactor);
-        compound.putFloat("FuelFactor", lastFuelFactor);
+        // 发热系数（heatFactor(m_eff)）依赖运动体真实高度（自动富油）——客户端无法可靠自算，必须服务端同步（踩坑 10）
         compound.putFloat("HeatFactor", lastHeatFactor);
-        // 蒸汽室燃料显示（服务端每 tick 计算，同步客户端 Goggle 燃料行；客户端不重算）
+        // 蒸汽室燃料显示（服务端计算，低频同步客户端 Goggle 燃料行；P7+ 方案 D：burnTicks 客户端线性外推）
         compound.putString("SteamFuelType", steamFuelType);
         compound.putString("SteamFuelKey", steamFuelKey);
         compound.putFloat("SteamBurnTicks", steamBurnTicksRemaining);
@@ -1858,6 +1894,39 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return level != null && level.isClientSide ? displayedTemperature : temperature;
     }
 
+    // ---- P7+ 方案 B：可推导字段客户端按公式现算（与服务端公式一致；服务端返回权威值） ----
+    // 仅纯函数/常量参与推导，不违反「客户端不重算」约束（那条只针对高度相关量 EffectiveMixture/HeatFactor，仍随包同步）。
+
+    /** 经济系数：1 − (1−ECO_MIN)×ecoProgress（ecoProgress 服务端权威随包同步） */
+    private float economyFactor() {
+        return level != null && level.isClientSide ? 1f - (1f - ECO_MIN) * ecoProgress : lastEconomyFactor;
+    }
+
+    /** 过冷系数：coldPenalty(同步温度)，仅流体引擎运行中才计（与服务端 runningFluid>0 判定等价：流体引擎 running ⇒ 有运行燃烧室） */
+    private float coldFactor() {
+        if (level != null && level.isClientSide)
+            return !steamEngine && running ? coldPenalty(temperature) : 1f;
+        return lastColdFactor;
+    }
+
+    /** 最终油耗系数：杆值 × 经济 × 过冷；停机/蒸汽 → 1.0（与服务端一致） */
+    private float fuelFactor() {
+        if (level != null && level.isClientSide)
+            return !steamEngine && running ? mixture * economyFactor() * coldFactor() : 1f;
+        return lastFuelFactor;
+    }
+
+    /** 蒸汽倒计时剩余（P7+ 方案 D 客户端线性外推）：服务端低频同步 + burnTicks 每 tick −效率 精确线性；
+     *  运行中才外推（停机/油门 0 时服务端冻结储备，不外推避免显示归零过早）；服务端返回权威值 */
+    private float steamBurnTicksDisplay() {
+        if (level != null && level.isClientSide && running && efficiency > 0f) {
+            float remaining = steamBurnTicksRemaining
+                    - efficiency * Math.max(0, level.getGameTime() - steamBurnTicksSyncTime);
+            return Math.max(0f, remaining);
+        }
+        return steamBurnTicksRemaining;
+    }
+
     /** 蒸汽动力室 tooltip：状态（停机 / 正常 / 暖机中）+ 温度 + 油门（= 效率百分比） */
     private void addSteamChamberTooltip(List<Component> tooltip) {
         tooltip.add(Component.literal("    ")
@@ -1894,7 +1963,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 蒸汽室燃料行值：无储备 → 红"无"；流体 → 绿燃料名（不显示时间/数量）；固体 → 绿"燃料名 xN" + 青" (时间)"
      *  （并行燃烧：数量 = 蒸汽室个数；时间 = 墙钟剩余秒 = burnTicks/(油门×20)——消耗 ∝ 油门，
      *   25% 油门燃料耐用 4 倍显示同步拉长；油门 0 停机不显示倒计时）。
-     *  燃料名/时间来自服务端同步（客户端不重算），数量用客户端 scanModule 轻扫（同核心 tooltip 模块清单）。 */
+     *  燃料名/服务端低频同步（事件 + 1Hz 心跳），时间用客户端线性外推（P7+ 方案 D，burnTicks 每 tick −效率），
+     *  数量用客户端 scanModule 轻扫（同核心 tooltip 模块清单）。 */
     private Component steamFuelValueComponent() {
         if (steamFuelType.equals("fluid") && !steamFuelKey.isEmpty())
             return Component.translatable(steamFuelKey).withStyle(ChatFormatting.GREEN);
@@ -1903,8 +1973,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             Component name = Component.translatable(steamFuelKey)
                     .append(Component.literal(" x" + chambers))
                     .withStyle(ChatFormatting.GREEN);
-            if (steamBurnTicksRemaining > 0 && efficiency > 0f) {
-                int seconds = Math.max(0, Math.round(steamBurnTicksRemaining / efficiency / 20f));
+            // P7+ 方案 D：倒计时用客户端线性外推值（低频同步 + 每 tick −效率 精确线性，逐秒平滑跳动）
+            float burnTicks = steamBurnTicksDisplay();
+            if (burnTicks > 0 && efficiency > 0f) {
+                int seconds = Math.max(0, Math.round(burnTicks / efficiency / 20f));
                 name = name.copy().append(Component.literal(" (" + formatBurnTime(seconds) + ")")
                         .withStyle(ChatFormatting.AQUA));
             }
@@ -1979,7 +2051,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             // P7：高效 = 经济带 |T−155|≤10（145~165），仅流体引擎
             statusKey = "tooltip.ccpe.engine.status.efficient";
             statusColor = ChatFormatting.AQUA;
-        } else if (!steamEngine && lastColdFactor > 1.01f) {
+        } else if (!steamEngine && coldFactor() > 1.01f) {
             // P7：过冷状态（温度低于最低工作温度、油耗惩罚中——先小油门暖机；仅流体引擎）
             statusKey = "tooltip.ccpe.engine.status.cold";
             statusColor = ChatFormatting.BLUE;
@@ -2004,12 +2076,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
         // 油耗 / 发热系数（仅流体引擎；蒸汽 Plan B = 恒温自调节、无这两行）
         if (!steamEngine) {
-            // 油耗（服务端同步「最终油耗系数」= 杆值 × 经济系数 × 过冷惩罚，即除油门/自动富油外的全部油耗因子；<1 = 省油中）
+            // 油耗（P7+ 方案 B：客户端按公式现算「最终油耗系数」= 杆值 × 经济系数 × 过冷惩罚，即除油门/自动富油外的全部油耗因子；<1 = 省油中）
             // P7 修订：经济系数/油耗不以冷却气道为门控（无气道同样生效，过冷/经济区无气道可达）——setMixture/setCooling 均无门控（纯存值），冷却气道只是风门数值的消费载体
             tooltip.add(Component.literal("     ")
                     .append(Component.translatable("tooltip.ccpe.engine.economy").withStyle(ChatFormatting.GRAY))
-                    .append(Component.literal("×" + String.format(Locale.ROOT, "%.2f", (double) lastFuelFactor))
-                            .withStyle(lastFuelFactor < 1f ? ChatFormatting.GREEN : ChatFormatting.GRAY)));
+                    .append(Component.literal("×" + String.format(Locale.ROOT, "%.2f", (double) fuelFactor()))
+                            .withStyle(fuelFactor() < 1f ? ChatFormatting.GREEN : ChatFormatting.GRAY)));
             // P7：发热系数（heatFactor(m_eff)，m_eff = 杆 × 高空自动富油；稀=热 >1，富油=凉 <1）
             tooltip.add(Component.literal("     ")
                     .append(Component.translatable("tooltip.ccpe.engine.heat_factor").withStyle(ChatFormatting.GRAY))
