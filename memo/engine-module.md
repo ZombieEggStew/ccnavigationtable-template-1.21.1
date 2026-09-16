@@ -1,6 +1,6 @@
 # 引擎模块（aero_engine：engine_core + 燃烧室 + 整合气道）— 最终版（P0~P7 + 蒸汽燃料定稿 P2.5）
 
-> **状态：P0~P7 全部实现并编译通过；P2.5 蒸汽燃料定稿已实现（固体燃料并行燃烧 + 燃料箱自动抽取 + 余热运转 + 真实蒸汽车节流阀消耗 + Goggle 燃料行）**。本文档为最终版权威描述（wiki 制作依据）。
+> **状态：P0~P7 全部实现并编译通过；P2.5 蒸汽燃料定稿已实现（固体燃料并行燃烧 + 燃料箱自动抽取 + 余热运转 + 真实蒸汽车节流阀消耗 + Goggle 燃料行）；P2.5b 源抽取重构已实现并进游戏验证通过（四类源列表事件化重建 + 批量补料 + 删 priority 按查找顺序抽 + 断供换罐不重启）**。本文档为最终版权威描述（wiki 制作依据）。
 > 实现前先读参考源码（见文末「参考来源」）；本文档各数值以「最终版常量」为准，不再标注中间方案。
 
 > 设计封闭（用户逐项确认）：蒸汽室 = 水 + 燃料（无蒸汽流体）；**全引擎单燃料制**（P2.5 起按源列表查找顺序选一种，不混烧）+ **流体/蒸汽物理排斥**（不能混用）；严格零流体缓存（P2.5 起改为源列表 + 储备批量补料）；固体燃料从周围燃料箱（quick_fill_fuel_vault）自动抽取（**并行燃烧、流体优先**）；水走 drain 管线；**无红石控制，末段做 Lua 控制**；整合气道（散热+进气）替换冷却风道；**燃料体系分家**（蒸汽 = 纯原版解析，流体燃烧室 = 纯 datapack）；**温度阈值全部引擎固定**；过稀失火后续阶段。
@@ -76,7 +76,7 @@
 | 自动富油 | `autoRichness = 1 + 0.45×(1−P)` 钳 [1, 1.25]（与冷却同气压曲线）；**只进发热**（高空富油降温 ×0.875），不进油耗 |
 | 经济系数 | 双因素 AND 门控 + 时间解锁：`|T−155|≤10 ∧ |m_eff−1|≤0.05` 持续达标 → 15s 渐入 ×0.75（离开 6s 归零）；混合比不对无奖励无惩罚；**不门控整合气道** |
 | 温度阈值（P7 最终） | **全部引擎固定**：经济目标 `ENGINE_T_OPT=155`、过冷 `ENGINE_MIN_WORK_TEMP=100`、过热 200——不随燃料、不随油门（真实 = 引擎设计点/节温器恒定，如塞斯纳 172 CHT 工作带固定） |
-| 过冷惩罚 | `cold = 1 + 0.3×max(0, 100−T)/100`（20°C ≈×1.24，只乘油耗）；小油门暖机玩法；仅流体 |
+| 过冷惩罚 | `cold = 1 + COLD_K×max(0, 100−T)/100`（COLD_K=1.0：20°C ≈×1.8，只乘油耗）；小油门暖机玩法；仅流体 |
 | 过稀失火 | 后续阶段：m_eff<0.8 概率掉出力 / <0.6 熄火（出力风险对冲拉稀收益） |
 | 蒸汽温度 | 闭式锅炉自调节钉 `BOILER_T_OPT=155`；T<100°C 只烧不发电（暖机）；**运行 = 油门开启且 T≥100°C 且水可用（无燃料余热也运转，但缺水停机防干烧）**；**消耗 ∝ 油门（真实节流阀语义）**；永不过热、高度免疫；无经济区/混合比/风门 |
 | 冲压冷却 | 10→30 m/s 线性爬升到 ×2.0 |
@@ -122,12 +122,23 @@ EngineCoreBlockEntity（仅 controller 干活；非 controller 的 getGeneratedS
 - **运行状态继承**：新核心放在 controller 外侧会成为新 controller → `updateConnectivity` 在 `formMulti` 前 `adoptAdjacentEngineState` 从相邻引擎 controller 继承温度/油门/混合比/经济进度等（见踩坑 14）。
 - `getMaxLength=21`、`getMaxWidth=1`。
 
-### 7.2 零缓存流体抽取（P1 → P2.5 批量源列表）
+### 7.2 零缓存流体抽取（P1 → P2.5b 批量源列表）
 
 - 必须走 capability：`level.getCapability(Capabilities.FluidHandler.BLOCK, pos, null)` 再 `drain()`；绝不直接改储罐 BE。
-- **P2.5 源列表**（替代单源缓存 + 冷却重扫）：controller 维护四类源列表（水 / 流体室燃料 / 蒸汽室流体燃料 / 蒸汽室固体燃料箱），**事件化重建**（onLoad / 方块 neighborChanged 去抖 10 tick / 连接性变化 / 全源失败延迟 20 tick 重扫）；列表按 scanModule 邻居枚举序（查找序）构建，transient 不落盘。方案 A：scanModule 保持每 tick（免费当安全网），只把源列表构建事件化。
-- **批量补料**：储备 ≤0 才补一批（批次 = 引擎数量 × 配置倍数 K，`Config.ENGINE_SOURCE_BATCH_MULTIPLIER`，进游戏缓存一次）；从列表头一直抽，头罐失败（空/被拆）**即时切下一个**；全部失败 → 延迟重扫 + 置 `sourcesAllFailed` 等待期不补料。
-- 储备：水 `waterReserve` / 流体室燃料 `fluidFuelReserve`（float mb）；蒸汽燃料走 burnTicks（蒸汽室 BE）。**储备耗尽即时补料（同 tick）**，避免 running 判定 1 tick 空档 → 应力网络不闪断。
+- **P2.5b 源列表**（替代单源缓存 + 冷却重扫）：controller 维护四类源列表，**事件化重建**，列表按 scanModule 邻居枚举序（查找序）构建，transient 不落盘（读档 onLoad 重建）：
+  | 列表 | 元素 | 用途 |
+  |---|---|---|
+  | `waterSources` | `BlockPos` | 蒸汽室水源罐（罐内含原版水） |
+  | `fluidFuelSources` | `FuelSource(pos, EngineFuels.Entry)` | 流体室燃料罐（datapack 表命中） |
+  | `steamFuelSources` | `SteamFuelSource(pos, fluid, burnTicksPerBucket)` | 蒸汽室流体燃料罐（原版桶燃烧时长>0） |
+  | `solidFuelSources` | `BlockPos` | 蒸汽室固体燃料箱（ItemHandler 含可烧物） |
+  每列表一个游标（`waterSourceIdx` 等），**从列表头一直抽，头罐失败（空/被拆/流体不对）→ `advanceXxx()` 即时切下一个（同 tick，零停机）**。
+- **重建触发**（方案 A：scanModule 保持每 tick 枚举当免费安全网，源列表构建事件化）：
+  - `markSourcesDirtyNow()`（下 tick 就扫）：onLoad / 连接性变化（`updateConnectivity`/`notifyMultiUpdated`/`setController`/`removeController`/adopt 后）。
+  - `markSourcesDirty()`（去抖 10 tick）：方块 `neighborChanged`（核心 + 两类燃烧室覆写转发 `onModuleNeighborChanged`，**仅邻居带流体/物品能力才触发**——红石/装饰噪声不重建）。
+  - `scheduleSourcesRescan()`（延迟 20 tick + 置 `sourcesAllFailed`）：**全源失败**时由 drain 方法触发；等待期不补料（避免每 tick 扫空表），重建完成/新事件后复位。
+- **批量补料**：储备 ≤0 才补一批；**批次 = 引擎数量 × 配置倍数 K**（`Config.ENGINE_SOURCE_BATCH_MULTIPLIER` 默认 1.0，进游戏由 `onServerStarting` 缓存到 `SOURCE_BATCH_MULTIPLIER`，每 tick 不读配置）；批次时长（满油门）≈1s/批（低油门按 1/效率拉长）。drain 接受部分量（罐剩多少收多少），`drain` 返回 0 才算失败切换。
+- **储备**：水 `waterReserve` / 流体室燃料 `fluidFuelReserve`（float mb）；蒸汽燃料走 burnTicks（蒸汽室 BE）。**储备耗尽即时补料（同 tick 内）**，避免 running 判定 1 tick 空档 → 应力网络不闪断。`fluidFuel` = 当前活动燃料条目（最近一次成功补料的源决定；储备耗尽且补不到 → null → runningFluid=0）。
 - 已知限制：移动装置（contraption）上的储罐找不到（v1 不支持）。
 
 ### 7.3 燃烧室并入与逐室评估（P1/P2）
@@ -197,12 +208,12 @@ m_eff            = leverMixture × autoRichness(P)             // 实际混合�
 eco：satisfied = |T−155|≤10 ∧ |m_eff−1|≤0.05（双因素平底窗）
      达标 → ecoProgress += 1/15/20（15s 缓慢解锁）；不达标 → −= 1/6/20（6s 流失）
      eco = 1 − 0.25×ecoProgress（1.0 → 0.75，省 25%）；保持才奖励、快速掠过不奖励
-cold = 1 + 0.3×max(0, 100 − T)/100                           // 过冷惩罚（T<100°C，20°C ≈×1.24）
+cold = 1 + COLD_K×max(0, 100 − T)/100                           // 过冷惩罚（COLD_K=1.0，T<100°C，20°C ≈×1.8）
 
 heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1−0.5×(m−1))（浓侧平缓）
 ```
 
-**常量**：`MIXTURE_MIN/MAX=0.6/1.4`、`MIXTURE_PRESSURE_K=0.45`、`MIXTURE_ALT_MAX=1.25`、`MIXTURE_LEAN_K=2.0`、`MIXTURE_RICH_K=0.5`、`MIXTURE_RICH_FLOOR=0.7`、`ECO_MIN=0.75`、`ECO_FLAT=10`、`ECO_MIX_FLAT=0.05`、`ECO_UNLOCK_RATE=1/15`、`ECO_DECAY_RATE=1/6`、`COLD_K=0.3`。
+**常量**：`MIXTURE_MIN/MAX=0.6/1.4`、`MIXTURE_PRESSURE_K=0.45`、`MIXTURE_ALT_MAX=1.25`、`MIXTURE_LEAN_K=2.0`、`MIXTURE_RICH_K=0.5`、`MIXTURE_RICH_FLOOR=0.7`、`ECO_MIN=0.75`、`ECO_FLAT=10`、`ECO_MIX_FLAT=0.05`、`ECO_UNLOCK_RATE=1/15`、`ECO_DECAY_RATE=1/6`、`COLD_K=1.0`。
 
 **设计张力（高空管理博弈）**——高空冷却更差 + 自动富油 = 免费降温福利：
 
@@ -235,7 +246,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 
 **燃料箱（quick_fill_fuel_vault）**：单物品类型库存（容量 1024），暴露 `ItemHandler.BLOCK` 能力（注册于 `CCPeripheralExtender#registerBlockCapabilities`，`QuickFillFuelVaultBlockEntity#getItemHandler` 单槽视图：`getStackInSlot` 数量钳到最大堆叠、真实量在 `storedCount`）；引擎只走 capability 抽取，绝不直接改容器 BE。
 
-**源列表（P2.5，替代单源缓存）**：四类源列表（水 / 流体室燃料 / 蒸汽室流体燃料 / 固体燃料箱）transient 存于 controller，**事件化重建**——onLoad / 方块 neighborChanged（去抖 10 tick，仅当邻居带流体/物品能力才触发）/ 连接性变化 → `markSourcesDirty`；全源失败 → `scheduleSourcesRescan`（延迟 20 tick）。重建 = 按 scanModule 邻居枚举序收集，`EngineCoreBlockEntity#rebuildSources`。
+**源列表（P2.5b，替代单源缓存）**：四类源列表（水 / 流体室燃料 / 蒸汽室流体燃料 / 固体燃料箱）transient 存于 controller，**事件化重建**——onLoad / 连接性变化 → `markSourcesDirtyNow()`（下 tick 就扫）；方块 neighborChanged（去抖 10 tick，仅当邻居带流体/物品能力才触发）→ `markSourcesDirty()`；全源失败 → `scheduleSourcesRescan`（延迟 20 tick + 等待期不补料）。重建 = 按 scanModule 邻居枚举序收集，`EngineCoreBlockEntity#rebuildSources`。
 
 **燃烧倒计时独立于燃料源**：蒸汽室循环门控 = 水储备 OK 且（流体可用 || 固体可用 || 任一室 `burnTicks>0`）——燃料箱/源罐被拆时已有储备继续燃烧（不冻结不停机），倒计时结束才尝试再抽，抽不到才停烧（停烧 = 停止加热，温度开始牛顿冷却）。
 
@@ -247,7 +258,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 
 | 输入 | 规则 |
 |---|---|
-| 流体燃料（流体室） | datapack `engine_fuel/*.json`；单燃料制；每室 consumption mb/s（默认 1）。**P2.5：删 priority**，按源列表查找顺序选第一个可用燃料 |
+| 流体燃料（流体室） | datapack `engine_fuel/*.json`；单燃料制；每室 consumption mb/s（默认 1）；**P2.5b**：删 priority 按源列表查找顺序选第一个可用燃料；**储备制**（`fluidFuelReserve` mb，批次 = 室数×K mb，耗尽才补，头罐失败即时切下一个） |
 | 水（蒸汽室） | **1mb/s/室 × 油门**（消耗 ∝ 蒸汽流量，25% 油门 = 0.25mb/s/室）；水储备（批次 = 室数×K mb）从模块邻居水源罐批量补；水不可用整类暂停 |
 | 固体燃料（蒸汽室） | 物品原版 `burnTime` → 每秒烧 **油门** 个 burnTick（25% 油门燃料耐用 4 倍）；**流体不可用**时从模块邻居燃料箱（quick_fill_fuel_vault 等）**一次抽 N×K 个并行燃烧**（N = 蒸汽室数、K = 配置倍数，当前箱不足切下一箱，每室同燃同熄），流体优先 |
 | 流体燃料（蒸汽室） | **纯原版解析**：桶物品原版熔炉燃烧时长（熔岩桶 20000 tick → 1mb 烧 20 tick × 油门）；批量 drain 批次 mb → 每室 + 批次/N × burnTicksPerBucket/1000 burnTick；`EngineFuels.vanillaBucketBurnTicks` 权威 |
@@ -377,7 +388,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 - **一个杆（油门）就够起飞**：油门同时定应力与转速；转速不够带动机器时推油门；**油门 0 = 停机不烧油**。
 - **流体引擎巡航省油**：装整合气道 → 拉杆到 m_eff≈1.0（高空 Y≈260 → 杆 0.8）= 海拔补偿 → 保持温度在 155°C 带内（145~165）且混合比达标 15s → 经济渐入 ×0.75。太热 → 拉富/开风门；太冷（高速冲压/多风道/低油门）→ 关风门保热；冷却吃紧（高空/静态）→ 富油或降油门。
 - **高空自动富油（wiki 解释）**：杆 1.0 = 出厂标定，任何高度油耗 ×1.0（无惩罚）；高空空气稀 → 发动机天然富油（m_eff = 杆 × 自动富油，Y≈260 ≈×1.25）——**自动富油只带来富油降温（发热 ×0.875），不费油**。拉稀省油（油耗 ×杆值）；把杆拉到 m_eff≈1.0 = 海拔补偿，吃到经济系数。
-- **过冷惩罚**：刚开机温度低于 100°C 时油耗上升（×~1.24），先小油门暖机再推油门。
+- **过冷惩罚**：刚开机温度低于 100°C 时油耗上升（20°C ≈×1.8），先小油门暖机再推油门。
 - **蒸汽引擎**：燃料箱塞燃料 → 点火 → 暖机（T 从环境爬到 100°C 约 4s，期间只烧不发电）→ 出力；**真实蒸汽车油门**：消耗 ∝ 油门（25% 油门燃料耐用 4 倍，Goggle 倒计时同步拉长），油门 0 = 停机不烧油；**余热运转**：燃料耗尽但 T≥100°C 且水储备未耗尽仍满出力发电，缺水/冷却到 100°C 以下才停机；**并行燃烧**：N 个蒸汽室同时烧 N 个燃料（一次抽 N×K 个、当前箱不足切下一箱）；永不过热、高空无忧；代价 = 应力低（3072/室）。
 - 过载 = 停烧（不白烧油）；过热锁存（流体）T≤180 才恢复；高频启停（油门 0↔1）触发 Create flicker 惩罚。
 
@@ -386,7 +397,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 ## 15. 边界清单（实现时逐条守住）
 
 - 消耗只在服务端；客户端只读同步状态
-- 引用一律 WeakReference + `isRemoved()` 校验 + 失效重扫
+- 源列表只存 BlockPos，每 tick 从 capability 重新取（被拆/卸载 → 能力查询返回 null 即失效，天然自愈）；不缓存 handler 引用
 - 只走 capability，绝不直接改罐/容器
 - 储罐/容器在移动装置上 = 已知限制（v1 不支持）
 - 燃烧室双面贴两核心按 `FACING.getOpposite()` 归一边，不双计
@@ -422,6 +433,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 3. **进游戏调参**：`ECO_MIN/ECO_FLAT/COLD_K/ENGINE_T_OPT/ENGINE_MIN_WORK_TEMP/解锁流失速率` 各值。
 4. **蒸汽进游戏调参**：`STEAM_WARMUP_RATE`、消耗∝油门幅度（水/燃料）、余热冷却速率（K_CORE 停机散热）——用户计划逐项实测。
 5. **移动装置（contraption）上的燃料箱/储罐**：当前源扫描只在静态世界方块上有效（v1 已知限制）。
+6. **流体暖机「冷机加浓」（方案 A 已定，未实施）**：静止 4 室+2 风道实测 25% 油门平衡 ≈100°C（正压过冷线、零余量）、0.1 油门 ≈52°C（深过冷）——线性热模型（发热 ∝ 油门）下「低油门暖机 + 高油门经济带」数学上不能同时成立（100/155/200 三点油门比固定 1:1.69:2.25）。现实依据：塞斯纳 172（Lycoming O-320）暖机 = 1000–1200 RPM（≈满转 37–44%，定距桨功率仅 ~5–10%）2–5 分钟达油温 ≥100°F（38°C）；本 mod 的 100/155/200 更接近 CHT 尺度，框架不动。**方案：流体发热乘 `warmupHeatBoost(T) = 1 + COLD_RICH_K × max(0, (COLD_RICH_FADE−T)/COLD_RICH_FADE)`**（仅流体，蒸汽自调节不需）：`COLD_RICH_K=0.8`（冷机最大 ×1.8 发热）、`COLD_RICH_FADE=150`（经济中心附近衰减完，经济带/过热阈值不受影响）；**不加燃料倍率**（已有 coldPenalty 承担「冷=费油」）。改后（4+2 静止海平面）：0.20→100°C 跨过冷线、0.25→~114°C、经济带 ~40%、过热 ~56% 不变。实现点：`EngineCoreBlockEntity` 常量区 + 发热行（约 509 行）乘因子；备选方案 B（`BASE_HEAT_FLUID 30→44`：0.25→136°C 但经济带掉 ~30%、过热提前 ~39%，弃用）。常量进游戏实测微调。
 
 ---
 
@@ -438,7 +450,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 | P6 | 回炉（单燃料制 + 物理排斥放置拦截）、eco(T) 经济区、整合气道替换风道、风门 setCooling、蒸汽 Plan B、Lua 扩展 | ✅ |
 | P7 | 奖励驱动重构：油耗 = 杆×eco×cold、eco 双因素 AND 门控 + 解锁进度、温度全部引擎固定、过冷惩罚、tooltip 每 tick 同步、燃料体系分家、Goggle 精简（油门/油耗/发热系数） | ✅ |
 | P2.5（蒸汽燃料定稿） | 蒸汽固体燃料并行燃烧（一次抽 N×K、不足切下一箱、流体优先）+ 燃料箱 ItemHandler 能力 + 储备倒计时独立于燃料源（拆箱不停机）+ 余热运转（运行 = 油门+T≥100 且水储备>0）+ 真实蒸汽车节流阀消耗（∝油门 + 墙钟显示）+ Goggle 燃料行（xN + 墙钟秒） | ✅ |
-| P2.5b（源抽取重构） | 单源缓存+冷却重扫 → **四类源列表事件化重建**（onLoad / neighborChanged 去抖 10 / 连接性 / 全失败延迟 20 tick 重扫）+ **批量补料**（批次 = 室数×配置倍数 K，进游戏缓存；头罐失败即时切下一个；储备耗尽同 tick 补料防应力闪断）+ **删 priority 按查找顺序抽** + scanModule 方案 A（每 tick 枚举当安全网） | ✅ |
+| P2.5b（源抽取重构） | 单源缓存+冷却重扫 → **四类源列表事件化重建**（onLoad / neighborChanged 去抖 10 / 连接性 / 全失败延迟 20 tick 重扫）+ **批量补料**（批次 = 室数×配置倍数 K，进游戏缓存；头罐失败即时切下一个；储备耗尽同 tick 补料防应力闪断）+ **删 priority 按查找顺序抽** + scanModule 方案 A（每 tick 枚举当安全网） | ✅ 进游戏验证通过（放罐/拆罐即生效、断供换罐不重启、全失败重扫恢复） |
 
 ---
 
@@ -463,6 +475,11 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 17. **油门 0 白抽燃料**：蒸汽补料/喂料/耗水必须带 `efficiency > 0` 门控（油门 0 = 停机不烧油）；`burnTicks -= 油门` 天然冻结，但改固定速率后必须显式门控（喂料 ×0 / 批量补料条件 / 耗水 ×0）。
 18. **"不足 N 不抽取"用 simulate 先验**：`extractItem(slot, N, true)` 返回不足 N 个 → 整组不抽（不拆零）；燃料箱 IItemHandler 的 `getStackInSlot` 把数量钳到最大堆叠（真实量在 `storedCount`），但 simulate extract 不受钳制影响，可正确校验 ≥ N。
 19. **并行燃烧补料时机 = 全室空炉**：各室 burnTicks 同值同速递减，全部 ≤ 0 才批量补料；部分室空炉（如中途加室）会等到下个并行周期才补齐。
+20. **P2.5b「1 tick 空档」闪断**：储备耗尽的那 tick，若补料放在下一 tick，`running` 判定（如 `steamWaterReady = waterReserve > 0f`）会闪 1 tick false → Create 应力网络重新激活（转速/应力瞬时归零）。修复：**储备耗尽在消耗之后同一 tick 内立即补料**；流体室侧 `runningFluid` 用补料前的 reserve 判定 + 补料在判定前执行，天然无空档，不需要同 tick 补。
+21. **P2.5b 重扫倒计时反复重置 → 永不执行**：全源失败时每个失败 tick 都调 `scheduleSourcesRescan`，若每次都重置倒计时（cooldown=20）则永远到不了 0。修复：`sourcesAllFailed` 置位后不再重置（已有排程直接 return）；等倒计时走完 → 重建 → 复位才再试。
+22. **P2.5b 邻居噪声饿死重建**：`markSourcesDirty` 若每次调用都重置去抖（cooldown=10），红石/装饰等连续邻居变化会让重建永远推迟。修复：已有排程（`sourcesDirty && cooldown>0`）则不重置 + **neighborChanged 只转发带流体/物品能力的邻居**（`onModuleNeighborChanged` 先查 capability），普通方块变化不触发。
+23. **P2.5b 删 priority 后燃料顺序 = 扫描序**：`EngineFuels.sortedByPriority()` 删除；流体室燃料 = `rebuildSources` 按 scanModule 邻居枚举序找到的第一个表命中条目（同源罐的 fluid 副本 + entry 一起缓存，drain 按源 fluid，防止罐中途换流体被误抽）。
+24. **P2.5b 配置「进游戏缓存」**：批次倍数 K 每 tick 读 `Config.get()` 有解析开销且改配置不热生效——按用户要求进游戏缓存一次到 `SOURCE_BATCH_MULTIPLIER`（`onServerStarting` 写入）。
 
 ---
 

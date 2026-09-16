@@ -283,8 +283,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final float ENGINE_T_OPT = 155f;
     /** 过冷阈值（°C，引擎最低工作温度；与蒸汽暖机门槛 STEAM_MIN_WORK_TEMP 同值）：T < 此值 = 过冷油耗惩罚，先小油门暖机 */
     public static final float ENGINE_MIN_WORK_TEMP = 100f;
-    /** 过冷惩罚系数：cold = 1 + COLD_K × max(0, ENGINE_MIN_WORK_TEMP − T) / ENGINE_MIN_WORK_TEMP（20°C ≈×1.24） */
-    public static final float COLD_K = 0.3f;
+    /** 过冷惩罚系数：cold = 1 + COLD_K × max(0, ENGINE_MIN_WORK_TEMP − T) / ENGINE_MIN_WORK_TEMP（20°C ≈×1.8，0°C ≈×2.0） */
+    public static final float COLD_K = 1.0f;
     /** 蒸汽引擎固定最佳工作温度（°C，锅炉设计温度，不随燃料变——真实：蒸汽效率 ∝ 蒸汽温度/压力 [卡诺]） */
     public static final float BOILER_T_OPT = 155f;
 
@@ -1058,7 +1058,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /**
      * P7 过冷惩罚（只乘油耗、绝不反哺 Q_heat）：cold = 1 + COLD_K × max(0, ENGINE_MIN_WORK_TEMP − T) / ENGINE_MIN_WORK_TEMP。
-     * T ≥ 100°C（引擎最低工作温度，引擎固定）无惩罚；刚开机 20°C ≈×1.24——玩家先小油门暖机（绝对油耗小、损失轻）再推油门。
+     * T ≥ 100°C（引擎最低工作温度，引擎固定）无惩罚；刚开机 20°C ≈×1.8——玩家先小油门暖机（绝对油耗小、损失轻）再推油门。
      * 阈值引擎固定（不随燃料/油门），真实 = 最低工作油温。
      */
     protected float coldPenalty(float temp) {
