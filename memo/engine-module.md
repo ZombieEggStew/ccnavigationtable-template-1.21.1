@@ -429,7 +429,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 ## 16. 后续计划
 
 1. **过稀失火**（方案已定）：m_eff<0.8 概率失火（本 tick 出力 ×0）；m_eff<0.6 熄火停机（拉富回安全区自动重启）；高空拉稀余量更大（自动富油垫稀）；只可能在流体引擎出现。
-2. ~~tooltip 差量/批量同步优化~~ **✅ 已实施（P7+ 方案 A+B+D）**：由每 tick 20Hz 全量广播改为（1）事件差量（running/overheated/warmingUp/steamEngine/airDuct/燃料类型/容量变化）；（2）温度 ≥1°C 门控（`SYNC_TEMP_DELTA`）；（3）慢字段（ecoProgress/EffectiveMixture/HeatFactor/SteamBurnTicks）20 tick（1Hz）心跳；可推导字段（经济/过冷/油耗系数）客户端按公式现算（`economyFactor()/coldFactor()/fuelFactor()`，不违反踩坑 10——高度相关量 EffectiveMixture/HeatFactor 仍随包同步）；蒸汽倒计时客户端线性外推（`steamBurnTicksDisplay()`，运行中才外推）；`setChanged` 仍每 tick 保温度持久化。稳态包量 ≈1/20 以下。
+2. ~~tooltip 差量/批量同步优化~~ **✅ 已实施（P7+ 方案 A+B+D）**：由每 tick 20Hz 全量广播改为（1）事件差量（running/overheated/warmingUp/steamEngine/airDuct/燃料类型/容量变化）；（2）温度 ≥1°C 门控（`SYNC_TEMP_DELTA`）；（3）慢字段（ecoProgress/EffectiveMixture/HeatFactor/SteamBurnTicks）20 tick（1Hz）心跳；可推导字段（经济/过冷/油耗系数）客户端按公式现算（`economyFactor()/coldFactor()/fuelFactor()`，不违反踩坑 10——高度相关量 EffectiveMixture/HeatFactor 仍随包同步）；蒸汽倒计时客户端线性外推（`steamBurnTicksDisplay()`，运行中才外推）；`setChanged` 仍每 tick 保温度持久化。稳态包量 ≈1/20 以下。**进游戏验证通过**（详见 §17 实施记录）。
 3. **进游戏调参**：`ECO_MIN/ECO_FLAT/COLD_K/ENGINE_T_OPT/ENGINE_MIN_WORK_TEMP/解锁流失速率` 各值。
 4. **蒸汽进游戏调参**：`STEAM_WARMUP_RATE`、消耗∝油门幅度（水/燃料）、余热冷却速率（K_CORE 停机散热）——用户计划逐项实测。
 5. **移动装置（contraption）上的燃料箱/储罐**：当前源扫描只在静态世界方块上有效（v1 已知限制）。
@@ -451,7 +451,41 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 | P7 | 奖励驱动重构：油耗 = 杆×eco×cold、eco 双因素 AND 门控 + 解锁进度、温度全部引擎固定、过冷惩罚、tooltip 每 tick 同步、燃料体系分家、Goggle 精简（油门/油耗/发热系数） | ✅ |
 | P2.5（蒸汽燃料定稿） | 蒸汽固体燃料并行燃烧（一次抽 N×K、不足切下一箱、流体优先）+ 燃料箱 ItemHandler 能力 + 储备倒计时独立于燃料源（拆箱不停机）+ 余热运转（运行 = 油门+T≥100 且水储备>0）+ 真实蒸汽车节流阀消耗（∝油门 + 墙钟显示）+ Goggle 燃料行（xN + 墙钟秒） | ✅ |
 | P2.5b（源抽取重构） | 单源缓存+冷却重扫 → **四类源列表事件化重建**（onLoad / neighborChanged 去抖 10 / 连接性 / 全失败延迟 20 tick 重扫）+ **批量补料**（批次 = 室数×配置倍数 K，进游戏缓存；头罐失败即时切下一个；储备耗尽同 tick 补料防应力闪断）+ **删 priority 按查找顺序抽** + scanModule 方案 A（每 tick 枚举当安全网） | ✅ 进游戏验证通过（放罐/拆罐即生效、断供换罐不重启、全失败重扫恢复） |
-| P7+（tooltip 同步优化，方案 A+B+D） | 每 tick 20Hz 全量广播 → **事件差量 + 温度 ≥1°C 门控 + 慢字段 20 tick（1Hz）心跳**；**可推导字段下放客户端**（经济/过冷/油耗系数按公式现算，`economyFactor()/coldFactor()/fuelFactor()`；高度相关 EffectiveMixture/HeatFactor 仍服务端同步）；**蒸汽倒计时客户端线性外推**（`steamBurnTicksDisplay()`，运行中才外推）；setChanged 每 tick 保留保温度持久化；Lua 读缓存/活塞动画/应力网络重激活均不受影响 | ✅ 编译通过；待进游戏验证 tooltip 实时性/包量 |
+| P7+（tooltip 同步优化，方案 A+B+D） | 每 tick 20Hz 全量广播 → **事件差量 + 温度 ≥1°C 门控 + 慢字段 20 tick（1Hz）心跳**；**可推导字段下放客户端**（经济/过冷/油耗系数按公式现算，`economyFactor()/coldFactor()/fuelFactor()`；高度相关 EffectiveMixture/HeatFactor 仍服务端同步）；**蒸汽倒计时客户端线性外推**（`steamBurnTicksDisplay()`，运行中才外推）；setChanged 每 tick 保留保温度持久化；Lua 读缓存/活塞动画/应力网络重激活均不受影响 | ✅ 编译通过 + 进游戏验证通过（四套 tooltip 温度连续、状态档位切换、蒸汽倒计时逐秒走正常；稳态包量降到 1Hz 级，详见下方实施记录） |
+
+### P7+ tooltip 同步优化（方案 A+B+D）实施记录
+
+**动机**：P7 起 tooltip 数据每 tick `sendData()`（20Hz 全量 NBT，广播给全部 chunk 追踪玩家）——频率 × 载荷 × 受众三处全占；参考 Create（`SyncedBlockEntity.sendData` 只在离散转变调用、连续量客户端从动力网络推导 + LerpedFloat 平滑）、Simulated（`velocity_sensor` 每 tick 但载荷仅 2 字段；`portable_engine` 纯事件驱动）后定案。
+
+**方案 A：事件差量 + 温度门控 + 慢字段心跳**（`tick()` 末尾同步判定，改 `EngineCoreBlockEntity`）
+- **事件差量**（任一变化即发包）：`running / overheated / warmingUp / steamEngine / hasAirDuct / moduleCapacity / steamFuelType / steamFuelKey / steamSolidFuelKey`；
+- **温度门控**：`|T − lastSyncedTemp| ≥ SYNC_TEMP_DELTA(1°C)`（恢复 P7 前方案；`lastSyncedTemp` 恢复差量语义，不再每 tick 无条件覆盖）；
+- **慢字段心跳**：`++syncHeartbeat ≥ SYNC_HEARTBEAT_INTERVAL(20 tick = 1Hz)` 无条件补发（ecoProgress / EffectiveMixture / HeatFactor / SteamBurnTicks 校准 + 防漏——慢字段随每包携带，心跳只是保底，不会被事件饿死）；
+- `setChanged()` 每 tick 保留（温度存 controller NBT 需持久化，与发包解耦）；`reActivateSource`（Create 基类消费）只在运行态/容量变化置位，与发包无关；
+- Lua `setThrottle/setMixture/setCooling/attach/detach` 等 setter 原本各自 `sendData()`（事件同步），不在 tick 判定内重复检测；
+- 新增快照字段：`lastSyncedRunning/Overheated/WarmingUp/SteamEngine/AirDuct`、`lastSyncedSteamFuelType/Key/SolidFuelKey`、`syncHeartbeat`、`SYNC_HEARTBEAT_INTERVAL=20`。
+
+**方案 B：可推导字段下放客户端**（`write()` 删 4 字段，磁盘包 + 客户端包同时生效；`read()` 保留 contains 兜底兼容旧包/旧档）
+- 不再随包同步：`EconomyFactor`（= 1−0.25×ecoProgress）、`ColdFactor`（= coldPenalty(T)，纯 T 函数）、`FuelFactor`（= 杆×经济×过冷）、`OptimalTemp`（P7 后恒 155/155，无消费者，仅保留服务端字段）；
+- 客户端派生 getter：`economyFactor() / coldFactor()（仅流体引擎运行中才计，与服务端 runningFluid>0 判定等价）/ fuelFactor()`；tooltip 状态行（过冷）、油耗行改读派生值；
+- **仍必须服务端同步**：`EffectiveMixture / HeatFactor`（依赖运动体真实高度——客户端无法可靠自算，踩坑 10 约束）；
+- 服务端字段本身保留（tick 每 tick 重算；Lua `getFuelEconomyFactor` 直读 `lastEconomyFactor`；`adoptAdjacentEngineState` 照常拷贝）。
+
+**方案 D：蒸汽倒计时客户端线性外推**（`steamBurnTicksDisplay()`）
+- 依据：burnTicks 每 tick **精确** −效率（服务端消耗逻辑）→ `remaining = 同步值 − 效率×(gameTime − steamBurnTicksSyncTime)`，墙钟秒 = remaining/(效率×20) 逐秒平滑跳动；
+- **运行中才外推**（`running && efficiency > 0`）：停机/油门 0 时服务端冻结储备，不外推防止显示归零过早；`read(clientPacket)` 记录 `steamBurnTicksSyncTime` 基线；
+- 同步时机：燃料类型变化（事件）+ setThrottle（事件）+ 1Hz 心跳校准；每包误差 ≤ 效率×20 burnTick = 满油门 1 墙钟秒，1s 粒度显示不可感知。
+
+**停机状态行为（FAQ 记录）**：
+- 服务端：controller 每 tick 仍执行全部轻量计算（`scanModule` 安全网 / 牛顿冷却 / ecoProgress 流失 / `setChanged` 落盘）——**无 drain、无补料、无发电/应力更新**；
+- 发包：温度冷却期按 |ΔT|≥1°C 发（停机 155°C ≈2.7Hz → 指数衰减到 <0.2Hz），稳态只剩 **1Hz 心跳**；
+- 客户端：活塞动画停（speed=0）、音效不触发、倒计时外推被 running 门控关闭，零额外开销。
+
+**方案 C 评估（未实施，后续可选）**：
+- **C1 距离过滤**（`PacketDistributor.sendToPlayersNear` 32 格替代 sendData 广播）：好做——项目现成案例 `MonitorPeripheral.playNiceSound`（sendToPlayersNear）+ `SyncGridPayload`（压缩 NBT payload 模板）+ `SensorPacketHandlers.playToClient` → `be.readClient()` 写客户端 BE；注意 payload 必须携带 `write(clientPacket=true)` **全量 NBT（含 super 的 Speed 字段）**，保证客户端动能网络/活塞动画不受影响；chunk 加载/连接性变化仍走原 `getUpdatePacket`/`sendBlockUpdated`，两套并行；
+- **C2 悬停订阅**：Create/Simulated 均无现成案例（最近类比 = 原版 `ChunkMap` 追踪玩家投递）；需自管订阅生命周期（断线/区块卸载清理、订阅瞬间补发全量包防首帧空白）；工作量 ≈ C1 的 2~3 倍、收益边际递减（C1 后已只剩近处玩家 × 事件+1Hz）→ **推荐先 C1，多人服有压力再上 C2**。
+
+**验证**：`./gradlew.bat classes` 编译通过（仅既有警告）；进游戏挂 goggle 实测四套 tooltip（核心/蒸汽室/气道/流体室全量）温度连续无台阶、状态档位切换正常、蒸汽固体燃料倒计时逐秒走无卡顿、放/拆燃烧室与气道后总应力输出 1s 内刷新——均正常；稳态包量降到 1Hz 级。
 
 ---
 
@@ -481,6 +515,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 22. **P2.5b 邻居噪声饿死重建**：`markSourcesDirty` 若每次调用都重置去抖（cooldown=10），红石/装饰等连续邻居变化会让重建永远推迟。修复：已有排程（`sourcesDirty && cooldown>0`）则不重置 + **neighborChanged 只转发带流体/物品能力的邻居**（`onModuleNeighborChanged` 先查 capability），普通方块变化不触发。
 23. **P2.5b 删 priority 后燃料顺序 = 扫描序**：`EngineFuels.sortedByPriority()` 删除；流体室燃料 = `rebuildSources` 按 scanModule 邻居枚举序找到的第一个表命中条目（同源罐的 fluid 副本 + entry 一起缓存，drain 按源 fluid，防止罐中途换流体被误抽）。
 24. **P2.5b 配置「进游戏缓存」**：批次倍数 K 每 tick 读 `Config.get()` 有解析开销且改配置不热生效——按用户要求进游戏缓存一次到 `SOURCE_BATCH_MULTIPLIER`（`onServerStarting` 写入）。
+25. **P3 散热侧「有储备 ≠ 在消耗」→ 停机冷得更快**：发热侧早已加 efficiency 门控（踩坑 13），但温度更新的散热项 `K_AMBIENT × runningTotal` 漏了门控——停机（油门 0）时 `runningFluid/runningSteam` 仍计有储备的室（油门 0 储备不消耗、不归零）→ 燃烧室散热分量（每室 0.05）持续生效，**有剩燃料的停机引擎比无燃料冷得快约 2 倍**（实测 4 节+2 风道静止：k=0.095 vs 0.045；200→20 显示值 30 秒 vs ~3 分钟）。修复：蒸汽/流体两分支冷却处改为 `K_AMBIENT * (running ? runningTotal : 0)`（`K_CORE×length` 停机自散热不受影响，与 memo §15「冷却按运行中室数计」一致）。
 
 ---
 

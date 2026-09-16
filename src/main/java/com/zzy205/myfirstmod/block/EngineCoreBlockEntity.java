@@ -511,7 +511,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             if (runningSteam > 0 && efficiency > 0f) {
                 temperature += (BOILER_T_OPT - temperature) * STEAM_WARMUP_RATE / 20f;
             } else {
-                float kCool = K_CORE * length + K_AMBIENT * runningTotal
+                // 修正：K_AMBIENT 只计「运行中」的室——停机（油门 0）时 runningSteam 仍计有储备的室，
+                // 而储备≠在消耗，不加门控会导致「有剩燃料冷得更快」（踩坑 13 原则；冷却按运行中室数计，memo §15）
+                float kCool = K_CORE * length + K_AMBIENT * (running ? runningTotal : 0)
                         + K_DUCT * scan.coolingDucts * (hasAirDuct ? coolingStrength : 1f);
                 temperature += (-kCool * (temperature - tAmb)) / thermalCapacity() / 20f;
             }
@@ -521,7 +523,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             if (running && !overheated && runningFluid > 0 && fluidFuel != null)
                 heat += runningFluid * efficiency * fluidFuel.heat() * BASE_HEAT_FLUID * mixtureHeatFactor;
             // P6 风门：冷却强度只缩放冷却气道散热分量（冲压/气压/环境不动）；无气道时 D=0 无影响
-            float kTotal = (K_CORE * length + K_AMBIENT * runningTotal
+            // P3 修正：K_AMBIENT 只计「运行中」的室——停机（油门 0）时 runningFluid 仍计有储备的室，
+            // 储备≠在消耗，不加门控会导致「有剩燃料冷得更快」（踩坑 13 原则；冷却按运行中室数计，memo §15）
+            float kTotal = (K_CORE * length + K_AMBIENT * (running ? runningTotal : 0)
                     + K_DUCT * scan.coolingDucts * (hasAirDuct ? coolingStrength : 1f))
                     * ramFactor() * pressureFactor();
             temperature += (heat - kTotal * (temperature - tAmb)) / thermalCapacity() / 20f;
