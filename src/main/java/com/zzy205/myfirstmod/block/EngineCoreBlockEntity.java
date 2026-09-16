@@ -773,8 +773,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * 全部失败 → {@link #scheduleSourcesRescan()} 并返回 0。只走 capability。
      */
     protected float drainWaterBatch(int chamberCount) {
-        if (waterSources.isEmpty())
+        if (waterSources.isEmpty()) {
+            // 列表空（罐未探测到 / 空罐未入列）→ 纳入"全源失败延迟重扫"自愈循环：每 ~1s 重建一次，
+            // 罐被灌满/放好即被探测（踩坑 29：内容变化无事件，仅靠事件重建会永久卡死）
+            scheduleSourcesRescan();
             return 0f;
+        }
         int batch = batchMb(chamberCount);
         int n = waterSources.size();
         for (int tries = 0; tries < n; tries++) {
@@ -804,8 +808,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * 全部失败 → {@link #scheduleSourcesRescan()} 并返回 0。只走 capability。
      */
     protected float drainFluidFuelBatch(int chamberCount) {
-        if (fluidFuelSources.isEmpty())
+        if (fluidFuelSources.isEmpty()) {
+            scheduleSourcesRescan(); // 同 drainWaterBatch（踩坑 29）：空列表也要周期重扫自愈
             return 0f;
+        }
         int batch = batchMb(chamberCount);
         int n = fluidFuelSources.size();
         for (int tries = 0; tries < n; tries++) {
@@ -842,8 +848,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * 只走 capability，绝不直接改罐 BE。调用前提：全室空炉 + 油门 > 0。
      */
     protected boolean refillSteamFluidFuel(List<BlockPos> steamChambers) {
-        if (steamFuelSources.isEmpty() || steamChambers.isEmpty())
+        if (steamChambers.isEmpty())
             return false;
+        if (steamFuelSources.isEmpty()) {
+            scheduleSourcesRescan(); // 同 drainWaterBatch（踩坑 29）：空列表也要周期重扫自愈
+            return false;
+        }
         int batch = batchMb(steamChambers.size());
         int n = steamFuelSources.size();
         for (int tries = 0; tries < n; tries++) {
@@ -952,8 +962,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected boolean tryPullSolidFuelBatch(List<BlockPos> steamChambers) {
         if (steamChambers.isEmpty())
             return false;
-        if (solidFuelSources.isEmpty())
+        if (solidFuelSources.isEmpty()) {
+            scheduleSourcesRescan(); // 同 drainWaterBatch（踩坑 29）：空列表也要周期重扫自愈
             return false;
+        }
         int need = batchItems(steamChambers.size());
         int n = solidFuelSources.size();
         for (int tries = 0; tries < n; tries++) {

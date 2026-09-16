@@ -107,7 +107,12 @@ public class SteamPowerChamberBlockEntity extends BlockEntity {
         EngineCoreBlockEntity controller = engineController(parent);
         if (controller == null || !controller.isRunning())
             return 0;
-        float angle = Mth.lerp(partialTick, prevPistonAngle, pistonAngle);
+        // 跨 2π 回绕帧：把目标角展开到上一角之后（差值 = 正常推进量），插值不反向扫掠——
+        // 否则回绕那一帧活塞沿整圈反向横扫一次（每圈一次"卡"，默认油门 64rpm ≈ 每 0.94s 一次，见 memo 踩坑 28）
+        float to = pistonAngle;
+        if (to < prevPistonAngle)
+            to += (float) (Math.PI * 2);
+        float angle = Mth.lerp(partialTick, prevPistonAngle, to);
         float phase = angle + directionPhase(facing) + axisParityPhase(parent);
         return (float) (Math.sin(phase) * PISTON_STROKE);
     }
