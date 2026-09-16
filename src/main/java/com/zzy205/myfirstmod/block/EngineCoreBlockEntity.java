@@ -93,10 +93,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final float GENERATED_SPEED = 256;
 
     /** 每个流体燃烧室的基础应力贡献（SU） */
-    public static final float BASE_STRESS_PER_CHAMBER = 4096;
+    public static final float BASE_STRESS_PER_CHAMBER = 8192;
 
     /** 每个蒸汽动力室的基础应力贡献（SU） */
-    public static final float STEAM_STRESS_PER_CHAMBER = 3072;
+    public static final float STEAM_STRESS_PER_CHAMBER = 4096;
 
     /** 整条引擎的总节数（每个成员都存同一值，由 ConnectivityHandler.setHeight 维护） */
     protected int length = 1;
@@ -110,7 +110,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     // ---- P1：燃烧/发电状态（仅 controller 计算；Running 同步给客户端驱动音效/动画） ----
     /** 是否运行（有燃烧室 + 燃料可用 + 未过载） */
     protected boolean running = false;
-    /** 模块总容量（SU，当前转速下）＝运行燃烧室数 × 4096 × 燃料 stress 倍率 */
+    /** 模块总容量（SU，当前转速下）＝运行燃烧室数 × 8192 × 燃料 stress 倍率 */
     protected float moduleCapacity = 0;
 
     // ---- P2.5：源列表 + 储备（transient，事件化重建；方案见 memo/engine-module.md 关键机制 7.3） ----
@@ -199,9 +199,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final float STEAM_MIN_WORK_TEMP = 100f;
     /** 环境散热系数（°C/s/°C/室）——静态 eff25% 不过热 ⇒ K_AMB ≥ 0.25×H0/ΔT_max */
     public static final float K_AMBIENT = 0.05f;
-    /** 每个整合气道散热系数（°C/s/°C）——静态 eff50% + 1风道/室 ⇒ K_AMB+K_DUCT ≥ 0.5×H0/ΔT_max */
+    /** 每个冷却气道散热系数（°C/s/°C）——静态 eff50% + 1风道/室 ⇒ K_AMB+K_DUCT ≥ 0.5×H0/ΔT_max */
     public static final float K_DUCT = 0.05f;
-    /** 引擎核心自身散热系数（°C/s/°C/节）：停机时核心仍缓慢散热（不依赖整合气道），τ ≈ 1/0.02 = 50s */
+    /** 引擎核心自身散热系数（°C/s/°C/节）：停机时核心仍缓慢散热（不依赖冷却气道），τ ≈ 1/0.02 = 50s */
     public static final float K_CORE = 0.02f;
     /** 冲压冷却满增益（×）：运动 ≥RAM_FULL 时总散热 ×2.0（eff100% + 1风道/室 + 冲压 ⇒ 足够） */
     public static final float RAM_MAX = 2.0f;
@@ -239,7 +239,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /** 客户端：当前 goggle 悬停的引擎方块（核心 / 模块方块的 {@code IProxyHoveringInformation.getInformationSource}
      *  代理到本 controller 时记录——核心记录自身、蒸汽室记录蒸汽室、流体室/气道记录各自方块）。
-     *  仅用于 {@link #addToGoggleTooltip} 按悬停方块分流三套 tooltip（核心 / 蒸汽动力室 / 流体燃烧室+整合气道全量）；
+     *  仅用于 {@link #addToGoggleTooltip} 按悬停方块分流四套 tooltip（核心 / 蒸汽动力室 / 流体燃烧室全量 / 冷却气道精简）；
      *  每次 tooltip 渲染后复位（防跨帧串味）。 */
     @OnlyIn(Dist.CLIENT)
     private Block hoveredSourceBlock;
@@ -292,9 +292,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected boolean steamEngine = false;
     /** 蒸汽暖机中（tick 服务端计算：点火燃烧但温度 < STEAM_MIN_WORK_TEMP，只烧不发电）。NBT 同步客户端供 Goggle。 */
     protected boolean warmingUp = false;
-    /** 是否已装整合气道（tick 扫描；P6 门控：解锁经济区/拉稀权/风门）。NBT 同步客户端。 */
+    /** 是否已装冷却气道（tick 扫描；信息用——风道散热分量消费 coolingStrength 的载体，setMixture/setCooling 均无门控）。NBT 同步客户端。 */
     protected boolean hasAirDuct = false;
-    /** 服务端每 tick 的当前经济系数（0.75~1.0；无整合气道/停机 → 1.0），NBT 同步客户端 Goggle 显示 */
+    /** 服务端每 tick 的当前经济系数（0.75~1.0；停机 → 1.0），NBT 同步客户端 Goggle 显示 */
     protected float lastEconomyFactor = 1f;
     /** P7：经济解锁进度（0~1，服务端权威：双因素持续达标缓慢累积、离开窗口快速流失）。NBT 同步客户端 Goggle 经济行渐入显示 */
     protected float ecoProgress = 0f;
@@ -306,7 +306,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected float lastFuelFactor = 1f;
     /** P7：最终发热系数（heatFactor(m_eff)，m_eff = 杆 × 高空自动富油；稀=热 >1 / 富油=凉 <1；蒸汽恒 1.0）。NBT 同步客户端 Goggle */
     protected float lastHeatFactor = 1f;
-    /** 冷却强度（风门，0~1，默认 1.0 = 全开；只缩放 K_DUCT 风道散热分量，冲压/气压/环境不动；仅装整合气道后可调，只能降——真实 cowl flap）。NBT 持久化。 */
+    /** 冷却强度（风门，0~1，默认 1.0 = 全开；只缩放 K_DUCT 风道散热分量，冲压/气压/环境不动；仅装冷却气道后可调，只能降——真实 cowl flap）。NBT 持久化。 */
     protected float coolingStrength = 1f;
 
     // ---- P6：Lua getActiveFuel 缓存（服务端 tick 更新，供读缓存） ----
@@ -385,14 +385,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // 过热（流体）为"整机停摆"门控（不发电不消耗）；蒸汽引擎永不过热
         boolean heatAllowed = !overheated;
 
-        // P5/P7：混合比（仅流体引擎；蒸汽引擎无混合比轴——锁 1.0、无自动富油、发热不乘热因子）。
-        // P6 进气=拉稀权：无整合气道 → 杆值钳 ≥1.0（不能拉稀省油）；装后开放 0.6~1.4。
+        // P5/P7：混合比（仅流体引擎消费；蒸汽引擎无混合比轴——effectiveMixture 锁 1.0、无自动富油、发热不乘热因子）。
+        // P7 修订：混合比纯存值、无门控（setMixture/getMixture 直存取值，不按引擎类型拒绝）——
+        //   非流体引擎（蒸汽）因 effectiveMixture 强制 1.0、且无流体室不耗油，存值不生效。
         // P7 奖励驱动：m_eff = 杆 × autoRichness 只进发热（heatFactor——高空自动富油 = 只是发热减少/富油降温）
         //   与 eco 混合比窗口（海拔补偿 = 拉到 m_eff≈1.0 吃经济折扣）；完全不进油耗——
         //   油耗只随 杆值 × 经济系数 × 过冷惩罚（高空不拉稀 = ×1.0 无惩罚）。
         boolean airDuct = scan.coolingDucts > 0;
         hasAirDuct = airDuct;
-        float leverMixture = airDuct ? mixture : Math.max(1f, mixture);            // 杆值（含拉稀权钳制；油耗直接 × 杆值）
+        // P7 修订：混合比纯存值、无门控——杆值 = mixture 直取；非流体引擎（蒸汽）因 effectiveMixture 强制 1.0
+        // 且无流体室不耗油，存值不生效（见 steamEngine 分支）。
+        float leverMixture = mixture;                                             // 杆值（油耗直接 × 杆值）
         float effectiveMixture = steamEngine ? 1f : leverMixture * autoRichness(); // 实际混合比（发热/eco 窗口/显示用）
         lastEffectiveMixture = effectiveMixture;
         float mixtureHeatFactor = steamEngine ? 1f : heatFactor(effectiveMixture);
@@ -507,7 +510,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             float heat = 0;
             if (running && !overheated && runningFluid > 0 && fluidFuel != null)
                 heat += runningFluid * efficiency * fluidFuel.heat() * BASE_HEAT_FLUID * mixtureHeatFactor;
-            // P6 风门：冷却强度只缩放整合气道散热分量（冲压/气压/环境不动）；无气道时 D=0 无影响
+            // P6 风门：冷却强度只缩放冷却气道散热分量（冲压/气压/环境不动）；无气道时 D=0 无影响
             float kTotal = (K_CORE * length + K_AMBIENT * runningTotal
                     + K_DUCT * scan.coolingDucts * (hasAirDuct ? coolingStrength : 1f))
                     * ramFactor() * pressureFactor();
@@ -572,14 +575,14 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
     }
 
-    /** 模块扫描结果：一次遍历收集两类燃烧室 + 整合气道数 + 去重后的全部邻居（core 成员 6 邻居 ∪ 燃烧室 6 邻居） */
+    /** 模块扫描结果：一次遍历收集两类燃烧室 + 冷却气道数 + 去重后的全部邻居（core 成员 6 邻居 ∪ 燃烧室 6 邻居） */
     protected record ModuleScan(List<BlockPos> fluidChambers, List<BlockPos> steamChambers, List<BlockPos> neighbors,
                                 int coolingDucts) {}
 
     /**
      * 扫描本条引擎（全部成员）：统计贴附的流体/蒸汽燃烧室（仅计入背面 FACING 反方向正贴核心的，
      * 避免双计），并收集模块全部邻居（core 成员 ∪ 燃烧室，去重）——水和流体燃料的源罐查找范围。
-     * 整合气道计数范围 = 贴在核心成员 ∪ 燃烧室上（blockstate 计数，经 seen 去重防重复计）。
+     * 冷却气道计数范围 = 贴在核心成员 ∪ 燃烧室上（blockstate 计数，经 seen 去重防重复计）。
      */
     protected ModuleScan scanModule() {
         List<BlockPos> fluidChambers = new ArrayList<>();
@@ -602,13 +605,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                         && neighbor.relative(state.getValue(SteamPowerChamberBlock.FACING).getOpposite()).equals(corePos)) {
                     steamChambers.add(neighbor);
                 }
-                // 整合气道：贴在核心成员上即计入（blockstate 计数，无 BE；去重防两核心间重复计）
-                if (state.is(MyModBlocks.integrated_air_duct.get()) && seen.add(neighbor))
+                // 冷却气道：贴在核心成员上即计入（blockstate 计数，无 BE；去重防两核心间重复计）
+                if (state.is(MyModBlocks.cooling_air_duct.get()) && seen.add(neighbor))
                     coolingDucts++;
                 addNeighbor(seen, neighbors, neighbor);
             }
         }
-        // 燃烧室自己的邻居（罐/容器可能贴着燃烧室；整合气道贴在燃烧室旁同样计入冷却）
+        // 燃烧室自己的邻居（罐/容器可能贴着燃烧室；冷却气道贴在燃烧室旁同样计入冷却）
         for (BlockPos chamber : fluidChambers)
             coolingDucts += scanChamberNeighbors(seen, neighbors, chamber);
         for (BlockPos chamber : steamChambers)
@@ -627,14 +630,14 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
-     * 扫描 pos（燃烧室）的 6 邻居：整合气道计入冷却计数（返回新计入数，经 seen 去重防核心/燃烧室间重复计），
+     * 扫描 pos（燃烧室）的 6 邻居：冷却气道计入冷却计数（返回新计入数，经 seen 去重防核心/燃烧室间重复计），
      * 其余邻居并入模块邻居列表（水和流体燃料的源罐/容器查找范围）。
      */
     private int scanChamberNeighbors(Set<BlockPos> seen, List<BlockPos> neighbors, BlockPos pos) {
         int ducts = 0;
         for (Direction dir : Direction.values()) {
             BlockPos neighbor = pos.relative(dir);
-            if (level.getBlockState(neighbor).is(MyModBlocks.integrated_air_duct.get()) && seen.add(neighbor))
+            if (level.getBlockState(neighbor).is(MyModBlocks.cooling_air_duct.get()) && seen.add(neighbor))
                 ducts++;
             addNeighbor(seen, neighbors, neighbor);
         }
@@ -1044,7 +1047,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * （|T−ENGINE_T_OPT|≤ECO_FLAT ∧ |m_eff−1|≤ECO_MIX_FLAT）→ 缓慢累积（ECO_UNLOCK_RATE，15s 满）；
      * 离开窗口/停机 → 快速流失（ECO_DECAY_RATE，6s 归零）。保持才奖励、快速掠过不奖励；
      * 混合比不对 = 无奖励也无惩罚（温度控得再好也没用）。
-     * P7 修订：经济系数<b>不以整合气道为门控</b>（无气道同样生效）——整合气道只门控 setMixture/setCooling Lua。
+     * P7 修订：经济系数<b>不以冷却气道为门控</b>（无气道同样生效）——setMixture/setCooling 均无门控（纯存值），冷却气道只是风门数值的消费载体。
      */
     protected float updateEcoProgress(float progress, float temp, float tOptEff, float mEff,
                                       boolean runningFluid) {
@@ -1275,21 +1278,21 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return true;
         }
 
-        /** 当前混合比杆（0.6~1.4，默认 1.0；只影响油耗与温度，不影响应力/转速）。蒸汽引擎无混合比轴 → 恒 1.0 */
+        /** 当前混合比杆（0.6~1.4，默认 1.0；只影响油耗与温度，不影响应力/转速）。纯存值无门控——非流体引擎存了也不生效 */
         @LuaFunction
         public final double getMixture() {
-            return steamEngine ? 1.0 : mixture;
+            return mixture;
         }
 
         /**
          * 当前<b>实际</b>混合比（杆 × 自动富油，服务端每 tick 计算）：
          * 高空/低压下 > 杆值（空气稀 → 化油器按体积配油 → 天然变浓）。P7：自动富油只降温不进油耗——
          * 该读数是经济系数混合比窗口（m_eff≈1.0）与发热的反馈：海拔补偿 = 拉到 m_eff≈1.0 吃经济折扣。
-         * 海平面 = 杆值。蒸汽引擎无混合比轴 → 恒 1.0。
+         * 海平面 = 杆值。蒸汽引擎无混合比轴（tick 计算时已强制 1.0）→ 恒 1.0。
          */
         @LuaFunction
         public final double getEffectiveMixture() {
-            return steamEngine ? 1.0 : lastEffectiveMixture;
+            return lastEffectiveMixture;
         }
 
         /**
@@ -1299,12 +1302,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
          * P7 奖励驱动：杆 1.0 = 出厂标定（任何高度油耗 ×1.0 无惩罚）；高空自动富油只降温（进 heatFactor）；
          * 经济系数 = 温度+实际混合比双因素（m_eff≈1.0 才解锁）——海拔补偿 = 拉到 m_eff≈1.0 吃经济折扣。
          * 可用 {@link #getEffectiveMixture()} 读实际值做海拔补偿校正。
-         * P6：蒸汽引擎（无混合比轴）或未装整合气道（进气=拉稀权未解锁）→ 拒绝返回 false。
+         * P7 修订：混合比是纯引擎级存值、<b>无门控</b>——只有流体引擎的油耗/温度路径会消费它，
+         * 非流体引擎（蒸汽）存了也不生效（effectiveMixture 强制 1.0、无流体室不耗油）。
          */
         @LuaFunction(mainThread = true)
         public final boolean setMixture(double value) {
-            if (steamEngine || !hasAirDuct)
-                return false;
             if (!Double.isFinite(value))
                 return false;
             float clamped = (float) Mth.clamp(value, MIXTURE_MIN, MIXTURE_MAX);
@@ -1317,7 +1319,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
 
         /**
-         * P7：当前经济系数（0.75~1.0；无整合气道 / 停机 / 油门 0 → 1.0 无意义）。
+         * P7：当前经济系数（0.75~1.0；停机 / 油门 0 → 1.0 无意义）。
          * 服务端每 tick 计算并同步（读缓存，≤1 tick 滞后）；温度与<b>实际混合比</b>双因素持续达标
          * （|T−T_opt(eff)|≤10 ∧ |m_eff−1|≤0.05）→ 解锁进度缓慢累积（15s 满）渐入 0.75，离开窗口 6s 流失；
          * 混合比不对 → 无奖励无惩罚。
@@ -1327,7 +1329,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return lastEconomyFactor;
         }
 
-        /** P6：是否已装整合气道（解锁经济区 / 拉稀权 / 风门） */
+        /** P6：是否已装冷却气道（信息用：风道散热分量消费 coolingStrength 的载体；setMixture/setCooling 均无门控） */
         @LuaFunction
         public final boolean hasAirDuct() {
             return hasAirDuct;
@@ -1355,21 +1357,19 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return result;
         }
 
-        /** P6：当前冷却强度（风门 0~1，默认 1.0 = 全开）。蒸汽引擎无风门（恒温自调节）→ 恒 1.0 */
+        /** P6：当前冷却强度（风门 0~1，默认 1.0 = 全开）。纯存值无门控——只有装冷却气道时风道散热分量才消费它（蒸汽引擎无风道消费，存了不生效） */
         @LuaFunction
         public final double getCooling() {
-            return steamEngine ? 1.0 : coolingStrength;
+            return coolingStrength;
         }
 
         /**
-         * P6：设置冷却强度（风门 0~1，越界钳制；未装整合气道 / 蒸汽引擎 / 非法参数返回 false）。
-         * 只缩放风道散热分量（K_DUCT×D×strength），冲压/气压/环境散热不动；只能降（想更冷 = 多装风道，真实 cowl flap）。
-         * 蒸汽引擎无此轴（温度钉在 BOILER_T_OPT 自调节，散热无对象）。
+         * P7 修订：设置冷却强度（风门 0~1，越界钳制；非法参数返回 false）——<b>无门控</b>，纯存值。
+         * 只有装冷却气道时 K_DUCT 风道散热分量才消费它（只缩放风道散热，冲压/气压/环境散热不动；
+         * 只能降 = 想更冷多装风道，真实 cowl flap）。蒸汽引擎无风道（温度钉在 BOILER_T_OPT 自调节），存了不生效。
          */
         @LuaFunction(mainThread = true)
         public final boolean setCooling(double value) {
-            if (steamEngine || !hasAirDuct)
-                return false;
             if (!Double.isFinite(value))
                 return false;
             float clamped = (float) Mth.clamp(value, 0.0, 1.0);
@@ -1505,9 +1505,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
-     * 从引擎任一模块方块位置（核心成员 / 燃烧室 / 整合气道）解析整条引擎 controller 坐标；
+     * 从引擎任一模块方块位置（核心成员 / 燃烧室 / 冷却气道）解析整条引擎 controller 坐标；
      * 该方块不属于任何已组网引擎（未连接核心）时返回 null。
-     * <p>供模块方块（燃烧室 / 整合气道）的 goggle tooltip 代理使用（{@code IProxyHoveringInformation}）。</p>
+     * <p>供模块方块（燃烧室 / 冷却气道）的 goggle tooltip 代理使用（{@code IProxyHoveringInformation}）。</p>
      */
     public static BlockPos engineControllerPos(Level level, BlockPos modulePos) {
         // 方块本身是核心成员
@@ -1521,7 +1521,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return controllerOfCoreAt(level, modulePos.relative(facing.getOpposite()));
         }
 
-        // 整合气道：与冷却计数同范围（核心成员 ∪ 燃烧室邻居）
+        // 冷却气道：与冷却计数同范围（核心成员 ∪ 燃烧室邻居）
         for (Direction dir : Direction.values()) {
             BlockPos neighbor = modulePos.relative(dir);
             BlockState ns = level.getBlockState(neighbor);
@@ -1689,7 +1689,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         mixture = compound.contains("Mixture") ? compound.getFloat("Mixture") : 1f;
         // P5：实际混合比（服务端同步；旧存档/首个 tick 前 → 1.0）
         lastEffectiveMixture = compound.contains("EffectiveMixture") ? compound.getFloat("EffectiveMixture") : 1f;
-        // P6：蒸汽类型 / 整合气道 / 经济系数（服务端权威；旧存档无字段 → 默认值）
+        // P6：蒸汽类型 / 冷却气道 / 经济系数（服务端权威；旧存档无字段 → 默认值）
         steamEngine = compound.getBoolean("SteamEngine");
         warmingUp = compound.getBoolean("WarmingUp");
         hasAirDuct = compound.getBoolean("AirDuct");
@@ -1747,7 +1747,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putFloat("Mixture", mixture);
         // 实际混合比（含高空自动富油）服务端权威值，同步给客户端 Goggle 显示
         compound.putFloat("EffectiveMixture", lastEffectiveMixture);
-        // P6：蒸汽类型 / 整合气道 / 当前经济系数（服务端每 tick 计算，同步客户端 Goggle；客户端不重算）
+        // P6：蒸汽类型 / 冷却气道 / 当前经济系数（服务端每 tick 计算，同步客户端 Goggle；客户端不重算）
         compound.putBoolean("SteamEngine", steamEngine);
         compound.putBoolean("WarmingUp", warmingUp);
         compound.putBoolean("AirDuct", hasAirDuct);
@@ -1771,7 +1771,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /**
      * Goggle 提示：非 controller 委托给 controller；按悬停方块分流四套 tooltip——引擎核心（温度 / Lua 控制 /
-     * 总应力输出 / 目前转速 / 连接的模块）、蒸汽动力室（状态 / 温度 / 油门）、整合气道（温度 / 效率=风门）、
+     * 总应力输出 / 目前转速 / 连接的模块）、蒸汽动力室（状态 / 温度 / 油门）、冷却气道（温度 / 效率=风门）、
      * 流体燃烧室（全量引擎状态，行为不变）。
      * 首行标题（Create overlay 视为标题行，其后有间距）→ 内容整体下移一行。
      * <p>悬停方块由各引擎方块（核心 {@code EngineCoreBlock} / 模块方块）的 {@code IProxyHoveringInformation.getInformationSource}
@@ -1790,8 +1790,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             Block hovered = level != null && level.isClientSide ? hoveredSourceBlock : null;
             if (hovered == MyModBlocks.steam_power_chamber.get()) {
                 addSteamChamberTooltip(tooltip);
-            } else if (hovered == MyModBlocks.integrated_air_duct.get()) {
-                addAirDuctTooltip(tooltip);
+            } else if (hovered == MyModBlocks.cooling_air_duct.get()) {
+                addCoolingDuctTooltip(tooltip);
             } else if (hovered == MyModBlocks.fluid_combustion_chamber.get()) {
                 addFullEngineTooltip(tooltip, isPlayerSneaking);
             } else {
@@ -1841,7 +1841,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             if (steam > 0)
                 addModuleLine(tooltip, MyModBlocks.steam_power_chamber.get().getName(), steam);
             if (ducts > 0)
-                addModuleLine(tooltip, MyModBlocks.integrated_air_duct.get().getName(), ducts);
+                addModuleLine(tooltip, MyModBlocks.cooling_air_duct.get().getName(), ducts);
         }
     }
 
@@ -1932,8 +1932,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return s;
     }
 
-    /** 整合气道 tooltip：温度 + 冷却（= setCooling 风门百分比） */
-    private void addAirDuctTooltip(List<Component> tooltip) {
+    /** 冷却气道 tooltip：温度 + 冷却（= setCooling 风门百分比） */
+    private void addCoolingDuctTooltip(List<Component> tooltip) {
         tooltip.add(Component.literal("    ")
                 .append(Component.translatable("tooltip.ccpe.engine.header")
                         .withStyle(ChatFormatting.WHITE)));
@@ -2005,7 +2005,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // 油耗 / 发热系数（仅流体引擎；蒸汽 Plan B = 恒温自调节、无这两行）
         if (!steamEngine) {
             // 油耗（服务端同步「最终油耗系数」= 杆值 × 经济系数 × 过冷惩罚，即除油门/自动富油外的全部油耗因子；<1 = 省油中）
-            // P7 修订：经济系数/油耗不以整合气道为门控（无气道同样生效，过冷/经济区无气道可达）——气道只门控 setMixture/setCooling Lua
+            // P7 修订：经济系数/油耗不以冷却气道为门控（无气道同样生效，过冷/经济区无气道可达）——setMixture/setCooling 均无门控（纯存值），冷却气道只是风门数值的消费载体
             tooltip.add(Component.literal("     ")
                     .append(Component.translatable("tooltip.ccpe.engine.economy").withStyle(ChatFormatting.GRAY))
                     .append(Component.literal("×" + String.format(Locale.ROOT, "%.2f", (double) lastFuelFactor))
@@ -2029,7 +2029,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
-     * 应力容量（SU per RPM，Create 语义）：总容量 = 运行燃烧室数 × 4096 × 燃料 stress 倍率，
+     * 应力容量（SU per RPM，Create 语义）：总容量 = 运行燃烧室数 × 8192 × 燃料 stress 倍率，
      * 除以当前转速即为每 RPM 容量（CDG modular engine 同款公式）。
      */
     @Override

@@ -32,7 +32,7 @@ import java.util.Map;
  *   "fluid": "minecraft:water",   // 流体 id
  *   "consumption": 1.0,           // 消耗速度：每个流体燃烧室 mb/s
  *   "heat": 1.0,                  // 发热倍率（P3 过热逻辑用；P1 只解析不消费）
- *   "stress": 1.0                 // 产生应力倍率（容量 = 燃烧室数 × 4096 × stress）
+ *   "stress": 1.0                 // 产生应力倍率（容量 = 燃烧室数 × 8192 × stress）
  * }
  * </pre>
  * <b>P2.5 起删除 priority 选择优先级</b>：多个燃料可用时按<b>源列表查找顺序</b>选（引擎扫邻居储罐

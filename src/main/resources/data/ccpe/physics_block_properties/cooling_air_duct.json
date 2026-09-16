@@ -1,5 +1,5 @@
 {
-  "selector": "ccpe:integrated_air_duct",
+  "selector": "ccpe:cooling_air_duct",
   "properties": {
     "sable:mass": 0.25,
     "sable:volume": 0.5

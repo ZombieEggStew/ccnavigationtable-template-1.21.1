@@ -25,13 +25,13 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * 整合气道（aero_engine / integrated_air_duct）：6 面贴附 × 每面 2 旋转 = <b>12 个 blockstate</b>。
+ * 冷却气道（aero_engine / cooling_air_duct）：6 面贴附 × 每面 2 旋转 = <b>12 个 blockstate</b>。
  * <p>
- * P6 设计（见 memo/engine-module.md 节 10）：<b>散热气道 + 进气气道综合模块</b>——直接替换原冷却风道。
+ * 纯散热模块（由整合气道 integrated_air_duct 改版而来，见 memo/engine-module.md）：
  * <ul>
  *   <li><b>散热</b>：每块计入引擎散热系数 K_DUCT（原冷却风道职责，计数范围 = 贴在核心成员 ∪ 燃烧室上）；</li>
- *   <li><b>进气（拉稀权）</b>：装 ≥1 块解锁经济区 / 混合比拉稀（0.6~1.4）/ 风门冷却强度控制
- *       （未装 → 有效混合比钳 ≥1.0、经济系数恒 1.0、`setCooling` 拒绝）；</li>
+ *   <li><b>风门</b>：装 ≥1 块解锁 Lua {@code setCooling}（冷却效率/风门）——只门控冷却；
+ *       混合比拉稀权（{@code setMixture}）已改为以流体燃烧室为门控（流体引擎天然可拉稀），不再由气道门控。</li>
  * </ul>
  * <p>
  * 朝向由两个属性表达（结构参考 {@code PitotTubeBlock} / simulated:rope_connector 的
@@ -50,9 +50,9 @@ import java.util.Map;
  * （任何朝向都响应，地板/天花板/墙面通用）；右键其他面走 Create 默认（换贴面/转朝向）；
  * 潜行右键 = 默认拆除掉包。
  */
-public class IntegratedAirDuctBlock extends DirectionalBlock implements IWrenchable, IProxyHoveringInformation {
+public class CoolingAirDuctBlock extends DirectionalBlock implements IWrenchable, IProxyHoveringInformation {
 
-    public static final MapCodec<IntegratedAirDuctBlock> CODEC = simpleCodec(IntegratedAirDuctBlock::new);
+    public static final MapCodec<CoolingAirDuctBlock> CODEC = simpleCodec(CoolingAirDuctBlock::new);
 
     /** 贴附面（放置时 = 点击面） */
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
@@ -79,7 +79,7 @@ public class IntegratedAirDuctBlock extends DirectionalBlock implements IWrencha
         return map;
     }
 
-    public IntegratedAirDuctBlock(BlockBehaviour.Properties properties) {
+    public CoolingAirDuctBlock(BlockBehaviour.Properties properties) {
         super(properties);
         registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(AXIS_ALONG_FIRST, false));
     }
@@ -121,10 +121,10 @@ public class IntegratedAirDuctBlock extends DirectionalBlock implements IWrencha
     }
 
     /**
-     * goggle tooltip 代理：整合气道贴附在引擎模块（核心成员 / 燃烧室）上时，tooltip 源代理到整条引擎
+     * goggle tooltip 代理：冷却气道贴附在引擎模块（核心成员 / 燃烧室）上时，tooltip 源代理到整条引擎
      * controller；未连接任何核心时返回自身（无 BE → 不显示）。
      * <p>代理时在 controller 上记录悬停方块（{@link EngineCoreBlockEntity#markHoveredModule}），
-     * 供 {@code addToGoggleTooltip} 按悬停方块分流——整合气道显示全量引擎 tooltip（保持既有行为）。</p>
+     * 供 {@code addToGoggleTooltip} 按悬停方块分流——冷却气道显示专属精简 tooltip（温度 + 冷却风门）。</p>
      */
     @Override
     public BlockPos getInformationSource(Level level, BlockPos pos, BlockState state) {
