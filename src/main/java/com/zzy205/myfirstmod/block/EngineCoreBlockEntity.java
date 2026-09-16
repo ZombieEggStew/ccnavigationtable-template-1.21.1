@@ -360,7 +360,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         boolean prevRunning = running;
         float prevCapacity = moduleCapacity;
 
-        boolean overstressed = isOverStressed();
         ModuleScan scan = scanModule();
         // P6 单燃料制：流体/蒸汽物理排斥 —— 模块同时挂有两类燃烧室（旧档/蓝图/命令残留）时，
         // 只让多数派类型工作，少数派忽略（不发电/不消耗/不产热/不计容量）；平局流体优先。
@@ -422,7 +421,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // !sourcesAllFailed = 全源失败等待重扫期间不补料（避免每 tick 扫空表）
         int runningFluid = 0;
         float fluidCapacity = 0;
-        if (heatAllowed && !fluidChambers.isEmpty() && !overstressed) {
+        // P3 方案 C：过载不再停烧（对齐 Create）——过载时照常燃烧/发电，网络红字提示；消除「过载→容量归零→解除过载」自激振荡
+        if (heatAllowed && !fluidChambers.isEmpty()) {
             if (fluidFuelReserve <= 0f && efficiency > 0f && !sourcesAllFailed)
                 fluidFuelReserve += drainFluidFuelBatch(fluidChambers.size());
             if (fluidFuel != null && fluidFuelReserve > 0f) {
@@ -445,7 +445,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // 补不到才停烧/停机（不因源消失立即停机）。
         int runningSteam = 0;
         boolean waterOk = false;
-        if (heatAllowed && !steamChambers.isEmpty() && !overstressed) {
+        // P3 方案 C：同流体室——过载不再停烧（对齐 Create），照常烧水/烧燃料，网络红字提示
+        if (heatAllowed && !steamChambers.isEmpty()) {
             // 水储备：空才补一批（批次 = 室数×K mb，接受部分量；头罐失败即时切下一个）；油门 0 不抽。
             // !sourcesAllFailed = 全源失败等待重扫期间不补料（避免每 tick 扫空表）
             if (waterReserve <= 0f && efficiency > 0f && !sourcesAllFailed)
@@ -492,7 +493,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // 流体引擎维持原条件（有运行燃烧室，不要求水）。
         boolean steamWaterReady = !steamEngine || waterReserve > 0f;
         // P4：throttle=0（效率=0）→ 停机（不发电；throttle=0 时容量/消耗/发热全为 0，避免"空转"假象）
-        running = !overstressed && !overheated && efficiency > 0f && steamReady && steamWaterReady
+        // P3 方案 C：running 不再要求 !overstressed——过载是网络状态不是引擎状态（对齐 Create：过载照常运行烧油，
+        // 网络红字提示；容量不随过载归零 → 无「停机→解除过载→重启」自激振荡）
+        running = !overheated && efficiency > 0f && steamReady && steamWaterReady
                 && (runningTotal > 0 || steamEngine);
         // 蒸汽容量 = 运行状态下的全部蒸汽室（余热运转同样满出力，容量不受燃料储备限制）；暖机/停机 = 0
         float steamCapacityChambers = steamEngine && running ? steamChambers.size()
@@ -1826,6 +1829,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 return false;
             return controller.addToGoggleTooltip(tooltip, isPlayerSneaking);
         }
+        // P3 方案 C：网络过载红字提示（对齐 Create——引擎照常运行烧油，只在 goggle 顶部红字提示；
+        // 客户端 isOverStressed() 由同步的 capacity/stress 派生，见 Create KineticBlockEntity.read）
+        if (isOverStressed()) {
+            tooltip.add(Component.literal("    ")
+                    .append(Component.translatable("tooltip.ccpe.engine.status.overloaded").withStyle(ChatFormatting.RED)));
+        }
         try {
             Block hovered = level != null && level.isClientSide ? hoveredSourceBlock : null;
             if (hovered == MyModBlocks.steam_power_chamber.get()) {
@@ -2031,7 +2040,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
         // 不调用 super.addToGoggleTooltip：Create 动力方默认 goggle 会加「容量提供 / 应力影响」行，
         // 用户要求精简 tooltip —— 全部应力条目移除（核心 tooltip 的应力行也已移除）。
-        // 状态行档位（仅流体引擎；蒸汽走暖机/正常）：停机（!running：油门 0/缺燃料/缺水/过载）/
+        // 状态行档位（仅流体引擎；蒸汽走暖机/正常）：停机（!running：油门 0/缺燃料/缺水）/
         // 过冷(<~97) / 正常(97~145) / 高效(145~165 经济带) / 正常(165~200) / 即将过热(200~220) / 过热锁定(≥220，滞回 200 解锁)
         String statusKey;
         ChatFormatting statusColor;

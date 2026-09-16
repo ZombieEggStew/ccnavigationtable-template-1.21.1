@@ -109,6 +109,7 @@ public final class FlightDataRecorder {
             "pedCh", "pedL", "pedR",
             "joy1Ch", "joy1X", "joy1Y", "joy1XA", "joy1YA",
             "joyCh", "joyX", "joyY", "joyXA", "joyYA",
+            "joy3Ch", "joy3X", "joy3Y", "joy3XA", "joy3YA",
             "thrCh", "thrAxis", "thrGear", "thrFwd", "thrBack",
             "thr2Ch", "thr2Axis", "thr2Center", "thr2Up", "thr2Down"
     };
@@ -584,6 +585,18 @@ public final class FlightDataRecorder {
             f.add(n(joy2.getJoystick2AxisY()));
             f.add(joy2.isJoystick2XActive() ? "1" : "0");
             f.add(joy2.isJoystick2YActive() ? "1" : "0");
+        } else {
+            f.add("0"); f.add("0"); f.add("0"); f.add("0"); f.add("0");
+        }
+
+        // 操纵杆3（原始操纵杆换皮版）：joy3Ch joy3X joy3Y joy3XA joy3YA
+        ControlDeskBlockEntity joy3 = firstDeskWith(desks, ControlDeskBlockEntity.ControlType.JOYSTICK_3);
+        if (joy3 != null) {
+            f.add(String.valueOf(joy3.getChannel()));
+            f.add(n(joy3.getJoystick3AxisX()));
+            f.add(n(joy3.getJoystick3AxisY()));
+            f.add(joy3.isJoystick3XActive() ? "1" : "0");
+            f.add(joy3.isJoystick3YActive() ? "1" : "0");
         } else {
             f.add("0"); f.add("0"); f.add("0"); f.add("0"); f.add("0");
         }

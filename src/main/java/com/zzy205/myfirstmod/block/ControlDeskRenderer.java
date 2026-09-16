@@ -42,6 +42,8 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
     private final Map<BlockPos, float[]> smoothTilts = new HashMap<>();
     /** 每个控制台独立的摇杆2 动画倾斜值（度）{tiltX, tiltY}：指数逼近追逐目标（独立于 joystick） */
     private final Map<BlockPos, float[]> smoothTilt2s = new HashMap<>();
+    /** 每个控制台独立的操纵杆3 动画倾斜值（度）{tiltX, tiltY}：指数逼近追逐目标（独立于 joystick） */
+    private final Map<BlockPos, float[]> smoothTilt3s = new HashMap<>();
     /** 每个控制台独立的踏板动画平移量（块单位）{leftPx, rightPx}：指数逼近追逐目标 */
     private final Map<BlockPos, float[]> smoothPedals = new HashMap<>();
     /** 每个控制台独立的油门动画平移量（块单位）：指数逼近追逐目标（沿模型空间 x 轴） */
@@ -144,6 +146,13 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
         } else {
             smoothTilt2s.remove(be.getBlockPos());
         }
+        // joystick_3（原始操纵杆换皮版）：底座静态 + 手柄倾斜动画（与 joystick 同安装位，不平移、不绕盒心旋转）
+        if (be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_3)) {
+            renderPart(MyModPartialModels.CONTROL_DESK_JOYSTICK_3_BASE, state, facing, ms, bufferSource, light, 0);
+            renderJoystick3(be, state, facing, ms, bufferSource, light);
+        } else {
+            smoothTilt3s.remove(be.getBlockPos());
+        }
         // throttle_2：底座静态 + 手柄绕枢轴 (4,2,8) 旋转（总距杆类型，见 Throttle2Motion），放置变换与 throttle 同链
         if (be.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE_2)) {
             int backRot = be.getBackSlotRotation();
@@ -207,6 +216,28 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
                     .rotate(Mth.DEG_TO_RAD * tiltY, Direction.EAST)
                     .rotate(Mth.DEG_TO_RAD * tiltX, Direction.SOUTH)
                     .translate(-Joystick2Motion.PIVOT_X, -Joystick2Motion.PIVOT_Y, -Joystick2Motion.PIVOT_Z);
+        }
+        stick.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
+    }
+
+    /** 操纵杆3 手柄：facing 旋转 + 绕枢轴 (8,2,2) 倾斜（动画 = 指数逼近追逐服务端权威轴值 × 15°，逻辑照抄 {@link #renderJoystick}，见 {@link Joystick3Motion}）。 */
+    private void renderJoystick3(ControlDeskBlockEntity be, BlockState state, Direction facing,
+                                 PoseStack ms, MultiBufferSource bufferSource, int light) {
+        float[] smooth = smoothTilt3s.computeIfAbsent(be.getBlockPos(), k -> new float[2]);
+        float[] target = Joystick3Motion.targetDeg(be);
+        float frameTicks = Minecraft.getInstance().getTimer().getGameTimeDeltaTicks();
+        smooth[0] = JoystickTilt.approach(smooth[0], target[0], frameTicks);
+        smooth[1] = JoystickTilt.approach(smooth[1], target[1], frameTicks);
+        float tiltX = smooth[0];
+        float tiltY = smooth[1];
+
+        SuperByteBuffer stick = CachedBuffers.partial(MyModPartialModels.CONTROL_DESK_JOYSTICK_3_HANDLE, state);
+        stick.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
+        if (tiltX != 0f || tiltY != 0f) {
+            stick.translate(Joystick3Motion.PIVOT_X, Joystick3Motion.PIVOT_Y, Joystick3Motion.PIVOT_Z)
+                    .rotate(Mth.DEG_TO_RAD * tiltY, Direction.EAST)
+                    .rotate(Mth.DEG_TO_RAD * tiltX, Direction.SOUTH)
+                    .translate(-Joystick3Motion.PIVOT_X, -Joystick3Motion.PIVOT_Y, -Joystick3Motion.PIVOT_Z);
         }
         stick.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }

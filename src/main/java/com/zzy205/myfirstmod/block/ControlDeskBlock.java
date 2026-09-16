@@ -148,9 +148,10 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             }
             boolean docked = state.getValue(DOCKED);
             boolean baffled = state.getValue(BAFFLED);
-            // 拓展坞已装：禁止再装 PEDAL / JOYSTICK / 挡板（北侧空区已被桌面覆盖 / 形态互斥）
+            // 拓展坞已装：禁止再装 PEDAL / JOYSTICK / JOYSTICK_3 / 挡板（北侧空区已被桌面覆盖 / 形态互斥）
             if (docked && (type == ControlDeskBlockEntity.ControlType.PEDAL
                     || type == ControlDeskBlockEntity.ControlType.JOYSTICK
+                    || type == ControlDeskBlockEntity.ControlType.JOYSTICK_3
                     || type == ControlDeskBlockEntity.ControlType.BAFFLE)) {
                 if (player != null) {
                     player.displayClientMessage(
@@ -158,10 +159,11 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 }
                 return ItemInteractionResult.SUCCESS;
             }
-            // 挡板已装：禁止再装北侧控件 PEDAL / JOYSTICK 与同为形态安装的 DOCK（北侧区域已被立墙占据 / 形态互斥）；
+            // 挡板已装：禁止再装北侧控件 PEDAL / JOYSTICK / JOYSTICK_3 与同为形态安装的 DOCK（北侧区域已被立墙占据 / 形态互斥）；
             // 桌顶棋盘网格模块（joystick_2 / throttle / throttle_2 / monitor_2）不受影响，可与挡板共存
             if (baffled && (type == ControlDeskBlockEntity.ControlType.PEDAL
                     || type == ControlDeskBlockEntity.ControlType.JOYSTICK
+                    || type == ControlDeskBlockEntity.ControlType.JOYSTICK_3
                     || type == ControlDeskBlockEntity.ControlType.DOCK)) {
                 if (player != null) {
                     player.displayClientMessage(
@@ -268,6 +270,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         if (be instanceof ControlDeskBlockEntity desk) {
             boolean anyInstalled = desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_3)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
@@ -347,6 +350,10 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
                 && hitBounds(installBounds(ControlDeskBlockEntity.ControlType.JOYSTICK, facing, pos), click)) {
             return ControlDeskBlockEntity.ControlType.JOYSTICK;
+        }
+        if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_3)
+                && hitBounds(installBounds(ControlDeskBlockEntity.ControlType.JOYSTICK_3, facing, pos), click)) {
+            return ControlDeskBlockEntity.ControlType.JOYSTICK_3;
         }
         if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2)
                 && hitBounds(List.of(joystick2PlaceBox(desk, facing, pos)), click)) {
@@ -507,6 +514,9 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)) {
                 drops.add(new ItemStack(MyModItems.CONTROL_JOYSTICK.get()));
             }
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_3)) {
+                drops.add(new ItemStack(MyModItems.CONTROL_JOYSTICK_3.get()));
+            }
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2)) {
                 drops.add(new ItemStack(MyModItems.CONTROL_MONITOR_2.get()));
             }
@@ -556,6 +566,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
         return switch (type) {
             case PEDAL -> MyModItems.CONTROL_PEDAL.get();
             case JOYSTICK -> MyModItems.CONTROL_JOYSTICK.get();
+            case JOYSTICK_3 -> MyModItems.CONTROL_JOYSTICK_3.get();
             case MONITOR_2 -> MyModItems.CONTROL_MONITOR_2.get();
             case THROTTLE -> MyModItems.CONTROL_THROTTLE.get();
             case JOYSTICK_2 -> MyModItems.CONTROL_JOYSTICK_2.get();
@@ -570,6 +581,7 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
     private static ControlDeskBlockEntity.ControlType controlTypeOf(ItemStack stack) {
         if (stack.is(MyModItems.CONTROL_PEDAL.get())) return ControlDeskBlockEntity.ControlType.PEDAL;
         if (stack.is(MyModItems.CONTROL_JOYSTICK.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK;
+        if (stack.is(MyModItems.CONTROL_JOYSTICK_3.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK_3;
         if (stack.is(MyModItems.CONTROL_MONITOR_2.get())) return ControlDeskBlockEntity.ControlType.MONITOR_2;
         if (stack.is(MyModItems.CONTROL_THROTTLE.get())) return ControlDeskBlockEntity.ControlType.THROTTLE;
         if (stack.is(MyModItems.CONTROL_JOYSTICK_2.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK_2;
@@ -693,6 +705,8 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
                 result.add(PEDAL_RIGHT_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
             }
             case JOYSTICK -> result.add(JOYSTICK_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
+            // 操纵杆3（原始操纵杆换皮版）：与 JOYSTICK 同一安装位（北向基准 x5..11, z0..8）
+            case JOYSTICK_3 -> result.add(JOYSTICK_SHAPER.get(facing).move(pos.getX(), pos.getY(), pos.getZ()).bounds());
             case MONITOR_2, THROTTLE, JOYSTICK_2, THROTTLE_2 -> { /* 无安装位框（插槽已移除） */ }
             case DOCK -> result.add(dockPlaceBox(facing, pos));
             case BAFFLE -> result.add(bafflePlaceBox(facing, pos));

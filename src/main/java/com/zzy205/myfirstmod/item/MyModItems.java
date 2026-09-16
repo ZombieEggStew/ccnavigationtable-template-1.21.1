@@ -38,6 +38,9 @@ public class MyModItems {
             "throttle", () -> new Item(new Item.Properties()));
     public static final DeferredItem<Item> CONTROL_JOYSTICK_2 = ITEMS.register(
             "joystick_2", () -> new Item(new Item.Properties()));
+    // joystick_3 = 原始操纵杆（joystick）的换皮版：逻辑完全照抄 joystick（独立配置/轴值/输入租约），只换模型
+    public static final DeferredItem<Item> CONTROL_JOYSTICK_3 = ITEMS.register(
+            "joystick_3", () -> new Item(new Item.Properties()));
     public static final DeferredItem<Item> CONTROL_THROTTLE_2 = ITEMS.register(
             "throttle_2", () -> new Item(new Item.Properties()));
 

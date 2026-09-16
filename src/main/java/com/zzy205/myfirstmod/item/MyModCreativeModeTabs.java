@@ -43,6 +43,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModItems.CONTROL_PEDAL);
                 output.accept(MyModItems.CONTROL_JOYSTICK);
                 output.accept(MyModItems.CONTROL_JOYSTICK_2);
+                output.accept(MyModItems.CONTROL_JOYSTICK_3);
                 output.accept(MyModItems.CONTROL_THROTTLE);
                 output.accept(MyModItems.CONTROL_THROTTLE_2);
                 output.accept(MyModItems.CONTROL_MONITOR_2);

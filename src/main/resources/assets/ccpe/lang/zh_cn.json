@@ -78,6 +78,7 @@
   "tooltip.ccpe.engine.status.stopped": "停机",
   "tooltip.ccpe.engine.status.cold": "过冷",
   "tooltip.ccpe.engine.status.efficient": "高效",
+  "tooltip.ccpe.engine.status.overloaded": "网络过载",
   "tooltip.ccpe.engine.temperature": "温度：",
   "tooltip.ccpe.engine.overheated": "过热停机！",
   "tooltip.ccpe.engine.efficiency": "效率：",
@@ -161,6 +162,7 @@
   "item.ccpe.monitor_2": "监视器 2",
   "item.ccpe.throttle": "油门杆",
   "item.ccpe.joystick_2": "操纵杆 2",
+  "item.ccpe.joystick_3": "操纵杆 3",
   "item.ccpe.throttle_2": "油门杆 2",
 
   "gui.ccpe.control_desk.already_installed": "该控件已安装",
