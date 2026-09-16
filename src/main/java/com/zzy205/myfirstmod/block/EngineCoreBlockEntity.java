@@ -172,9 +172,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     // ---- P3：温度/冷却（牛顿冷却模型，方案见 memo/engine-module.md 关键机制 6） ----
     /** 过热阈值（°C）：T ≥ 此值硬停 */
-    public static final float OVERHEAT_TEMP = 200f;
-    /** 滞回恢复阈值（°C）：T ≤ 此值才允许重启（0.9×OVERHEAT_TEMP；与「即将过热」预警阈值同值 180） */
-    public static final float OVERHEAT_RESUME = 180f;
+    public static final float OVERHEAT_TEMP = 220f;
+    /** 滞回恢复阈值（°C）：T ≤ 此值才允许重启（≈0.9×OVERHEAT_TEMP；与「即将过热」预警阈值同值 200） */
+    public static final float OVERHEAT_RESUME = 200f;
     /** 海平面高度（Y，主世界默认 63）：Y≤此值环境温度恒 T_AMB_SEA */
     public static final float T_AMB_SEA_Y = 63f;
     /** 海平面环境温度（°C） */
@@ -2032,7 +2032,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // 不调用 super.addToGoggleTooltip：Create 动力方默认 goggle 会加「容量提供 / 应力影响」行，
         // 用户要求精简 tooltip —— 全部应力条目移除（核心 tooltip 的应力行也已移除）。
         // 状态行档位（仅流体引擎；蒸汽走暖机/正常）：停机（!running：油门 0/缺燃料/缺水/过载）/
-        // 过冷(<~97) / 正常(97~145) / 高效(145~165 经济带) / 正常(165~180) / 即将过热(180~200) / 过热锁定(≥200，滞回 180 解锁)
+        // 过冷(<~97) / 正常(97~145) / 高效(145~165 经济带) / 正常(165~200) / 即将过热(200~220) / 过热锁定(≥220，滞回 200 解锁)
         String statusKey;
         ChatFormatting statusColor;
         if (overheated) {
@@ -2046,8 +2046,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             // 停机：油门 0 / 缺燃料 / 缺水 / 过载等（不发电不消耗；温度档位无意义，优先显示停机）
             statusKey = "tooltip.ccpe.engine.status.stopped";
             statusColor = ChatFormatting.GRAY;
-        } else if (temperature >= OVERHEAT_TEMP * 0.9f) {
-            // 即将过热：T ≥ 180（0.9×200），与过热滞回解锁阈值同值
+        } else if (temperature >= OVERHEAT_RESUME) {
+            // 即将过热：T ≥ 200（滞回解锁阈值），200~220 预警区，≥220 过热锁定
             statusKey = "tooltip.ccpe.engine.status.warning";
             statusColor = ChatFormatting.GOLD;
         } else if (!steamEngine && temperature >= ENGINE_T_OPT - ECO_FLAT
