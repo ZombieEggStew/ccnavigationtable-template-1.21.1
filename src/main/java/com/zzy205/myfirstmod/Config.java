@@ -44,6 +44,12 @@ public class Config {
             .comment("Stress coefficient for the Transmission Peripheral in servo mode: actual stress = value × |real output RPM| (the output speed may be overridden/accelerated by setServoSpeed).")
             .defineInRange("servoModeStressImpact", 2.0, 0.0, 1024.0);
 
+    // ── 引擎源抽取批次倍数（P2.5 批量补料：批次 = 引擎数量 × K，进游戏时缓存一次）──
+    public static final ModConfigSpec.DoubleValue ENGINE_SOURCE_BATCH_MULTIPLIER = BUILDER
+            .comment("Engine source batch multiplier (K): each refill drains chamber count × K (water/fuel mb, or solid fuel items). "
+                    + "Higher = fewer refills/availability checks but larger single drains. Cached once when entering a world.")
+            .defineInRange("engineSourceBatchMultiplier", 1.0, 0.25, 64.0);
+
     // ── 调试：飞行数据记录器（方案 B）──
     public static final ModConfigSpec.BooleanValue FLIGHT_RECORDER_ENABLED = BUILDER
             .comment("Flight data recorder (debug): log per-tick body data for every FMC/AIC/INS-registered aircraft into <gameDir>/flight_logs/*.csv "

@@ -16,11 +16,11 @@ import net.neoforged.api.distmarker.OnlyIn;
  * <b>服务端（由引擎 controller 驱动，本 BE 不 tick）</b>：{@link #burnTicks} = 剩余燃烧时长
  * （burnTick 制，1 tick 烧 1 burnTick，等价原版熔炉速率）。来源：
  * <ul>
- *   <li>固体燃料：controller 并行燃烧批量抽取——全室空炉时一次从燃料箱抽 N 个（N = 蒸汽室个数，
- *       不足 N 不抽），每室 +1 个物品 burnTime（同燃同熄，燃烧时长 = 单个燃料时长）；</li>
- *   <li>流体燃料：controller 从源罐 drain（1mb = burn_ticks_per_bucket/1000 burnTick，如熔岩 20 tick/mb）。</li>
+ *   <li>固体燃料：controller 并行燃烧批量抽取——全室空炉时一次从燃料箱抽 N×K 个（N = 蒸汽室个数，
+ *       K = 配置批次倍数，不足切下一箱），每室 + 抽到数量/N × burnTime（同燃同熄，燃烧时长 = 单个燃料时长）；</li>
+ *   <li>流体燃料：controller 从源罐批量 drain（批次 mb → 每室 + 批次/N × burnTicksPerBucket/1000 burnTick）。</li>
  * </ul>
- * 水不可用时 controller 暂停消耗（burnTicks 冻结，不烧燃料）。burnTicks 持久化到 NBT。
+ * 水/燃料源断供时 controller 暂停消耗（burnTicks 冻结，储备烧完为止）。burnTicks 持久化到 NBT。
  * <p>
  * <b>客户端（活塞动画）</b>：父引擎（FACING 反方向贴的核心）运行时，活塞伸出量在
  * ±{@link #PISTON_STROKE}（±2/16 块，默认模型活塞在中间位）间正弦往复；<b>角度随引擎输出转速推进</b>
@@ -41,9 +41,6 @@ public class SteamPowerChamberBlockEntity extends BlockEntity {
 
     /** 剩余燃烧时长（burnTick 制，float 支持效率小数递减；服务端，仅 controller 读写；持久化） */
     public float burnTicks = 0f;
-
-    /** 流体燃料消耗累加器（mb 小数，服务端，仅 controller 读写；不持久化——重启丢失不足 1mb 无影响） */
-    public float fluidFuelDebt = 0f;
 
     public SteamPowerChamberBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.steam_power_chamber_entity.get(), pos, state);

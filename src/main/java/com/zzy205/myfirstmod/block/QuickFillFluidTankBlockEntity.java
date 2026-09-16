@@ -30,7 +30,23 @@ public class QuickFillFluidTankBlockEntity extends BlockEntity implements IHaveG
     /** 总容量：4000mb（4 桶） */
     public static final int CAPACITY = 4000;
 
-    private final FluidTank tank = new FluidTank(CAPACITY);
+    /**
+     * 内部流体槽（单槽 4000mb）。覆写 {@code onContentsChanged()}：任何来源的流体变化
+     * （玩家交互 / 引擎 drain / 流体管道）都推送客户端 BE 更新包——客户端 goggle tooltip
+     * 直读本槽（TankContent 同步），不推则显示旧量。
+     * 参考 create:fluid_tank：{@code SmartFluidTank} 变更回调 → {@code onFluidStackChanged}
+     * → {@code setChanged()} + {@code sendData()}（见
+     * {@code references/Create-mc1.21.1-dev/.../FluidTankBlockEntity.java}）。
+     */
+    private final FluidTank tank = new FluidTank(CAPACITY) {
+        @Override
+        protected void onContentsChanged() {
+            if (level != null && !level.isClientSide) {
+                setChanged();
+                level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
+            }
+        }
+    };
 
     public QuickFillFluidTankBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.quick_fill_fluid_tank_entity.get(), pos, state);

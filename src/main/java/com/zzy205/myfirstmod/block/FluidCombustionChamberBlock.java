@@ -126,6 +126,14 @@ public class FluidCombustionChamberBlock extends DirectionalBlock implements IWr
         return SHAPES.get(state.getValue(FACING));
     }
 
+    /** 邻居方块变化（罐/燃料箱贴到燃烧室旁）→ 让所属引擎 controller 去抖重建源列表 */
+    @Override
+    public void neighborChanged(BlockState state, Level level, BlockPos pos, Block neighborBlock,
+            BlockPos neighborPos, boolean movedByPiston) {
+        super.neighborChanged(state, level, pos, neighborBlock, neighborPos, movedByPiston);
+        EngineCoreBlockEntity.onModuleNeighborChanged(level, pos, neighborPos);
+    }
+
     // ── 方块实体 ──
 
     @Override

@@ -19,7 +19,6 @@ import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,10 +32,12 @@ import java.util.Map;
  *   "fluid": "minecraft:water",   // 流体 id
  *   "consumption": 1.0,           // 消耗速度：每个流体燃烧室 mb/s
  *   "heat": 1.0,                  // 发热倍率（P3 过热逻辑用；P1 只解析不消费）
- *   "stress": 1.0,                // 产生应力倍率（容量 = 燃烧室数 × 4096 × stress）
- *   "priority": 0.0               // 可选：多个燃料可用时的选择优先级（越大越优先）
+ *   "stress": 1.0                 // 产生应力倍率（容量 = 燃烧室数 × 4096 × stress）
  * }
  * </pre>
+ * <b>P2.5 起删除 priority 选择优先级</b>：多个燃料可用时按<b>源列表查找顺序</b>选（引擎扫邻居储罐
+ * 的顺序，见 {@code EngineCoreBlockEntity#rebuildSources}），不再按 priority 排序。旧数据包里的
+ * priority 字段忽略不读。
  * <b>P7 燃料体系分家：本表只服务流体燃烧室</b>（消耗/发热/应力）。蒸汽引擎燃料 = 纯原版解析：
  * 桶物品的原版熔炉燃烧时长（熔岩桶 20000 tick；添加蒸汽燃料 = 按原版为熔炉添加燃料），见 {@link #vanillaBucketBurnTicks}。
  * <b>P7 温度全部引擎固定</b>：过热 200°C / 过冷 100°C / 经济目标 155°C（{@code ENGINE_T_OPT}）——均不随燃料、不随油门。
@@ -52,11 +53,9 @@ public class EngineFuels {
     public static final String FOLDER = "engine_fuel";
 
     private static final Map<ResourceLocation, Entry> FUELS = new HashMap<>();
-    private static List<Entry> sorted = List.of();
 
     /** 单个燃料条目（仅流体燃烧室用；蒸汽引擎燃料走原版解析，见 {@link #vanillaBucketBurnTicks}） */
-    public record Entry(ResourceLocation fluid, float consumption, float heat, float stress,
-                        float priority) {}
+    public record Entry(ResourceLocation fluid, float consumption, float heat, float stress) {}
 
     public static void registerAddReloadListener(AddReloadListenerEvent event) {
         event.addListener(new ReloadListener());
@@ -81,11 +80,6 @@ public class EngineFuels {
         if (bucket == null || bucket == Items.AIR)
             return 0;
         return new ItemStack(bucket).getBurnTime(RecipeType.SMELTING);
-    }
-
-    /** 按 priority 降序（其次 id 升序）的燃料表，即"第一个可用燃料"的选择顺序 */
-    public static List<Entry> sortedByPriority() {
-        return sorted;
     }
 
     /** 已加载燃料数量（调试用） */
@@ -115,18 +109,15 @@ public class EngineFuels {
                     float consumption = json.get("consumption").getAsFloat();
                     float heat = json.has("heat") ? json.get("heat").getAsFloat() : 1f;
                     float stress = json.has("stress") ? json.get("stress").getAsFloat() : 1f;
-                    float priority = json.has("priority") ? json.get("priority").getAsFloat() : 0f;
-                    parsed.put(fluid, new Entry(fluid, consumption, heat, stress, priority));
+                    parsed.put(fluid, new Entry(fluid, consumption, heat, stress));
                 } catch (Exception ex) {
                     LOGGER.error("Failed to parse engine fuel {}", e.getKey(), ex);
                 }
             }
             FUELS.clear();
             FUELS.putAll(parsed);
-            sorted = new ArrayList<>(FUELS.values());
-            sorted.sort(Comparator.comparingDouble(Entry::priority).reversed()
-                    .thenComparing(Entry::fluid));
-            LOGGER.info("[EngineFuels] reload: loaded {} fuels {}", sorted.size(), sorted.stream().map(Entry::fluid).toList());
+            LOGGER.info("[EngineFuels] reload: loaded {} fuels {}", FUELS.size(),
+                    FUELS.values().stream().map(Entry::fluid).toList());
         }
     }
 }

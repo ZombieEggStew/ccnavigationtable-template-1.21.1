@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod;
 
 import com.mojang.logging.LogUtils;
 import com.tterrag.registrate.Registrate;
+import com.zzy205.myfirstmod.block.EngineCoreBlockEntity;
 import com.zzy205.myfirstmod.block.EngineFuels;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
@@ -111,6 +112,8 @@ public class CCPeripheralExtender {
         SensorSystemAPI.refreshAeroConfig();
         SensorSystemAPI.refreshPressureCurve(event.getServer().overworld());
         SensorSystemAPI.refreshUniversalDrag(event.getServer().overworld());
+        // 引擎源抽取批次倍数（K）：进游戏缓存一次（避免每 tick 读配置）；批次 = 引擎数量 × K
+        EngineCoreBlockEntity.SOURCE_BATCH_MULTIPLIER = Config.ENGINE_SOURCE_BATCH_MULTIPLIER.get().floatValue();
     }
 
     /** 服务器停止（关世界/回主菜单）：清空静态全局频道注册表，避免跨世界残留占用频道。 */

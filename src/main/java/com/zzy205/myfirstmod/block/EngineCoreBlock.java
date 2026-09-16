@@ -77,6 +77,18 @@ public class EngineCoreBlock extends RotatedPillarKineticBlock implements IBE<En
         super.onRemove(state, level, pos, newState, isMoving);
     }
 
+    /**
+     * 邻居方块变化（放置/拆除/状态改变）→ 让整条引擎 controller 去抖重建源列表
+     * （罐/燃料箱贴到核心或燃烧室旁时立即被发现；P2.5 源列表事件化，见
+     * {@code EngineCoreBlockEntity#onModuleNeighborChanged}）。
+     */
+    @Override
+    public void neighborChanged(BlockState state, Level level, BlockPos pos, Block neighborBlock,
+            BlockPos neighborPos, boolean movedByPiston) {
+        super.neighborChanged(state, level, pos, neighborBlock, neighborPos, movedByPiston);
+        EngineCoreBlockEntity.onModuleNeighborChanged(level, pos, neighborPos);
+    }
+
     // ================= 延伸放置（P0） =================
 
     @Override

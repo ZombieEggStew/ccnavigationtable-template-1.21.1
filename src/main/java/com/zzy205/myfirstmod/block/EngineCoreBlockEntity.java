@@ -70,13 +70,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * </ul>
  * 燃烧发电（仅 controller tick，零流体缓存）：
  * <ul>
- *   <li>流体燃烧室：每室消耗燃料表流体的 consumption mb/s（fuelDebt 累加器 → 从源罐 drain 1mb）；
- *       容量 = 室数 × 4096 × stress 倍率；</li>
- *   <li>蒸汽动力室：水（1mb/s/室 × 油门，从源罐 drain）+ 燃料（burnTick 制，每秒烧 油门 个 burnTick，
+ *   <li>流体燃烧室：每室消耗燃料表流体的 consumption mb/s（流体燃料储备 → 批量补料，批次 = 室数×K mb）；</li>
+ *   <li>蒸汽动力室：水（1mb/s/室 × 油门，水储备 → 批量补料）+ 燃料（burnTick 制，每秒烧 油门 个 burnTick，
  *       25% 油门燃料耐用 4 倍——真实蒸汽车节流阀语义：消耗 ∝ 蒸汽流量）——
- *       流体燃料按 burn_ticks_per_bucket 从源罐抽；<b>流体燃料优先，流体不可用时</b>从模块邻居燃料箱
- *       （quick_fill_fuel_vault 等 ItemHandler 容器）自动抽取固体燃料（+物品 burnTime，缓存源坐标 + 冷却重扫，
- *       参考流体源罐模式）；水不可用时暂停（不烧）；</li>
+ *       流体燃料按 burn_ticks_per_bucket 批量抽；<b>流体燃料优先，流体不可用时</b>从模块邻居燃料箱
+ *       （quick_fill_fuel_vault 等 ItemHandler 容器）批量抽固体燃料（+物品 burnTime）；</li>
+ *   <li>源抽取（P2.5）：事件化重建源列表（onLoad / 方块 neighborChanged / 连接性变化，去抖 10 tick；
+ *       全源失败延迟 20 tick 重扫），从列表头一直抽、失败即时切下一个；批次倍数 K 配置进游戏缓存。</li>
  *   <li>定距桨单杆模型（P4 定稿）：转速 = 油门 × {@link #GENERATED_SPEED}（0~256 线性，100% 油门 = 256rpm/满应力）；
  *       总容量 = 两类运行室贡献之和 × 油门，与转速同比例缩放（过载比例不随油门变）。</li>
  * </ul>
@@ -112,32 +112,53 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected boolean running = false;
     /** 模块总容量（SU，当前转速下）＝运行燃烧室数 × 4096 × 燃料 stress 倍率 */
     protected float moduleCapacity = 0;
-    /** 燃料消耗累加器（0.05mb/t = 1mb/s，≥1 才从源罐 drain 1mb，零缓存） */
-    protected float fuelDebt = 0f;
-    /** 当前燃料流体（缓存，供 drain 使用） */
-    protected FluidStack fuelFluid = FluidStack.EMPTY;
-    /** 当前燃料源罐位置（缓存，失效重扫） */
-    protected BlockPos fuelSourcePos;
-    /** 空转重扫冷却（无燃料时避免每 tick 全量扫描源罐） */
-    protected int fuelRescanCooldown = 0;
 
-    // ---- P2：蒸汽室状态（仅 controller 计算；水/蒸汽流体燃料零缓存） ----
-    /** 水源罐位置（缓存，失效重扫；蒸汽室共享） */
-    protected BlockPos waterSourcePos;
-    /** 水源重扫冷却 */
-    protected int waterRescanCooldown = 0;
-    /** 水消耗累加器（每蒸汽室 1mb/s = 0.05mb/t，≥1 才 drain 1mb） */
-    protected float waterDebt = 0f;
+    // ---- P2.5：源列表 + 储备（transient，事件化重建；方案见 memo/engine-module.md 关键机制 7.3） ----
+    /** 引擎源抽取批次倍数（K，进游戏缓存一次）：批次 = 引擎数量 × K（水/流体燃料 mb、固体燃料 个）。
+     *  配置见 {@code Config.ENGINE_SOURCE_BATCH_MULTIPLIER}，由 {@code CCPeripheralExtender#onServerStarting} 写入。 */
+    public static float SOURCE_BATCH_MULTIPLIER = 1f;
+
+    /** 水源罐列表（含原版水的流体罐；查找序 = scanModule 邻居枚举序） */
+    protected List<BlockPos> waterSources = List.of();
+    /** 当前水源列表游标（drain 失败即时切下一个） */
+    protected int waterSourceIdx = 0;
+    /** 流体室燃料源列表（pos + datapack 条目；查找序） */
+    protected List<FuelSource> fluidFuelSources = List.of();
+    /** 当前流体室燃料源游标 */
+    protected int fluidFuelSourceIdx = 0;
+    /** 蒸汽室流体燃料源列表（pos + 流体 + 每桶原版燃烧 tick；查找序） */
+    protected List<SteamFuelSource> steamFuelSources = List.of();
+    /** 当前蒸汽室流体燃料源游标 */
+    protected int steamFuelSourceIdx = 0;
+    /** 蒸汽室固体燃料源（燃料箱）列表（查找序） */
+    protected List<BlockPos> solidFuelSources = List.of();
+    /** 当前固体燃料箱游标 */
+    protected int solidFuelSourceIdx = 0;
+    /** 水储备（mb，蒸汽室共享；批次补料，消耗 ∝ 油门；>0 = 有水可烧） */
+    protected float waterReserve = 0f;
+    /** 流体室燃料储备（mb；批次补料） */
+    protected float fluidFuelReserve = 0f;
+    /** 当前活动流体室燃料条目（最近一次成功补料的源决定；储备耗尽后由下次补料重选） */
+    protected EngineFuels.Entry fluidFuel = null;
+    /** 源列表需要重建（事件：onLoad / 邻居变化去抖到期 / 连接性变化 / 全失败延迟重扫） */
+    protected boolean sourcesDirty = false;
+    /** 全源失败等待重扫中：置位期间不尝试补料（避免每 tick 扫空表）；重建/新事件后复位 */
+    protected boolean sourcesAllFailed = false;
+    /** 源列表重建倒计时（邻居变化去抖 / 全失败延迟重扫用） */
+    protected int sourcesRescanCooldown = 0;
+    /** 邻居变化去抖 tick（方块 neighborChanged 去抖后重建源列表） */
+    private static final int SOURCES_DEBOUNCE_TICKS = 10;
+    /** 全部源不可用后的延迟重扫 tick（避免频繁空扫） */
+    private static final int SOURCES_RESCAN_TICKS = 20;
+
+    /** 流体室燃料源：位置 + 对应 datapack 燃料条目 */
+    protected record FuelSource(BlockPos pos, EngineFuels.Entry entry) {}
+
+    /** 蒸汽室流体燃料源：位置 + 流体 + 每桶原版熔炉燃烧 tick（P7 纯原版解析，如熔岩 20000） */
+    protected record SteamFuelSource(BlockPos pos, FluidStack fluid, int burnTicksPerBucket) {}
+
     /** 蒸汽室当前流体燃料（缓存，供 drain 使用；P7 = 纯原版解析，无 datapack 条目） */
     protected FluidStack steamFuelFluid = FluidStack.EMPTY;
-    /** 蒸汽室流体燃料源罐位置（缓存，失效重扫） */
-    protected BlockPos steamFuelSourcePos;
-    /** 蒸汽室流体燃料重扫冷却 */
-    protected int steamFuelRescanCooldown = 0;
-    /** 蒸汽室固体燃料源（燃料箱）位置（缓存，失效重扫；流体燃料不可用时的兜底燃料；各蒸汽室共享） */
-    protected BlockPos solidFuelSourcePos;
-    /** 固体燃料源重扫冷却 */
-    protected int solidFuelRescanCooldown = 0;
 
     // ---- 蒸汽室燃料显示（Goggle 燃料行；服务端每 tick 计算，NBT 同步客户端，参考 simulated portable_engine）----
     /** 蒸汽室当前燃料类型（服务端权威）："none"（无储备）/"fluid"（最后靠流体 feed 补燃料）/"solid"（最后靠固体 pull 补燃料） */
@@ -377,98 +398,72 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         float mixtureHeatFactor = steamEngine ? 1f : heatFactor(effectiveMixture);
         lastHeatFactor = mixtureHeatFactor; // P7：同步给 Goggle 发热系数行（服务端权威）
 
-        // 流体燃烧室（P1）：燃料表第一个可用流体；每室 consumption mb/s × 效率 × 杆值 × 经济 × 过冷（P7，蒸汽引擎无流体室 → 跳过扫描）
+        // 源列表重建调度（方案 A：scanModule 每 tick 枚举邻居当安全网；重建事件驱动——
+        // onLoad / 方块 neighborChanged / 连接性变化 → markSourcesDirty；全源失败 → scheduleSourcesRescan）
+        if (sourcesDirty && --sourcesRescanCooldown <= 0) {
+            sourcesDirty = false;
+            rebuildSources(neighbors);
+        }
+        // 流体燃烧室（P1/P2.5 批量）：储备空才补料（批次 = 室数×K mb），running = 储备>0 且燃料条目已知；
+        // 每室 consumption mb/s × 效率 × 杆值 × 经济 × 过冷（P7，蒸汽引擎无流体室 → 跳过）。
+        // !sourcesAllFailed = 全源失败等待重扫期间不补料（避免每 tick 扫空表）
         int runningFluid = 0;
         float fluidCapacity = 0;
-        EngineFuels.Entry fluidFuel = heatAllowed && !fluidChambers.isEmpty() ? findFuel(neighbors) : null;
-        if (!fluidChambers.isEmpty() && fluidFuel != null && !overstressed) {
-            runningFluid = fluidChambers.size();
-            fluidCapacity = runningFluid * BASE_STRESS_PER_CHAMBER * fluidFuel.stress();
-            // P7 经济区（只省油耗、绝不反哺 Q_heat）：eco = 双因素 AND 门控 + 解锁进度（上 tick 值，1 tick 滞后可忽略）
-            // P7 过冷惩罚：cold = 1 + COLD_K×(ENGINE_MIN_WORK_TEMP−T)/ENGINE_MIN_WORK_TEMP（刚开机低温 = 油耗惩罚，小油门暖机；只乘油耗）
-            // P7 奖励驱动：油耗 = 杆值 × eco × cold（自动富油/heatFactor 不进油耗；高空不拉稀 = ×1.0 无惩罚）
-            float coldPen = coldPenalty(temperature);
-            fuelDebt += runningFluid * fluidFuel.consumption() * efficiency * leverMixture
-                    * (1f - (1f - ECO_MIN) * ecoProgress) * coldPen / 20f;
-            while (fuelDebt >= 1f) {
-                if (drainFuel(1)) {
-                    fuelDebt -= 1f;
-                } else {
-                    runningFluid = 0;
-                    fluidCapacity = 0;
-                    fuelDebt = 0;
-                    break;
-                }
+        if (heatAllowed && !fluidChambers.isEmpty() && !overstressed) {
+            if (fluidFuelReserve <= 0f && efficiency > 0f && !sourcesAllFailed)
+                fluidFuelReserve += drainFluidFuelBatch(fluidChambers.size());
+            if (fluidFuel != null && fluidFuelReserve > 0f) {
+                runningFluid = fluidChambers.size();
+                fluidCapacity = runningFluid * BASE_STRESS_PER_CHAMBER * fluidFuel.stress();
+                // P7 经济区（只省油耗、绝不反哺 Q_heat）：eco = 双因素 AND 门控 + 解锁进度（上 tick 值，1 tick 滞后可忽略）
+                // P7 过冷惩罚：cold = 1 + COLD_K×(ENGINE_MIN_WORK_TEMP−T)/ENGINE_MIN_WORK_TEMP（刚开机低温 = 油耗惩罚，小油门暖机；只乘油耗）
+                // P7 奖励驱动：油耗 = 杆值 × eco × cold（自动富油/heatFactor 不进油耗；高空不拉稀 = ×1.0 无惩罚）
+                float coldPen = coldPenalty(temperature);
+                fluidFuelReserve -= runningFluid * fluidFuel.consumption() * efficiency * leverMixture
+                        * (1f - (1f - ECO_MIN) * ecoProgress) * coldPen / 20f;
+            } else if (fluidFuelReserve <= 0f) {
+                fluidFuel = null; // 储备耗尽且补不到 → 无活动燃料
             }
-        } else {
-            fuelDebt = 0;
         }
 
-        // 蒸汽动力室（P2/P2.5）：水 + 燃料（burnTick 制，水在才烧；水不可用整类暂停）。
-        // 燃料来源：流体燃料优先（P7 纯原版解析：桶物品熔炉燃烧时长）；流体不可用 → 从模块邻居
-        // 燃料箱（quick_fill_fuel_vault 等 ItemHandler 容器）自动抽取 1 个熔炉燃料物品（固体兜底）。
-        // 燃烧倒计时独立于燃料源：燃料箱/源罐被拆时，已有储备（burnTicks）仍继续燃烧，
-        // 倒计时结束才尝试再抽，抽不到才停烧（不因源消失立即停机）。
+        // 蒸汽动力室（P2/P2.5 批量）：水储备 + 燃料储备（burnTick 制）。
+        // 燃料来源：流体燃料优先（P7 纯原版解析：桶物品熔炉燃烧时长）；流体不可用 → 固体燃料箱兜底。
+        // 储备倒计时独立于燃料源：燃料箱/源罐被拆时，已有储备（burnTicks / 水储备）仍继续燃烧/运转，
+        // 补不到才停烧/停机（不因源消失立即停机）。
         int runningSteam = 0;
-        boolean waterOk = !overstressed && heatAllowed && waterAvailable(neighbors);
-        int steamFuelBurnTicks = heatAllowed && !steamChambers.isEmpty() ? findSteamFuelBurnTicks(neighbors) : 0;
-        // 固体燃料可用性：仅流体不可用时才判定（流体优先）；缓存燃料箱逻辑 = 自动抽取流缓存储罐同款
-        // （源坐标 + 冷却重扫，见 solidFuelAvailable）
-        boolean steamSolidFuelOk = steamFuelBurnTicks <= 0 && heatAllowed && !steamChambers.isEmpty()
-                && solidFuelAvailable(neighbors);
-        // 门控 = 水 OK 且（流体可用 || 固体可用 || 任一室仍有储备）——储备倒计时独立于燃料源存在性
-        boolean steamHasReserve = hasSteamReserve(steamChambers);
-        if (waterOk && (steamFuelBurnTicks > 0 || steamSolidFuelOk || steamHasReserve)) {
-            // P6 Plan B：蒸汽无经济区（温度钉在 BOILER_T_OPT 自调节 → 无折扣无惩罚，系数恒 1.0）
-            // P2.5 并行燃烧：N = 蒸汽室个数，一次抽 N 个燃料（不足不抽），每室 1 个同燃同熄——
-            // 燃烧时长 = 单个燃料的时长（每室独立 burnTicks 倒计时，节奏相同）。
-            // 真实蒸汽车节流阀语义：消耗 ∝ 油门（蒸汽流量）——每秒烧 油门 个 burnTick、
-            // 水/流体同缩（25% 油门 = 1/4 蒸汽流量 = 燃料耐用 4 倍）；油门 0 = 停机不烧油（冻结）。
-            if (steamFuelBurnTicks > 0) {
-                // 流体燃料（P7 纯原版解析）：每 tick 每室消耗 1000/原版桶燃烧时长 × 油门 mb
-                // （熔岩桶 20000 → 100% 油门 0.05mb/t = 1mb/s，1mb = 20 burnTick）；累计 ≥1mb 从源罐抽
+        boolean waterOk = false;
+        if (heatAllowed && !steamChambers.isEmpty() && !overstressed) {
+            // 水储备：空才补一批（批次 = 室数×K mb，接受部分量；头罐失败即时切下一个）；油门 0 不抽。
+            // !sourcesAllFailed = 全源失败等待重扫期间不补料（避免每 tick 扫空表）
+            if (waterReserve <= 0f && efficiency > 0f && !sourcesAllFailed)
+                waterReserve += drainWaterBatch(steamChambers.size());
+            waterOk = waterReserve > 0f;
+            if (waterOk) {
+                // 燃料：并行燃烧，全室空炉才补（流体燃料优先 → 固体兜底；油门 0 不抽；
+                // 全源失败等待重扫期间不补料）
+                if (steamAllChambersEmpty(steamChambers) && efficiency > 0f && !sourcesAllFailed) {
+                    if (!refillSteamFluidFuel(steamChambers))
+                        tryPullSolidFuelBatch(steamChambers);
+                }
+                // 燃烧：各室并行倒计时（每秒烧 油门 个 burnTick → 25% 油门燃料耐用 4 倍，同燃同熄；
+                // Goggle 燃料行显示墙钟剩余秒 = burnTicks/(油门×20)）
                 for (BlockPos sp : steamChambers) {
                     if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
                         continue;
-                    be.fluidFuelDebt += 1000f / steamFuelBurnTicks * efficiency;
-                    while (be.fluidFuelDebt >= 1f) {
-                        if (drainSteamFluidFuel(1)) {
-                            be.fluidFuelDebt -= 1f;
-                            be.burnTicks += Math.max(1, Math.round(steamFuelBurnTicks / 1000f));
-                            steamFuelType = "fluid"; // 储备来源 = 流体（Goggle 燃料行）
+                    if (be.burnTicks > 0) {
+                        be.burnTicks -= efficiency;
+                        if (be.burnTicks <= 0)
                             be.setChanged();
-                        } else {
-                            be.fluidFuelDebt = 0;
-                            break;
-                        }
+                        runningSteam++;
                     }
                 }
-            } else if (steamAllChambersEmpty(steamChambers) && efficiency > 0f) {
-                // 固体燃料并行补料（流体不可用 + 全部室同时空炉）：一次抽 N 个熔炉燃料物品，
-                // 每室 +1 个物品的 burnTime；源不足 N 个 → 不抽取（整组断供不拆零）；油门 0 不抽
-                tryPullSolidFuelBatch(steamChambers);
-            }
-            // 燃烧：各室并行倒计时（每秒烧 油门 个 burnTick → 25% 油门燃料耐用 4 倍，同燃同熄；
-            // Goggle 燃料行显示墙钟剩余秒 = burnTicks/(油门×20)）
-            for (BlockPos sp : steamChambers) {
-                if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
-                    continue;
-                if (be.burnTicks > 0) {
-                    be.burnTicks -= efficiency;
-                    if (be.burnTicks <= 0)
-                        be.setChanged();
-                    runningSteam++;
-                }
-            }
-            if (runningSteam > 0) {
-                waterDebt += runningSteam * 0.05f * efficiency; // 1mb/s/室 × 油门（蒸汽流量 ∝ 油门）
-                while (waterDebt >= 1f) {
-                    if (drainWater(1)) {
-                        waterDebt -= 1f;
-                    } else {
-                        waterDebt = 0;
-                        break;
-                    }
+                // 耗水：1mb/s/室 × 油门（从水储备扣）
+                if (runningSteam > 0) {
+                    waterReserve -= runningSteam * 0.05f * efficiency;
+                    // 储备刚好耗尽 → 立即补一批（同一 tick 内补回，避免 running 判定出现 1 tick 空档
+                    // → 应力网络不闪断；补不到（全源失败）才真停机）
+                    if (waterReserve <= 0f && efficiency > 0f)
+                        waterReserve += drainWaterBatch(steamChambers.size());
                 }
             }
         }
@@ -479,10 +474,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         int runningTotal = runningFluid + runningSteam;
         // P6 Plan B：蒸汽锅炉暖机门控——T ≥ STEAM_MIN_WORK_TEMP 才「开始工作」（低于阈值只烧不发电，热机过程）
         boolean steamReady = !steamEngine || temperature >= STEAM_MIN_WORK_TEMP;
-        // P2.5：蒸汽运行条件 = 油门开启且温度 > 100（不再要求有燃料储备）——燃料耗尽但锅炉仍热
-        // （T ≥ 100°C）时靠余热继续发电，温度冷却到阈值以下才停机；流体引擎维持原条件（有运行燃烧室）。
+        // P2.5：蒸汽运行条件 = 油门开启且温度 > 100 且有水储备（有水储备才运行；余热运转同样需要水在）——
+        // 燃料耗尽但锅炉仍热（T ≥ 100°C）且水储备 > 0 时靠余热继续发电；缺水/温度冷却到阈值以下才停机；
+        // 流体引擎维持原条件（有运行燃烧室，不要求水）。
+        boolean steamWaterReady = !steamEngine || waterReserve > 0f;
         // P4：throttle=0（效率=0）→ 停机（不发电；throttle=0 时容量/消耗/发热全为 0，避免"空转"假象）
-        running = !overstressed && !overheated && efficiency > 0f && steamReady
+        running = !overstressed && !overheated && efficiency > 0f && steamReady && steamWaterReady
                 && (runningTotal > 0 || steamEngine);
         // 蒸汽容量 = 运行状态下的全部蒸汽室（余热运转同样满出力，容量不受燃料储备限制）；暖机/停机 = 0
         float steamCapacityChambers = steamEngine && running ? steamChambers.size()
@@ -563,13 +560,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             if (running != prevRunning) {
                 LOGGER.info("[EngineCore] {} running {} -> {} | fluid={} steam={} fuel={} water={} steamFuel={} solid={} T={}℃ overheated={} capacity={}",
                         worldPosition, prevRunning, running, runningFluid, runningSteam,
-                        fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterOk, steamFuelBurnTicks,
-                        solidFuelSourcePos != null, temperature, overheated, moduleCapacity);
+                        fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterReserve, steamFuelType,
+                        solidFuelSources.size(), temperature, overheated, moduleCapacity);
             } else if (!running && level.getGameTime() % 40 == 0) {
                 LOGGER.info("[EngineCore] {} idle | fluid={} steam={} fuel={} water={} steamFuel={} solid={} T={}℃ overheated={} ducts={} len={} speed={}",
                         worldPosition, fluidChambers.size(), steamChambers.size(),
-                        fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterOk, steamFuelBurnTicks,
-                        solidFuelSourcePos != null, temperature, overheated,
+                        fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterReserve, steamFuelType,
+                        solidFuelSources.size(), temperature, overheated,
                         scan.coolingDucts, length, getSpeed());
             }
         }
@@ -644,145 +641,197 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return ducts;
     }
 
-    /** 找流体燃烧室当前可用燃料：优先复用缓存的源罐；失效则按优先级全量重扫（带冷却） */
-    protected EngineFuels.Entry findFuel(List<BlockPos> neighbors) {
-        if (fuelSourcePos != null) {
-            IFluidHandler handler = fluidHandlerAt(fuelSourcePos);
-            if (handler != null) {
-                FluidStack stack = handler.getFluidInTank(0);
+    // ================= P2.5：源列表（事件化重建 + 批量补料） =================
+
+    /**
+     * 重建四类源列表（事件驱动：onLoad / 方块 neighborChanged / 连接性变化 → {@link #markSourcesDirty()}；
+     * 全源失败 → {@link #scheduleSourcesRescan()}）。按 scanModule 邻居枚举顺序（查找序）收集：
+     * <ul>
+     *   <li>水源：罐内为原版水的流体罐；</li>
+     *   <li>流体室燃料：罐内流体在 engine_fuel datapack 表中（P2.5 起不再按 priority，就按查找顺序）；</li>
+     *   <li>蒸汽室流体燃料：桶物品原版熔炉燃烧时长 &gt; 0（P7 纯原版解析）；</li>
+     *   <li>蒸汽室固体燃料：带 ItemHandler 且含可烧物品的容器（quick_fill_fuel_vault 等）。</li>
+     * </ul>
+     * 只走 capability，绝不直接改罐/容器 BE。列表 transient 不落盘。
+     */
+    protected void rebuildSources(List<BlockPos> neighbors) {
+        List<BlockPos> water = new ArrayList<>();
+        List<FuelSource> fluidFuelList = new ArrayList<>();
+        List<SteamFuelSource> steamFuelList = new ArrayList<>();
+        List<BlockPos> solid = new ArrayList<>();
+        for (BlockPos pos : neighbors) {
+            IFluidHandler fh = fluidHandlerAt(pos);
+            if (fh != null) {
+                FluidStack stack = fh.getFluidInTank(0);
                 if (!stack.isEmpty()) {
+                    if (stack.getFluid() == Fluids.WATER)
+                        water.add(pos);
+                    int burn = EngineFuels.vanillaBucketBurnTicks(BuiltInRegistries.FLUID.getKey(stack.getFluid()));
+                    if (burn > 0)
+                        steamFuelList.add(new SteamFuelSource(pos, stack.copy(), burn));
                     EngineFuels.Entry entry = EngineFuels.get(stack.getFluid());
-                    if (entry != null) {
-                        fuelFluid = stack.copy();
-                        return entry;
-                    }
+                    if (entry != null)
+                        fluidFuelList.add(new FuelSource(pos, entry));
                 }
             }
-            fuelSourcePos = null;
+            IItemHandler ih = itemHandlerAt(pos);
+            if (ih != null && hasBurnableFuel(ih))
+                solid.add(pos);
         }
-
-        if (fuelRescanCooldown > 0) {
-            fuelRescanCooldown--;
-            return null;
-        }
-        fuelRescanCooldown = 10;
-
-        for (EngineFuels.Entry entry : EngineFuels.sortedByPriority()) {
-            for (BlockPos neighbor : neighbors) {
-                IFluidHandler handler = fluidHandlerAt(neighbor);
-                if (handler == null)
-                    continue;
-                FluidStack stack = handler.getFluidInTank(0);
-                if (stack.isEmpty())
-                    continue;
-                if (BuiltInRegistries.FLUID.getKey(stack.getFluid()).equals(entry.fluid())) {
-                    fuelSourcePos = neighbor;
-                    fuelFluid = stack.copy();
-                    return entry;
-                }
-            }
-        }
-        return null;
+        waterSources = water;
+        fluidFuelSources = fluidFuelList;
+        steamFuelSources = steamFuelList;
+        solidFuelSources = solid;
+        waterSourceIdx = fluidFuelSourceIdx = steamFuelSourceIdx = solidFuelSourceIdx = 0;
+        sourcesAllFailed = false; // 重建完成 → 解除「全源失败」等待（下 tick 即可重试补料）
     }
 
-    // ================= P2：蒸汽室（水 + 燃料） =================
+    /** 标记源列表需要重建（方块 neighborChanged）。去抖语义：已有排程则不再重置——
+     *  最后一次事件起 {@link #SOURCES_DEBOUNCE_TICKS} tick 重建（合并同一瞬间的连续事件，防邻居噪声饿死重建）。
+     *  新事件也复位「全源失败」等待（可能有新源出现，立即允许补料）。 */
+    protected void markSourcesDirty() {
+        sourcesAllFailed = false;
+        if (sourcesDirty && sourcesRescanCooldown > 0)
+            return;
+        sourcesDirty = true;
+        sourcesRescanCooldown = SOURCES_DEBOUNCE_TICKS;
+    }
 
-    /** 水是否可用：优先复用缓存的水源罐；失效则重扫（带冷却）。源 = 模块邻居中含原版水的罐 */
-    protected boolean waterAvailable(List<BlockPos> neighbors) {
-        if (waterSourcePos != null) {
-            IFluidHandler handler = fluidHandlerAt(waterSourcePos);
-            if (handler != null) {
-                FluidStack stack = handler.getFluidInTank(0);
-                if (!stack.isEmpty() && stack.getFluid() == Fluids.WATER)
-                    return true;
-            }
-            waterSourcePos = null;
-        }
+    /** 立即重建源列表（onLoad / 连接性变化：下 tick 就扫，不等去抖） */
+    protected void markSourcesDirtyNow() {
+        sourcesAllFailed = false;
+        sourcesDirty = true;
+        sourcesRescanCooldown = 1;
+    }
 
-        if (waterRescanCooldown > 0) {
-            waterRescanCooldown--;
-            return false;
-        }
-        waterRescanCooldown = 10;
+    /** 全部源不可用 → 延迟重扫（{@link #SOURCES_RESCAN_TICKS} tick 后重建源列表再试，避免频繁空扫）。
+     *  已有排程则不再重置（每 tick 的失败 drain 不会反复推迟重扫——否则永远不会执行）。 */
+    protected void scheduleSourcesRescan() {
+        if (sourcesAllFailed || (sourcesDirty && sourcesRescanCooldown > 0))
+            return;
+        sourcesAllFailed = true;
+        sourcesDirty = true;
+        sourcesRescanCooldown = SOURCES_RESCAN_TICKS;
+    }
 
-        for (BlockPos pos : neighbors) {
+    /** 批次流体量（mb）：引擎数量 × 配置倍数 K（进游戏缓存） */
+    private int batchMb(int chamberCount) {
+        return Math.max(1, Math.round(chamberCount * SOURCE_BATCH_MULTIPLIER));
+    }
+
+    /** 批次固体物品数（个）：引擎数量 × 配置倍数 K */
+    private int batchItems(int chamberCount) {
+        return Math.max(1, Math.round(chamberCount * SOURCE_BATCH_MULTIPLIER));
+    }
+
+    /**
+     * 从水源列表头 drain 一批水（批次 = 室数×K mb，接受部分量）；头罐失败/空/被拆 → 即时切下一个；
+     * 全部失败 → {@link #scheduleSourcesRescan()} 并返回 0。只走 capability。
+     */
+    protected float drainWaterBatch(int chamberCount) {
+        if (waterSources.isEmpty())
+            return 0f;
+        int batch = batchMb(chamberCount);
+        int n = waterSources.size();
+        for (int tries = 0; tries < n; tries++) {
+            BlockPos pos = waterSources.get(waterSourceIdx);
             IFluidHandler handler = fluidHandlerAt(pos);
-            if (handler == null)
+            if (handler == null) {
+                advanceWaterSource();
                 continue;
-            FluidStack stack = handler.getFluidInTank(0);
-            if (!stack.isEmpty() && stack.getFluid() == Fluids.WATER) {
-                waterSourcePos = pos;
+            }
+            FluidStack drained = handler.drain(new FluidStack(Fluids.WATER, batch), IFluidHandler.FluidAction.EXECUTE);
+            if (drained.getAmount() > 0)
+                return drained.getAmount(); // 部分接受：罐剩多少收多少
+            advanceWaterSource(); // 空 → 切下一个
+        }
+        scheduleSourcesRescan();
+        return 0f;
+    }
+
+    private void advanceWaterSource() {
+        if (!waterSources.isEmpty())
+            waterSourceIdx = (waterSourceIdx + 1) % waterSources.size();
+    }
+
+    /**
+     * 从流体室燃料源列表头 drain 一批（批次 = 室数×K mb，接受部分量）；头罐失败/空/被拆 → 即时切下一个；
+     * 成功时把 {@link #fluidFuel} 设为该源的燃料条目（P2.5：按查找顺序，不再按 priority）；
+     * 全部失败 → {@link #scheduleSourcesRescan()} 并返回 0。只走 capability。
+     */
+    protected float drainFluidFuelBatch(int chamberCount) {
+        if (fluidFuelSources.isEmpty())
+            return 0f;
+        int batch = batchMb(chamberCount);
+        int n = fluidFuelSources.size();
+        for (int tries = 0; tries < n; tries++) {
+            FuelSource src = fluidFuelSources.get(fluidFuelSourceIdx);
+            IFluidHandler handler = fluidHandlerAt(src.pos());
+            if (handler == null) {
+                advanceFluidFuelSource();
+                continue;
+            }
+            net.minecraft.world.level.material.Fluid fuel = BuiltInRegistries.FLUID.get(src.entry().fluid());
+            if (fuel == null) {
+                advanceFluidFuelSource();
+                continue;
+            }
+            FluidStack drained = handler.drain(new FluidStack(fuel, batch), IFluidHandler.FluidAction.EXECUTE);            if (drained.getAmount() > 0) {
+                fluidFuel = src.entry(); // 活动燃料 = 当前源条目
+                return drained.getAmount();
+            }
+            advanceFluidFuelSource();
+        }
+        scheduleSourcesRescan();
+        return 0f;
+    }
+
+    private void advanceFluidFuelSource() {
+        if (!fluidFuelSources.isEmpty())
+            fluidFuelSourceIdx = (fluidFuelSourceIdx + 1) % fluidFuelSources.size();
+    }
+
+    /**
+     * 蒸汽室流体燃料批量补料（并行燃烧同燃同熄）：从蒸汽流体燃料源列表头一次 drain 批次 mb，
+     * 每室 + 批次/N × burnTicksPerBucket/1000 burnTick（N = 蒸汽室数；1mb 熔岩 = 20 burnTick）；
+     * 头罐失败/空/被拆 → 即时切下一个；全部失败 → {@link #scheduleSourcesRescan()} 并返回 false。
+     * 只走 capability，绝不直接改罐 BE。调用前提：全室空炉 + 油门 > 0。
+     */
+    protected boolean refillSteamFluidFuel(List<BlockPos> steamChambers) {
+        if (steamFuelSources.isEmpty() || steamChambers.isEmpty())
+            return false;
+        int batch = batchMb(steamChambers.size());
+        int n = steamFuelSources.size();
+        for (int tries = 0; tries < n; tries++) {
+            SteamFuelSource src = steamFuelSources.get(steamFuelSourceIdx);
+            IFluidHandler handler = fluidHandlerAt(src.pos());
+            if (handler == null) {
+                advanceSteamFuelSource();
+                continue;
+            }
+            FluidStack drained = handler.drain(new FluidStack(src.fluid().getFluid(), batch), IFluidHandler.FluidAction.EXECUTE);
+            if (drained.getAmount() > 0) {
+                // 每室 + 实际抽到的 mb/N × burnTicksPerBucket/1000（部分接受；并行燃烧各室同值）
+                float addBurn = drained.getAmount() / (float) steamChambers.size() * src.burnTicksPerBucket() / 1000f;
+                for (BlockPos sp : steamChambers) {
+                    if (level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be) {
+                        be.burnTicks += Math.max(1, addBurn);
+                        be.setChanged();
+                    }
+                }
+                steamFuelType = "fluid"; // 储备来源 = 流体（Goggle 燃料行）
+                steamFuelFluid = drained.copy();
                 return true;
             }
+            advanceSteamFuelSource();
         }
+        scheduleSourcesRescan();
         return false;
     }
 
-    /** 从水源罐 drain 指定量（mb）；源罐失效返回 false */
-    protected boolean drainWater(int mb) {
-        if (waterSourcePos == null)
-            return false;
-        IFluidHandler handler = fluidHandlerAt(waterSourcePos);
-        if (handler == null) {
-            waterSourcePos = null;
-            return false;
-        }
-        return handler.drain(new FluidStack(Fluids.WATER, mb), IFluidHandler.FluidAction.EXECUTE).getAmount() >= mb;
-    }
-
-    /** 找蒸汽室当前可用流体燃料（P7 纯原版解析：桶物品原版熔炉燃烧时长 > 0）：缓存优先，失效重扫（带冷却）。
-     *  返回每桶燃烧 tick 数（熔岩桶 = 20000）；无可用燃料返回 0。不查 engine_fuel datapack（那是流体燃烧室的燃料表）。 */
-    protected int findSteamFuelBurnTicks(List<BlockPos> neighbors) {
-        if (steamFuelSourcePos != null) {
-            IFluidHandler handler = fluidHandlerAt(steamFuelSourcePos);
-            if (handler != null) {
-                FluidStack stack = handler.getFluidInTank(0);
-                if (!stack.isEmpty()) {
-                    int burn = EngineFuels.vanillaBucketBurnTicks(BuiltInRegistries.FLUID.getKey(stack.getFluid()));
-                    if (burn > 0) {
-                        steamFuelFluid = stack.copy();
-                        return burn;
-                    }
-                }
-            }
-            steamFuelSourcePos = null;
-        }
-
-        if (steamFuelRescanCooldown > 0) {
-            steamFuelRescanCooldown--;
-            return 0;
-        }
-        steamFuelRescanCooldown = 10;
-
-        // 扫模块邻居储罐：桶物品熔炉燃烧时长 > 0 的流体中，选燃烧最久者（原版燃料值权威）
-        int bestBurn = 0;
-        for (BlockPos pos : neighbors) {
-            IFluidHandler handler = fluidHandlerAt(pos);
-            if (handler == null)
-                continue;
-            FluidStack stack = handler.getFluidInTank(0);
-            if (stack.isEmpty())
-                continue;
-            int burn = EngineFuels.vanillaBucketBurnTicks(BuiltInRegistries.FLUID.getKey(stack.getFluid()));
-            if (burn > bestBurn) {
-                bestBurn = burn;
-                steamFuelSourcePos = pos;
-                steamFuelFluid = stack.copy();
-            }
-        }
-        return bestBurn;
-    }
-
-    /** 从蒸汽室流体燃料源罐 drain 指定量（mb）；源罐失效返回 false */
-    protected boolean drainSteamFluidFuel(int mb) {
-        if (steamFuelSourcePos == null)
-            return false;
-        IFluidHandler handler = fluidHandlerAt(steamFuelSourcePos);
-        if (handler == null) {
-            steamFuelSourcePos = null;
-            return false;
-        }
-        return handler.drain(new FluidStack(steamFuelFluid.getFluid(), mb), IFluidHandler.FluidAction.EXECUTE).getAmount() >= mb;
+    private void advanceSteamFuelSource() {
+        if (!steamFuelSources.isEmpty())
+            steamFuelSourceIdx = (steamFuelSourceIdx + 1) % steamFuelSources.size();
     }
 
     /** 从指定位置取 ItemHandler 能力（模块邻居容器：quick_fill_fuel_vault 等；只走 capability，绝不直接改容器 BE） */
@@ -795,49 +844,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         for (int slot = 0; slot < handler.getSlots(); slot++) {
             ItemStack stack = handler.getStackInSlot(slot);
             if (!stack.isEmpty() && stack.getBurnTime(RecipeType.SMELTING) > 0)
-                return true;
-        }
-        return false;
-    }
-
-    /**
-     * 蒸汽室固体燃料是否可用（仅流体燃料不可用时才调用——流体优先）：
-     * 优先复用缓存的燃料箱；源失效/已空则带冷却重扫（同 {@code steamFuelSourcePos} 模式）。
-     * 源 = 模块邻居中带 ItemHandler 且含熔炉燃料物品（burnTime > 0）的容器（quick_fill_fuel_vault 等）。
-     */
-    protected boolean solidFuelAvailable(List<BlockPos> neighbors) {
-        if (solidFuelSourcePos != null) {
-            IItemHandler handler = itemHandlerAt(solidFuelSourcePos);
-            if (handler != null && hasBurnableFuel(handler))
-                return true;
-            solidFuelSourcePos = null;
-        }
-
-        if (solidFuelRescanCooldown > 0) {
-            solidFuelRescanCooldown--;
-            return false;
-        }
-        solidFuelRescanCooldown = 10;
-
-        for (BlockPos pos : neighbors) {
-            IItemHandler handler = itemHandlerAt(pos);
-            if (handler == null)
-                continue;
-            if (hasBurnableFuel(handler)) {
-                solidFuelSourcePos = pos;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 任一蒸汽室是否仍有燃料储备（burnTicks > 0）。储备 = 燃烧倒计时，独立于燃料源存在性——
-     * 燃料箱/源罐被拆或无源时，储备仍应继续燃烧；倒计时结束且抽不到燃料才停烧。
-     */
-    private boolean hasSteamReserve(List<BlockPos> steamChambers) {
-        for (BlockPos sp : steamChambers) {
-            if (level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be && be.burnTicks > 0)
                 return true;
         }
         return false;
@@ -892,52 +898,64 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
-     * 并行燃烧批量补固体燃料：全部蒸汽室同时空炉时，一次从燃料箱抽 N 个（N = 蒸汽室个数）
-     * 熔炉燃料物品（burnTime > 0），每个室 +1 个物品的 burnTime——各室并行燃烧同一燃料，
-     * 燃烧时长 = 单个燃料的时长；<b>源不足 N 个 → 不抽取</b>（整组断供不拆零，下一 tick 重试）。
+     * 并行燃烧批量补固体燃料：全部蒸汽室同时空炉时，从固体燃料源列表头依次找箱，一次抽
+     * N×K 个（N = 蒸汽室个数，K = 配置批次倍数）熔炉燃料物品（burnTime > 0），每室 +
+     * 抽到数量/N × burnTime——各室并行燃烧同一燃料，同燃同熄；<b>当前箱不足 → 切下一箱</b>；
+     * 全部箱不足/空 → {@link #scheduleSourcesRescan()} 并返回 false。
      * <p>调用前提：流体燃料不可用（流体优先）且全室空炉；油门 0 不抽（停机不烧油）。
-     * 只走 capability，绝不直接改容器 BE；源 = 缓存的燃料箱（{@code solidFuelSourcePos}，
-     * 由 {@link #solidFuelAvailable} 维护）。源已空/已拆 → 失效缓存（下一 tick 重扫）。</p>
+     * 只走 capability，绝不直接改容器 BE。</p>
      */
     protected boolean tryPullSolidFuelBatch(List<BlockPos> steamChambers) {
         if (steamChambers.isEmpty())
             return false;
-        if (solidFuelSourcePos == null)
+        if (solidFuelSources.isEmpty())
             return false;
-        IItemHandler handler = itemHandlerAt(solidFuelSourcePos);
-        if (handler == null) {
-            solidFuelSourcePos = null;
-            return false;
-        }
-        int need = steamChambers.size();
-        for (int slot = 0; slot < handler.getSlots(); slot++) {
-            ItemStack stack = handler.getStackInSlot(slot);
-            if (stack.isEmpty())
+        int need = batchItems(steamChambers.size());
+        int n = solidFuelSources.size();
+        for (int tries = 0; tries < n; tries++) {
+            BlockPos pos = solidFuelSources.get(solidFuelSourceIdx);
+            IItemHandler handler = itemHandlerAt(pos);
+            if (handler == null) {
+                advanceSolidSource();
                 continue;
-            int burnTime = stack.getBurnTime(RecipeType.SMELTING);
-            if (burnTime <= 0)
-                continue;
-            // 不足 N 个不抽取（模拟先验；不足 → 视为断供，不拆零）
-            ItemStack simulated = handler.extractItem(slot, need, true);
-            if (simulated.getCount() < need)
-                return false;
-            ItemStack extracted = handler.extractItem(slot, need, false);
-            if (extracted.getCount() < need) { // 竞态兜底
-                solidFuelSourcePos = null;
-                return false;
             }
-            // 每室 +1 个物品的 burnTime（并行燃烧：每室 1 个，同燃同熄）
-            for (BlockPos sp : steamChambers) {
-                if (level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be) {
-                    be.burnTicks += burnTime;
-                    be.setChanged();
+            for (int slot = 0; slot < handler.getSlots(); slot++) {
+                ItemStack stack = handler.getStackInSlot(slot);
+                if (stack.isEmpty())
+                    continue;
+                int burnTime = stack.getBurnTime(RecipeType.SMELTING);
+                if (burnTime <= 0)
+                    continue;
+                // 不足 N×K 个不抽取（模拟先验；不足 → 该箱断供，切下一箱）
+                ItemStack simulated = handler.extractItem(slot, need, true);
+                if (simulated.getCount() < need)
+                    break; // 本箱不足 → 切下一箱
+                ItemStack extracted = handler.extractItem(slot, need, false);
+                if (extracted.getCount() < need) { // 竞态兜底 → 切下一箱
+                    advanceSolidSource();
+                    return false;
                 }
+                // 每室 + 抽到数量/N × burnTime（并行燃烧：每室同燃同熄）
+                int perChamberBurn = Math.max(1, Math.round(extracted.getCount() / (float) steamChambers.size() * burnTime));
+                for (BlockPos sp : steamChambers) {
+                    if (level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be) {
+                        be.burnTicks += perChamberBurn;
+                        be.setChanged();
+                    }
+                }
+                steamFuelType = "solid"; // 储备来源 = 固体（Goggle 燃料行）
+                steamSolidFuelKey = extracted.getDescriptionId();
+                return true;
             }
-            steamFuelType = "solid"; // 储备来源 = 固体（Goggle 燃料行）
-            steamSolidFuelKey = extracted.getDescriptionId();
-            return true;
+            advanceSolidSource(); // 本箱无合适燃料 → 切下一箱
         }
+        scheduleSourcesRescan();
         return false;
+    }
+
+    private void advanceSolidSource() {
+        if (!solidFuelSources.isEmpty())
+            solidFuelSourceIdx = (solidFuelSourceIdx + 1) % solidFuelSources.size();
     }
 
     // ================= P3：温度/冷却辅助 =================
@@ -1051,19 +1069,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 热容：C_TH_BASE × 节数（模块越大热得越慢） */
     protected float thermalCapacity() {
         return C_TH_BASE * Math.max(1, length);
-    }
-
-    /** 从当前源罐 drain 指定量（mb）；源罐失效返回 false */
-    protected boolean drainFuel(int mb) {
-        if (fuelSourcePos == null)
-            return false;
-        IFluidHandler handler = fluidHandlerAt(fuelSourcePos);
-        if (handler == null) {
-            fuelSourcePos = null;
-            return false;
-        }
-        FluidStack drained = handler.drain(new FluidStack(fuelFluid.getFluid(), mb), IFluidHandler.FluidAction.EXECUTE);
-        return drained.getAmount() >= mb;
     }
 
     protected IFluidHandler fluidHandlerAt(BlockPos pos) {
@@ -1388,6 +1393,37 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // 必须先继承相邻引擎 controller 的运行状态，否则温度/油门/混合比等全部重置（见 adoptAdjacentEngineState）
         adoptAdjacentEngineState();
         ConnectivityHandler.formMulti(this);
+        // 组网后源列表按新模块邻居重建（新 controller 的邻居集合可能变化）
+        markSourcesDirtyNow();
+    }
+
+    /** BE 载入（读档/放置/方块加载）：源列表按当前邻居重建（下 tick 就扫） */
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        if (level != null && !level.isClientSide)
+            markSourcesDirtyNow();
+    }
+
+    /**
+     * 模块邻居方块变化（放置/拆除/状态改变）→ 让整条引擎 controller 去抖重建源列表。
+     * 由核心/燃烧室的 {@code neighborChanged} 调用（服务端）。只作用于存在 controller 的引擎。
+     * <p>过滤：仅当邻居位置<b>当前带流体/物品能力</b>（罐/燃料箱出现）才触发重建——
+     * 红石/装饰等普通方块变化不重建；罐被拆除后邻居无能力 → 不重建，但源列表在 drain 时
+     * 对失效位置（capability 为 null）即时跳过，天然自愈。</p>
+     */
+    public static void onModuleNeighborChanged(Level level, BlockPos modulePos, BlockPos neighborPos) {
+        if (level == null || level.isClientSide)
+            return;
+        if (neighborPos != null
+                && level.getCapability(Capabilities.FluidHandler.BLOCK, neighborPos, null) == null
+                && level.getCapability(Capabilities.ItemHandler.BLOCK, neighborPos, null) == null)
+            return; // 无能力的邻居变化（红石/装饰等）不触发重建
+        BlockPos controllerPos = engineControllerPos(level, modulePos);
+        if (controllerPos != null
+                && level.getBlockEntity(controllerPos) instanceof EngineCoreBlockEntity core) {
+            core.markSourcesDirty();
+        }
     }
 
     /**
@@ -1436,14 +1472,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         warmingUp = donor.warmingUp;
         steamEngine = donor.steamEngine;
         hasAirDuct = donor.hasAirDuct;
-        fuelDebt = donor.fuelDebt;
-        waterDebt = donor.waterDebt;
-        fuelFluid = donor.fuelFluid.copy();
+        // P2.5：拷贝储备与活动燃料（源列表按新 controller 的邻居重建，不拷贝——位置随 controller 变）
+        waterReserve = donor.waterReserve;
+        fluidFuelReserve = donor.fluidFuelReserve;
+        fluidFuel = donor.fluidFuel;
         steamFuelFluid = donor.steamFuelFluid.copy();
-        fuelSourcePos = donor.fuelSourcePos;
-        waterSourcePos = donor.waterSourcePos;
-        steamFuelSourcePos = donor.steamFuelSourcePos;
-        solidFuelSourcePos = donor.solidFuelSourcePos;
         steamFuelType = donor.steamFuelType;
         steamFuelKey = donor.steamFuelKey;
         steamBurnTicksRemaining = donor.steamBurnTicksRemaining;
@@ -1451,6 +1484,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         activeFuelType = donor.activeFuelType;
         activeFuelId = donor.activeFuelId;
         activeFuelTopt = donor.activeFuelTopt;
+        markSourcesDirty();
     }
 
     // ================= IMultiBlockEntityContainer =================
@@ -1554,6 +1588,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         this.controller = controller;
         setChanged();
         sendData();
+        if (level != null && !level.isClientSide)
+            markSourcesDirtyNow(); // controller 变更 → 源列表按新 controller 邻居重建
     }
 
     @Override
@@ -1566,6 +1602,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         reActivateSource = true;
         setChanged();
         sendData();
+        markSourcesDirtyNow(); // 拆解重组 → 源列表按新模块重建
     }
 
     @Override
@@ -1582,6 +1619,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public void notifyMultiUpdated() {
         reActivateSource = true;
         setChanged();
+        if (level != null && !level.isClientSide)
+            markSourcesDirtyNow(); // 组网结构变化 → 源列表按新模块邻居重建
     }
 
     @Override
