@@ -473,9 +473,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                         runningSteam++;
                     }
                 }
-                // 耗水：1mb/s/室 × 油门（从水储备扣）
-                if (runningSteam > 0) {
-                    waterReserve -= runningSteam * 0.05f * efficiency;
+                // 耗水：1mb/s/室 × 油门（从水储备扣）。门控 = 引擎在工作（running）或正烧燃料暖机（runningSteam>0）——
+                // 水是工质（蒸汽流量 ∝ 油门），燃料只影响加热不影响发电（memo §7.7/§15）：无燃料余热运转 / 地狱环境热运转
+                // （T≥100 只靠环境）同样正常耗水（踩坑 30：原门控 runningSteam>0 → 无燃料永不耗水）。
+                // 耗水室数：工作中 = 全部蒸汽室（容量 = 全部室满出力）；暖机 = 正在烧的室。
+                if (running || runningSteam > 0) {
+                    int waterChambers = running ? steamChambers.size() : runningSteam;
+                    waterReserve -= waterChambers * 0.05f * efficiency;
                     // 储备刚好耗尽 → 立即补一批（同一 tick 内补回，避免 running 判定出现 1 tick 空档
                     // → 应力网络不闪断；补不到（全源失败）才真停机）
                     if (waterReserve <= 0f && efficiency > 0f)
