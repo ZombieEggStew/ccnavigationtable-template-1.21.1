@@ -165,7 +165,7 @@ EngineCoreBlockEntity（仅 controller 干活；非 controller 的 getGeneratedS
 ```
 Q_heat   = Σ运行室 × efficiency × 燃料.heat × heatFactor(m_eff) × 类型基础热
 K_total  = (K_CORE×length + K_AMB×N + K_DUCT×D×风门) × ram(speed) × f(pressure)
-T_amb    = 分段线性：Y≤63 → 20℃；63→200（云层）20→0℃；200→320（世界顶）0→−40℃；≥320 恒 −40℃
+T_amb    = 地狱维度（the_nether）恒 155℃（全高度，与高度无关）；其余维度分段线性：Y≤63 → 20℃；63→200（云层）20→0℃；200→320（世界顶）0→−40℃；≥320 恒 −40℃
 T'       = (Q_heat − K_total×(T − T_amb)) / C_th
 T       += T'/20；钳制 [T_amb, T_max×1.2]
 overheat = T ≥ 220 → 硬停；resume = T ≤ 200（滞回）
@@ -184,6 +184,7 @@ altitude：运动体取 getSubLevelWorldPos().y，静态取方块 Y
 | RAM_START / RAM_FULL / RAM_MAX | 10 / 30 m/s / ×2.0 | 冲压冷却曲线 |
 | **OVERHEAT_TEMP / OVERHEAT_RESUME** | **220 / 200°C** | 过热硬停 / 滞回恢复（= 即将过热预警阈值） |
 | T_AMB_SEA_Y / T_AMB_SEA / T_AMB_CLOUD_Y / T_AMB_CLOUD_TEMP / T_AMB_TOP_Y / T_AMB_FLOOR | 63 / 20°C / 200 / 0°C / 320 / −40°C | 环境温度（Minecraft 尺度分段线性：海平面→云层→世界顶；不再用真实对流层 0.0065°C/m） |
+| **T_AMB_NETHER** | **155°C** | 地狱维度（the_nether）环境温度：**全高度恒定**（地狱 = 热环境，与高度无关；= 经济目标同值） |
 | C_TH_BASE | 1.0 | 热容 ×length |
 | PRESSURE_FLOOR | 0.25 | 气压因子下限 |
 | **ENGINE_T_OPT** | **155°C** | 经济目标（引擎固定，不随燃料/油门） |

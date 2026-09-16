@@ -187,6 +187,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final float T_AMB_TOP_Y = 320f;
     /** 环境温度下限（°C） */
     public static final float T_AMB_FLOOR = -40f;
+    /** 地狱维度（minecraft:the_nether）环境温度（°C）：全高度恒定（地狱 = 热环境，与高度无关）；与引擎经济目标同值 155 */
+    public static final float T_AMB_NETHER = 155f;
     /** 流体室基础热（°C/s，100% 效率下每室） */
     public static final float BASE_HEAT_FLUID = 30f;
     /** 蒸汽室基础热倍率（P3 旧模型：吃水 = 天然冷却，比流体室低 20%）——P6 Plan B 已退役：
@@ -1037,7 +1039,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
-     * 环境温度（°C）：按 Minecraft 尺度分段线性（不再套真实对流层 0.0065°C/m —— 那在 63~320 的
+     * 环境温度（°C）：地狱维度（the_nether）全高度恒 {@link #T_AMB_NETHER}=155°C（热环境，与高度无关）；
+     * 其余维度按 Minecraft 尺度分段线性（不再套真实对流层 0.0065°C/m —— 那在 63~320 的
      * 世界里整段只降 ~1.7°C，高度几乎无温度差异）：
      *   Y ≤ 63（海平面）    → 恒 20°C
      *   63 → 200（云层）    → 20°C 线性降到 0°C（结冰层，云层生成高度）
@@ -1045,6 +1048,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      *   Y ≥ 320            → 恒 −40°C
      */
     protected float ambientTemp() {
+        if (hasLevel() && level.dimension() == Level.NETHER)
+            return T_AMB_NETHER;
         float y = engineAltitude();
         if (y <= T_AMB_SEA_Y)
             return T_AMB_SEA;
