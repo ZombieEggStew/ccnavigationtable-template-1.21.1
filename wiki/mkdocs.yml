@@ -129,8 +129,8 @@ nav:
   - Engine System:
     - Overview: engine/overview.md
     - Engine Core: engine/engine-core.md
-    - Fluid Combustion Chamber: engine/fluid-combustion-chamber.md
     - Steam Power Chamber: engine/steam-power-chamber.md
+    - Fluid Combustion Chamber: engine/fluid-combustion-chamber.md
     - Cooling Air Duct: engine/cooling-air-duct.md
     - Fuel & Fuel Sources: engine/fuel.md
     - Engine Lua API: engine/lua-api.md
