@@ -29,13 +29,13 @@ It replicates `create:mechanical_bearing`'s rotation logic (angle advancing per 
 
 Create and Aeronautics already have two bearings, each with its own design philosophy — the **Servo Bearing** is the third, purpose-built for precise control.
 
-### The powered bearing's rendering problem
+### The mechanical bearing's rendering problem
 
 `create:mechanical_bearing`'s *client* does not show the server angle directly. It keeps a `clientAngleDiff` that is halved every tick and **chases** the server value exponentially — so at the end of a move the last few degrees visually **crawl** into place. This is purely a **client-side visual artifact**: the server-side angle and the physics are exact, and the rendering lag does **not** affect physics at all.
 
 The Servo Bearing removes that whole chase chain (details below), so the visual is smooth and lands in place — no crawling.
 
-| | `Powered Bearing create:mechanical_bearing` | `Physics Bearing simulated:swivel_bearing` | `ccpe:servo_bearing` |
+| | `create:mechanical_bearing` | `simulated:swivel_bearing` | `ccpe:servo_bearing` |
 |---|---|---|---|
 | Power input | Create stress network (RPM) | Cogwheel meshed from the side | **None** — pure Lua target angle |
 | Driven structure | Kinematic contraption entity | Real physics body (Sable sub-level) | Kinematic contraption entity |
@@ -44,6 +44,18 @@ The Servo Bearing removes that whole chase chain (details below), so the visual 
 | Client rendering | Exponential catch-up → **crawling** | Physics-driven (accurate) | Server angle + frame interpolation |
 | Redstone | POWERED / wrench / movementMode | Powered lock | None |
 
+## Compared to `aero_bearing`
+
+| | `aero_bearing` | Servo Bearing |
+|---|---|---|
+| Drive | Sable physics (RotaryConstraint PD servo) | Create contraption entity (kinematic) |
+| Dynamics | Inertia, aero feedback | Rigid, angle-exact, no inertia |
+| Power | Axial stress input (or Lua control mode) | None |
+| Best for | Physical control surfaces / rotors | Precise angle control |
+
+They complement each other: use the **Aero Bearing** when you need real
+aerodynamic feedback; use the **Servo Bearing** when the control surface must
+go exactly where the computer tells it.
 
 ## Lua API
 
@@ -83,19 +95,6 @@ print(s.getAngle())        -- 45.0 (waiting to reach -45°)
   inside a Sable sub-level.
 - **No plate block**: unlike `aero_bearing`, no connection plate is needed —
   the contraption entity carries the structure directly.
-
-## Compared to `aero_bearing`
-
-| | `aero_bearing` | Servo Bearing |
-|---|---|---|
-| Drive | Sable physics (RotaryConstraint PD servo) | Create contraption entity (kinematic) |
-| Dynamics | Inertia, aero feedback | Rigid, angle-exact, no inertia |
-| Power | Axial stress input (or Lua control mode) | None |
-| Best for | Physical control surfaces / rotors | Precise angle control |
-
-They complement each other: use the **Aero Bearing** when you need real
-aerodynamic feedback; use the **Servo Bearing** when the control surface must
-go exactly where the computer tells it.
 
 ## Known limitations
 - `MAX_ANGULAR_SPEED` (18°/tick) is hard-coded; a config option is planned.

@@ -35,6 +35,15 @@
 | 客户端渲染 | 指数追赶 → **末端爬行** | 物理驱动（精确） | 服务端角度 + 帧间插值 |
 | 红石 | POWERED / 扳手 / movementMode | 锁定（powered） | 无 |
 
+## 与 `aero_bearing` 的对比
+| | `aero_bearing` | 舵机轴承 |
+|---|---|---|
+| 驱动 | Sable 物理（RotaryConstraint PD 伺服） | Create contraption 实体（运动学） |
+| 动力学 | 有惯性、气动反馈 | 刚性、角度精确、无惯性 |
+| 动力 | 轴向应力输入（或 Lua 控制模式） | 无 |
+| 适合 | 物理舵面 / 旋翼 | 精确角度控制 |
+
+两者互补：需要气动真实反馈用**航空轴承**；需要舵面精确到达计算机指定角度时用**舵机轴承**。
 
 ## Lua API
 
@@ -65,17 +74,6 @@ print(s.getAngle())        -- 45.0（正在朝 -45° 转）
 - **服务端权威 + 平滑客户端**：客户端每 tick 同步服务端角度（`lazyTickRate=1`，滞后 ≤ 1 tick），用**帧间插值**渲染（`angleLerp(prevAngle, angle, partialTicks)`）而非原版的外推式——匀速平滑、约 50ms 内到位、**无爬行**。
 - **装配**：空手右键切换装配；Lua `assemble()`/`disassemble()` 行为等价（同步调用）。在 Sable sub-level 内装配已验证可行。
 - **无 plate 方块**：与 `aero_bearing` 不同，不需要连接 plate——contraption 实体直接承载结构。
-
-## 与 `aero_bearing` 的对比
-
-| | `aero_bearing` | 舵机轴承 |
-|---|---|---|
-| 驱动 | Sable 物理（RotaryConstraint PD 伺服） | Create contraption 实体（运动学） |
-| 动力学 | 有惯性、气动反馈 | 刚性、角度精确、无惯性 |
-| 动力 | 轴向应力输入（或 Lua 控制模式） | 无 |
-| 适合 | 物理舵面 / 旋翼 | 精确角度控制 |
-
-两者互补：需要气动真实反馈用**航空轴承**；需要舵面精确到达计算机指定角度时用**舵机轴承**。
 
 ## 已知限制
 - `MAX_ANGULAR_SPEED`（18°/tick）目前硬编码，计划后续加 Config 选项。
