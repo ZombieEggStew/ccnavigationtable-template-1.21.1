@@ -14,15 +14,15 @@
 | 方块 | ID | 作用 |
 |---|---|---|
 | [引擎核心](engine-core.zh.md) | `ccpe:engine_core` | 多方块骨架：核心排成一排组成一条引擎（1×1×N，N≤21），整条共享运行状态；只有 **controller** 输出与决策 |
-| [流体燃烧室](fluid-combustion-chamber.zh.md) | `ccpe:fluid_combustion_chamber` | 烧 **datapack 流体燃料**；**每室 8192 SU**（× 燃料 stress 倍率） |
+| [流体燃烧室](fluid-combustion-chamber.zh.md) | `ccpe:fluid_combustion_chamber` | 烧 **其他模组的流体燃料**；**每室 8192 SU**（× 燃料 stress 倍率） |
 | [蒸汽动力室](steam-power-chamber.zh.md) | `ccpe:steam_power_chamber` | 烧 **水 + 燃料**产生蒸汽；**每室 4096 SU**；简单稳定、永不过热 |
-| [冷却气道](cooling-air-duct.zh.md) | `ccpe:cooling_air_duct` | 散热鳍片 + 可调风门（`setCooling`） |
+| [冷却气道](cooling-air-duct.zh.md) | `ccpe:cooling_air_duct` | 散热鳍片 + 可调风门 |
 
 引擎供料辅助方块：
 
 | 方块 | ID | 作用 |
 |---|---|---|
-| [快速装填流体储罐](fuel.zh.md#quick-fill-fluid-tank) | `ccpe:quick_fill_fluid_tank` | 4000mb 单槽流体存储；引擎的水 / 流体燃料源 |
+| [快速装填流体储罐](fuel.zh.md#quick-fill-fluid-tank) | `ccpe:quick_fill_fluid_tank` | 4000mb 单槽流体存储|
 | [快速装填燃料箱](fuel.zh.md#quick-fill-fuel-vault) | `ccpe:quick_fill_fuel_vault` | 单物品类型存储（容量 1024）；蒸汽室的固体燃料源 |
 
 ## 两种引擎对照
@@ -37,26 +37,6 @@
 | 复杂度 | 高上限：省油/散热/混合比三重管理 | 简单稳定：点火暖机 → 出力 |
 
 两类燃烧室**物理互斥**：同一台引擎不能混装流体燃烧室与蒸汽动力室（放置被拦截，controller 按多数派仲裁）。
-
-## 一个杆就够起飞
-
-- **油门**（`setThrottle(0..1)`）是唯一控制：同时决定**应力输出与转速**（定距桨模型——转速 = 油门 × 256，0~256 线性）。
-- 油门 **0 = 停机，不烧油**。
-- 引擎过载**不停转**（对齐 Create 发电机——网络顶部红字「网络过载」提示，引擎照常运转）。
-
-## 温度与经济（流体引擎）
-
-- 流体引擎是**经济管理游戏**：油耗 = 杆值 × 经济系数 × 过冷惩罚；发热 = `heatFactor(杆 × 高空自动富油)`。
-- **拉稀 = 省油但更热**；**富油 = 花油买冷**。
-- 经济系数需要**温度在 155°C 带**与**实际混合比 m_eff≈1.0** 双达标并保持 15s → 渐入 **×0.75**（离开窗口 6s 流失）。
-- **高空自动富油 = 免费降温**——只影响发热，绝不进油耗。
-
-## 蒸汽引擎（简单稳定）
-
-- 燃料箱塞燃料 → 点火 → **暖机**（<100°C 只烧不发电）→ 出力。
-- **真实蒸汽车油门**：消耗 ∝ 油门——25% 油门燃料耐用 4 倍。
-- **余热运转**：燃料耗尽但锅炉仍热（T≥100°C）且水未断供 → 仍满出力发电；缺水（防干烧）或冷却到 100°C 以下才停机。
-- 永不过热、高空无忧。
 
 ## 页面索引
 
