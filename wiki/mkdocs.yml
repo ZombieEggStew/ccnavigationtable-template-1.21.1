@@ -51,6 +51,13 @@ plugins:
             Electronic Transmission: 电子变速箱
             Aero Bearing: 航空轴承
             Servo Mode: 舵机模式
+            Engine System: 引擎系统
+            Engine Core: 引擎核心
+            Fluid Combustion Chamber: 流体燃烧室
+            Steam Power Chamber: 蒸汽动力室
+            Cooling Air Duct: 冷却气道
+            Fuel & Fuel Sources: 燃料与燃料源
+            Engine Lua API: 引擎 Lua API
             Modular Monitor: 模块化监视器
             Monitor: 监视器
             Button Module: 按钮模块
@@ -102,6 +109,7 @@ nav:
     - Redstone Transceiver: redstone-transceiver/overview.md
     - Electronic Transmission: electronic-transmission/overview.md
     - Aero Bearing: aero-bearing/overview.md
+    - Engine System: engine/overview.md
     - Modular Monitor: monitor/overview.md
     - Control Desk: control-desk/overview.md
   - Global Signal System:
@@ -118,6 +126,14 @@ nav:
     - Electronic Transmission: electronic-transmission/overview.md
     - Aero Bearing: aero-bearing/overview.md
     - Trailing Wheel Mount: other/trailing-wheel-mount.md
+  - Engine System:
+    - Overview: engine/overview.md
+    - Engine Core: engine/engine-core.md
+    - Fluid Combustion Chamber: engine/fluid-combustion-chamber.md
+    - Steam Power Chamber: engine/steam-power-chamber.md
+    - Cooling Air Duct: engine/cooling-air-duct.md
+    - Fuel & Fuel Sources: engine/fuel.md
+    - Engine Lua API: engine/lua-api.md
   - Avionics System:
     - Overview: sensor-system/overview.md
     - Static Port: sensor-system/static-port.md
