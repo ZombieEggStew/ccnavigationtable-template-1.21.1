@@ -170,6 +170,6 @@ nav:
     - Baffle: control-desk/baffle.md
   - Examples & Tutorials:
     - trainer aircraft: examples/trainer_aircraft.md
-    - trainer aircraft v2: examples/trainer_aircraft_2.md
+    # - trainer aircraft v2: examples/trainer_aircraft_2.md
     - Aerodynamics: examples/aerodynamics.md
   - FAQ: faq.md
