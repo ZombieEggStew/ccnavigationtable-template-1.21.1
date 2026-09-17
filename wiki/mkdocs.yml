@@ -50,6 +50,7 @@ plugins:
             Actuators: 执行器
             Electronic Transmission: 电子变速箱
             Aero Bearing: 航空轴承
+            Servo Bearing: 舵机轴承
             Servo Mode: 舵机模式
             Engine System: 引擎系统
             Engine Core: 引擎核心
@@ -127,6 +128,7 @@ nav:
   - Actuators:
     - Electronic Transmission: electronic-transmission/overview.md
     - Aero Bearing: aero-bearing/overview.md
+    - Servo Bearing: actuators/servo-bearing.md
     - Trailing Wheel Mount: other/trailing-wheel-mount.md
   - Engine System:
     - Overview: engine/overview.md

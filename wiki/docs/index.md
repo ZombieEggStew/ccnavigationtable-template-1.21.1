@@ -39,6 +39,9 @@ A rotation speed controller optimized for CC:T control, avoiding the network cas
 ### [🍌 Aero Bearing](aero-bearing/overview.md)
 A Sable-physics bearing with direct axial power input. In **Lua Control mode** the rotation angle is set directly via Lua, skipping the stress-network angle accumulation — position your sail/control surface exactly.
 
+### [🤖 Servo Bearing](actuators/servo-bearing.md)
+A Lua-driven servo with **no power input**: a CC:Tweaked computer positions the assembled control surface at an exact target angle (shortest path). Kinematic and rigid, with smooth client rendering — no crawling.
+
 ### [🔧 Engine System](engine/overview.md)
 A modular, multi-block Create power source for aircraft, driven by a **single throttle lever**:
 
