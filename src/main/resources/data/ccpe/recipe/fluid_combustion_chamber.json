@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:iron_sheet"
+    },
+    "X": {
+      "item": "minecraft:dried_kelp"
+    },
+    "Y": {
+      "item": "minecraft:piston"
+    },
+    "Z": {
+      "item": "minecraft:flint_and_steel"
+    }
+  },
+  "pattern": [
+    " Z ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:fluid_combustion_chamber"
+  }
+}

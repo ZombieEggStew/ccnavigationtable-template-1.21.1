@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "tag": "minecraft:wooden_trapdoors"
+    },
+    "X": {
+      "item": "create:iron_sheet"
+    },
+    "Y": {
+      "item": "minecraft:barrel"
+    }
+  },
+  "pattern": [
+    "   ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:quick_fill_fuel_vault"
+  }
+}

@@ -39,21 +39,21 @@ public class MyModBlocks {
     public static final DeferredBlock<TransmissionPeripheralBlock> transmission_peripheral =
             registerBlocks("transmission_peripheral", () -> new TransmissionPeripheralBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.METAL).
-                    strength(2.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
     public static final DeferredBlock<MonitorBlock> monitor =
             registerBlocks("my_monitor", () -> new MonitorBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.METAL).
-                    strength(1.5f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
     public static final DeferredBlock<ControlDeskBlock> my_control_desk =
             registerBlocks("my_control_desk", () -> new ControlDeskBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.WOOD).
-                    strength(1.5f, 6.0f).
+                    strength(1.0f, 6.0f).
                     // forceSolidOn：桌体碰撞盒是半高块（16×8×8），默认 calculateSolid 判为“非实心”→ blocksMotion()=false
                     // → FlowingFluid.canHoldFluid()=!blocksMotion() 为 true → 水流会把控制台冲掉（1.21.1 水破坏方块的判定）。
                     // 强制实心只影响 isSolid/blocksMotion 标志（水不能流入该格），不改变碰撞盒，也不会新增窒息
@@ -66,7 +66,7 @@ public class MyModBlocks {
     public static final DeferredBlock<MyBearingBlock> aero_bearing =
             registerBlocks("aero_bearing", () -> new MyBearingBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(5.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
@@ -74,7 +74,7 @@ public class MyModBlocks {
     public static final DeferredBlock<ServoBearingBlock> servo_bearing =
             registerBlocks("servo_bearing", () -> new ServoBearingBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(5.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
@@ -136,7 +136,7 @@ public class MyModBlocks {
     public static final DeferredBlock<MyBearingPlateBlock> aero_bearing_plate =
             BLOCKS.register("aero_bearing_plate", () -> new MyBearingPlateBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(5.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
@@ -144,7 +144,7 @@ public class MyModBlocks {
     public static final DeferredBlock<TrailingWheelMountBlock> trailing_wheel_mount =
             registerBlocks("trailing_wheel_mount", () -> new TrailingWheelMountBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(1.5f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
@@ -152,7 +152,7 @@ public class MyModBlocks {
     public static final DeferredBlock<EngineCoreBlock> engine_core =
             registerBlocks("engine_core", () -> new EngineCoreBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(5.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
@@ -160,7 +160,7 @@ public class MyModBlocks {
     public static final DeferredBlock<FluidCombustionChamberBlock> fluid_combustion_chamber =
             registerBlocks("fluid_combustion_chamber", () -> new FluidCombustionChamberBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(5.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
@@ -168,7 +168,7 @@ public class MyModBlocks {
     public static final DeferredBlock<SteamPowerChamberBlock> steam_power_chamber =
             registerBlocks("steam_power_chamber", () -> new SteamPowerChamberBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(5.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
@@ -176,7 +176,7 @@ public class MyModBlocks {
     public static final DeferredBlock<QuickFillFluidTankBlock> quick_fill_fluid_tank =
             registerBlocks("quick_fill_fluid_tank", () -> new QuickFillFluidTankBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.COPPER).
-                    strength(5.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
@@ -184,7 +184,7 @@ public class MyModBlocks {
     public static final DeferredBlock<QuickFillFuelVaultBlock> quick_fill_fuel_vault =
             registerBlocks("quick_fill_fuel_vault", () -> new QuickFillFuelVaultBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.COPPER).
-                    strength(5.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
@@ -192,7 +192,7 @@ public class MyModBlocks {
     public static final DeferredBlock<CoolingAirDuctBlock> cooling_air_duct =
             registerBlocks("cooling_air_duct", () -> new CoolingAirDuctBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(5.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 

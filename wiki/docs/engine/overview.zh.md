@@ -44,5 +44,6 @@
 - [流体燃烧室](fluid-combustion-chamber.zh.md) — datapack 燃料、混合比与经济玩法
 - [蒸汽动力室](steam-power-chamber.zh.md) — 水 + 燃料、暖机、余热运转
 - [冷却气道](cooling-air-duct.zh.md) — 散热鳍片与风门
+- [温度与冷却模型](temperature.zh.md) — 发热与散热如何计算（高度→温度与气压）
 - [燃料与燃料源](fuel.zh.md) — datapack 燃料、原版燃料、快速装填储罐/燃料箱
 - [Lua API](lua-api.zh.md) — `ccpe:engine` 外设参考

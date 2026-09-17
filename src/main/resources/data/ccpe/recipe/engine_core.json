@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:iron_sheet"
+    },
+    "X": {
+      "item": "create:shaft"
+    },
+    "Y": {
+      "item": "create:industrial_iron_block"
+    },
+    "Z": {
+      "item": "simulated:engine_assembly"
+    }
+  },
+  "pattern": [
+    " Z ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 2,
+    "id": "ccpe:engine_core"
+  }
+}

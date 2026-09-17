@@ -1,7 +1,0 @@
-{
-  "fluid": "minecraft:water",
-  "consumption": 1.0,
-  "heat": 1.0,
-  "stress": 1.0,
-  "priority": 0.0
-}

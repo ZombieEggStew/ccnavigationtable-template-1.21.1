@@ -45,5 +45,6 @@ The two chamber types are **physically mutually exclusive**: one engine cannot m
 - [Fluid Combustion Chamber](fluid-combustion-chamber.md) — datapack fuel, mixture and economy gameplay
 - [Steam Power Chamber](steam-power-chamber.md) — water + fuel, warm-up, residual-heat operation
 - [Cooling Air Duct](cooling-air-duct.md) — cooling fins and the shutter
+- [Temperature & Cooling Model](temperature.md) — how heat is generated and dissipated (altitude → temperature & pressure)
 - [Fuel & Fuel Sources](fuel.md) — datapack fuel, vanilla fuel, quick-fill tank / fuel vault
 - [Lua API](lua-api.md) — the `ccpe:engine` peripheral reference

@@ -58,6 +58,7 @@ plugins:
             Cooling Air Duct: 冷却气道
             Fuel & Fuel Sources: 燃料与燃料源
             Engine Lua API: 引擎 Lua API
+            Temperature & Cooling Model: 温度与冷却模型
             Modular Monitor: 模块化监视器
             Monitor: 监视器
             Button Module: 按钮模块
@@ -68,6 +69,7 @@ plugins:
             Foot Pedal: 脚踏板
             Joystick: 操纵杆
             Joystick 2: 操纵杆 2
+            Joystick 3: 操纵杆 3
             Throttle: 油门
             Throttle 2: 油门 2
             Monitor 2: 监视器 2
@@ -133,6 +135,7 @@ nav:
     - Fluid Combustion Chamber: engine/fluid-combustion-chamber.md
     - Cooling Air Duct: engine/cooling-air-duct.md
     - Fuel & Fuel Sources: engine/fuel.md
+    - Temperature & Cooling Model: engine/temperature.md
     - Engine Lua API: engine/lua-api.md
   - Avionics System:
     - Overview: sensor-system/overview.md
@@ -156,6 +159,7 @@ nav:
     - Foot Pedal: control-desk/pedal.md
     - Joystick: control-desk/joystick.md
     - Joystick 2: control-desk/joystick_2.md
+    - Joystick 3: control-desk/joystick_3.md
     - Throttle: control-desk/throttle.md
     - Throttle 2: control-desk/throttle_2.md
     - Monitor 2: control-desk/monitor_2.md
