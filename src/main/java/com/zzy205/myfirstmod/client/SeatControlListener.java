@@ -147,8 +147,12 @@ public class SeatControlListener {
         ControlDeskBlockEntity joy2Desk = desks.stream()
                 .filter(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2))
                 .findFirst().orElse(null);
-        boolean hasJoystick = joyDesk != null || joy2Desk != null;
+        ControlDeskBlockEntity joy3Desk = desks.stream()
+                .filter(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_3))
+                .findFirst().orElse(null);
+        boolean hasJoystick = joyDesk != null || joy2Desk != null || joy3Desk != null;
         boolean hasJoystick2 = joy2Desk != null;
+        boolean hasJoystick3 = joy3Desk != null;
         boolean hasPedal = desks.stream()
                 .anyMatch(d -> d.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL));
         boolean hasThrottle = desks.stream()
@@ -193,19 +197,27 @@ public class SeatControlListener {
         boolean leftEdge = left && !anyDirDown(bindings, ControlDir.LEFT, lastDown);
         boolean rightEdge = right && !anyDirDown(bindings, ControlDir.RIGHT, lastDown);
         int returnTicksX = joyDesk != null ? joyDesk.getJoystickReturnTimeYaw()
-                : (joy2Desk != null ? joy2Desk.getJoystick2ReturnTimeYaw() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME);
+                : (joy2Desk != null ? joy2Desk.getJoystick2ReturnTimeYaw()
+                : (joy3Desk != null ? joy3Desk.getJoystick3ReturnTimeYaw() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME));
         int returnTicksY = joyDesk != null ? joyDesk.getJoystickReturnTime()
-                : (joy2Desk != null ? joy2Desk.getJoystick2ReturnTime() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME);
-        boolean gearModeX = joyDesk != null ? joyDesk.isGearModeYaw() : (joy2Desk != null && joy2Desk.isGear2ModeYaw());
-        boolean gearModeY = joyDesk != null ? joyDesk.isGearModePitch() : (joy2Desk != null && joy2Desk.isGear2ModePitch());
+                : (joy2Desk != null ? joy2Desk.getJoystick2ReturnTime()
+                : (joy3Desk != null ? joy3Desk.getJoystick3ReturnTime() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_RETURN_TIME));
+        boolean gearModeX = joyDesk != null ? joyDesk.isGearModeYaw()
+                : (joy2Desk != null ? joy2Desk.isGear2ModeYaw() : (joy3Desk != null && joy3Desk.isGear3ModeYaw()));
+        boolean gearModeY = joyDesk != null ? joyDesk.isGearModePitch()
+                : (joy2Desk != null ? joy2Desk.isGear2ModePitch() : (joy3Desk != null && joy3Desk.isGear3ModePitch()));
         int gearCountX = joyDesk != null ? joyDesk.getGearCountYaw()
-                : (joy2Desk != null ? joy2Desk.getGear2CountYaw() : ControlDeskBlockEntity.DEFAULT_GEAR_COUNT);
+                : (joy2Desk != null ? joy2Desk.getGear2CountYaw()
+                : (joy3Desk != null ? joy3Desk.getGear3CountYaw() : ControlDeskBlockEntity.DEFAULT_GEAR_COUNT));
         int gearCountY = joyDesk != null ? joyDesk.getGearCountPitch()
-                : (joy2Desk != null ? joy2Desk.getGear2CountPitch() : ControlDeskBlockEntity.DEFAULT_GEAR_COUNT);
+                : (joy2Desk != null ? joy2Desk.getGear2CountPitch()
+                : (joy3Desk != null ? joy3Desk.getGear3CountPitch() : ControlDeskBlockEntity.DEFAULT_GEAR_COUNT));
         int freeSpeedTicksX = joyDesk != null ? joyDesk.getJoystickFreeSpeedYaw()
-                : (joy2Desk != null ? joy2Desk.getJoystick2FreeSpeedYaw() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED);
+                : (joy2Desk != null ? joy2Desk.getJoystick2FreeSpeedYaw()
+                : (joy3Desk != null ? joy3Desk.getJoystick3FreeSpeedYaw() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED));
         int freeSpeedTicksY = joyDesk != null ? joyDesk.getJoystickFreeSpeedPitch()
-                : (joy2Desk != null ? joy2Desk.getJoystick2FreeSpeedPitch() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED);
+                : (joy2Desk != null ? joy2Desk.getJoystick2FreeSpeedPitch()
+                : (joy3Desk != null ? joy3Desk.getJoystick3FreeSpeedPitch() : ControlDeskBlockEntity.DEFAULT_JOYSTICK_FREE_SPEED));
 
         // 自由模式：按下按 1/满偏tick 累加（速度可配置）；档位模式：无自动回正，按下边沿进/退一档
         // （本地模拟仅供 HUD overlay；服务端用同一套 JoystickTilt 动力学权威模拟 BE 轴值）
@@ -222,8 +234,8 @@ public class SeatControlListener {
         SeatControlState.setGearHold(gearModeX, gearModeY);
         SeatControlState.update(true, hasJoystick, axisX, axisY, rawX, rawY, Math.abs(axisX), Math.abs(axisY));
 
-        // 运行时输入上报服务端（服务端权威模拟 + getUpdatePacket 广播；装操纵杆/摇杆2/踏板/油门/油门2 的联动台才需要）
-        if (hasJoystick || hasJoystick2 || hasPedal || hasThrottle || hasThrottle2) {
+        // 运行时输入上报服务端（服务端权威模拟 + getUpdatePacket 广播；装操纵杆/摇杆2/操纵杆3/踏板/油门/油门2 的联动台才需要）
+        if (hasJoystick || hasJoystick2 || hasJoystick3 || hasPedal || hasThrottle || hasThrottle2) {
             sendInput(seatPos, up, down, left, right,
                     pedalLeftDown, pedalLeftUp, pedalRightDown, pedalRightUp,
                     throttleForward, throttleBack, throttle2Up, throttle2Down);
@@ -287,6 +299,14 @@ public class SeatControlListener {
                 add(out, pos, desk.getJoystick2KeyDown(), "摇杆2 后拉", ControlDir.DOWN);
                 add(out, pos, desk.getJoystick2KeyLeft(), "摇杆2 左摆", ControlDir.LEFT);
                 add(out, pos, desk.getJoystick2KeyRight(), "摇杆2 右摆", ControlDir.RIGHT);
+            }
+            if (desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_3)) {
+                // 操纵杆3（原始操纵杆换皮版）与操纵杆同方向槽位（广播语义）；默认按键照抄 joystick（WASD），
+                // 可经 Joystick3ModuleScreen 改绑；与 JOYSTICK 同安装位互斥，但按键绑定各自独立
+                add(out, pos, desk.getJoystick3KeyUp(), "操纵杆3 前推", ControlDir.UP);
+                add(out, pos, desk.getJoystick3KeyDown(), "操纵杆3 后拉", ControlDir.DOWN);
+                add(out, pos, desk.getJoystick3KeyLeft(), "操纵杆3 左摆", ControlDir.LEFT);
+                add(out, pos, desk.getJoystick3KeyRight(), "操纵杆3 右摆", ControlDir.RIGHT);
             }
             if (desk.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE)) {
                 add(out, pos, desk.getThrottleKeyForward(), "油门杆 前进", ControlDir.THROTTLE_FORWARD);

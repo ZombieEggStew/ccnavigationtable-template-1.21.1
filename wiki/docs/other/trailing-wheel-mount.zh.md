@@ -1,5 +1,7 @@
 # 从动轮悬架
 
+![从动轮悬架](../img/trailing_wheel_mount.png)
+
 > 单轮无动力悬架，转向由 Lua 驱动——无红石、无 Create 动力输入
 
 **从动轮悬架**（`ccpe:trailing_wheel_mount`）是一个被动的单轮悬架方块。它承载一个轮胎，

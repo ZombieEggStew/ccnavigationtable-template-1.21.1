@@ -194,7 +194,7 @@ Create / Flywheel 证据（工作区）：
 12. 旧 Lua 程序按新 API 改写后行为正确。
 13. `setVisible` 渲染开关：`setVisible(false)` 后整屏（9 宫格 + 内容）消失、显示空白面板；`setVisible(true)` 恢复；内容/设置不丢；重启世界后开关状态保留。
 
-> 建议验证方式：写一个 Lua 测试程序依次覆盖 1-10（`setGrid` → `write` 覆盖 → `draw(batch)` → `drawCells`/`drawShapes` 单层 → `writeField` 定宽字段 → `fillField` 定宽填充 → `fill` → 图形层 → 斜视角观察），完成后勾选以上条目并回填本 memo 与 `.TO DO.md`。
+> 建议验证方式：写一个 Lua 测试程序依次覆盖 1-10（`setGrid` → `write` 覆盖 → `draw(batch)` → `drawCells`/`drawShapes` 单层 → `writeField` 定宽字段 → `fillField` 定宽填充 → `fill` → 图形层 → 斜视角观察），完成后勾选以上条目并回填本 memo 与 `WORK RECORD.md`。
 >
 > **旧测试脚本已失效**：`run/saves/**/computercraft/*/home/` 下遗留的 Lua 脚本（`test.lua`/`test2.lua`/`asd.lua` 等）用的都是已删除的 monitor 背景平面 API（`monitor.setTextScale`/`setCursorPos`/`write`），直接运行会报 `attempt to call a nil value`；验证前必须按新 API 重写（`mon.getCellModule(x,y)` 或 `mon.getModule(id)` 取 screen 句柄 → `setGrid`/`write`/`fill`/`draw`）。
 

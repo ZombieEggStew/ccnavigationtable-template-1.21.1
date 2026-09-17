@@ -84,7 +84,8 @@ public class ControlDeskPlacementOverlay {
                 if (hitState.getBlock() instanceof ControlDeskBlock
                         && hitState.getValue(ControlDeskBlock.BAFFLED)
                         && (type == ControlDeskBlockEntity.ControlType.PEDAL
-                        || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
+                        || type == ControlDeskBlockEntity.ControlType.JOYSTICK
+                        || type == ControlDeskBlockEntity.ControlType.JOYSTICK_3)) {
                     return;
                 }
                 showInstallPreview(mc, hit, type);
@@ -141,10 +142,11 @@ public class ControlDeskPlacementOverlay {
         BlockState state = mc.level.getBlockState(pos);
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
 
-        // 装拓展坞后禁装 PEDAL / JOYSTICK（北侧空区被桌面覆盖）：不显示安装预览
+        // 装拓展坞后禁装 PEDAL / JOYSTICK / JOYSTICK_3（北侧空区被桌面覆盖）：不显示安装预览
         if (state.getValue(ControlDeskBlock.DOCKED)
                 && (type == ControlDeskBlockEntity.ControlType.PEDAL
-                || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
+                || type == ControlDeskBlockEntity.ControlType.JOYSTICK
+                || type == ControlDeskBlockEntity.ControlType.JOYSTICK_3)) {
             return;
         }
 
@@ -442,12 +444,13 @@ public class ControlDeskPlacementOverlay {
         Direction facing = state.getValue(ControlDeskBlock.FACING);
         boolean docked = state.getValue(ControlDeskBlock.DOCKED);
         boolean baffled = state.getValue(ControlDeskBlock.BAFFLED);
-        // 与服务端 install(BAFFLE) 一致：北侧控件 PEDAL / JOYSTICK 或同为形态安装的 DOCK 已装时不可安装 → 变红；
+        // 与服务端 install(BAFFLE) 一致：北侧控件 PEDAL / JOYSTICK / JOYSTICK_3 或同为形态安装的 DOCK 已装时不可安装 → 变红；
         // 桌顶棋盘网格模块（joystick_2 / throttle / throttle_2 / monitor_2）已装不影响挡板安装
         boolean frontBlocked = false;
         if (mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk) {
             frontBlocked = desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_3)
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK);
         }
 
@@ -546,6 +549,7 @@ public class ControlDeskPlacementOverlay {
     static ControlDeskBlockEntity.ControlType controlTypeOf(ItemStack stack) {
         if (stack.is(MyModItems.CONTROL_PEDAL.get())) return ControlDeskBlockEntity.ControlType.PEDAL;
         if (stack.is(MyModItems.CONTROL_JOYSTICK.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK;
+        if (stack.is(MyModItems.CONTROL_JOYSTICK_3.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK_3;
         if (stack.is(MyModItems.CONTROL_MONITOR_2.get())) return ControlDeskBlockEntity.ControlType.MONITOR_2;
         if (stack.is(MyModItems.CONTROL_THROTTLE.get())) return ControlDeskBlockEntity.ControlType.THROTTLE;
         if (stack.is(MyModItems.CONTROL_JOYSTICK_2.get())) return ControlDeskBlockEntity.ControlType.JOYSTICK_2;

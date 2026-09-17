@@ -1,0 +1,15 @@
+{
+  "variants": {
+    "axis=x": {
+      "model": "ccpe:block/aero_engine/engine_core/block",
+      "y": 90
+    },
+    "axis=y": {
+      "model": "ccpe:block/aero_engine/engine_core/block",
+      "x": 90
+    },
+    "axis=z": {
+      "model": "ccpe:block/aero_engine/engine_core/block"
+    }
+  }
+}

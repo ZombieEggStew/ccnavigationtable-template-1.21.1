@@ -6,10 +6,18 @@ import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
 import com.zzy205.myfirstmod.block.MyBearingRenderer;
 import com.zzy205.myfirstmod.block.MyBearingVisual;
+import com.zzy205.myfirstmod.block.ServoBearingRenderer;
+import com.zzy205.myfirstmod.block.ServoBearingVisual;
 import com.zzy205.myfirstmod.block.InsRenderer;
 import com.zzy205.myfirstmod.block.InsVisual;
 import com.zzy205.myfirstmod.block.AicRenderer;
 import com.zzy205.myfirstmod.block.AicVisual;
+import com.zzy205.myfirstmod.block.EngineCoreRenderer;
+import com.zzy205.myfirstmod.block.EngineCoreVisual;
+import com.zzy205.myfirstmod.block.FluidCombustionChamberRenderer;
+import com.zzy205.myfirstmod.block.FluidCombustionChamberVisual;
+import com.zzy205.myfirstmod.block.SteamPowerChamberRenderer;
+import com.zzy205.myfirstmod.block.SteamPowerChamberVisual;
 import com.zzy205.myfirstmod.block.TrailingWheelMountRenderer;
 import com.zzy205.myfirstmod.block.ControlDeskVisual;
 import com.zzy205.myfirstmod.block.ControlDeskRenderer;
@@ -20,6 +28,7 @@ import com.zzy205.myfirstmod.block.MyModPartialModels;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
 import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
 import com.zzy205.myfirstmod.client.MonitorUseInterceptor;
+import com.zzy205.myfirstmod.client.MonitorHoverInterceptor;
 import com.zzy205.myfirstmod.client.MonitorBackgrounds;
 import com.zzy205.myfirstmod.client.MonitorOutlineRenderer;
 import com.zzy205.myfirstmod.client.ControlDeskPlacementOverlay;
@@ -62,6 +71,7 @@ public class CCPeripheralExtenderClient {
         MonitorGridOverlay.register();
         Monitor2GridOverlay.register();
         MonitorUseInterceptor.register();
+        MonitorHoverInterceptor.register();
         ControlDeskPlacementOverlay.register();
         DeskTopGridOverlay.register();
         ControlDeskGhostPreviewRenderer.register();
@@ -84,6 +94,18 @@ public class CCPeripheralExtenderClient {
         TooltipModifier.REGISTRY.register(fluidPortItem,
                 new ItemDescription.Modifier(fluidPortItem, FontHelper.Palette.STANDARD_CREATE));
 
+        // 快速装填燃料箱物品 tooltip（同 fluid_port 模式：ItemDescription，平时只显示"按住 SHIFT 查看"提示，
+        // 按住 SHIFT 展开 summary + 存入/自动存入/取出 3 组用法；Create ClientEvents 自动应用）。
+        Item quickFillFuelVaultItem = MyModBlocks.quick_fill_fuel_vault.get().asItem();
+        TooltipModifier.REGISTRY.register(quickFillFuelVaultItem,
+                new ItemDescription.Modifier(quickFillFuelVaultItem, FontHelper.Palette.STANDARD_CREATE));
+
+        // 快速装填流体储罐物品 tooltip（同 fuel_vault 模式：ItemDescription，平时只显示"按住 SHIFT 查看"提示，
+        // 按住 SHIFT 展开 summary + 存入/空桶装满/潜行反向 3 组用法；Create ClientEvents 自动应用）。
+        Item quickFillFluidTankItem = MyModBlocks.quick_fill_fluid_tank.get().asItem();
+        TooltipModifier.REGISTRY.register(quickFillFluidTankItem,
+                new ItemDescription.Modifier(quickFillFluidTankItem, FontHelper.Palette.STANDARD_CREATE));
+
         // 从动轮悬架物品 tooltip（同 fluid_port 模式：ItemDescription，平时只显示"按住 SHIFT 查看"提示，
         // 按住 SHIFT 展开 summary + 从动/转向/重量说明；Create ClientEvents 自动应用）。
         Item trailingWheelMountItem = MyModBlocks.trailing_wheel_mount.get().asItem();
@@ -100,6 +122,13 @@ public class CCPeripheralExtenderClient {
         // 轴承本体模型由 blockstate 渲染，半轴是唯一动态部分，Flywheel 可用时跳过 vanilla BE 渲染。
         SimpleBlockEntityVisualizer.builder(MyModBlockEntities.aero_bearing_entity.get())
                 .factory(MyBearingVisual::new)
+                .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
+        // 注册 Flywheel Visual（servo_bearing 顶部转盘，复用 Create 的 BEARING_TOP partial）。
+        // 底座由 blockstate 模型渲染，顶部转盘是唯一动态部分，Flywheel 可用时跳过 vanilla BE 渲染。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.servo_bearing_entity.get())
+                .factory(ServoBearingVisual::new)
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
@@ -133,6 +162,26 @@ public class CCPeripheralExtenderClient {
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
+        // 注册 Flywheel Visual（发动机核心：AXIS 两端半传动杆实例化渲染，贯通传动杆）。
+        // 方块本体由 blockstate 静态模型渲染，半轴是唯一动态部分，Flywheel 可用时跳过 vanilla BE 渲染。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.engine_core_entity.get())
+                .factory(EngineCoreVisual::new)
+                .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
+        // 注册 Flywheel Visual（流体燃烧室：活塞实例化渲染，沿 FACING 方向伸出）。
+        // 腔体由 blockstate 静态模型渲染，活塞是唯一动态部分，Flywheel 可用时跳过 vanilla BE 渲染。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.fluid_combustion_chamber_entity.get())
+                .factory(FluidCombustionChamberVisual::new)
+                .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
+        // 注册 Flywheel Visual（蒸汽动力室：活塞实例化渲染，同流体燃烧室模式）。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.steam_power_chamber_entity.get())
+                .factory(SteamPowerChamberVisual::new)
+                .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
+                .apply();
+
         // 初始化自定义 PartialModel（参照 Create 的 AllPartialModels.init()）
         MyModPartialModels.init();
         event.enqueueWork(MonitorBackgrounds::reload);
@@ -153,6 +202,9 @@ public class CCPeripheralExtenderClient {
                 MyModBlockEntities.aero_bearing_entity.get(),
                 MyBearingRenderer::new);
         event.registerBlockEntityRenderer(
+                MyModBlockEntities.servo_bearing_entity.get(),
+                ServoBearingRenderer::new);
+        event.registerBlockEntityRenderer(
                 MyModBlockEntities.control_desk_entity.get(),
                 ControlDeskRenderer::new);
         event.registerBlockEntityRenderer(
@@ -167,6 +219,15 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.trailing_wheel_mount_entity.get(),
                 TrailingWheelMountRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.engine_core_entity.get(),
+                EngineCoreRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.fluid_combustion_chamber_entity.get(),
+                FluidCombustionChamberRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.steam_power_chamber_entity.get(),
+                SteamPowerChamberRenderer::new);
     }
 
     @SubscribeEvent

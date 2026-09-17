@@ -1,0 +1,54 @@
+{
+  "variants": {
+    "axis_along_first=false,facing=down": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block",
+      "x": 180
+    },
+    "axis_along_first=false,facing=east": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block_v",
+      "y": 90
+    },
+    "axis_along_first=false,facing=north": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block_v"
+    },
+    "axis_along_first=false,facing=south": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block_v",
+      "y": 180
+    },
+    "axis_along_first=false,facing=up": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block"
+    },
+    "axis_along_first=false,facing=west": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block_v",
+      "y": 270
+    },
+    "axis_along_first=true,facing=down": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block",
+      "x": 180,
+      "y": 90
+    },
+    "axis_along_first=true,facing=east": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block",
+      "x": 90,
+      "y": 90
+    },
+    "axis_along_first=true,facing=north": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block",
+      "x": 90
+    },
+    "axis_along_first=true,facing=south": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block",
+      "x": 90,
+      "y": 180
+    },
+    "axis_along_first=true,facing=up": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block",
+      "y": 90
+    },
+    "axis_along_first=true,facing=west": {
+      "model": "ccpe:block/aero_engine/cooling_air_duct/block",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "variants": {
+    "facing=down,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/closed",
+      "x": 180
+    },
+    "facing=down,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/open",
+      "x": 180
+    },
+    "facing=east,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/closed",
+      "x": 90,
+      "y": 90
+    },
+    "facing=east,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/open",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/closed",
+      "x": 90
+    },
+    "facing=north,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/open",
+      "x": 90
+    },
+    "facing=south,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/closed",
+      "x": 90,
+      "y": 180
+    },
+    "facing=south,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/open",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/closed"
+    },
+    "facing=up,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/open"
+    },
+    "facing=west,open=false": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/closed",
+      "x": 90,
+      "y": 270
+    },
+    "facing=west,open=true": {
+      "model": "ccpe:block/aero_engine/quick_fill_fuel_vault/open",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

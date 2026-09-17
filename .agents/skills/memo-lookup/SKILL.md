@@ -1,6 +1,6 @@
 ---
 name: memo-lookup
-description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首要入口。memo 目录还包含项目进度（.TO DO.md）以及关键技术参考文档。当需要定位应修改的 Java 文件、了解项目整体状态、当前开发的功能、或查阅 OBJ 模型、旋转、Catnip、物品栏渲染等技术要点时使用此技能。'
+description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首要入口。memo 目录还包含项目进度以及关键技术参考文档。当需要定位应修改的 Java 文件、了解项目整体状态、当前开发的功能、或查阅 OBJ 模型、旋转、Catnip、物品栏渲染等技术要点时使用此技能。'
 ---
 
 # 项目 Memo 查阅
@@ -42,7 +42,8 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 |------|------|---------|
 | `code-map.md` | Java 源码职责、核心数据流、修改入口和已知边界 | 需要定位或修改 Java 文件时（首要入口，先查它） |
 | `api-code-map.md` | **api/ 依赖源码代码地图**（全部为 Java 源码 `-sources`）：Sable Companion / Flywheel / Catnip（核心三件套，项目根基）与 Create / CC:Tweaked / Ponder 的包级地图、import 前缀→路径对照、项目内使用文件清单；JEI / Registrate 未提取（标注为不在 api/） | 需要查外部依赖 API 的包路径/类位置/签名（先查它，再进 api/ 搜索）；涉及渲染、物理、子次元、Outliner、GUI 控件时尤其有用 |
-| `.TO DO.md` | 项目整体进度清单 | 了解已完成/待完成功能、规划下一步工作 |
+| `ATTENTION.md` | **踩坑与注意事项合集**（Sable 坐标/变换互逆/枢轴/GridState re-key/屏幕破坏性变更/引擎门控/INS randomNudge 等） | 改任何代码前先核对对应模块小节，避免重踩已知坑 |
+| `WORK RECORD.md` | 各功能**实施总结/工作记录**（引擎 P7、INS、FMC 应力、屏幕渲染重构、测试 Monitor 变换方案） | 了解某功能怎么做的、后续计划、待验证项 |
 | `record_screen_module.md` | 可变尺寸屏幕实现记录 | 修改屏幕数据、渲染、放置或拆卸行为时 |
 | `record_screen_text.md` | 屏幕字符/矩形渲染实现记录（位图字体、UV 环绕、镜像/深度坑） | 修改屏幕文本/图形渲染或 `ScreenTextRenderer` 时 |
 | `knob-interaction.md` | 旋钮交互数据流 | 修改旋钮拖拽、角度同步或音效时 |
@@ -54,13 +55,14 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 | `my_bearing.md` | 自研风帆轴承方案设计（轴向应力输入 + RotaryConstraint 物理驱动，不贯通应力） | 实现/修改 my_bearing 方块时，先读方案再动手 |
 | `my_aero_sensor.md` | 惯性导航系统（ccpe:ins）实现记录（部件层级 test(Y)→gimbal(Z)→compass(X)、重力摆动画、逆变换链一致性、randomNudge 坑、PIVOT_DROP） | 修改 ccpe:ins 的动画/层级/渲染/扰动时，先读本文 |
 | `short-range link.md` | 短程信号链接器（ccpe:short_range_linker）实现方案（物理体作用域频道注册表、链上共享加载开关、Lua API ccpe.link、频道唯一性语义） | 实现/修改短程信号链接器时，先读本文 |
+| `engine-module.md` | 引擎模块（engine_core 排排坐组网 + 零缓存抽储罐 + 燃烧室并入 + 冷却过热约束 + 末段 Lua 控制）方案设计（CDG modular + Create ConnectivityHandler/SteamEngine 参考） | 实现/修改 engine_core / 燃烧室 / cooling_duct 的组网、燃料消耗、冷却、Lua 控制时，先读本文 |
 | `pitot-selection-box.md` | 皮托管选择框调试记录（VoxelShaper 旋转坑：单位混用/基准朝向/end_rod 风格下 Catnip 与原版 X 旋转方向相反，水平四向绕 Y 180°；新增方块选择框的 checklist） | 新增或修改 6 向 FACING 方块的选择框/碰撞框，或排查选择框"不可见/差 90°/水平反了"时 |
 | `neoforge-debugging.md` | 本项目 F5 启动事实 | 调试启动配置或 classpath 时 |
 | `registrate-datagen.md` | **Registrate + datagen 新增方块完整流程**（红色航行灯实战；含三个坑：datagen 生成 lang 会盖手写文件、Registrate 自动 .tab(SEARCH) 导致服务器启动崩溃及修复、datagen 环境需最小化 mod） | 用 Registrate 注册新方块/跑 runData/排查创造标签崩溃时 |
 
 ## 最小上下文原则
 
-- 不要在每次任务开始时读取 `.TO DO.md` 或全部 memo。
+- 不要在每次任务开始时读取 `ATTENTION.md`、`WORK RECORD.md` 或全部 memo。
 - 只读取与当前请求直接对应的一份 memo；仅当它引用了另一个必须的文档时再读取下一份。
 - 与项目进度或设计取舍没有直接关系时，不加载 memo。
 - 需要定位 Java 文件职责、模块边界或修改入口时，查阅 `code-map.md`；需要定位外部依赖 API 时查阅 `api-code-map.md`。不要因此读取全部其他 memo。
@@ -73,7 +75,6 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 
 - **定位/修改 Java 源码** → `code-map.md`（首要入口）
 - **查外部依赖 API（Sable/Flywheel/Catnip/Create/CC/JEI）** → `api-code-map.md`（首要入口）
-- **项目进度相关** → `.TO DO.md`
 - **添加新元件** → `add-monitor-module` skill
 - **3D 线框/高亮** → `catnip-outliner` skill
 - **OBJ 模型或模型烘焙** → `neoforge-model-rendering` skill
@@ -97,5 +98,5 @@ memo 文档提供了关键 API 速查和代码模板，结合项目现有代码�
 
 ## 注意事项
 
-- `.TO DO.md` 中的 checkbox 状态是项目进度的重要参考
+- `ATTENTION.md` 是踩坑与注意事项的首选入口；`WORK RECORD.md` 记录实施总结与后续计划
 - 如果 memo 和相关 skill 都无法回答当前 API 问题，再回退到 `minecraft-research` skill。

@@ -39,21 +39,21 @@ public class MyModBlocks {
     public static final DeferredBlock<TransmissionPeripheralBlock> transmission_peripheral =
             registerBlocks("transmission_peripheral", () -> new TransmissionPeripheralBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.METAL).
-                    strength(2.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
     public static final DeferredBlock<MonitorBlock> monitor =
             registerBlocks("my_monitor", () -> new MonitorBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.METAL).
-                    strength(1.5f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
     public static final DeferredBlock<ControlDeskBlock> my_control_desk =
             registerBlocks("my_control_desk", () -> new ControlDeskBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.WOOD).
-                    strength(1.5f, 6.0f).
+                    strength(1.0f, 6.0f).
                     // forceSolidOn：桌体碰撞盒是半高块（16×8×8），默认 calculateSolid 判为“非实心”→ blocksMotion()=false
                     // → FlowingFluid.canHoldFluid()=!blocksMotion() 为 true → 水流会把控制台冲掉（1.21.1 水破坏方块的判定）。
                     // 强制实心只影响 isSolid/blocksMotion 标志（水不能流入该格），不改变碰撞盒，也不会新增窒息
@@ -66,7 +66,15 @@ public class MyModBlocks {
     public static final DeferredBlock<MyBearingBlock> aero_bearing =
             registerBlocks("aero_bearing", () -> new MyBearingBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(5.0f, 6.0f).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
+    /** Lua 舵机轴承（ccpe:servo_bearing）：复刻 mechanical_bearing 旋转逻辑，无动力/无红石，CC:T 外设目标角控制；模型复用 Create 机械轴承资产（见 ServoBearingBlock） */
+    public static final DeferredBlock<ServoBearingBlock> servo_bearing =
+            registerBlocks("servo_bearing", () -> new ServoBearingBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
@@ -128,7 +136,7 @@ public class MyModBlocks {
     public static final DeferredBlock<MyBearingPlateBlock> aero_bearing_plate =
             BLOCKS.register("aero_bearing_plate", () -> new MyBearingPlateBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(5.0f, 6.0f).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 
@@ -136,7 +144,55 @@ public class MyModBlocks {
     public static final DeferredBlock<TrailingWheelMountBlock> trailing_wheel_mount =
             registerBlocks("trailing_wheel_mount", () -> new TrailingWheelMountBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).
-                    strength(1.5f, 6.0f).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
+    /** 发动机核心（engine_core）：Create 动力源方块骨架（AXIS X/Y/Z 三向 + 贯通传动杆，发电逻辑待后续模块接入，见 EngineCoreBlockEntity）；音效对齐 simulated:portable_engine（SoundType.NETHERITE_BLOCK） */
+    public static final DeferredBlock<EngineCoreBlock> engine_core =
+            registerBlocks("engine_core", () -> new EngineCoreBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
+    /** 流体燃烧室（fluid_combustion_chamber）：6 向贴附式方块（blockstate 结构参考 fluid_port，见 FluidCombustionChamberBlock）；活塞由 Flywheel/BER 叠加渲染（当前无动画）；音效对齐发动机核心（SoundType.NETHERITE_BLOCK） */
+    public static final DeferredBlock<FluidCombustionChamberBlock> fluid_combustion_chamber =
+            registerBlocks("fluid_combustion_chamber", () -> new FluidCombustionChamberBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
+    /** 蒸汽动力室（steam_power_chamber）：6 向贴附式方块，模式照抄流体燃烧室（见 SteamPowerChamberBlock）；音效对齐发动机核心（SoundType.NETHERITE_BLOCK） */
+    public static final DeferredBlock<SteamPowerChamberBlock> steam_power_chamber =
+            registerBlocks("steam_power_chamber", () -> new SteamPowerChamberBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
+    /** 快速装填流体储罐（quick_fill_fluid_tank）：6 向贴附式方块，自带 4000mb 单槽流体存储（见 QuickFillFluidTankBlock / QuickFillFluidTankBlockEntity：右键存入/空桶装满 1 桶 + create:fluid_tank 同款 goggle tooltip）；音效对齐 fluid_port（SoundType.COPPER） */
+    public static final DeferredBlock<QuickFillFluidTankBlock> quick_fill_fluid_tank =
+            registerBlocks("quick_fill_fluid_tank", () -> new QuickFillFluidTankBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.COPPER).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
+    /** 快速装填燃料箱（quick_fill_fuel_vault）：6 向贴附式台阶状方块，blockstate/选择框照抄 fluid_port（FACING × OPEN，默认 OPEN=false 即模型 closed.json，见 QuickFillFuelVaultBlock）；带 BE（单物品类型库存，容量 1024，无 GUI，灵感参考 create:item_hatch）；音效对齐 fluid_port（SoundType.COPPER） */
+    public static final DeferredBlock<QuickFillFuelVaultBlock> quick_fill_fuel_vault =
+            registerBlocks("quick_fill_fuel_vault", () -> new QuickFillFuelVaultBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.COPPER).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
+    /** 冷却气道（cooling_air_duct）：6 面贴附 × 每面 2 旋转 = 12 态纯静态方块（无 BE，见 CoolingAirDuctBlock）；纯散热模块（计入 K_DUCT，装 ≥1 个解锁 setCooling 风门；混合比拉稀权已改由流体燃烧室门控）；音效对齐发动机核心（SoundType.NETHERITE_BLOCK） */
+    public static final DeferredBlock<CoolingAirDuctBlock> cooling_air_duct =
+            registerBlocks("cooling_air_duct", () -> new CoolingAirDuctBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(1.0f, 6.0f).
                     noOcclusion()
             ));
 

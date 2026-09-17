@@ -1,0 +1,35 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "ccpe:block/control_desk/joystick_3",
+		"particle": "ccpe:block/control_desk/joystick_3"
+	},
+	"elements": [
+		{
+			"from": [7.1, 9, 1.6],
+			"to": [8.9, 13, 3.4],
+			"rotation": {"angle": 0, "axis": "y", "origin": [7, 10, 0]},
+			"faces": {
+				"north": {"uv": [14, 9, 12, 13], "texture": "#0"},
+				"east": {"uv": [12, 9, 14, 13], "texture": "#0"},
+				"south": {"uv": [14, 9, 12, 13], "texture": "#0"},
+				"west": {"uv": [12, 9, 14, 13], "texture": "#0"},
+				"up": {"uv": [9, 9, 11, 11], "texture": "#0"},
+				"down": {"uv": [12, 12, 14, 14], "texture": "#0"}
+			}
+		},
+		{
+			"name": "stick",
+			"from": [7.3, 2, 1.8],
+			"to": [8.7, 9, 3.2],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 2, 1.5]},
+			"faces": {
+				"north": {"uv": [16, 9, 15, 16], "texture": "#0"},
+				"east": {"uv": [15, 9, 16, 16], "texture": "#0"},
+				"south": {"uv": [15, 9, 16, 16], "texture": "#0"},
+				"west": {"uv": [16, 9, 15, 16], "texture": "#0"}
+			}
+		}
+	]
+}

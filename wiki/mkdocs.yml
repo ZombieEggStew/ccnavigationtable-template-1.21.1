@@ -45,10 +45,21 @@ plugins:
             Home: 首页
             Overview: 概述
             Peripheral Extender: 外设扩展器
+            Global Signal System: 全局信号系统
             Redstone Transceiver: 红石收发器
+            Actuators: 执行器
             Electronic Transmission: 电子变速箱
             Aero Bearing: 航空轴承
+            Servo Bearing: 舵机轴承
             Servo Mode: 舵机模式
+            Engine System: 引擎系统
+            Engine Core: 引擎核心
+            Fluid Combustion Chamber: 流体燃烧室
+            Steam Power Chamber: 蒸汽动力室
+            Cooling Air Duct: 冷却气道
+            Fuel & Fuel Sources: 燃料与燃料源
+            Engine Lua API: 引擎 Lua API
+            Temperature & Cooling Model: 温度与冷却模型
             Modular Monitor: 模块化监视器
             Monitor: 监视器
             Button Module: 按钮模块
@@ -59,6 +70,7 @@ plugins:
             Foot Pedal: 脚踏板
             Joystick: 操纵杆
             Joystick 2: 操纵杆 2
+            Joystick 3: 操纵杆 3
             Throttle: 油门
             Throttle 2: 油门 2
             Monitor 2: 监视器 2
@@ -66,6 +78,7 @@ plugins:
             Baffle: 挡板
             Examples & Tutorials: 示例与教程
             trainer aircraft: 教练机
+            trainer aircraft v2: 教练机 v2
             Aerodynamics: 气动模型
             Channel Setup: 频道设置
             Block NBT Reading: 方块 NBT 读取
@@ -74,6 +87,7 @@ plugins:
             Aeronautics Sensor Integration: 航空学传感器集成
             Chunk & Physics Body Loading: 区块/物理结构加载
             Sensor System: 传感器系统
+            Avionics System: 航电系统
             Static Port: 静压孔
             Pitot Tube: 皮托管
             Inertial Navigation System: 惯性导航系统
@@ -99,9 +113,10 @@ nav:
     - Redstone Transceiver: redstone-transceiver/overview.md
     - Electronic Transmission: electronic-transmission/overview.md
     - Aero Bearing: aero-bearing/overview.md
+    - Engine System: engine/overview.md
     - Modular Monitor: monitor/overview.md
     - Control Desk: control-desk/overview.md
-  - Peripheral Extender:
+  - Global Signal System:
     - Overview: peripheral-extender/overview.md
     - Channel Setup: peripheral-extender/channel-setup.md
     - Block NBT Reading: peripheral-extender/nbt-reading.md
@@ -110,14 +125,22 @@ nav:
     - Aeronautics Sensor Integration: peripheral-extender/simulated-integration.md
     - Chunk & Physics Body Loading: peripheral-extender/chunk-loading.md
     - Lua API Reference: api-reference.md
-  - Redstone Transceiver:
-    - Overview: redstone-transceiver/overview.md
-  - Electronic Transmission:
-    - Overview: electronic-transmission/overview.md
-    - Servo Mode: electronic-transmission/servo-mode.md
-  - Aero Bearing:
-    - Overview: aero-bearing/overview.md
-  - Sensor System:
+    - Redstone Transceiver: redstone-transceiver/overview.md
+  - Actuators:
+    - Electronic Transmission: electronic-transmission/overview.md
+    - Aero Bearing: aero-bearing/overview.md
+    - Servo Bearing: actuators/servo-bearing.md
+    - Trailing Wheel Mount: other/trailing-wheel-mount.md
+  - Engine System:
+    - Overview: engine/overview.md
+    - Engine Core: engine/engine-core.md
+    - Steam Power Chamber: engine/steam-power-chamber.md
+    - Fluid Combustion Chamber: engine/fluid-combustion-chamber.md
+    - Cooling Air Duct: engine/cooling-air-duct.md
+    - Fuel & Fuel Sources: engine/fuel.md
+    - Temperature & Cooling Model: engine/temperature.md
+    - Engine Lua API: engine/lua-api.md
+  - Avionics System:
     - Overview: sensor-system/overview.md
     - Static Port: sensor-system/static-port.md
     - Pitot Tube: sensor-system/pitot-tube.md
@@ -139,14 +162,14 @@ nav:
     - Foot Pedal: control-desk/pedal.md
     - Joystick: control-desk/joystick.md
     - Joystick 2: control-desk/joystick_2.md
+    - Joystick 3: control-desk/joystick_3.md
     - Throttle: control-desk/throttle.md
     - Throttle 2: control-desk/throttle_2.md
     - Monitor 2: control-desk/monitor_2.md
     - Dock: control-desk/dock.md
     - Baffle: control-desk/baffle.md
-  - Other:
-    - Trailing Wheel Mount: other/trailing-wheel-mount.md
   - Examples & Tutorials:
     - trainer aircraft: examples/trainer_aircraft.md
+    # - trainer aircraft v2: examples/trainer_aircraft_2.md
     - Aerodynamics: examples/aerodynamics.md
   - FAQ: faq.md

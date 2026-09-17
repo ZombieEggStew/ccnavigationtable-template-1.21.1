@@ -222,6 +222,11 @@ dependencies {
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
     // localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
 
+    // ---- Jade (optional — quick_fill_fuel_vault 内容物 tooltip) ------------
+    // Jade 只在 run/mods 里运行时加载（dev 环境手动放置）；本地 libs 抽 jar 仅供编译期
+    // 引用 snownee.jade.api（同 simulated/offroad/aeronautics 模式）。
+    compileOnly files("libs/Jade-1.21.1-NeoForge-15.10.5.jar")
+
     // ---- Runtime mods (only present in run tasks, never in the published jar)
     // We use transitive=false to avoid Gradle trying to resolve Create's
     // optional integration deps (FTB Chunks/Teams/Library, JourneyMap, Curios,

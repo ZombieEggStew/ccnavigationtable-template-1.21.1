@@ -50,6 +50,8 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     private TransformedInstance throttleIndicator;
     private TransformedInstance joystick2Base;
     private TransformedInstance joystick2Handle;
+    private TransformedInstance joystick3Base;
+    private TransformedInstance joystick3Handle;
     private TransformedInstance throttle2Base;
     private TransformedInstance throttle2Handle;
 
@@ -59,6 +61,9 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
     /** 摇杆2 动画倾斜值（度）：指数逼近追逐 {@link Joystick2Motion#targetDeg} */
     private float smoothTilt2X;
     private float smoothTilt2Y;
+    /** 操纵杆3 动画倾斜值（度）：指数逼近追逐 {@link Joystick3Motion#targetDeg} */
+    private float smoothTilt3X;
+    private float smoothTilt3Y;
     /** 踏板动画平移量（块单位）：指数逼近追逐 {@link PedalMotion#targetPx}（左/右） */
     private float smoothPedalLeft;
     private float smoothPedalRight;
@@ -125,6 +130,7 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
 
         boolean pedalWanted = be.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL);
         boolean joystickWanted = be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK);
+        boolean joystick3Wanted = be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_3);
         boolean monitor2Wanted = be.isInstalled(ControlDeskBlockEntity.ControlType.MONITOR_2);
         boolean throttleWanted = be.isInstalled(ControlDeskBlockEntity.ControlType.THROTTLE);
         boolean joystick2Wanted = be.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_2);
@@ -216,6 +222,17 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
                     applyJoystick2Placement(inst, be);
                     applyTilt(inst, tilt2X, tilt2Y, Joystick2Motion.PIVOT_X, Joystick2Motion.PIVOT_Y, Joystick2Motion.PIVOT_Z);
                 });
+
+        // joystick_3（原始操纵杆换皮版，逻辑照抄 joystick）：底座静态 + 手柄倾斜动画；
+        // 与 joystick 同安装位（固定安装位，不平移、不绕盒心旋转），手柄叠加倾斜绕枢轴 (8,2,2)
+        this.joystick3Base = syncInstance(this.joystick3Base, joystick3Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_3_BASE, facing, null);
+        float[] target3 = Joystick3Motion.targetDeg(be);
+        this.smoothTilt3X = JoystickTilt.approach(this.smoothTilt3X, target3[0], frameTicks);
+        this.smoothTilt3Y = JoystickTilt.approach(this.smoothTilt3Y, target3[1], frameTicks);
+        final float tilt3X = this.smoothTilt3X;
+        final float tilt3Y = this.smoothTilt3Y;
+        this.joystick3Handle = syncInstance(this.joystick3Handle, joystick3Wanted, MyModPartialModels.CONTROL_DESK_JOYSTICK_3_HANDLE, facing,
+                inst -> applyTilt(inst, tilt3X, tilt3Y, Joystick3Motion.PIVOT_X, Joystick3Motion.PIVOT_Y, Joystick3Motion.PIVOT_Z));
 
         // throttle_2：底座静态 + 手柄绕枢轴 (4,2,8) 旋转（总距杆类型，见 Throttle2Motion）；
         // 数值 = 服务端权威角度（0..+30°，空格上抬 / 左Ctrl 下拉，锁存不回正），动画层指数逼近
@@ -486,6 +503,8 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         if (this.throttleIndicator != null) consumer.accept(this.throttleIndicator);
         if (this.joystick2Base != null) consumer.accept(this.joystick2Base);
         if (this.joystick2Handle != null) consumer.accept(this.joystick2Handle);
+        if (this.joystick3Base != null) consumer.accept(this.joystick3Base);
+        if (this.joystick3Handle != null) consumer.accept(this.joystick3Handle);
         if (this.throttle2Base != null) consumer.accept(this.throttle2Base);
         if (this.throttle2Handle != null) consumer.accept(this.throttle2Handle);
     }
@@ -504,6 +523,8 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         if (this.throttleIndicator != null) this.relight(this.throttleIndicator);
         if (this.joystick2Base != null) this.relight(this.joystick2Base);
         if (this.joystick2Handle != null) this.relight(this.joystick2Handle);
+        if (this.joystick3Base != null) this.relight(this.joystick3Base);
+        if (this.joystick3Handle != null) this.relight(this.joystick3Handle);
         if (this.throttle2Base != null) this.relight(this.throttle2Base);
         if (this.throttle2Handle != null) this.relight(this.throttle2Handle);
     }
@@ -525,6 +546,8 @@ public class ControlDeskVisual extends AbstractBlockEntityVisual<ControlDeskBloc
         if (this.throttleIndicator != null) this.throttleIndicator.delete();
         if (this.joystick2Base != null) this.joystick2Base.delete();
         if (this.joystick2Handle != null) this.joystick2Handle.delete();
+        if (this.joystick3Base != null) this.joystick3Base.delete();
+        if (this.joystick3Handle != null) this.joystick3Handle.delete();
         if (this.throttle2Base != null) this.throttle2Base.delete();
         if (this.throttle2Handle != null) this.throttle2Handle.delete();
     }

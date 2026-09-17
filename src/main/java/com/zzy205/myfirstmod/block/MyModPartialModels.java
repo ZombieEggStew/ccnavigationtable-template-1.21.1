@@ -22,6 +22,9 @@ public class MyModPartialModels {
     public static final PartialModel CONTROL_DESK_THROTTLE_INDICATOR = block("control_desk_1/throttle/throttle_indicator");
     public static final PartialModel CONTROL_DESK_JOYSTICK_2_BASE = block("control_desk_1/joystick_2/joystick_2_base");
     public static final PartialModel CONTROL_DESK_JOYSTICK_2_HANDLE = block("control_desk_1/joystick_2/joystick_2_handle");
+    /** 操纵杆3（原始操纵杆换皮版）：拆 base/handle 两部件（同 joystick_2 结构；枢轴 (8,2,2) 见 {@link Joystick3Motion}） */
+    public static final PartialModel CONTROL_DESK_JOYSTICK_3_BASE = block("control_desk_1/joystick_3/base");
+    public static final PartialModel CONTROL_DESK_JOYSTICK_3_HANDLE = block("control_desk_1/joystick_3/handle");
     public static final PartialModel CONTROL_DESK_THROTTLE_2_BASE = block("control_desk_1/throttle_2/throttle_2_base");
     public static final PartialModel CONTROL_DESK_THROTTLE_2_HANDLE = block("control_desk_1/throttle_2/throttle_2_handle");
     /** Monitor：偏航支架（bearing，随 facing+offset+yaw） */
@@ -44,6 +47,12 @@ public class MyModPartialModels {
     public static final PartialModel INS_YAW = block("my_aero_sensor/ins/test");
     /** 航空集成计算机（AIC）：可旋转罗盘（以旋转中心为原点建模，渲染时平移到 COMPASS_POS 再旋转） */
     public static final PartialModel AIC_COMPASS = block("my_aero_sensor/aic/compass");
+    /** 流体燃烧室：活塞（动态部件，Flywheel/BER 叠加渲染，沿 FACING 方向伸出；腔体由 blockstate 静态模型渲染） */
+    public static final PartialModel FLUID_COMBUSTION_CHAMBER_PISTON = block("aero_engine/fluid_combustion_chamber/piston");
+    /** 蒸汽动力室：活塞（同流体燃烧室模式） */
+    public static final PartialModel STEAM_POWER_CHAMBER_PISTON = block("aero_engine/steam_power_chamber/piston");
+    /** Lua 舵机轴承（servo_bearing）：顶部转盘（动态部件，随角度绕 FACING 轴旋转；底座由 blockstate 模型渲染） */
+    public static final PartialModel SERVO_BEARING_TOP = block("servo_bearing/top");
 
     private static PartialModel block(String path) {
         return PartialModel.of(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "block/" + path));

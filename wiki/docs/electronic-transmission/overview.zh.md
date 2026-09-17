@@ -2,6 +2,8 @@
 
 ![电子变速箱](../img/transmission_peripheral_v.png)
 
+## 变速模式
+
 > **与 create:RotationSpeedController 有什么不同?**
 
 > - 使用机械动力的转速控制器作为外设执行 `setTargetSpeed()` 会触发 `RotationPropagator.handleRemoved()` 会级联清空整个下游子网络的 source，导致不符合预期的结果（比如在转速控制器的下游使用 aeroworks 的 stepper_servo，改变转速的同时激活步进电机，电机会乱转）。
@@ -37,3 +39,77 @@ print(t.getTargetSpeed())  -- 128.56
 print(t.getRatio())
 ```
 
+## 舵机模式
+
+**电子变速箱** 可以作为舵机使用：不再是连续传递旋转，而是把输出轴**绝对定位**到
+±180° 内的指定角度（单圈、走最短路径），完全由 Lua 控制。
+
+舵机模式仍然需要输入动力：输出轴以输入转速（或被 Lua 覆盖的转速）运动，
+没有动力时舵机保持静止。
+
+## Lua 函数
+
+| 方法 | 说明 |
+|---|---|
+| `setServoMode(enabled)` | 开启 / 关闭舵机模式（`mainThread=true`）。**开启时自动归位到 0°**（当前位置重新定义为 0°，不旋转）——已在舵机模式时再次开启同样会归位。 |
+| `getServoMode()` | 是否处于舵机模式 |
+| `setServoAngle(degrees)` | 把输出轴定位到 `degrees` 度（±180，走最短路径）。在变速器模式下调用会自动切入舵机模式（同样先归位到 0° 再定位）。 |
+| `getServoAngle()` | 当前**服务器权威**角度（精确；每 tick 同步） |
+| `setServoSpeed(rpm)` | 输出转速（0~96 RPM）。`0` = 使用输入转速。超过 96 会自动钳到 96。 |
+| `getServoSpeed()` | 已设置的输出转速（`0` 表示"使用输入转速"） |
+| `getServoReaim()` | 段内同向重瞄是否开启（默认 `false`） |
+| `(1.0.9) setServoReaim(enabled)` | 开启 / 关闭段内同向重瞄。开启后对同向目标变化响应更快，但高频变化的目标在 ±180° 边界附近可能错误定位（见下方警告），因此**默认关闭**。 |
+| `resetServo()` | **重新归位**：把当前位置重新定义为 0°，目标也置 0°——**不产生任何旋转**。不在舵机模式时会先进入舵机模式。 |
+
+舵机模式下 `setRatio` / `setTargetSpeed` 会被拒绝并返回 `false`。
+调用 `setServoMode(false)` 切回变速器模式。
+
+## 行为说明（段式运动）
+
+舵机通过 Create `SequenceContext` 段式状态机（与 Create Propulsion Simulated
+的 tilt adapter 同思路）向下游精确传播转角，且不会触发 flicker 惩罚：
+
+- **±180° 是同一个位置**：`+180°` 与 `-180°` 是同一物理位置。输出轴已在 `-180°`
+  时调用 `setServoAngle(180)` 视为"已在原地"，不会旋转。
+- **运动过程中同向改目标立即生效（re-aim）**：段内把目标改为**同方向**的更远/更近
+  位置（如 0°→90° 途中改到 120°），当前段会在同一 tick 内直接延长/缩短到新目标，
+  无需等段结束，也不会触发 flicker。
+
+!!! warning "(1.0.9)开启 re-aim 时，高速变换的输入可能导致定位错误"
+    目标**高频变化**时，重瞄会反复改写段终点导致错误定位。因此 re-aim **默认关闭**
+
+- **反向改目标仍等段结束**：段内把目标改为**反方向**时，仍延迟到下一段生效
+  （每段最多 179°），而不是立即反向。96 RPM 下一段约 6 tick，反向等待最多约 0.3 秒。
+- **断电会恢复**：运动中失去输入动力时舵机停下，动力恢复后继续朝目标前进（不会忘记目标）。
+- **flicker 安全**：重新接入动力网络会延迟到 Create flicker 分数降到阈值以下，
+  快速连续定位不会导致方块被破坏。
+- **护目镜 tooltip**：戴 Create 护目镜查看时，变速箱模式显示变速比 / 目标转速与
+  输出转速，舵机模式显示当前角度、目标角度与段内重瞄开关状态（「段内重瞄：开/关」）。
+
+## 为什么限制 96 RPM？
+
+96 RPM 以上时 180° 移动仅需约 2 tick 即完成，肉眼无增益，反而会触发某些特性，需要额外的处理，因此有效转速被限制在 **96 RPM**。
+
+- `setServoSpeed(128)` → 自动钳到 96。
+- 输入动力转速超过 96 时，有效转速同样被钳到 96。
+
+## 示例
+
+```lua
+local t = peripheral.find("ccpe:transmission_peripheral")
+
+t.setServoMode(true)       -- 进入舵机模式并归位到 0°（不旋转）
+t.setServoSpeed(0)         -- 以输入转速运动
+t.setServoAngle(90)        -- 输出轴转到 +90°
+print(t.getServoAngle())   -- 90.0（服务器权威值）
+
+t.setServoAngle(135)       -- 运动中途改目标：若仍在朝 90° 转，当前段会立即延长到 135°
+
+t.setServoAngle(-45)       -- 走最短路径转回
+
+t.resetServo()             -- 当前位置重新定义为 0°，不旋转
+print(t.getServoAngle())   -- 0.0
+
+t.setServoSpeed(96)        -- 最大转速；setServoSpeed(128) 会被钳到 96
+t.setServoMode(false)      -- 切回变速器模式
+```

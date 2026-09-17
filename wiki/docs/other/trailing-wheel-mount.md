@@ -1,5 +1,7 @@
 # Trailing Wheel Mount
 
+![Trailing Wheel Mount](../img/trailing_wheel_mount.png)
+
 > Passive single-wheel suspension with Lua-driven steering — no redstone, no Create power input
 
 The **Trailing Wheel Mount** (`ccpe:trailing_wheel_mount`) is a passive wheel

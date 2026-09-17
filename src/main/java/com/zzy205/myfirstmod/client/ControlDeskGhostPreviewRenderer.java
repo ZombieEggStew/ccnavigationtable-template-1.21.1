@@ -65,17 +65,19 @@ public class ControlDeskGhostPreviewRenderer {
         if (!(state.getBlock() instanceof ControlDeskBlock)) return;
         if (!(mc.level.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk)) return;
         if (desk.isInstalled(type)) return; // 已装该控件：不显示半透明模型（红色线框由 overlay 负责）
-        // 装拓展坞后禁装 PEDAL / JOYSTICK：不显示半透明模型预览（与 overlay 的线框抑制一致）
+        // 装拓展坞后禁装 PEDAL / JOYSTICK / JOYSTICK_3：不显示半透明模型预览（与 overlay 的线框抑制一致）
         if (state.getValue(ControlDeskBlock.DOCKED)
                 && (type == ControlDeskBlockEntity.ControlType.PEDAL
-                || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
+                || type == ControlDeskBlockEntity.ControlType.JOYSTICK
+                || type == ControlDeskBlockEntity.ControlType.JOYSTICK_3)) {
             return;
         }
-        // 装挡板后禁装北侧控件 PEDAL / JOYSTICK：不显示它们的半透明模型预览（与 overlay 的线框抑制一致）；
+        // 装挡板后禁装北侧控件 PEDAL / JOYSTICK / JOYSTICK_3：不显示它们的半透明模型预览（与 overlay 的线框抑制一致）；
         // 桌顶棋盘网格模块（joystick_2 / throttle / throttle_2 / monitor_2）不受影响，正常显示实物预览
         if (state.getValue(ControlDeskBlock.BAFFLED)
                 && (type == ControlDeskBlockEntity.ControlType.PEDAL
-                || type == ControlDeskBlockEntity.ControlType.JOYSTICK)) {
+                || type == ControlDeskBlockEntity.ControlType.JOYSTICK
+                || type == ControlDeskBlockEntity.ControlType.JOYSTICK_3)) {
             return;
         }
 
@@ -189,6 +191,10 @@ public class ControlDeskGhostPreviewRenderer {
             case JOYSTICK -> new PartialModel[]{
                     MyModPartialModels.CONTROL_DESK_JOYSTICK_BASE,
                     MyModPartialModels.CONTROL_DESK_JOYSTICK};
+            // 操纵杆3（原始操纵杆换皮版）：与 joystick 同安装位（固定位，无盒位平移）
+            case JOYSTICK_3 -> new PartialModel[]{
+                    MyModPartialModels.CONTROL_DESK_JOYSTICK_3_BASE,
+                    MyModPartialModels.CONTROL_DESK_JOYSTICK_3_HANDLE};
             case MONITOR_2 -> new PartialModel[]{MyModPartialModels.CONTROL_DESK_MONITOR_2};
             case THROTTLE -> new PartialModel[]{
                     MyModPartialModels.CONTROL_DESK_THROTTLE_BASE,

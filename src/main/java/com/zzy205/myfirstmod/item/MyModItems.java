@@ -38,6 +38,9 @@ public class MyModItems {
             "throttle", () -> new Item(new Item.Properties()));
     public static final DeferredItem<Item> CONTROL_JOYSTICK_2 = ITEMS.register(
             "joystick_2", () -> new Item(new Item.Properties()));
+    // joystick_3 = 原始操纵杆（joystick）的换皮版：逻辑完全照抄 joystick（独立配置/轴值/输入租约），只换模型
+    public static final DeferredItem<Item> CONTROL_JOYSTICK_3 = ITEMS.register(
+            "joystick_3", () -> new Item(new Item.Properties()));
     public static final DeferredItem<Item> CONTROL_THROTTLE_2 = ITEMS.register(
             "throttle_2", () -> new Item(new Item.Properties()));
 
@@ -56,7 +59,15 @@ public class MyModItems {
     }
 
     public static <T extends Block> void registerBlockItems(String name, DeferredBlock<T> block) {
-        ITEMS.register(name, () -> new BlockItem(block.get(), new Item.Properties()));
+        ITEMS.register(name, () -> {
+            Block b = block.get();
+            // P6 物理排斥：燃烧室用自定义物品（ChamberBlockItem#place 拦截「流体/蒸汽混装」放置，
+            // DENY 音效 + 状态条提示，同 create:factory_gauge 的 FactoryPanelBlockItem#place 模式）
+            if (b instanceof com.zzy205.myfirstmod.block.FluidCombustionChamberBlock
+                    || b instanceof com.zzy205.myfirstmod.block.SteamPowerChamberBlock)
+                return new ChamberBlockItem(b, new Item.Properties());
+            return new BlockItem(b, new Item.Properties());
+        });
     }
 
     public static void register(IEventBus modEventBus) {

@@ -41,6 +41,18 @@
 ### [🍌 航空轴承](aero-bearing/overview.md)
 Sable 物理轴承，直接轴向动力输入。**Lua 控制模式**下旋转角度由 Lua 直接设定，跳过应力网络角度累计——精确控制你的风帆/舵面角度。
 
+### [🤖 舵机轴承](actuators/servo-bearing.zh.md)
+纯 Lua 驱动的舵机，**无需动力输入**：由 CC:Tweaked 计算机把装配好的舵面精确摆到目标角度（最短路径）。运动学刚性、客户端渲染平滑——无爬行。
+
+### [🔧 引擎系统](engine/overview.zh.md)
+模块化多方块 Create 动力源，专为飞行器设计，**一个油门杆**驱动：
+
+- **[引擎核心](engine/engine-core.zh.md)** — 核心排成一排组网成一条引擎（最多 21 节），共享运行状态；转速 = 油门 × 256
+- **[流体燃烧室](engine/fluid-combustion-chamber.zh.md)** — datapack 燃料、每室 8192 SU、混合比/经济玩法
+- **[蒸汽动力室](engine/steam-power-chamber.zh.md)** — 水 + 原版燃料、每室 4096 SU、永不过热、余热运转
+- **[冷却气道](engine/cooling-air-duct.zh.md)** — 散热鳍片与可调风门
+- Lua 控制（`ccpe:engine`，无红石）
+
 ### [🛰️ 传感器系统](sensor-system/overview.zh.md)
 为物理体（Sable 子次元）设计的航空传感器，全部可通过 `ccpe.sensor_system` Lua API 读取：
 

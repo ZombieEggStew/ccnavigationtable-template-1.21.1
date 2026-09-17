@@ -1174,7 +1174,7 @@ public class SensorSystemAPI implements ILuaAPI {
      * 锚点间三次 Hermite 插值 {@code f(t) = ((c·t + q)·t + l)·t + v1}（c=(s1+s2)Δx−2Δy、
      * q=3Δy−(2s1+s2)Δx、l=Δx·s1），结果钳位 ≥0；y 超出锚点区间时取首/末锚点值。
      */
-    private double evaluatePressure(double y) {
+    private static double evaluatePressure(double y) {
         PressureCurve curve = pressureCurve;   // 单次读取快照，避免撕裂
         double[][] pts = curve.anchors();
         double v;
@@ -1206,6 +1206,20 @@ public class SensorSystemAPI implements ILuaAPI {
             }
         }
         return curve.base() * v;
+    }
+
+    /**
+     * 引擎冷却模型用：<b>无门控</b>读大气压分数（世界高度 Y → 气压，海平面 = 1.0）。
+     * <p>
+     * 与 {@link #getPressureFromAltitude(double)} 同公式，但<b>不要求</b>机体上有 FMC/AIC——
+     * 冷却模型在普通静态方块/任意机床的引擎上都需要气压。曲线未刷新（从未放置 FMC/AIC，
+     * 服务器启动时已按主世界刷新一次）时用默认曲线。
+     *
+     * @param altitude 世界高度 Y
+     * @return 该高度的气压（大气压分数，海平面 = 1.0；钳位 ≥0）
+     */
+    public static double getPressureForEngine(double altitude) {
+        return evaluatePressure(altitude);
     }
 
     /**

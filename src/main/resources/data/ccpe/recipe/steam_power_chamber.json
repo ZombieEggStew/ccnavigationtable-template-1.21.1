@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:copper_sheet"
+    },
+    "X": {
+      "item": "create:steam_engine"
+    },
+    "Y": {
+      "item": "minecraft:blast_furnace"
+    }
+  },
+  "pattern": [
+    "   ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:steam_power_chamber"
+  }
+}

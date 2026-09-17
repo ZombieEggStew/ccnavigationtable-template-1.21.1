@@ -44,6 +44,12 @@ public class Config {
             .comment("Stress coefficient for the Transmission Peripheral in servo mode: actual stress = value × |real output RPM| (the output speed may be overridden/accelerated by setServoSpeed).")
             .defineInRange("servoModeStressImpact", 2.0, 0.0, 1024.0);
 
+    // ── 引擎源抽取批次倍数（P2.5 批量补料：批次 = 引擎数量 × K，进游戏时缓存一次）──
+    public static final ModConfigSpec.DoubleValue ENGINE_SOURCE_BATCH_MULTIPLIER = BUILDER
+            .comment("Engine source batch multiplier (K): each refill drains chamber count × K (water/fuel mb, or solid fuel items). "
+                    + "Higher = fewer refills/availability checks but larger single drains. Cached once when entering a world.")
+            .defineInRange("engineSourceBatchMultiplier", 1.0, 0.25, 64.0);
+
     // ── 调试：飞行数据记录器（方案 B）──
     public static final ModConfigSpec.BooleanValue FLIGHT_RECORDER_ENABLED = BUILDER
             .comment("Flight data recorder (debug): log per-tick body data for every FMC/AIC/INS-registered aircraft into <gameDir>/flight_logs/*.csv "
@@ -87,6 +93,15 @@ public class Config {
     public static final ModConfigSpec.BooleanValue JOYSTICK_OVERLAY_ENABLED = CLIENT_BUILDER
             .comment("坐垫操作模式下显示虚拟摇杆 HUD（默认关闭，避免破坏沉浸感；需要时在客户端配置中开启）。")
             .define("joystickOverlayEnabled", false);
+
+    // ── 客户端：引擎活塞"噗嗤"音效 ──
+    public static final ModConfigSpec.DoubleValue ENGINE_FLUID_PUFF_VOLUME = CLIENT_BUILDER
+            .comment("流体燃烧室活塞'噗嗤'音效音量 (0.0-2.0，0 = 关闭该音效逻辑节省性能)。默认: 0.05（每活塞周期触发一次，Create STEAM 声，频率随转速）。")
+            .defineInRange("engineFluidPuffVolume", 0.05, 0.0, 2.0);
+
+    public static final ModConfigSpec.DoubleValue ENGINE_STEAM_PUFF_VOLUME = CLIENT_BUILDER
+            .comment("蒸汽动力室活塞'噗嗤'音效音量 (0.0-2.0，0 = 关闭该音效逻辑节省性能)。默认: 0.1（每活塞周期触发一次，Create STEAM 声，频率随转速）。")
+            .defineInRange("engineSteamPuffVolume", 0.1, 0.0, 2.0);
 
     static final ModConfigSpec SPEC = BUILDER.build();
     static final ModConfigSpec CLIENT_SPEC = CLIENT_BUILDER.build();

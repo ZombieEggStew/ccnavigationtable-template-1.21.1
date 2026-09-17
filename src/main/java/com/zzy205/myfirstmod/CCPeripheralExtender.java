@@ -2,8 +2,12 @@ package com.zzy205.myfirstmod;
 
 import com.mojang.logging.LogUtils;
 import com.tterrag.registrate.Registrate;
+import com.zzy205.myfirstmod.block.EngineCoreBlockEntity;
+import com.zzy205.myfirstmod.block.EngineFuels;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.MyModBlocks;
+import com.zzy205.myfirstmod.block.QuickFillFluidTankBlockEntity;
+import com.zzy205.myfirstmod.block.QuickFillFuelVaultBlockEntity;
 import com.zzy205.myfirstmod.block.TrailingWheelMountBlockEntity;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralCapabilities;
@@ -23,6 +27,7 @@ import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
@@ -65,8 +70,14 @@ public class CCPeripheralExtender {
         // 注册全部自定义网络包（按功能域拆分在 network 包内）
         modEventBus.addListener(RegisterPayloadHandlersEvent.class, ModPackets::register);
 
+        // 引擎燃料表（engine_fuel/*.json）：服务端数据包重载时加载（P1，见 EngineFuels）
+        NeoForge.EVENT_BUS.addListener(EngineFuels::registerAddReloadListener);
+
         // 注册 CC:T 外设 capability（支持 peripheral.wrap / peripheral.find）
         modEventBus.addListener(RegisterCapabilitiesEvent.class, CCPeripheralCapabilities::register);
+
+        // 注册方块流体能力（quick_fill_fluid_tank 的 4000mb 单槽存储；与 CC 是否加载无关）
+        modEventBus.addListener(RegisterCapabilitiesEvent.class, CCPeripheralExtender::registerBlockCapabilities);
 
         // 全局频道注册表是静态字段：服务器停止（回主菜单/关世界）时清空，防止旧世界设备残留占用频道
         NeoForge.EVENT_BUS.addListener(CCPeripheralExtender::onServerStarting);
@@ -101,6 +112,8 @@ public class CCPeripheralExtender {
         SensorSystemAPI.refreshAeroConfig();
         SensorSystemAPI.refreshPressureCurve(event.getServer().overworld());
         SensorSystemAPI.refreshUniversalDrag(event.getServer().overworld());
+        // 引擎源抽取批次倍数（K）：进游戏缓存一次（避免每 tick 读配置）；批次 = 引擎数量 × K
+        EngineCoreBlockEntity.SOURCE_BATCH_MULTIPLIER = Config.ENGINE_SOURCE_BATCH_MULTIPLIER.get().floatValue();
     }
 
     /** 服务器停止（关世界/回主菜单）：清空静态全局频道注册表，避免跨世界残留占用频道。 */
@@ -109,5 +122,19 @@ public class CCPeripheralExtender {
         ShortRangeLinkerRegistry.clear();
         BodySensorRegistry.clear();
         FlightDataRecorder.closeAll();
+    }
+
+    /** 注册方块能力：快速装填流体储罐暴露 4000mb 单槽 FluidHandler.BLOCK（供流体管道/goggle tooltip 等读取）；
+     *  快速装填燃料箱暴露单槽 ItemHandler.BLOCK（供引擎蒸汽室自动抽取固体燃料——只走 capability，见
+     *  {@code EngineCoreBlockEntity#tryPullSolidFuel}）。 */
+    private static void registerBlockCapabilities(RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(
+                Capabilities.FluidHandler.BLOCK,
+                MyModBlockEntities.quick_fill_fluid_tank_entity.get(),
+                (be, side) -> ((QuickFillFluidTankBlockEntity) be).getTank());
+        event.registerBlockEntity(
+                Capabilities.ItemHandler.BLOCK,
+                MyModBlockEntities.quick_fill_fuel_vault_entity.get(),
+                (be, side) -> ((QuickFillFuelVaultBlockEntity) be).getItemHandler());
     }
 }

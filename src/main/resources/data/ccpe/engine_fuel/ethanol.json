@@ -1,0 +1,6 @@
+{
+  "fluid": "createdieselgenerators:ethanol",
+  "consumption": 1.0,
+  "heat": 0.5,
+  "stress": 0.5
+}

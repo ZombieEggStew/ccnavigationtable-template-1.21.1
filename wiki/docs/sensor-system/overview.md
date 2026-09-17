@@ -1,9 +1,9 @@
-# Sensor System
+# Avionics System
 
 > Aviation sensors for physics bodies
 
 
-The **Sensor System** is a set of attachable avionics blocks for physics bodies (Sable sub-levels). Once installed on a body, CC:Tweaked computers **on the same body** (including constraint chains) can read the sensors through a single Lua module: `require("ccpe.sensor_system")`.
+The **Avionics System** is a set of attachable avionics blocks for physics bodies (Sable sub-levels). Once installed on a body, CC:Tweaked computers **on the same body** (including constraint chains) can read the sensors through a single Lua module: `require("ccpe.sensor_system")`.
 
 Everything is body-scoped: a computer only sees the sensors installed on its **own** physics body (including constraint chains), so several aircraft can be instrumented independently without interference.
 

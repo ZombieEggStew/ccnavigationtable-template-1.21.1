@@ -39,6 +39,18 @@ A rotation speed controller optimized for CC:T control, avoiding the network cas
 ### [🍌 Aero Bearing](aero-bearing/overview.md)
 A Sable-physics bearing with direct axial power input. In **Lua Control mode** the rotation angle is set directly via Lua, skipping the stress-network angle accumulation — position your sail/control surface exactly.
 
+### [🤖 Servo Bearing](actuators/servo-bearing.md)
+A Lua-driven servo with **no power input**: a CC:Tweaked computer positions the assembled control surface at an exact target angle (shortest path). Kinematic and rigid, with smooth client rendering — no crawling.
+
+### [🔧 Engine System](engine/overview.md)
+A modular, multi-block Create power source for aircraft, driven by a **single throttle lever**:
+
+- **[Engine Core](engine/engine-core.md)** — cores snap into one engine (up to 21 blocks) sharing a running state; speed = throttle × 256 rpm
+- **[Fluid Combustion Chamber](engine/fluid-combustion-chamber.md)** — datapack fuel, 8192 SU per chamber, mixture/economy gameplay
+- **[Steam Power Chamber](engine/steam-power-chamber.md)** — water + vanilla fuel, 4096 SU per chamber, never overheats, residual-heat operation
+- **[Cooling Air Duct](engine/cooling-air-duct.md)** — cooling fins & adjustable shutter
+- Lua control via `ccpe:engine` (no redstone)
+
 ### [🛰️ Sensor System](sensor-system/overview.md)
 Aviation sensors for physics bodies (Sable sub-levels), all readable from Lua via `ccpe.sensor_system`:
 
