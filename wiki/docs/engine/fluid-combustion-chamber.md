@@ -2,20 +2,39 @@
 
 ![fluid_combustion_chamber](../img/fluid_combustion_chamber.png)
 
-The **Fluid Combustion Chamber** (`ccpe:fluid_combustion_chamber`) attaches to an [Engine Core](engine-core.md) and burns **datapack fluid fuel** — each chamber contributes **8192 SU** (× the fuel's stress multiplier). This is the "economy management" half of the engine system: fuel cost and temperature are tuned through the **mixture lever**, the throttle and the cooling duct shutter.
+The **Fluid Combustion Chamber** (`ccpe:fluid_combustion_chamber`) attaches to an [Engine Core](engine-core.md) and burns **fluid fuels from other mods** — each chamber contributes **8192 SU** (× the fuel's stress multiplier). This is the "economy management" half of the engine system: fuel cost and temperature are tuned through the **mixture**, the throttle and the cooling duct shutter.
 
 ## Placement
 
-- Sneak-right-click the chamber against any face of an engine core (the chamber attaches to the face it is placed against). A placement ghost previews the attachment.
+- Right-click the chamber against any face of an engine core (the chamber attaches to the face it is placed against). A placement ghost previews the attachment.
 - Attach as many chambers as you like around the row of cores; each chamber is a separate input module.
 - **Fluid and steam chambers are mutually exclusive on one engine** — the two types cannot be mixed (placement is blocked; the controller arbitrates by majority).
-- A chamber attached between two cores belongs to one engine only (never double-counted).
 
 ## Fuel
 
 - Fuel comes from **datapacks**: `data/<namespace>/engine_fuel/*.json` (hot-reloaded with `/reload`). No need for a specific fuel source block — the engine drains the fluid from any fluid tank in the engine's neighbourhood via its capability (zero internal fluid cache, e.g. the [Quick-Fill Fluid Tank](fuel.md#quick-fill-fluid-tank) works).
-- Each fuel entry defines `consumption` (mb/s per chamber, default 1), `heat` and `stress` multipliers — see [Fuel & Fuel Sources](fuel.md).
-- **One fuel at a time per engine**: the controller picks the first usable fuel in its source scan order (no priority field anymore); old `priority` fields in data packs are ignored.
+
+### Supported fuels
+
+The mod ships the following fuels in `data/ccpe/engine_fuel/*.json` (you need the corresponding mod installed for its fluids to exist; see the notes):
+
+| Fuel | Source mod | `consumption` (mb/s per chamber) | `heat` | `stress` |
+|---|---|---|---|---|
+| Diesel | Create: Diesel Generators (`createdieselgenerators:diesel`) | 1.0 | ×1.25 | ×1.25 |
+| Biodiesel | Create: Diesel Generators (`createdieselgenerators:biodiesel`) | 1.0 | ×1.0 | ×1.0 |
+| Gasoline | Create: Diesel Generators (`createdieselgenerators:gasoline`) | 1.0 | ×1.0 | ×1.0 |
+| Ethanol | Create: Diesel Generators (`createdieselgenerators:ethanol`) | 1.0 | ×0.5 | ×0.5 |
+| Plant Oil | Create: Diesel Generators (`createdieselgenerators:plant_oil`) | 1.0 | ×0.5 | ×0.5 |
+| Coral | Create Propulsion: Simulated (`createpropulsion:coral`) | 1.0 | ×1.25 | ×1.25 |
+| Turpentine | Create Propulsion: Simulated (`createpropulsion:turpentine`) | 1.5 | ×1.0 | ×1.0 |
+
+How the multipliers matter:
+
+- **`stress`** scales the chamber's **8192 SU** base — Diesel / Coral produce **10240 SU** per chamber, while Ethanol / Plant Oil produce only **4096 SU**.
+- **`heat`** scales the heat generated into the temperature model (see [Temperature & Cooling Model](temperature.md)) — Diesel / Coral run hotter, Ethanol / Plant Oil run cooler.
+- **`consumption`** is the burn rate per chamber (mb/s) — Turpentine burns **1.5 mb/s** (faster consumption at the same power), all others 1.0.
+- **One fuel at a time**: the engine picks the first usable fuel in its source scan order — with several tanks around, the scan order decides which one burns.
+- These are only the bundled entries — the engine accepts **any** `engine_fuel/*.json` in any datapack, so other mods' fluids can be added the same way.
 
 ## Output & consumption model
 
@@ -23,13 +42,13 @@ The **Fluid Combustion Chamber** (`ccpe:fluid_combustion_chamber`) attaches to a
 - **Fuel burn** = lever × economy factor × cold penalty (see below), × fuel `consumption`.
 - **Heat** = running chambers × fuel `heat` × `heatFactor(actual mixture)` × throttle.
 
-## Mixture — the economy lever
+## Mixture
 
 `setMixture(0.6..1.4)` (default 1.0) only affects **fuel cost and temperature** — never stress or speed:
 
 - **Lean (< 1.0)** = fuel saving, but hotter. Heat factor: `1 + 2.0×(1−m)²` (convex on the lean side).
 - **Rich (> 1.0)** = spend fuel to cool. Heat factor: `max(0.7, 1−0.5×(m−1))`.
-- **Altitude auto-rich**: air gets thinner with height, so the carburettor naturally enriches — the *actual* mixture is `lever × autoRichness(pressure)`, where `autoRichness = 1 + 0.45×(1−pressure)` clamped to [1.0, 1.25]. Auto-richness **only cools** (×0.875 heat at max) — it never increases fuel consumption. At Y≈260 the auto-rich is ≈×1.25, so pulling the lever to ≈0.8 gives an *actual* mixture of ≈1.0 (altitude compensation, see economy).
+- **Altitude auto-rich**: air gets thinner with height, so the carburettor naturally enriches — the *actual* mixture is `lever × autoRichness(pressure)`, where `autoRichness = 1 + 0.45×(1−pressure)` clamped to [1.0, 1.25]. Auto-richness **only cools** (×0.875 heat at max). At Y≈260 the auto-rich is ≈×1.25, so pulling the lever to ≈0.8 gives an *actual* mixture of ≈1.0 (altitude compensation, see economy).
 
 ## Economy factor
 
@@ -41,6 +60,8 @@ The **economy factor** is an AND-gated, time-unlocked discount (0.75–1.0):
 - The economy factor multiplies consumption **only** — it never feeds back into heat.
 
 ## Temperature & cooling
+
+> For the full heat-generation and dissipation equations, altitude → temperature and altitude → pressure curves, see [Temperature & Cooling Model](temperature.md).
 
 - **Newton cooling model**: heat generated minus heat dissipated (ambient + core + cooling ducts, scaled by ram air at speed and air pressure at altitude), integrated against thermal mass.
 - **Environment temperature** varies by height in the overworld (sea level 20°C → clouds 0°C → world top −40°C); the Nether is a constant **155°C** at all heights, the End a constant **0°C**.

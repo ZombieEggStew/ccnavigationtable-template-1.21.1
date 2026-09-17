@@ -9,6 +9,8 @@
 ## [> 存档下载 <](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/main/.design_guide/trainer%20aircraft.zip)
 [OneDrive](https://1drv.ms/u/c/4fabe5939824c0f1/IQDyp7GaueyWSJS6sStblBfdAdL7uPhhr4vora3CftGzKo0)
 
+!!!info "注意"
+    1.1.4 版本修改了流体端口的重量，需要手动重新配平
 
 ## 需求 mod
 

@@ -66,9 +66,8 @@ The **Quick-Fill Fuel Vault** (`ccpe:quick_fill_fuel_vault`) is a 6-sided attach
 
 ## Batch refills (how the engine draws)
 
-The engine has **zero internal fluid cache** — every tick it draws from source storages via capability into a small **reserve**:
+The engine has **zero internal fluid cache** — it draws into a small **reserve** from source storages via capability on each batch refill:
 
 - **Batch size = chamber count × K**, where **K** is the configurable batch multiplier (`engineSourceBatchMultiplier`, default 1.0, range 0.25–64; cached once when entering a world).
 - The engine draws from the **head of its source list**; if the head tank/vault is empty, removed or holds the wrong content, it **immediately advances to the next source** (same tick, zero downtime).
 - The reserve is refilled the same tick it runs out, so the stress network never flickers.
-- Known limitation (v1): source storages on moving contraptions are not detected — sources must be static world blocks.

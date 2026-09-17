@@ -48,23 +48,9 @@ end
 -- 盯温度
 print(string.format("T = %.1f°C  eco = %.2f  fuel = %s",
     e.getTemperature(), e.getFuelEconomyFactor(), e.getActiveFuel().type))
-
--- 蒸汽？等暖机再推满
-if e.isWarmingUp() then
-    print("warming up...")
-else
-    e.setThrottle(1.0)
-end
 ```
 
-## 运行条件（全部满足才发电）
-
-- ≥ 1 运行燃烧室，**且**
-- 油门 > 0，**且**
-- 未过热（仅流体引擎；220/200°C 滞回），**且**
-- 蒸汽引擎：T≥100°C **且**水可用。
-
-**过载不停机**——对齐 Create 发电机：照常运行烧油，goggle 顶部红字「网络过载」提示。停机原因：缺燃料/缺水、油门 0、流体过热（T≤200°C 恢复）、蒸汽暖机未完成。
+**过载不停机**——对齐 Create 应力源：照常运行烧油，goggle 顶部红字「网络过载」提示。停机原因：缺燃料/缺水、油门 0、流体过热（T≤200°C 恢复）、蒸汽暖机未完成。
 
 ## 状态档位（流体引擎，按 `getTemperature()`）
 

@@ -2,13 +2,11 @@
 
 ![engine_core](../img/engine_core.png)
 
-The **Engine Core** (`ccpe:engine_core`) is the skeleton of the engine system — a Create kinetic power-source block that assembles into a multi-block row. Cores placed in a line merge into **one engine** (1×1×N, up to 21 blocks) that shares a single running state, temperature and throttle; only the **controller** (one end of the row) generates power and makes decisions.
+The **Engine Core** (`ccpe:engine_core`) is the skeleton of the engine system — a Create kinetic power-source block that assembles into a multi-block row. Cores placed in a line merge into **one engine** (1×1×N, up to 21 blocks) that shares a single running state, temperature and throttle; only the **controller** (one end of the row) outputs stress and makes decisions.
 
 ## Assembly & placement
 
 - Place the first core, then **right-click an existing engine with another engine core** to extend it along its axis (Create `PoleHelper` placement). The cores auto-merge into one multi-block engine.
-- The core is a rotating-pillar block (`AXIS` X/Y/Z). A **through-shaft** runs along the axis on both faces, so the row of cores couples into a single stress network — power can be taken from any shaft face of any core.
-- Breaking a middle segment splits the engine; the two halves re-form on their own (Create `ConnectivityHandler`).
 - Engines are persisted: after a chunk reload, the cores re-assemble via their saved positions (`Uninitialized` / `LastKnownPos` NBT, also works with Create schematics).
 - The engine state (temperature, throttle, mixture, economy progress) is **inherited when you extend the engine** — extending at the controller end keeps the running state instead of resetting it.
 - **Controller**: the block at one end of the row. Only the controller ticks, generates stress and runs the Lua peripheral. A non-controller core reports 0 generated speed, but every core is a valid place to read/write the engine from Lua (the peripheral delegates to the controller).
@@ -23,7 +21,7 @@ The engine follows a **fixed-pitch propeller model**: the throttle lever is the 
 
 ## Operating conditions
 
-The engine generates only while it **runs**:
+The engine outputs stress only while it **runs**:
 
 - **≥ 1 running chamber** (has fuel to burn),
 - **throttle > 0** (throttle 0 = stopped, no fuel burned),

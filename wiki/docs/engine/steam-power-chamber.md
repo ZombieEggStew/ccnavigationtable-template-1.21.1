@@ -6,35 +6,32 @@ The **Steam Power Chamber** (`ccpe:steam_power_chamber`) attaches to an [Engine 
 
 ## Placement
 
-- Sneak-right-click the chamber against any face of an engine core (it attaches to the face it is placed against), with a placement ghost previewing the attachment.
+- Right-click the chamber against any face of an engine core (it attaches to the face it is placed against), with a placement ghost previewing the attachment.
 - **Fluid and steam chambers are mutually exclusive on one engine** — the two types cannot be mixed.
-- A chamber between two cores belongs to one engine only (never double-counted).
 
 ## How it works
 
 1. **Fuel & water sources** — place a [Quick-Fill Fuel Vault](fuel.md#quick-fill-fuel-vault) (solid fuel) and/or a fluid tank with a burnable bucket fuel (e.g. lava), plus a water tank, near the engine. The controller auto-draws from any neighbouring storage via capability (zero internal cache).
 2. **Ignite** — with water and fuel available, the boiler starts burning.
-3. **Warm-up** — below 100°C the engine burns fuel but **does not generate** (this is `isWarmingUp()`).
-4. **Power** — once T ≥ 100°C and throttle > 0, the engine generates **4096 SU per chamber**.
+3. **Warm-up** — below 100°C the engine burns fuel but **does not output stress** (this is `isWarmingUp()`).
+4. **Power** — once T ≥ 100°C and throttle > 0, the engine outputs **4096 SU of stress per chamber**.
 
 ## Closed boiler — never overheats
 
 - The boiler self-regulates and pins at **155°C** (saturation temperature) — independent of air pressure, environment or ram air, so the steam engine is **altitude-proof**.
 - There is **no overheat**, no mixture lever, no economy zone and no cooling duct requirement.
-- If the water runs out, the engine stops burning (dry-fire protection) and cools by Newton cooling. It can never overheat.
+- If the water runs out, the engine stops burning (dry-fire protection) and cools by Newton cooling.
 
 ## Fuel
 
-The steam engine uses **pure vanilla fuels** (no datapack needed):
+The steam engine uses only **vanilla-form fuels** (no datapack needed):
 
 - **Fluid fuel first**: bucket items with a vanilla furnace burn time > 0 (e.g. a lava bucket = 20000 ticks). The engine drains the fluid and converts it by burn time.
-- **Solid fuel fallback**: when no fluid fuel is available, the engine draws solid items with vanilla `burnTime > 0` (e.g. coal = 1600 ticks) from neighbouring item containers (e.g. the Quick-Fill Fuel Vault).
+- **Solid fuel fallback**: when no fluid fuel is available, the engine draws solid items with vanilla `burnTime > 0` (e.g. coal = 1600 ticks) from a neighbouring Quick-Fill Fuel Vault.
 - **Parallel burning**: `N` chambers burn `N` fuels at once (one per chamber, all start and end together). A batch is drawn as `N × K` items (K = configurable batch multiplier, default 1.0); if the current vault has fewer than `N×K`, the engine switches to the next vault rather than splitting a stack.
 - **Water**: 1 mb/s per chamber × throttle, drawn in batches from neighbouring water tanks.
 
 ## Real steam throttle — consumption ∝ throttle
-
-This is a **real steam-engine throttle**, not a power knob:
 
 - Fuel, water and fluid all scale **with the throttle**: at 25% throttle the engine burns 1/4 the steam flow, so **fuel lasts 4× longer**.
 - Throttle **0 = stopped** — nothing is drawn or burned.
@@ -45,7 +42,8 @@ This is a **real steam-engine throttle**, not a power knob:
 The engine keeps generating while the boiler is still hot even after the fuel runs out:
 
 - Running condition = **throttle > 0 AND T ≥ 100°C AND water available** (fuel is not required once the boiler is hot).
-- When the fuel is exhausted but the boiler is still ≥ 100°C and water is available, the engine keeps producing at **full output from all steam chambers**.
+- In the Nether the ambient temperature is fixed at 155°C, so with water alone the engine keeps working indefinitely.
+- When the fuel is exhausted but the boiler is still ≥ 100°C and water is available, it keeps working.
 - It stops only when the **water runs out** (dry-fire protection) or the boiler cools below **100°C**.
 - Combustion countdown is independent of the fuel source: if you remove the fuel vault, already-drawn fuel keeps burning to the end.
 

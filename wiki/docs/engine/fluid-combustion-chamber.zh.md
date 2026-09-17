@@ -2,20 +2,39 @@
 
 ![fluid_combustion_chamber](../img/fluid_combustion_chamber.png)
 
-**流体燃烧室**（`ccpe:fluid_combustion_chamber`）贴附在[引擎核心](engine-core.zh.md)上，燃烧 **datapack 流体燃料**——每室贡献 **8192 SU**（× 燃料 stress 倍率）。这是引擎系统的「经济管理」半边：油耗与温度通过**混合比杆**、油门与冷却气道风门来调控。
+**流体燃烧室**（`ccpe:fluid_combustion_chamber`）贴附在[引擎核心](engine-core.zh.md)上，燃烧 **其他模组 流体燃料**——每室贡献 **8192 SU**（× 燃料 stress 倍率）。这是引擎系统的「经济管理」半边：油耗与温度通过**混合比**、油门与冷却气道风门来调控。
 
 ## 放置
 
-- 潜行右键将燃烧室对准引擎核心的任意面（燃烧室贴附在点击面）。有放置虚影预览贴附位置。
+- 右键将燃烧室对准引擎核心的任意面。有放置虚影预览贴附位置。
 - 可以在核心排周围贴任意多个燃烧室，每个燃烧室都是一个独立输入模块。
 - **流体室与蒸汽室在同一台引擎上互斥**——不能混装（放置被拦截，controller 按多数派仲裁）。
-- 贴在两核心之间的燃烧室只归一边，绝不双计。
 
 ## 燃料
 
 - 燃料来自 **datapack**：`data/<命名空间>/engine_fuel/*.json`（`/reload` 热加载）。不需要特定燃料源方块——引擎通过 capability 从模块邻居任意流体储罐 drain（严格零内部流体缓存，[快速装填流体储罐](fuel.zh.md#quick-fill-fluid-tank) 即可）。
-- 每条燃料定义 `consumption`（mb/s/室，默认 1）、`heat`、`stress` 倍率——详见 [燃料与燃料源](fuel.zh.md)。
-- **全引擎单燃料制**：controller 按源列表查找顺序选第一个可用燃料（**P2.5 已删 priority**，旧数据包 priority 字段忽略不读）。
+
+### 支持的燃料
+
+本模组自带的燃料位于 `data/ccpe/engine_fuel/*.json`（需要安装对应模组才有对应流体；见备注）：
+
+| 燃料 | 来源模组 | `consumption`（mb/s/室） | `heat` | `stress` |
+|---|---|---|---|---|
+| 柴油 Diesel | Create: Diesel Generators（`createdieselgenerators:diesel`） | 1.0 | ×1.25 | ×1.25 |
+| 生物柴油 Biodiesel | Create: Diesel Generators（`createdieselgenerators:biodiesel`） | 1.0 | ×1.0 | ×1.0 |
+| 汽油 Gasoline | Create: Diesel Generators（`createdieselgenerators:gasoline`） | 1.0 | ×1.0 | ×1.0 |
+| 乙醇 Ethanol | Create: Diesel Generators（`createdieselgenerators:ethanol`） | 1.0 | ×0.5 | ×0.5 |
+| 植物油 Plant Oil | Create: Diesel Generators（`createdieselgenerators:plant_oil`） | 1.0 | ×0.5 | ×0.5 |
+| 珊瑚 Coral | Create Propulsion: Simulated（`createpropulsion:coral`） | 1.0 | ×1.25 | ×1.25 |
+| 松节油 Turpentine | Create Propulsion: Simulated（`createpropulsion:turpentine`） | 1.5 | ×1.0 | ×1.0 |
+
+各倍率的意义：
+
+- **`stress`** 缩放每室 **8192 SU** 基础出力——柴油/珊瑚每室 **10240 SU**，乙醇/植物油只有 **4096 SU**。
+- **`heat`** 缩放进入温度模型的发热（见[温度与冷却模型](temperature.zh.md)）——柴油/珊瑚更热，乙醇/植物油更凉。
+- **`consumption`** 是每室烧速（mb/s）——松节油烧 **1.5 mb/s**（同功率下耗油更快），其余均 1.0。
+- **单燃料制**：引擎按源列表查找顺序选第一个可用燃料——周围有多个罐时，扫描顺序决定烧哪种。
+- 以上只是自带条目——引擎接受任意 datapack 的 `engine_fuel/*.json`，其他模组的流体也可照此添加。
 
 ## 出力与消耗模型
 
@@ -23,13 +42,13 @@
 - **油耗** = 杆值 × 经济系数 × 过冷惩罚（见下）× 燃料 `consumption`。
 - **发热** = 运行室数 × 燃料 `heat` × `heatFactor(实际混合比)` × 油门。
 
-## 混合比——经济杆
+## 混合比
 
-`setMixture(0.6~1.4)`（默认 1.0）只影响**油耗与温度**——绝不影响应力/转速：
+`setMixture(0.6~1.4)`（默认 1.0）只影响**油耗与温度**——不影响应力/转速：
 
 - **拉稀（< 1.0）** = 省油，但更热。热因子：`1 + 2.0×(1−m)²`（稀侧凸曲线）。
 - **富油（> 1.0）** = 花油买冷。热因子：`max(0.7, 1−0.5×(m−1))`。
-- **高空自动富油**：越高空气越稀，化油器按进气体积配油 → 天然变浓——**实际混合比 = 杆 × autoRichness(气压)**，`autoRichness = 1 + 0.45×(1−气压)` 钳制 [1.0, 1.25]。自动富油**只降温**（满富油发热 ×0.875），**绝不进油耗**。Y≈260 时自动富油 ≈×1.25，所以把杆拉到 ≈0.8 时实际混合比 ≈1.0（海拔补偿，吃经济）。
+- **高空自动富油**：越高空气越稀，化油器按进气体积配油 → 天然变浓——**实际混合比 = 杆 × autoRichness(气压)**，`autoRichness = 1 + 0.45×(1−气压)` 钳制 [1.0, 1.25]。自动富油**只降温**（满富油发热 ×0.875）。Y≈260 时自动富油 ≈×1.25，所以把杆拉到 ≈0.8 时实际混合比 ≈1.0（海拔补偿，吃经济）。
 
 ## 经济系数
 
@@ -41,6 +60,8 @@
 - 经济系数只乘消耗，**绝不反哺发热**。
 
 ## 温度与冷却
+
+> 完整的发热/散热公式、高度→温度与高度→气压曲线见 [温度与冷却模型](temperature.zh.md)。
 
 - **牛顿冷却模型**：发热 − 散热（环境 + 核心 + 冷却气道，按速度冲压与高度气压缩放），对热容积分。
 - **环境温度**按高度变化（主世界海平面 20°C → 云层 0°C → 世界顶 −40°C）；**地狱全高度恒定 155°C**、**末地全高度恒定 0°C**。

@@ -48,23 +48,9 @@ end
 -- Watch the temperature
 print(string.format("T = %.1f°C  eco = %.2f  fuel = %s",
     e.getTemperature(), e.getFuelEconomyFactor(), e.getActiveFuel().type))
-
--- Steam? wait for warm-up, then full power
-if e.isWarmingUp() then
-    print("warming up...")
-else
-    e.setThrottle(1.0)
-end
 ```
 
-## Running conditions (all must hold to generate)
-
-- ≥ 1 running chamber, **and**
-- throttle > 0, **and**
-- not overheated (fluid engines only; hysteresis 220/200°C), **and**
-- steam engines: T ≥ 100°C **and** water available.
-
-**Overload does not stop the engine** — like Create generators it keeps running and burning fuel; the goggles show a red "Network overloaded" warning. Shutdown reasons: no fuel / no water, throttle 0, fluid overheat (resumes at ≤ 200°C), steam warm-up incomplete.
+**Overload does not stop the engine** — like Create stress sources it keeps running and burning fuel; the goggles show a red "Network overloaded" warning. Shutdown reasons: no fuel / no water, throttle 0, fluid overheat (resumes at ≤ 200°C), steam warm-up incomplete.
 
 ## Status tiers (fluid engine, via `getTemperature()`)
 
