@@ -56,8 +56,9 @@ public class ServoBearingBlockEntity extends KineticBlockEntity
     /**
      * 舵机最大角速度（度/游戏 tick）。照 mechanical_bearing 的 Sequencer 钳制语义：
      * 目标角推进时每 tick 至多转这么多度，最后一步补足剩余、精确到位。
+     * 当前值 18°/tick = 360°/s。
      */
-    public static final float MAX_ANGULAR_SPEED = 12f;
+    public static final float MAX_ANGULAR_SPEED = 18f;
 
     /** 是否应于下一 tick 装配/拆卸（空手右键触发） */
     public boolean assembleNextTick;
@@ -130,10 +131,19 @@ public class ServoBearingBlockEntity extends KineticBlockEntity
     }
 
     /**
-     * 渲染用插值角度（顶部转盘 / contraption 用）。<b>插值式</b>（非原版外推式）：
-     * {@code prevAngle → angle} 之间按 {@code partialTicks} 最短路径插值。
+     * 渲染用插值角度（顶部转盘 / contraption 用）。
+     * <p>
+     * <b>优先委托给 contraption 实体</b>：{@code movedContraption.getAngle(partialTicks)}
+     * 与结构的渲染角度完全同源（实体的 prevAngle/angle 由实体 tick 同步维护，插值连续、
+     * 视觉流畅），避免顶部转盘用 BE 自己维护的 prevAngle/angle（BE.tick 与 read 网络更新
+     * 时序不同步 → 偶发卡帧、与结构角度略微不一致）。
+     * <p>
+     * 未装配（无实体）时回退到自身插值（{@code prevAngle → angle}）。
      */
     public float getInterpolatedAngle(final float partialTicks) {
+        if (movedContraption != null && !movedContraption.isRemoved()) {
+            return movedContraption.getAngle(partialTicks);
+        }
         return AngleHelper.angleLerp(partialTicks, prevAngle, angle);
     }
 

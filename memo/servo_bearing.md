@@ -52,7 +52,7 @@ ControlledContraptionEntity（舵面结构）
   ```
 - `setTargetAngle(deg)`：`targetAngleLimit = AngleHelper.getShortestAngleDiff(angle, deg)`（带符号剩余度数，走最短路径）；
 - `applyRotation()` → `movedContraption.setAngle(angle)` + `setRotationAxis(FACING 轴)`；
-- `MAX_ANGULAR_SPEED = 12f`（度/游戏 tick = 240°/s），硬编码常量，**后续可 config 化**。
+- `MAX_ANGULAR_SPEED = 18f`（度/游戏 tick = 360°/s），硬编码常量，**后续可 config 化**。
 
 ### 2. 客户端视觉修复（核心新工作，与 mechanical_bearing 的关键差异）
 
@@ -67,6 +67,17 @@ ControlledContraptionEntity（舵面结构）
 
 效果：视觉 = 服务端角度轨迹 + 帧间插值 → 匀速平滑、末端 50ms 内到位、无爬行；且与 Sable 物理侧（本来就吃服务端角度 + 物理子步插值）一致。
 渲染器/Visual 传 `partialTicks`（不带原版的 `-1`，因为插值式不是外推式）。
+
+### 2.1 顶部转盘委托实体角度（验证后补充）
+
+进游戏发现：结构（contraption 实体）旋转流畅，但顶部转盘卡帧且与结构有轻微角度不一致。
+根因：顶部转盘用 BE 自己维护的 `prevAngle/angle`（BE.tick 更新 prevAngle、网络 read 更新 angle，
+**两个字段更新时间点不同 → 时序竞争 → 偶发插值区间为 [新值,新值] 卡一帧**）；而结构用实体
+自己维护的 `prevAngle/angle`（实体 tick 同步更新 → 插值连续流畅）。
+
+修复：`getInterpolatedAngle` **优先委托给 `movedContraption.getAngle(partialTicks)`**（与结构
+渲染完全同源 → 顶部 = 结构角度，同步且流畅）；未装配时回退到自身 `angleLerp(prevAngle, angle)`。
+`Visual`/`Renderer` 均调 `getInterpolatedAngle`，自动受益，无需改动。
 
 ### 3. 装配（照抄 mechanical_bearing.assemble）
 
@@ -124,7 +135,7 @@ s.getAngle()              -- 当前实际角度（0..360，服务端权威）
 
 ## 已知边界 / 注意事项
 
-1. **MAX_ANGULAR_SPEED 硬编码 12°/tick**（240°/s）——目标角推进速度；后续按需加 Config 项（`Config.java` 已有 `ModConfigSpec` 模式可参考）。
+1. **MAX_ANGULAR_SPEED 硬编码 18°/tick**（360°/s）——目标角推进速度；后续按需加 Config 项（`Config.java` 已有 `ModConfigSpec` 模式可参考）。
 2. **每 tick `sendData()`**（lazyTickRate=1）——一个 float 角度的同步包，20 次/秒，可接受；若担心可改为「角度变化 > ε 才发送」。
 3. **角度回绕**：`angle % 360` + `normalizeDegrees` 归一化到 [0,360)；`setTargetAngle` 走最短路径（`getShortestAngleDiff`），多圈目标（如 450°）会走 -270° 而非 +450°。
 4. **外设 `equals`**：通过 `Peripheral.outer()` 取外层 BE 位置比较（内部类不能直接 `that.worldPosition` 访问外部字段）。
