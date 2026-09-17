@@ -51,6 +51,8 @@ public class MyModPartialModels {
     public static final PartialModel FLUID_COMBUSTION_CHAMBER_PISTON = block("aero_engine/fluid_combustion_chamber/piston");
     /** 蒸汽动力室：活塞（同流体燃烧室模式） */
     public static final PartialModel STEAM_POWER_CHAMBER_PISTON = block("aero_engine/steam_power_chamber/piston");
+    /** Lua 舵机轴承（servo_bearing）：顶部转盘（动态部件，随角度绕 FACING 轴旋转；底座由 blockstate 模型渲染） */
+    public static final PartialModel SERVO_BEARING_TOP = block("servo_bearing/top");
 
     private static PartialModel block(String path) {
         return PartialModel.of(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "block/" + path));

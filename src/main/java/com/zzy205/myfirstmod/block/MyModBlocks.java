@@ -70,6 +70,14 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** Lua 舵机轴承（ccpe:servo_bearing）：复刻 mechanical_bearing 旋转逻辑，无动力/无红石，CC:T 外设目标角控制；模型复用 Create 机械轴承资产（见 ServoBearingBlock） */
+    public static final DeferredBlock<ServoBearingBlock> servo_bearing =
+            registerBlocks("servo_bearing", () -> new ServoBearingBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(5.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     /** 降压孔（静压孔）：贴附式气压传感器（模型绕 Y 轴对称，不区分水平旋转）；音效对齐 simulated:iron_handle（SoundType.COPPER） */
     public static final DeferredBlock<StaticPortBlock> static_port =
             registerBlocks("static_port", () -> new StaticPortBlock(BlockBehaviour.Properties.of().

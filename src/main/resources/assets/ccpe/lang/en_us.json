@@ -13,6 +13,7 @@
   "block.ccpe.my_monitor": "Monitor",
   "block.ccpe.my_control_desk": "Control Desk",
   "block.ccpe.aero_bearing": "Aero Bearing",
+  "block.ccpe.servo_bearing": "Servo Bearing",
   "block.ccpe.engine_core": "Engine Core",
   "block.ccpe.fluid_combustion_chamber": "Fluid Combustion Chamber",
   "block.ccpe.steam_power_chamber": "Steam Power Chamber",
@@ -68,6 +69,9 @@
   "tooltip.ccpe.aero_bearing.mode_stress": "Stress Driven",
   "tooltip.ccpe.aero_bearing.current_angle": "Current Angle:",
   "tooltip.ccpe.aero_bearing.target_angle": "Target Angle:",
+  "tooltip.ccpe.servo_bearing.header": "Servo Bearing",
+  "tooltip.ccpe.servo_bearing.current_angle": "Current Angle:",
+  "tooltip.ccpe.servo_bearing.target_angle": "Target Angle:",
 
   "tooltip.ccpe.engine.header": "Engine Status",
   "tooltip.ccpe.engine.status": "Status:",

@@ -6,6 +6,7 @@ import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.block.MyBearingBlockEntity;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity;
+import com.zzy205.myfirstmod.block.ServoBearingBlockEntity;
 import com.zzy205.myfirstmod.block.TrailingWheelMountBlockEntity;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralBlockEntity;
 import dan200.computercraft.api.peripheral.PeripheralCapability;
@@ -51,6 +52,12 @@ public final class CCPeripheralCapabilities {
                 PeripheralCapability.get(),
                 MyModBlockEntities.aero_bearing_entity.get(),
                 (be, side) -> ((MyBearingBlockEntity) be).getPeripheral()
+        );
+        // servo_bearing 作为 CC:T 外设（纯目标角舵机：setTargetAngle 最短路径定位，无动力/无红石）
+        event.registerBlockEntity(
+                PeripheralCapability.get(),
+                MyModBlockEntities.servo_bearing_entity.get(),
+                (be, side) -> ((ServoBearingBlockEntity) be).getPeripheral()
         );
         // engine_core 作为 CC:T 外设（ccpe:engine；非 controller 委托给 controller——外设挂在整条引擎的 controller 上）
         event.registerBlockEntity(

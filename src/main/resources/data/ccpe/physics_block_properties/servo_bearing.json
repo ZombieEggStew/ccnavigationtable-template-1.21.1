@@ -1,0 +1,7 @@
+{
+  "selector": "ccpe:servo_bearing",
+  "properties": {
+    "sable:mass": 0.5,
+    "sable:volume": 1.0
+  }
+}

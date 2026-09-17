@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "facing=up": { "model": "ccpe:block/servo_bearing/block" },
+    "facing=down": { "model": "ccpe:block/servo_bearing/block", "x": 180 },
+    "facing=north": { "model": "ccpe:block/servo_bearing/block", "x": 90 },
+    "facing=south": { "model": "ccpe:block/servo_bearing/block", "x": 90, "y": 180 },
+    "facing=east": { "model": "ccpe:block/servo_bearing/block", "x": 90, "y": 90 },
+    "facing=west": { "model": "ccpe:block/servo_bearing/block", "x": 90, "y": 270 }
+  }
+}

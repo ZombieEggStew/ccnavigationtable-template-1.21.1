@@ -13,6 +13,7 @@
   "block.ccpe.my_monitor": "监视器",
   "block.ccpe.my_control_desk": "控制台",
   "block.ccpe.aero_bearing": "航空轴承",
+  "block.ccpe.servo_bearing": "舵机轴承",
   "block.ccpe.engine_core": "发动机核心",
   "block.ccpe.fluid_combustion_chamber": "流体燃烧室",
   "block.ccpe.steam_power_chamber": "蒸汽动力室",
@@ -68,6 +69,9 @@
   "tooltip.ccpe.aero_bearing.mode_stress": "应力驱动",
   "tooltip.ccpe.aero_bearing.current_angle": "当前角度：",
   "tooltip.ccpe.aero_bearing.target_angle": "目标角度：",
+  "tooltip.ccpe.servo_bearing.header": "舵机轴承",
+  "tooltip.ccpe.servo_bearing.current_angle": "当前角度：",
+  "tooltip.ccpe.servo_bearing.target_angle": "目标角度：",
 
   "tooltip.ccpe.engine.header": "发动机状态",
   "tooltip.ccpe.engine.status": "状态：",
