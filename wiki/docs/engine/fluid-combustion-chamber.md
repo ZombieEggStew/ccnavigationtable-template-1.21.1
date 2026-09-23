@@ -27,6 +27,8 @@ The mod ships the following fuels in `data/ccpe/engine_fuel/*.json` (you need th
 | Plant Oil | Create: Diesel Generators (`createdieselgenerators:plant_oil`) | 1.0 | ×0.5 | ×0.5 |
 | Coral | Create Propulsion: Simulated (`createpropulsion:coral`) | 1.0 | ×1.25 | ×1.25 |
 | Turpentine | Create Propulsion: Simulated (`createpropulsion:turpentine`) | 1.5 | ×1.0 | ×1.0 |
+| Levitite Blend | Aeronautics (`aeronautics:levitite_blend`) | 1.25 | ×0.75 | ×1.0 |
+| Chocolate <br/> [*"Not the most stylish way to travel space, but certainly the tastiest."*](https://oxygennotincluded.wiki.gg/wiki/Sugar_Engine) | Create (`create:chocolate`) | 1.25 | ×1.25 | ×1.0 |
 
 How the multipliers matter:
 
@@ -46,15 +48,16 @@ How the multipliers matter:
 
 `setMixture(0.6..1.4)` (default 1.0) only affects **fuel cost and temperature** — never stress or speed:
 
-- **Lean (< 1.0)** = fuel saving, but hotter. Heat factor: `1 + 2.0×(1−m)²` (convex on the lean side).
-- **Rich (> 1.0)** = spend fuel to cool. Heat factor: `max(0.7, 1−0.5×(m−1))`.
-- **Altitude auto-rich**: air gets thinner with height, so the carburettor naturally enriches — the *actual* mixture is `lever × autoRichness(pressure)`, where `autoRichness = 1 + 0.45×(1−pressure)` clamped to [1.0, 1.25]. Auto-richness **only cools** (×0.875 heat at max). At Y≈260 the auto-rich is ≈×1.25, so pulling the lever to ≈0.8 gives an *actual* mixture of ≈1.0 (altitude compensation, see economy).
+- **Single linear heat factor for both sides**: `heatFactor = 1 − (m−1)` (i.e. `2 − m`), slope −1, no convex curve, no floor clamp.
+- **Lean (< 1.0)** = fuel saving, but hotter. Heat factor rises linearly: `m=0.8 → ×1.20`.
+- **Rich (> 1.0)** = spend fuel to cool. Heat factor falls linearly: `m=1.2 → ×0.80`, `m=1.4 → ×0.60` (no floor).
+- **Altitude auto-rich/lean**: the carburettor meters by intake air volume — thinner air at altitude naturally enriches (up to ×1.25), high pressure below sea level naturally leans (down to ×0.75) — the *actual* mixture is `lever × autoRichness(pressure)`, where `autoRichness = 1 + 0.45×(1−pressure)` clamped to [0.75, 1.25]. Auto-rich/lean only affects heat (×0.75 heat at full auto-rich), it never costs fuel. At Y≈260 the auto-rich is ≈×1.25, so pulling the lever to ≈0.8 gives an *actual* mixture of ≈1.0 (altitude compensation, see economy).
 
 ## Economy factor
 
 The **economy factor** is an AND-gated, time-unlocked discount (0.75–1.0):
 
-- Requires **both** `|T − 155°C| ≤ 10` **and** `|actual mixture − 1| ≤ 0.05` (flat-bottom window).
+- Requires **both** `|T − 155°C| ≤ 10` **and** `0.8 ≤ actual mixture ≤ 1.1` (flat-bottom window).
 - Staying inside the window for **15 s** ramps the factor in to **×0.75** (25% fuel saving); leaving it decays back in **6 s**. Holding the conditions is what matters — briefly passing through earns nothing.
 - If the mixture is wrong there is **no penalty**, just no reward.
 - The economy factor multiplies consumption **only** — it never feeds back into heat.

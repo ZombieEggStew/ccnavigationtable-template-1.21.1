@@ -74,7 +74,7 @@
 | 混合比与功率 | 不影响应力/转速（油门是唯一功率杆） |
 | 混合比热曲线 | 凸曲线：稀侧 `1+A(1−m)²`（A=2.0），浓侧 `1−B(m−1)`（B=0.5，下限 0.7） |
 | 自动富油 | `autoRichness = 1 + 0.45×(1−P)` 钳 [1, 1.25]（与冷却同气压曲线）；**只进发热**（高空富油降温 ×0.875），不进油耗 |
-| 经济系数 | 双因素 AND 门控 + 时间解锁：`|T−155|≤10 ∧ |m_eff−1|≤0.05` 持续达标 → 15s 渐入 ×0.75（离开 6s 归零）；混合比不对无奖励无惩罚；**不门控冷却气道** |
+| 经济系数 | 双因素 AND 门控 + 时间解锁：`|T−155|≤10 ∧ 0.8≤m_eff≤1.1` 持续达标 → 15s 渐入 ×0.75（离开 6s 归零）；混合比不对无奖励无惩罚；**不门控冷却气道** |
 | 温度阈值（P7 最终） | **全部引擎固定**：经济目标 `ENGINE_T_OPT=155`、过冷 `ENGINE_MIN_WORK_TEMP=100`、过热 220——不随燃料、不随油门（真实 = 引擎设计点/节温器恒定，如塞斯纳 172 CHT 工作带固定） |
 | 过冷惩罚 | `cold = 1 + COLD_K×max(0, 100−T)/100`（COLD_K=1.0：20°C ≈×1.8，只乘油耗）；小油门暖机玩法；仅流体 |
 | 过稀失火 | 后续阶段：m_eff<0.8 概率掉出力 / <0.6 熄火（出力风险对冲拉稀收益） |
@@ -207,7 +207,7 @@ m_eff            = leverMixture × autoRichness(P)             // 实际混合�
 油耗  ×= leverMixture × eco × cold                            // 自动富油不进油耗
 发热  ×= heatFactor(m_eff)                                    // 自动富油 = 只是发热减少
 
-eco：satisfied = |T−155|≤10 ∧ |m_eff−1|≤0.05（双因素平底窗）
+eco：satisfied = |T−155|≤10 ∧ 0.8≤m_eff≤1.1（双因素平底窗）
      达标 → ecoProgress += 1/15/20（15s 缓慢解锁）；不达标 → −= 1/6/20（6s 流失）
      eco = 1 − 0.25×ecoProgress（1.0 → 0.75，省 25%）；保持才奖励、快速掠过不奖励
 cold = 1 + COLD_K×max(0, 100 − T)/100                           // 过冷惩罚（COLD_K=1.0，T<100°C，20°C ≈×1.8）
@@ -215,7 +215,7 @@ cold = 1 + COLD_K×max(0, 100 − T)/100                           // 过冷惩�
 heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1−0.5×(m−1))（浓侧平缓）
 ```
 
-**常量**：`MIXTURE_MIN/MAX=0.6/1.4`、`MIXTURE_PRESSURE_K=0.45`、`MIXTURE_ALT_MAX=1.25`、`MIXTURE_LEAN_K=2.0`、`MIXTURE_RICH_K=0.5`、`MIXTURE_RICH_FLOOR=0.7`、`ECO_MIN=0.75`、`ECO_FLAT=10`、`ECO_MIX_FLAT=0.05`、`ECO_UNLOCK_RATE=1/15`、`ECO_DECAY_RATE=1/6`、`COLD_K=1.0`。
+**常量**：`MIXTURE_MIN/MAX=0.6/1.4`、`MIXTURE_PRESSURE_K=0.45`、`MIXTURE_ALT_MAX=1.25`、`MIXTURE_LEAN_K=2.0`、`MIXTURE_RICH_K=0.5`、`MIXTURE_RICH_FLOOR=0.7`、`ECO_MIN=0.75`、`ECO_FLAT=10`、`ECO_MIX_MIN/MAX=0.8/1.1`、`ECO_UNLOCK_RATE=1/15`、`ECO_DECAY_RATE=1/6`、`COLD_K=1.0`。
 
 **设计张力（高空管理博弈）**——高空冷却更差 + 自动富油 = 免费降温福利：
 
@@ -300,6 +300,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 | `getMixture()` | false | number | 混合比杆 0.6..1.4（仅流体；蒸汽恒 1.0） |
 | `setMixture(x)` | true | boolean | 混合比：油耗 ×杆值、温度 ×热因子；**无门控（纯存值，非流体引擎不生效）** |
 | `getEffectiveMixture()` | false | number | 实际混合比 = 杆 × 自动富油（eco 窗口与发热反馈） |
+| `getAutoRichness()` | false | number | 自然高度混合比 = 仅自动富油系数（**不含杆值**；海平面 1.0、Y≈260 ≈1.25；蒸汽恒 1.0）——海拔补偿参考：杆 ≈ 1/getAutoRichness() 使 m_eff≈1.0 |
 | `getFuelEconomyFactor()` | false | number | 经济系数 0.75..1.0（温度+混合比双达标渐入；混合比不对无奖励无惩罚） |
 | `hasAirDuct()` | false | boolean | 是否装冷却气道（信息用；setMixture/setCooling 均无门控，装风道时风门值才被 K_DUCT 分量消费） |
 | `getActiveFuel()` | false | table | 活动燃料：流体 `{type="fluid", fluid, optimalTemp=155}`；蒸汽 `{type="steam", optimalTemp=155}`；停机 `{type="none"}` |

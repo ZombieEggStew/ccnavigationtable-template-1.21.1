@@ -267,28 +267,32 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 混合比杆范围（setMixture 越界钳制） */
     public static final float MIXTURE_MIN = 0.6f;
     public static final float MIXTURE_MAX = 1.4f;
-    /** 自动富油系数（气压自变量）：1 + K×(1 − 气压)，钳制 [1, MIXTURE_ALT_MAX]。
+    /** 自动富油系数（气压自变量）：1 + K×(1 − 气压)，钳制 [MIXTURE_ALT_MIN, MIXTURE_ALT_MAX]。
      *  气压 = getPressureForEngine(engineAltitude)（与冷却模型同源同曲线，海平面 1.0 → 高空降，Y=320 为 0）。
-     *  起步 K=0.45：Y≈200（云层）≈×1.19，Y≈260 ≈×1.25 达上限（游戏高度就 0~320，不能再按"10km"标定）。 */
+     *  起步 K=0.45：Y≈200（云层）≈×1.19，Y≈260 ≈×1.25 达上限；海平面以下高气压 → 自动稀油（<1），下限 0.75。 */
     public static final float MIXTURE_PRESSURE_K = 0.45f;
+    public static final float MIXTURE_ALT_MIN = 0.75f;
     public static final float MIXTURE_ALT_MAX = 1.25f;
-    /** 热因子凸曲线：稀侧 1 + A×(1−m)²（加速惩罚防"永远拉稀"驻点），浓侧 1 − B×(m−1)（平缓收敛，下限 RICH_FLOOR） */
-    public static final float MIXTURE_LEAN_K = 2.0f;
-    public static final float MIXTURE_RICH_K = 0.5f;
-    public static final float MIXTURE_RICH_FLOOR = 0.7f;
+    /** 热因子（2026-09 用户定稿：双侧统一线性 heatFactor = 1 − (m−1)，斜率 −1，无凸曲线、无下限钳制）——
+     *  拉稀（m<1）升温、富油（m>1）降温，均按距 1.0 的距离线性缩放，混合比对发热影响显著增强 */
 
     /** 混合比杆（0.6~1.4，默认 1.0；只影响油耗与温度，不影响应力/转速）。NBT 持久化。 */
     protected float mixture = 1.0f;
     /** 服务端每 tick 的实际混合比（杆 × 高空自动富油），NBT 同步给客户端供 Goggle 显示——客户端无法可靠获得运动体真实高度，必须以服务端值为准 */
     protected float lastEffectiveMixture = 1f;
+    /** 服务端每 tick 的自动富油系数（自然高度混合比 = 1 + 0.45×(1−气压)，钳 [MIXTURE_ALT_MIN, MIXTURE_ALT_MAX]，
+     *  高气压（海平面以下）自动稀油 <1，不含杆值）；Lua getAutoRichness 读缓存，不随 NBT 同步（无客户端消费者） */
+    protected float lastAutoRichness = 1f;
 
     // ---- P6/P7：最佳工作温度经济区（P7：双因素 AND 门控 + 时间解锁进度；方案见 memo/engine-module.md 节 7/10） ----
     /** 经济区最大折扣（×，P7 由 0.8 调高到 0.75 = 省 25%）；双因素持续达标、解锁进度满时达到 */
     public static final float ECO_MIN = 0.75f;
     /** 温度平底窗半径（°C）：|T−T_opt(eff)| ≤ 此值 = 温度达标 */
     public static final float ECO_FLAT = 10f;
-    /** 混合比平底窗：|m_eff − 1| ≤ 此值 = 混合比达标（P7；与温度窗并列，双达标才解锁经济） */
-    public static final float ECO_MIX_FLAT = 0.05f;
+    /** 混合比平底窗下限：m_eff ≥ 此值 = 混合比达标（P7；与温度窗并列，双达标才解锁经济；0.8 = 过稀失火阈值边界） */
+    public static final float ECO_MIX_MIN = 0.8f;
+    /** 混合比平底窗上限：m_eff ≤ 此值 = 混合比达标（P7；与温度窗并列，双达标才解锁经济） */
+    public static final float ECO_MIX_MAX = 1.1f;
     /** 经济解锁速率（/s）：达标时 ecoProgress += 此值/20，15s 缓慢累积满（保持才奖励，快速掠过不奖励） */
     public static final float ECO_UNLOCK_RATE = 1f / 15f;
     /** 经济流失速率（/s）：不达标时 ecoProgress −= 此值/20，6s 归零（离开窗口快速失去折扣） */
@@ -330,6 +334,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected String activeFuelId = "";
     /** 当前活动燃料的最佳工作温度（°C） */
     protected float activeFuelTopt = ENGINE_T_OPT;
+
+    // ---- Lua getFluidTanks 缓存（引擎源储罐快照；刷新挂补料/源列表重建，mainThread=false 直读） ----
+    /** getFluidTanks 快照（仅 controller 持有；引用整体替换，绝不在原位增删——电脑线程可能正遍历旧快照）。
+     *  语义 = 引擎源储罐（水源 + 流体燃料 + 蒸汽流体燃料三源列表并集，按 pos 去重），不是全部贴着引擎的流体罐。 */
+    protected List<Map<String, Object>> fluidTanksCache = List.of();
 
     /** CC:T 外设实例（懒加载），不直接在 BE 上实现 IPeripheral 以避免 getType() 与 BlockEntity.getType() 冲突 */
     @Nullable
@@ -409,7 +418,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // P7 修订：混合比纯存值、无门控——杆值 = mixture 直取；非流体引擎（蒸汽）因 effectiveMixture 强制 1.0
         // 且无流体室不耗油，存值不生效（见 steamEngine 分支）。
         float leverMixture = mixture;                                             // 杆值（油耗直接 × 杆值）
-        float effectiveMixture = steamEngine ? 1f : leverMixture * autoRichness(); // 实际混合比（发热/eco 窗口/显示用）
+        float autoRich = steamEngine ? 1f : autoRichness();                        // 自然高度混合比（自动富油，不含杆值；蒸汽无此轴恒 1.0）
+        lastAutoRichness = autoRich;
+        float effectiveMixture = steamEngine ? 1f : leverMixture * autoRich;       // 实际混合比（发热/eco 窗口/显示用）
         lastEffectiveMixture = effectiveMixture;
         float mixtureHeatFactor = steamEngine ? 1f : heatFactor(effectiveMixture);
         lastHeatFactor = mixtureHeatFactor; // P7：同步给 Goggle 发热系数行（服务端权威）
@@ -734,6 +745,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         solidFuelSources = solid;
         waterSourceIdx = fluidFuelSourceIdx = steamFuelSourceIdx = solidFuelSourceIdx = 0;
         sourcesAllFailed = false; // 重建完成 → 解除「全源失败」等待（下 tick 即可重试补料）
+        fluidTanksCache = snapshotFluidTanks(); // 源储罐集合变化 → 刷新 getFluidTanks 缓存
     }
 
     /** 标记源列表需要重建（方块 neighborChanged）。去抖语义：已有排程则不再重置——
@@ -795,8 +807,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 continue;
             }
             FluidStack drained = handler.drain(new FluidStack(Fluids.WATER, batch), IFluidHandler.FluidAction.EXECUTE);
-            if (drained.getAmount() > 0)
+            if (drained.getAmount() > 0) {
+                fluidTanksCache = snapshotFluidTanks(); // 补料成功 → 罐内容变 → 刷新 getFluidTanks 缓存
                 return drained.getAmount(); // 部分接受：罐剩多少收多少
+            }
             advanceWaterSource(); // 空 → 切下一个
         }
         scheduleSourcesRescan();
@@ -832,8 +846,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 advanceFluidFuelSource();
                 continue;
             }
-            FluidStack drained = handler.drain(new FluidStack(fuel, batch), IFluidHandler.FluidAction.EXECUTE);            if (drained.getAmount() > 0) {
+            FluidStack drained = handler.drain(new FluidStack(fuel, batch), IFluidHandler.FluidAction.EXECUTE);
+            if (drained.getAmount() > 0) {
                 fluidFuel = src.entry(); // 活动燃料 = 当前源条目
+                fluidTanksCache = snapshotFluidTanks(); // 补料成功 → 罐内容变 → 刷新 getFluidTanks 缓存
                 return drained.getAmount();
             }
             advanceFluidFuelSource();
@@ -881,6 +897,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 }
                 steamFuelType = "fluid"; // 储备来源 = 流体（Goggle 燃料行）
                 steamFuelFluid = drained.copy();
+                fluidTanksCache = snapshotFluidTanks(); // 补料成功 → 罐内容变 → 刷新 getFluidTanks 缓存
                 return true;
             }
             advanceSteamFuelSource();
@@ -1096,22 +1113,21 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      */
     protected float autoRichness() {
         double p = SensorSystemAPI.getPressureForEngine(engineAltitude());
-        return Mth.clamp(1f + MIXTURE_PRESSURE_K * (float) (1d - p), 1f, MIXTURE_ALT_MAX);
+        return Mth.clamp(1f + MIXTURE_PRESSURE_K * (float) (1d - p), MIXTURE_ALT_MIN, MIXTURE_ALT_MAX);
     }
 
     /**
-     * 混合比热因子（凸曲线，与油耗反向——核心矛盾：发热不能跟烧油量走，否则永远拉稀）：
-     * 稀侧 1 + A×(1−m)² 加速惩罚（防"永远拉稀"驻点），浓侧 1 − B×(m−1) 平缓收敛（富油吸热降温，下限 RICH_FLOOR）。
+     * 混合比热因子（2026-09 用户定稿：双侧统一线性公式 heatFactor = 1 − (m−1)，即 2 − m）：
+     * 拉稀（m<1）→ 升温（>1）；富油（m>1）→ 降温（<1）。线性斜率 −1，不再有稀侧凸曲线
+     * 与富油下限钳制——混合比对发热的影响显著增强（拉稀到 0.8 → ×1.2，富油到 1.4 → ×0.6）。
      */
     protected float heatFactor(float m) {
-        if (m < 1f)
-            return 1f + MIXTURE_LEAN_K * (1f - m) * (1f - m);
-        return Math.max(MIXTURE_RICH_FLOOR, 1f - MIXTURE_RICH_K * (m - 1f));
+        return 1f - (m - 1f);
     }
 
     /**
      * P7 经济解锁进度（双因素 AND 门控 + 时间积分）：温度与混合比<b>同时</b>持续在平底窗内
-     * （|T−ENGINE_T_OPT|≤ECO_FLAT ∧ |m_eff−1|≤ECO_MIX_FLAT）→ 缓慢累积（ECO_UNLOCK_RATE，15s 满）；
+     * （|T−ENGINE_T_OPT|≤ECO_FLAT ∧ ECO_MIX_MIN≤m_eff≤ECO_MIX_MAX）→ 缓慢累积（ECO_UNLOCK_RATE，15s 满）；
      * 离开窗口/停机 → 快速流失（ECO_DECAY_RATE，6s 归零）。保持才奖励、快速掠过不奖励；
      * 混合比不对 = 无奖励也无惩罚（温度控得再好也没用）。
      * P7 修订：经济系数<b>不以冷却气道为门控</b>（无气道同样生效）——setMixture/setCooling 均无门控（纯存值），冷却气道只是风门数值的消费载体。
@@ -1120,7 +1136,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                                       boolean runningFluid) {
         boolean satisfied = runningFluid
                 && Math.abs(temp - tOptEff) <= ECO_FLAT
-                && Math.abs(mEff - 1f) <= ECO_MIX_FLAT;
+                && mEff >= ECO_MIX_MIN && mEff <= ECO_MIX_MAX;
         if (satisfied)
             return Math.min(1f, progress + ECO_UNLOCK_RATE / 20f);
         return Math.max(0f, progress - ECO_DECAY_RATE / 20f);
@@ -1143,6 +1159,43 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     protected IFluidHandler fluidHandlerAt(BlockPos pos) {
         return level.getCapability(Capabilities.FluidHandler.BLOCK, pos, null);
+    }
+
+    /**
+     * 引擎源储罐快照（getFluidTanks 缓存）：水源 + 流体燃料 + 蒸汽流体燃料三源列表的并集（按 pos 去重），
+     * 逐罐读 fluid/amount/remaining/capacity。只在补料成功 / 源列表重建时刷新（引擎视角下罐内容只在这
+     * 两个时刻变化；外部灌入要到下次补料或重建才可见）。返回全新 List，事后不在原位增删。
+     */
+    protected List<Map<String, Object>> snapshotFluidTanks() {
+        List<BlockPos> positions = new ArrayList<>();
+        Set<BlockPos> seen = new HashSet<>();
+        for (BlockPos pos : waterSources)
+            if (seen.add(pos))
+                positions.add(pos);
+        for (FuelSource src : fluidFuelSources)
+            if (seen.add(src.pos()))
+                positions.add(src.pos());
+        for (SteamFuelSource src : steamFuelSources)
+            if (seen.add(src.pos()))
+                positions.add(src.pos());
+        List<Map<String, Object>> tanks = new ArrayList<>();
+        for (BlockPos pos : positions) {
+            IFluidHandler handler = fluidHandlerAt(pos);
+            if (handler == null)
+                continue;
+            for (int tank = 0; tank < handler.getTanks(); tank++) {
+                FluidStack stack = handler.getFluidInTank(tank);
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("fluid", stack.isEmpty() ? null
+                        : BuiltInRegistries.FLUID.getKey(stack.getFluid()).toString());
+                entry.put("amount", (double) stack.getAmount());
+                int capacity = handler.getTankCapacity(tank);
+                entry.put("remaining", (double) Math.max(0, capacity - stack.getAmount()));
+                entry.put("capacity", (double) capacity);
+                tanks.add(entry);
+            }
+        }
+        return tanks;
     }
 
     /**
@@ -1225,15 +1278,16 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * local e = peripheral.wrap("front")     -- 包裹任意引擎核心节（外设挂在整条引擎的 controller 上）
      * print(e.getTemperature())              -- 温度（°C）
      * print(e.isOverheated())                -- 过热锁定
-     * for _, t in ipairs(e.getFluidTanks()) do -- 所有连接储罐：fluid/amount/remaining/capacity
+     * for _, t in ipairs(e.getFluidTanks()) do -- 引擎源储罐：fluid/amount/remaining/capacity
      *   print(t.fluid, t.amount, t.remaining, t.capacity)
      * end
      * e.setThrottle(0.5)                     -- 油门（0..1；应力与转速同比例：50% = 半应力 + 128rpm；0 = 停机）
      * e.setMixture(0.8)                      -- 混合比（0.6~1.4；只影响油耗与温度：稀=省油但更热，浓=费油但降温）
      * e.getEffectiveMixture()                -- 实际混合比（杆 × 高空自动富油，气压驱动；高空 > 杆值）
      * }</pre>
-     * 读方法 mainThread=false 直读 controller 缓存状态（每 tick 由 controller 刷新，最多滞后 1 tick）；
-     * 写方法 / 需要扫描世界的 `getFluidTanks` 为 mainThread=true 服务端权威。
+     * 读方法 mainThread=false 直读 controller 缓存状态（每 tick 由 controller 刷新，最多滞后 1 tick；
+     *  `getFluidTanks` 走源储罐快照缓存，刷新挂补料/源列表重建，不阻塞电脑线程）；
+     * 写方法为 mainThread=true 服务端权威。
      * 电脑 attach/detach 发生在主线程（CC 外设挂载路径），在此维护 {@code luaConnected} 供 Goggle 显示。
      */
     private class Peripheral implements IPeripheral {
@@ -1292,31 +1346,15 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
 
         /**
-         * 所有连接的流体储罐内容（模块邻居中带流体能力且方块 tag 过滤通过的方块，含燃料/水源罐，经 seen 去重）：
+         * 引擎源储罐内容（水源 + 流体燃料 + 蒸汽流体燃料三源列表并集，按 pos 去重；不是全部贴着引擎的流体罐）：
          * 每个储罐一项：{@code fluid}（流体 id，空罐为 nil）、{@code amount}（当前量 mb）、
          * {@code remaining}（剩余可装量 mb = capacity − amount）、{@code capacity}（总量 mb）。
-         * mainThread=true：需要现场扫描模块邻居并做 capability 查询。
+         * mainThread=false：直读 {@link #fluidTanksCache}——服务端在补料成功 / 源列表重建时刷新
+         * （引擎视角下罐内容只在这两个时刻变化；外部灌入要到下次补料/重建才可见）。
          */
-        @LuaFunction(mainThread = true)
+        @LuaFunction
         public final List<Map<String, Object>> getFluidTanks() {
-            List<Map<String, Object>> tanks = new ArrayList<>();
-            for (BlockPos neighbor : scanModule().neighbors()) {
-                IFluidHandler handler = fluidHandlerAt(neighbor);
-                if (handler == null)
-                    continue;
-                for (int tank = 0; tank < handler.getTanks(); tank++) {
-                    FluidStack stack = handler.getFluidInTank(tank);
-                    Map<String, Object> entry = new LinkedHashMap<>();
-                    entry.put("fluid", stack.isEmpty() ? null
-                            : BuiltInRegistries.FLUID.getKey(stack.getFluid()).toString());
-                    entry.put("amount", (double) stack.getAmount());
-                    int capacity = handler.getTankCapacity(tank);
-                    entry.put("remaining", (double) Math.max(0, capacity - stack.getAmount()));
-                    entry.put("capacity", (double) capacity);
-                    tanks.add(entry);
-                }
-            }
-            return tanks;
+            return fluidTanksCache;
         }
 
         /** 当前油门（0..1；默认 0.25——静态无风道不过热的既有定标值）。定距桨单杆模型：转速 = 油门 × 256 */
@@ -1363,6 +1401,18 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
 
         /**
+         * 当前<b>自然高度混合比</b>（高空自动富油系数，<b>不含玩家设定的杆值</b>）：
+         * 海平面 = 1.0；气压随高度下降 → 化油器按进气体积配油 → 空气稀天然变浓，最高 ×{@code MIXTURE_ALT_MAX}（Y≈260）。
+         * P7：自动富油只降温不进油耗——该读数是「海拔补偿该拉多少杆」的参考：
+         * 目标是 m_eff = 杆 × autoRichness ≈ 1.0 → 杆 ≈ 1 / getAutoRichness()。
+         * 蒸汽引擎无混合比轴 → 恒 1.0。
+         */
+        @LuaFunction
+        public final double getAutoRichness() {
+            return lastAutoRichness;
+        }
+
+        /**
          * 设置混合比（0.6~1.4，越界钳制；非法参数返回 false）。
          * P5/P7 经济性/热管理杆：只影响<b>油耗</b>（P7：×杆值，自动富油不进油耗）与<b>温度</b>（×凸热因子，m_eff=杆×autoRichness）——
          * 稀=省油但更热，浓=费油但降温；应力/转速完全不受影响。
@@ -1388,7 +1438,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         /**
          * P7：当前经济系数（0.75~1.0；停机 / 油门 0 → 1.0 无意义）。
          * 服务端每 tick 计算并同步（读缓存，≤1 tick 滞后）；温度与<b>实际混合比</b>双因素持续达标
-         * （|T−T_opt(eff)|≤10 ∧ |m_eff−1|≤0.05）→ 解锁进度缓慢累积（15s 满）渐入 0.75，离开窗口 6s 流失；
+         * （|T−T_opt(eff)|≤10 ∧ 0.8≤m_eff≤1.1）→ 解锁进度缓慢累积（15s 满）渐入 0.75，离开窗口 6s 流失；
          * 混合比不对 → 无奖励无惩罚。
          */
         @LuaFunction
@@ -1994,7 +2044,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                         .withStyle(ChatFormatting.GOLD)));
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.throttle").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
+                .append(Component.literal(String.format(Locale.ROOT, "%.1f%%", efficiency * 100))
+                        .withStyle(ChatFormatting.AQUA)));
         // 燃料（正在使用的燃料；固体显示剩余燃烧时间，流体不显示——参考 simulated portable_engine）
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.fuel").withStyle(ChatFormatting.GRAY))
@@ -2114,7 +2165,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                     .append(Component.translatable("tooltip.ccpe.engine.overheated").withStyle(ChatFormatting.RED)));
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.throttle").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
+                .append(Component.literal(String.format(Locale.ROOT, "%.1f%%", efficiency * 100))
+                        .withStyle(ChatFormatting.AQUA)));
         // 油耗 / 发热系数（仅流体引擎；蒸汽 Plan B = 恒温自调节、无这两行）
         if (!steamEngine) {
             // 油耗（P7+ 方案 B：客户端按公式现算「最终油耗系数」= 杆值 × 经济系数 × 过冷惩罚，即除油门/自动富油外的全部油耗因子；<1 = 省油中）
