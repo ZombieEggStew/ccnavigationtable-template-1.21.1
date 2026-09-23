@@ -27,7 +27,8 @@ The mod ships the following fuels in `data/ccpe/engine_fuel/*.json` (you need th
 | Plant Oil | Create: Diesel Generators (`createdieselgenerators:plant_oil`) | 1.0 | ×0.5 | ×0.5 |
 | Coral | Create Propulsion: Simulated (`createpropulsion:coral`) | 1.0 | ×1.25 | ×1.25 |
 | Turpentine | Create Propulsion: Simulated (`createpropulsion:turpentine`) | 1.5 | ×1.0 | ×1.0 |
-| Levitite Blend | Aeronautics (`aeronautics:levitite_blend`) | 1.25 | ×0.5 | ×0.75 |
+| Levitite Blend | Aeronautics (`aeronautics:levitite_blend`) | 1.25 | ×0.75 | ×1.0 |
+| Chocolate <br/> [*"Not the most stylish way to travel space, but certainly the tastiest."*](https://oxygennotincluded.wiki.gg/wiki/Sugar_Engine) | Create (`create:chocolate`) | 1.25 | ×1.25 | ×1.0 |
 
 How the multipliers matter:
 

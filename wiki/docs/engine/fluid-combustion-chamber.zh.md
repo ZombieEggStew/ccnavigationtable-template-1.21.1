@@ -27,7 +27,8 @@
 | 植物油 Plant Oil | Create: Diesel Generators（`createdieselgenerators:plant_oil`） | 1.0 | ×0.5 | ×0.5 |
 | 珊瑚 Coral | Create Propulsion: Simulated（`createpropulsion:coral`） | 1.0 | ×1.25 | ×1.25 |
 | 松节油 Turpentine | Create Propulsion: Simulated（`createpropulsion:turpentine`） | 1.5 | ×1.0 | ×1.0 |
-| 浮空混合物 Levitite Blend | Aeronautics（`aeronautics:levitite_blend`） | 1.25 | ×0.5 | ×0.75 |
+| 浮空混合物 Levitite Blend | Aeronautics（`aeronautics:levitite_blend`） | 1.25 | ×0.75 | ×1.0 |
+| 巧克力 Chocolate <br/> [*“不是最时髦的太空旅行方式，但一定是最美味的。”*](https://oxygennotincluded.wiki.gg/zh/wiki/%E7%B3%96%E7%B4%A0%E5%BC%95%E6%93%8E)| Create（`create:chocolate`） | 1.25 | ×1.25 | ×1.0 |
 
 各倍率的意义：
 

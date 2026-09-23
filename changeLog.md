@@ -105,7 +105,7 @@
 - Flight Data Recorder docs now consistently describe the actual **FMC/AIC/INS** scope (INS-only bodies are recorded too) and correct the "default on" wording to "default off": Config comment, class Javadoc, en_us / zh_cn tooltips, and both wiki pages.
 
 1.1.5
-- Added the Levitite Blend fluid fuel (Aeronautics `aeronautics:levitite_blend`). 
+- The Fluid Combustion Chamber can now burn Aeronautics' Levitite Blend fluid and Create's Chocolate fluid. Check the [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/fluid-combustion-chamber/) for more details.
 - Added `getAutoRichness` Lua method. Check the [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/lua-api/) for more details.
 - Mixture now has a much stronger effect on heat output (linear heat factor `2 − m`, both lean and rich). Check the [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/temperature/) for more details.
 - Widened the fluid engine's economy-factor mixture window: the mixture condition is now `0.8 ≤ actual mixture ≤ 1.1` (was `|actual mixture − 1| ≤ 0.05`).
