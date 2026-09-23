@@ -272,10 +272,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      *  起步 K=0.45：Y≈200（云层）≈×1.19，Y≈260 ≈×1.25 达上限（游戏高度就 0~320，不能再按"10km"标定）。 */
     public static final float MIXTURE_PRESSURE_K = 0.45f;
     public static final float MIXTURE_ALT_MAX = 1.25f;
-    /** 热因子凸曲线：稀侧 1 + A×(1−m)²（加速惩罚防"永远拉稀"驻点），浓侧 1 − B×(m−1)（平缓收敛，下限 RICH_FLOOR） */
-    public static final float MIXTURE_LEAN_K = 2.0f;
-    public static final float MIXTURE_RICH_K = 0.5f;
-    public static final float MIXTURE_RICH_FLOOR = 0.7f;
+    /** 热因子（2026-09 用户定稿：双侧统一线性 heatFactor = 1 − (m−1)，斜率 −1，无凸曲线、无下限钳制）——
+     *  拉稀（m<1）升温、富油（m>1）降温，均按距 1.0 的距离线性缩放，混合比对发热影响显著增强 */
 
     /** 混合比杆（0.6~1.4，默认 1.0；只影响油耗与温度，不影响应力/转速）。NBT 持久化。 */
     protected float mixture = 1.0f;
@@ -1106,13 +1104,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
-     * 混合比热因子（凸曲线，与油耗反向——核心矛盾：发热不能跟烧油量走，否则永远拉稀）：
-     * 稀侧 1 + A×(1−m)² 加速惩罚（防"永远拉稀"驻点），浓侧 1 − B×(m−1) 平缓收敛（富油吸热降温，下限 RICH_FLOOR）。
+     * 混合比热因子（2026-09 用户定稿：双侧统一线性公式 heatFactor = 1 − (m−1)，即 2 − m）：
+     * 拉稀（m<1）→ 升温（>1）；富油（m>1）→ 降温（<1）。线性斜率 −1，不再有稀侧凸曲线
+     * 与富油下限钳制——混合比对发热的影响显著增强（拉稀到 0.8 → ×1.2，富油到 1.4 → ×0.6）。
      */
     protected float heatFactor(float m) {
-        if (m < 1f)
-            return 1f + MIXTURE_LEAN_K * (1f - m) * (1f - m);
-        return Math.max(MIXTURE_RICH_FLOOR, 1f - MIXTURE_RICH_K * (m - 1f));
+        return 1f - (m - 1f);
     }
 
     /**
