@@ -24,7 +24,7 @@ local e = peripheral.wrap("front")
 | `getMixture()` | false | number | Mixture lever 0.6..1.4 (fluid engines only; steam is always 1.0) |
 | `setMixture(x)` | true | boolean | Mixture: fuel × lever, temperature × heat factor; **no gating** (pure storage — no effect on non-fluid engines) |
 | `getEffectiveMixture()` | false | number | Actual mixture = lever × altitude auto-rich (used by the economy window and heat feedback; > lever at altitude) |
-| `getAutoRichness()` | false | number | Natural altitude mixture = the altitude auto-rich coefficient only (no lever): 1.0 at sea level, up to ×1.25 at Y≈260 (steam: always 1.0). Reference for how far to pull the lever — pull to ≈ 1 / getAutoRichness() so m_eff ≈ 1.0 |
+| `getAutoRichness()` | false | number | Natural altitude mixture = the altitude auto-rich/lean coefficient only (no lever): 1.0 at sea level, up to ×1.25 at high altitude, down to ×0.75 below sea level (auto-lean at high pressure) (steam: always 1.0). Reference for how far to pull the lever — pull to ≈ 1 / getAutoRichness() so m_eff ≈ 1.0 |
 | `getFuelEconomyFactor()` | false | number | Economy factor 0.75..1.0 (temperature + mixture both in window, ramps in over 15 s; wrong mixture = no reward, no penalty) |
 | `hasAirDuct()` | false | boolean | Whether a cooling air duct is installed (informational; `setMixture`/`setCooling` are ungated — the shutter value is only consumed when a duct is present) |
 | `getActiveFuel()` | false | table | Active fuel: fluid `{type="fluid", fluid=<id>, optimalTemp=155}`; steam `{type="steam", optimalTemp=155}`; stopped `{type="none"}` |

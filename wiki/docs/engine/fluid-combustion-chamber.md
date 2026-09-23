@@ -46,9 +46,10 @@ How the multipliers matter:
 
 `setMixture(0.6..1.4)` (default 1.0) only affects **fuel cost and temperature** — never stress or speed:
 
-- **Lean (< 1.0)** = fuel saving, but hotter. Heat factor: `1 + 2.0×(1−m)²` (convex on the lean side).
-- **Rich (> 1.0)** = spend fuel to cool. Heat factor: `max(0.7, 1−0.5×(m−1))`.
-- **Altitude auto-rich**: air gets thinner with height, so the carburettor naturally enriches — the *actual* mixture is `lever × autoRichness(pressure)`, where `autoRichness = 1 + 0.45×(1−pressure)` clamped to [1.0, 1.25]. Auto-richness **only cools** (×0.875 heat at max). At Y≈260 the auto-rich is ≈×1.25, so pulling the lever to ≈0.8 gives an *actual* mixture of ≈1.0 (altitude compensation, see economy).
+- **Single linear heat factor for both sides**: `heatFactor = 1 − (m−1)` (i.e. `2 − m`), slope −1, no convex curve, no floor clamp.
+- **Lean (< 1.0)** = fuel saving, but hotter. Heat factor rises linearly: `m=0.8 → ×1.20`.
+- **Rich (> 1.0)** = spend fuel to cool. Heat factor falls linearly: `m=1.2 → ×0.80`, `m=1.4 → ×0.60` (no floor).
+- **Altitude auto-rich/lean**: the carburettor meters by intake air volume — thinner air at altitude naturally enriches (up to ×1.25), high pressure below sea level naturally leans (down to ×0.75) — the *actual* mixture is `lever × autoRichness(pressure)`, where `autoRichness = 1 + 0.45×(1−pressure)` clamped to [0.75, 1.25]. Auto-rich/lean only affects heat (×0.75 heat at full auto-rich), it never costs fuel. At Y≈260 the auto-rich is ≈×1.25, so pulling the lever to ≈0.8 gives an *actual* mixture of ≈1.0 (altitude compensation, see economy).
 
 ## Economy factor
 

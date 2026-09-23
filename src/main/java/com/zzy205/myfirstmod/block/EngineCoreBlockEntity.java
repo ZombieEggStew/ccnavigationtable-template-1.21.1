@@ -267,10 +267,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 混合比杆范围（setMixture 越界钳制） */
     public static final float MIXTURE_MIN = 0.6f;
     public static final float MIXTURE_MAX = 1.4f;
-    /** 自动富油系数（气压自变量）：1 + K×(1 − 气压)，钳制 [1, MIXTURE_ALT_MAX]。
+    /** 自动富油系数（气压自变量）：1 + K×(1 − 气压)，钳制 [MIXTURE_ALT_MIN, MIXTURE_ALT_MAX]。
      *  气压 = getPressureForEngine(engineAltitude)（与冷却模型同源同曲线，海平面 1.0 → 高空降，Y=320 为 0）。
-     *  起步 K=0.45：Y≈200（云层）≈×1.19，Y≈260 ≈×1.25 达上限（游戏高度就 0~320，不能再按"10km"标定）。 */
+     *  起步 K=0.45：Y≈200（云层）≈×1.19，Y≈260 ≈×1.25 达上限；海平面以下高气压 → 自动稀油（<1），下限 0.75。 */
     public static final float MIXTURE_PRESSURE_K = 0.45f;
+    public static final float MIXTURE_ALT_MIN = 0.75f;
     public static final float MIXTURE_ALT_MAX = 1.25f;
     /** 热因子（2026-09 用户定稿：双侧统一线性 heatFactor = 1 − (m−1)，斜率 −1，无凸曲线、无下限钳制）——
      *  拉稀（m<1）升温、富油（m>1）降温，均按距 1.0 的距离线性缩放，混合比对发热影响显著增强 */
@@ -279,7 +280,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected float mixture = 1.0f;
     /** 服务端每 tick 的实际混合比（杆 × 高空自动富油），NBT 同步给客户端供 Goggle 显示——客户端无法可靠获得运动体真实高度，必须以服务端值为准 */
     protected float lastEffectiveMixture = 1f;
-    /** 服务端每 tick 的自动富油系数（自然高度混合比 = 1 + 0.45×(1−气压)，钳 [1.0, MIXTURE_ALT_MAX]，不含杆值）；Lua getAutoRichness 读缓存，不随 NBT 同步（无客户端消费者） */
+    /** 服务端每 tick 的自动富油系数（自然高度混合比 = 1 + 0.45×(1−气压)，钳 [MIXTURE_ALT_MIN, MIXTURE_ALT_MAX]，
+     *  高气压（海平面以下）自动稀油 <1，不含杆值）；Lua getAutoRichness 读缓存，不随 NBT 同步（无客户端消费者） */
     protected float lastAutoRichness = 1f;
 
     // ---- P6/P7：最佳工作温度经济区（P7：双因素 AND 门控 + 时间解锁进度；方案见 memo/engine-module.md 节 7/10） ----
@@ -1100,7 +1102,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      */
     protected float autoRichness() {
         double p = SensorSystemAPI.getPressureForEngine(engineAltitude());
-        return Mth.clamp(1f + MIXTURE_PRESSURE_K * (float) (1d - p), 1f, MIXTURE_ALT_MAX);
+        return Mth.clamp(1f + MIXTURE_PRESSURE_K * (float) (1d - p), MIXTURE_ALT_MIN, MIXTURE_ALT_MAX);
     }
 
     /**

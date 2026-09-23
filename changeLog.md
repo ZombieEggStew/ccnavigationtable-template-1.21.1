@@ -107,3 +107,4 @@
 1.1.5
 - Added `getAutoRichness` Lua method. Check the [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/lua-api/) for more details.
 - Widened the fluid engine's economy-factor mixture window: the mixture condition is now `0.8 ≤ actual mixture ≤ 1.1` (was `|actual mixture − 1| ≤ 0.05`).
+- Mixture now has a much stronger effect on heat output (linear heat factor `2 − m`, both lean and rich). Check the [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/temperature/) for more details.

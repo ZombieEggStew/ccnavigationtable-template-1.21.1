@@ -38,9 +38,10 @@ Q_heat = running chambers × throttle × fuel.heat × BASE_HEAT_FLUID(30) × hea
 
 `m_eff = lever × autoRichness(pressure)` (see the [Fluid Combustion Chamber](fluid-combustion-chamber.md) page for the mixture lever and altitude auto-rich):
 
-- **Lean** (`m_eff < 1`): `heatFactor = 1 + 2.0×(1 − m)²` — convex, burns hotter as you lean (discourages "always lean").
-- **Rich** (`m_eff ≥ 1`): `heatFactor = max(0.7, 1 − 0.5×(m − 1))` — rich mixture absorbs heat and cools (floor 0.7).
-- **Altitude auto-rich is free cooling**: at altitude the carburettor naturally enriches (`autoRichness` up to ×1.25), so `m_eff > lever` — the auto-rich part only cools (`heatFactor` down to ≈0.875), it never costs fuel.
+- **Single linear formula for both sides**: `heatFactor = 1 − (m_eff − 1)` (i.e. `2 − m_eff`), slope −1, no convex curve, no floor clamp.
+- **Lean** (`m_eff < 1`): `heatFactor > 1`, hotter as you lean (`m_eff=0.8 → ×1.20`).
+- **Rich** (`m_eff ≥ 1`): `heatFactor < 1`, cooler as you enrich (`m_eff=1.4 → ×0.60`).
+- **Altitude auto-rich/lean is free heat control**: the carburettor meters by intake air volume — at altitude it naturally enriches (`autoRichness` up to ×1.25) which only cools (`heatFactor` down to ≈0.75 at full auto-rich); below sea level high pressure naturally leans (down to ×0.75) which only heats — it never costs fuel.
 
 The heat factor only scales **heat** — it never feeds back into fuel cost (economy factor multiplies fuel consumption only).
 
@@ -85,7 +86,7 @@ The pressure factor reuses the same air model as the avionics sensors (Sable's d
 
 - Default overworld anchors: `(−38, 1.5) / (63, 1.0) / (263, 0.4493) / (280, 0.4198) / (320, 0)` — sea level = **1.0 atmosphere**, Y ≥ 320 = 0.
 - `pressureFactor = max(pressure, 0.25)^0.8`.
-- The same pressure also drives the **altitude auto-rich** (`autoRichness = 1 + 0.45×(1−pressure)`, clamped to [1.0, 1.25]) — see the [Fluid Combustion Chamber](fluid-combustion-chamber.md) page.
+- The same pressure also drives the **altitude auto-rich/lean** (`autoRichness = 1 + 0.45×(1−pressure)`, clamped to [0.75, 1.25]; auto-leans below sea level at high pressure) — see the [Fluid Combustion Chamber](fluid-combustion-chamber.md) page.
 
 ### Altitude gameplay summary
 
