@@ -1,3 +1,5 @@
+sleep(1)
+
 local ss = require("ccpe.sensor_system")
 print()
 local function reset_bearing(bearing)

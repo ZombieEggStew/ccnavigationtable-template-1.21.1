@@ -335,6 +335,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 当前活动燃料的最佳工作温度（°C） */
     protected float activeFuelTopt = ENGINE_T_OPT;
 
+    // ---- Lua getFluidTanks 缓存（引擎源储罐快照；刷新挂补料/源列表重建，mainThread=false 直读） ----
+    /** getFluidTanks 快照（仅 controller 持有；引用整体替换，绝不在原位增删——电脑线程可能正遍历旧快照）。
+     *  语义 = 引擎源储罐（水源 + 流体燃料 + 蒸汽流体燃料三源列表并集，按 pos 去重），不是全部贴着引擎的流体罐。 */
+    protected List<Map<String, Object>> fluidTanksCache = List.of();
+
     /** CC:T 外设实例（懒加载），不直接在 BE 上实现 IPeripheral 以避免 getType() 与 BlockEntity.getType() 冲突 */
     @Nullable
     private IPeripheral peripheral;
@@ -740,6 +745,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         solidFuelSources = solid;
         waterSourceIdx = fluidFuelSourceIdx = steamFuelSourceIdx = solidFuelSourceIdx = 0;
         sourcesAllFailed = false; // 重建完成 → 解除「全源失败」等待（下 tick 即可重试补料）
+        fluidTanksCache = snapshotFluidTanks(); // 源储罐集合变化 → 刷新 getFluidTanks 缓存
     }
 
     /** 标记源列表需要重建（方块 neighborChanged）。去抖语义：已有排程则不再重置——
@@ -801,8 +807,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 continue;
             }
             FluidStack drained = handler.drain(new FluidStack(Fluids.WATER, batch), IFluidHandler.FluidAction.EXECUTE);
-            if (drained.getAmount() > 0)
+            if (drained.getAmount() > 0) {
+                fluidTanksCache = snapshotFluidTanks(); // 补料成功 → 罐内容变 → 刷新 getFluidTanks 缓存
                 return drained.getAmount(); // 部分接受：罐剩多少收多少
+            }
             advanceWaterSource(); // 空 → 切下一个
         }
         scheduleSourcesRescan();
@@ -838,8 +846,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 advanceFluidFuelSource();
                 continue;
             }
-            FluidStack drained = handler.drain(new FluidStack(fuel, batch), IFluidHandler.FluidAction.EXECUTE);            if (drained.getAmount() > 0) {
+            FluidStack drained = handler.drain(new FluidStack(fuel, batch), IFluidHandler.FluidAction.EXECUTE);
+            if (drained.getAmount() > 0) {
                 fluidFuel = src.entry(); // 活动燃料 = 当前源条目
+                fluidTanksCache = snapshotFluidTanks(); // 补料成功 → 罐内容变 → 刷新 getFluidTanks 缓存
                 return drained.getAmount();
             }
             advanceFluidFuelSource();
@@ -887,6 +897,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 }
                 steamFuelType = "fluid"; // 储备来源 = 流体（Goggle 燃料行）
                 steamFuelFluid = drained.copy();
+                fluidTanksCache = snapshotFluidTanks(); // 补料成功 → 罐内容变 → 刷新 getFluidTanks 缓存
                 return true;
             }
             advanceSteamFuelSource();
@@ -1151,6 +1162,43 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
+     * 引擎源储罐快照（getFluidTanks 缓存）：水源 + 流体燃料 + 蒸汽流体燃料三源列表的并集（按 pos 去重），
+     * 逐罐读 fluid/amount/remaining/capacity。只在补料成功 / 源列表重建时刷新（引擎视角下罐内容只在这
+     * 两个时刻变化；外部灌入要到下次补料或重建才可见）。返回全新 List，事后不在原位增删。
+     */
+    protected List<Map<String, Object>> snapshotFluidTanks() {
+        List<BlockPos> positions = new ArrayList<>();
+        Set<BlockPos> seen = new HashSet<>();
+        for (BlockPos pos : waterSources)
+            if (seen.add(pos))
+                positions.add(pos);
+        for (FuelSource src : fluidFuelSources)
+            if (seen.add(src.pos()))
+                positions.add(src.pos());
+        for (SteamFuelSource src : steamFuelSources)
+            if (seen.add(src.pos()))
+                positions.add(src.pos());
+        List<Map<String, Object>> tanks = new ArrayList<>();
+        for (BlockPos pos : positions) {
+            IFluidHandler handler = fluidHandlerAt(pos);
+            if (handler == null)
+                continue;
+            for (int tank = 0; tank < handler.getTanks(); tank++) {
+                FluidStack stack = handler.getFluidInTank(tank);
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("fluid", stack.isEmpty() ? null
+                        : BuiltInRegistries.FLUID.getKey(stack.getFluid()).toString());
+                entry.put("amount", (double) stack.getAmount());
+                int capacity = handler.getTankCapacity(tank);
+                entry.put("remaining", (double) Math.max(0, capacity - stack.getAmount()));
+                entry.put("capacity", (double) capacity);
+                tanks.add(entry);
+            }
+        }
+        return tanks;
+    }
+
+    /**
      * 流体燃烧室"噗嗤"音效池（每引擎一个，懒创建）：音量 = {@link Config#ENGINE_FLUID_PUFF_VOLUME}
      * （播放时读取，改配置即时生效）。照 Create {@code BoilerData/SoundPool}：
      * mergeTicks 合并窗口 + maxConcurrent 并发上限（超出随机截断）+ 各自坐标发声。
@@ -1230,15 +1278,16 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * local e = peripheral.wrap("front")     -- 包裹任意引擎核心节（外设挂在整条引擎的 controller 上）
      * print(e.getTemperature())              -- 温度（°C）
      * print(e.isOverheated())                -- 过热锁定
-     * for _, t in ipairs(e.getFluidTanks()) do -- 所有连接储罐：fluid/amount/remaining/capacity
+     * for _, t in ipairs(e.getFluidTanks()) do -- 引擎源储罐：fluid/amount/remaining/capacity
      *   print(t.fluid, t.amount, t.remaining, t.capacity)
      * end
      * e.setThrottle(0.5)                     -- 油门（0..1；应力与转速同比例：50% = 半应力 + 128rpm；0 = 停机）
      * e.setMixture(0.8)                      -- 混合比（0.6~1.4；只影响油耗与温度：稀=省油但更热，浓=费油但降温）
      * e.getEffectiveMixture()                -- 实际混合比（杆 × 高空自动富油，气压驱动；高空 > 杆值）
      * }</pre>
-     * 读方法 mainThread=false 直读 controller 缓存状态（每 tick 由 controller 刷新，最多滞后 1 tick）；
-     * 写方法 / 需要扫描世界的 `getFluidTanks` 为 mainThread=true 服务端权威。
+     * 读方法 mainThread=false 直读 controller 缓存状态（每 tick 由 controller 刷新，最多滞后 1 tick；
+     *  `getFluidTanks` 走源储罐快照缓存，刷新挂补料/源列表重建，不阻塞电脑线程）；
+     * 写方法为 mainThread=true 服务端权威。
      * 电脑 attach/detach 发生在主线程（CC 外设挂载路径），在此维护 {@code luaConnected} 供 Goggle 显示。
      */
     private class Peripheral implements IPeripheral {
@@ -1297,31 +1346,15 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
 
         /**
-         * 所有连接的流体储罐内容（模块邻居中带流体能力且方块 tag 过滤通过的方块，含燃料/水源罐，经 seen 去重）：
+         * 引擎源储罐内容（水源 + 流体燃料 + 蒸汽流体燃料三源列表并集，按 pos 去重；不是全部贴着引擎的流体罐）：
          * 每个储罐一项：{@code fluid}（流体 id，空罐为 nil）、{@code amount}（当前量 mb）、
          * {@code remaining}（剩余可装量 mb = capacity − amount）、{@code capacity}（总量 mb）。
-         * mainThread=true：需要现场扫描模块邻居并做 capability 查询。
+         * mainThread=false：直读 {@link #fluidTanksCache}——服务端在补料成功 / 源列表重建时刷新
+         * （引擎视角下罐内容只在这两个时刻变化；外部灌入要到下次补料/重建才可见）。
          */
-        @LuaFunction(mainThread = true)
+        @LuaFunction
         public final List<Map<String, Object>> getFluidTanks() {
-            List<Map<String, Object>> tanks = new ArrayList<>();
-            for (BlockPos neighbor : scanModule().neighbors()) {
-                IFluidHandler handler = fluidHandlerAt(neighbor);
-                if (handler == null)
-                    continue;
-                for (int tank = 0; tank < handler.getTanks(); tank++) {
-                    FluidStack stack = handler.getFluidInTank(tank);
-                    Map<String, Object> entry = new LinkedHashMap<>();
-                    entry.put("fluid", stack.isEmpty() ? null
-                            : BuiltInRegistries.FLUID.getKey(stack.getFluid()).toString());
-                    entry.put("amount", (double) stack.getAmount());
-                    int capacity = handler.getTankCapacity(tank);
-                    entry.put("remaining", (double) Math.max(0, capacity - stack.getAmount()));
-                    entry.put("capacity", (double) capacity);
-                    tanks.add(entry);
-                }
-            }
-            return tanks;
+            return fluidTanksCache;
         }
 
         /** 当前油门（0..1；默认 0.25——静态无风道不过热的既有定标值）。定距桨单杆模型：转速 = 油门 × 256 */
