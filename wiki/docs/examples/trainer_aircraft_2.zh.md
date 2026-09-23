@@ -1,7 +1,7 @@
 # 示例 - 教练机v2
 
-## [> 存档下载 <](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/main/.design_guide/trainer%20aircraft%v2.7z)
-[OneDrive](https://1drv.ms/u/c/4fabe5939824c0f1/IQBRrsxD701TSLc-8s9G-mUOAc90DH54mNX-K_e2ksRTCUw?e=FfH2xE)
+## [> 存档下载 <](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/main/.design_guide/trainer%20aircraft%20v2.7z)
+[OneDrive](https://1drv.ms/u/c/4fabe5939824c0f1/IQBRrsxD701TSLc-8s9G-mUOAc90DH54mNX-K_e2ksRTCUw?e=jRZdjp)
 
 
 ## 改动

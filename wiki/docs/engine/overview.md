@@ -48,3 +48,4 @@ The two chamber types are **physically mutually exclusive**: one engine cannot m
 - [Temperature & Cooling Model](temperature.md) — how heat is generated and dissipated (altitude → temperature & pressure)
 - [Fuel & Fuel Sources](fuel.md) — datapack fuel, vanilla fuel, quick-fill tank / fuel vault
 - [Lua API](lua-api.md) — the `ccpe:engine` peripheral reference
+- [Example](../examples/trainer_aircraft_2.md) — a complete example using the fluid combustion chamber, automatically controlling engine temperature and mixture

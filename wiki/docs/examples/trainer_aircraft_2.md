@@ -1,7 +1,7 @@
 # Example - Trainer Aircraft v2
 
 ## [> Download Save <](https://github.com/ZombieEggStew/ccnavigationtable-template-1.21.1/blob/main/.design_guide/trainer%20aircraft%20v2.7z)
-[OneDrive](https://1drv.ms/u/c/4fabe5939824c0f1/IQBRrsxD701TSLc-8s9G-mUOAc90DH54mNX-K_e2ksRTCUw?e=FfH2xE)
+[OneDrive](https://1drv.ms/u/c/4fabe5939824c0f1/IQBRrsxD701TSLc-8s9G-mUOAc90DH54mNX-K_e2ksRTCUw?e=jRZdjp)
 
 ## Changes
 

@@ -7,6 +7,8 @@ local e = peripheral.wrap("front")
 -- or: peripheral.find("ccpe:engine")
 ```
 
+## [Example — Temperature and Mixture Control](../examples/trainer_aircraft_2.md)
+
 ## Reading vs writing
 
 - **Read methods** run with `mainThread=false` and read the controller's cached state directly — at most 1 tick stale, and effectively free to poll at high frequency.
@@ -31,27 +33,6 @@ local e = peripheral.wrap("front")
 | `getCooling()` | false | number | Cooling shutter 0..1 (default 1.0) |
 | `setCooling(0..1)` | true | boolean | Shutter: only scales the duct dissipation component, can only reduce; **no gating** (pure storage, consumed only with a duct installed) |
 | `isWarmingUp()` | false | boolean | Steam warm-up in progress (T<100°C burns without generating) |
-
-## Example — cruise control
-
-```lua
-local e = peripheral.wrap("front")
-
--- Full startup
-e.setThrottle(0.25)          -- 25% throttle: 64 rpm, fuel lasts 4× longer on steam
-
--- Economy cruise (fluid engine): pull the lever for altitude compensation
-local nat = e.getAutoRichness()          -- natural altitude mixture (no lever)
-if nat > 1.0 then
-    e.setMixture(math.max(0.6, 1 / nat)) -- compensate: m_eff ≈ 1.0
-end
-
--- Watch the temperature
-print(string.format("T = %.1f°C  eco = %.2f  fuel = %s",
-    e.getTemperature(), e.getFuelEconomyFactor(), e.getActiveFuel().type))
-```
-
-**Overload does not stop the engine** — like Create stress sources it keeps running and burning fuel; the goggles show a red "Network overloaded" warning. Shutdown reasons: no fuel / no water, throttle 0, fluid overheat (resumes at ≤ 200°C), steam warm-up incomplete.
 
 ## Status tiers (fluid engine, via `getTemperature()`)
 
