@@ -111,5 +111,6 @@
 - The Fluid Combustion Chamber can now burn Aeronautics' Levitite Blend fluid and Create's Chocolate fluid. Check the [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/fluid-combustion-chamber/) for more details.
 - Added `getAutoRichness` Lua method. Check the [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/lua-api/) for more details.
 
+- engine.getFluidTanks() now mainThread = false
 
 
