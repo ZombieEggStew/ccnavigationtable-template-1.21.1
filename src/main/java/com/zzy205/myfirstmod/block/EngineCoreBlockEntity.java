@@ -2012,7 +2012,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                         .withStyle(ChatFormatting.GOLD)));
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.throttle").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
+                .append(Component.literal(String.format(Locale.ROOT, "%.1f%%", efficiency * 100))
+                        .withStyle(ChatFormatting.AQUA)));
         // 燃料（正在使用的燃料；固体显示剩余燃烧时间，流体不显示——参考 simulated portable_engine）
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.fuel").withStyle(ChatFormatting.GRAY))
@@ -2132,7 +2133,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                     .append(Component.translatable("tooltip.ccpe.engine.overheated").withStyle(ChatFormatting.RED)));
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.throttle").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal(Math.round(efficiency * 100) + "%").withStyle(ChatFormatting.AQUA)));
+                .append(Component.literal(String.format(Locale.ROOT, "%.1f%%", efficiency * 100))
+                        .withStyle(ChatFormatting.AQUA)));
         // 油耗 / 发热系数（仅流体引擎；蒸汽 Plan B = 恒温自调节、无这两行）
         if (!steamEngine) {
             // 油耗（P7+ 方案 B：客户端按公式现算「最终油耗系数」= 杆值 × 经济系数 × 过冷惩罚，即除油门/自动富油外的全部油耗因子；<1 = 省油中）
