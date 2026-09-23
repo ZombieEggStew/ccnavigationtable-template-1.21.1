@@ -109,6 +109,27 @@ local AIRSPEED_KP = 0.002     -- 油门比例：每 m/s 空速误差的油门修
 local AIRSPEED_KI = 0.001    -- 积分增益（1/s）：稳态归零，消除模型偏移
 local AIRSPEED_INT_MAX = 0.1 -- 积分限幅（油门 ±0.1，防 windup）
 
+-- 引擎温度控制 v2（2026-09 用户定稿；2026-09 加 I 项）：
+-- 混合比固定有效值 0.9（高效窗口下沿 0.8 + 0.1 裕度），不参与温度调节（风道应能压住拉稀发热）
+-- 风道 = PI+D：cool = COOL_BASE + COOL_KP×温度误差 + COOL_KI×误差积分 + COOL_KD×温度变化速率（D 项阻尼防过冲/振荡）
+-- I 项消除稳态误差（参考滚转环 +1.2° 残差加 ROLL_KI 的修法）：
+--   实测 PD 平衡点钉在 145°C（需求曲线 dT/dcool≈−210°C/单位，155°C 只需 ~5% 风门，COOL_BASE 0.6 严重失配）
+-- 实际混合比 = 杆 × autoRichness → 固定 eff 0.9 时杆 = 0.9/autoRichness（海拔补偿）
+-- 紧急兜底（用户已确认）：T≥200°C 富油到杆 1.4（heatFactor→0.7）防 220°C 硬停
+local ENGINE_TEMP_TARGET = 155.0  -- °C：温度目标（高效窗口中心 145~165）
+local ENGINE_TEMP_EMERGENCY = 200.0 -- °C：紧急富油兜底阈值
+local MIX_EFF_FIX = 0.9           -- 固定有效混合比（杆 = MIX_EFF_FIX / autoRichness）
+local MIX_EFF_MIN = 0.8           -- 高效混合比窗口下沿（参考）
+local MIX_EFF_MAX = 1.1           -- 高效混合比窗口上沿（参考）
+local MIX_LEVER_ABS_MIN = 0.6     -- setMixture 硬下限
+local MIX_LEVER_ABS_MAX = 1.4     -- setMixture 硬上限
+local ENGINE_CTRL_EVERY = 10      -- 控制周期（tick，10 = 0.5s；温度是慢过程）
+local COOL_BASE = 0.3             -- 风门基准工作点（P/I 项归零时；从 0.6 降到 0.3 减轻 I 项负担）
+local COOL_KP = 0.05              -- 风门/°C：温度误差比例（过热增冷却、过冷减冷却）
+local COOL_KI = 0.005             -- 1/s：温度误差积分增益（消除稳态误差；符号与 Kp 相同）
+local COOL_INT_MAX = 100.0        -- °C·s：积分限幅（防 windup；最大修正 = 100×0.005 = 0.5 风门）
+local COOL_KD = 0.02              -- 风门/(°C/s)：温度变化速率阻尼（0.05 引起 7~13% 抖动，降到 0.02）
+
 
 print("ready")
 
@@ -121,9 +142,12 @@ print("gravity",G)
 local cruise = ss.solveMaxCruise(m, N_sail, N_symmetric_sail, 1, S, 256)
 print("max alt",cruise.altitude)
 print("max speed",cruise.velocity)
-local MIN_ALT = 66
+local MIN_ALT = 65
 local airspeed_int = 0   -- 空速保持积分状态（退出 auto_th 时清零）
 local roll_int = 0       -- 滚转积分状态（auto_roll 关闭/摇杆接管时清零）
+local cool_int = 0       -- 温度控制积分状态（风门工作点自动修正；无外部接管，不清零）
+local engine_ctrl_tick = 0   -- 引擎温度控制周期计数
+local e_temp_prev = engine.getTemperature() or 155   -- 上一控制周期温度（dT/dt 差分用，初始=启动温度防假速率）
 module_monitor.playNiceSound()
 
 while true do
@@ -158,6 +182,44 @@ while true do
         throttle_axis = math.max(0, math.min(1, throttle_axis + AIRSPEED_KP * airspeed_err + airspeed_int))
     else
         airspeed_int = 0   -- 非自动油门时清积分（防 windup 与重入跳变）
+    end
+
+    -- ===== 引擎温度控制 v2（混合比固定 0.9 + 风道 PD）=====
+    -- 温度慢过程：每 ENGINE_CTRL_EVERY tick 才动作一次，避免 20Hz 抖动
+    -- ⚠ 写方法（setMixture/setCooling）是 mainThread=true：此处只算目标值，真正调用放循环末尾
+    --   parallel.waitForAll 中并行发出，避免阻塞电脑线程拖慢 20Hz 循环（读方法直读缓存零成本）
+    local e_set_mix = nil   -- 本轮待写混合比（nil = 不写）
+    local e_set_cool = nil  -- 本轮待写风门（nil = 不写）
+    local e_temp = engine.getTemperature() or 155
+    local e_auto_rich = engine.getAutoRichness() or 1.0
+
+    engine_ctrl_tick = engine_ctrl_tick + 1
+    if engine_ctrl_tick >= ENGINE_CTRL_EVERY then
+        engine_ctrl_tick = 0
+
+        -- 温度变化速率（°/s，控制周期差分；正 = 升温）
+        local dTdt = (e_temp - e_temp_prev) / (ENGINE_CTRL_EVERY * DT)
+        e_temp_prev = e_temp
+
+        -- 混合比：固定有效混合比 0.9（海拔补偿杆值），不参与温度调节
+        local lever_fixed = math.max(MIX_LEVER_ABS_MIN,
+            math.min(MIX_LEVER_ABS_MAX, MIX_EFF_FIX / e_auto_rich))
+        e_set_mix = lever_fixed
+
+        -- 风道 PI+D：冷却效率 = 基准 + 温度误差比例 + 误差积分（消稳态误差）+ 温度变化速率阻尼
+        -- 过冷（T 低 / 降温中）→ cool 减小（保热）；过热（T 高 / 升温中）→ cool 增大（散热）
+        -- I 项与滚转环同款：cool_int += 误差×经过时间，限幅后 ×COOL_KI 输出（符号与 Kp 相同）
+        local temp_err = e_temp - ENGINE_TEMP_TARGET
+        cool_int = cool_int + temp_err * (ENGINE_CTRL_EVERY * DT)
+        cool_int = math.max(-COOL_INT_MAX, math.min(COOL_INT_MAX, cool_int))
+        local cool_cmd = COOL_BASE + COOL_KP * temp_err + cool_int * COOL_KI + COOL_KD * dTdt
+        e_set_cool = cool_cmd
+
+        -- 紧急兜底：T≥200°C 富油到杆 1.4（heatFactor→0.7）防 220°C 硬停
+        if e_temp >= ENGINE_TEMP_EMERGENCY then
+            e_set_mix = MIX_LEVER_ABS_MAX
+        end
+
     end
 
 
@@ -229,12 +291,14 @@ while true do
             {1,3,"Pitch",align = "left"},
             {1,4,"Roll",align = "left"},
             {1,5,"Yaw",align = "left"},
+            {1,6,"Tmp",align = "left"},
 
             {1, 1 ,string.format("%.1f", alt_current),align = "right"},
             {1, 2 ,string.format("%.2f", speed),align = "right"},
             {1, 3 ,string.format("%.1f", - angle.pitch),align = "right"},
             {1, 4 ,string.format("%.2f", angle_roll),align = "right"},
             {1, 5 ,string.format("%.1f", angle.yaw),align = "right"},
+            {1, 6 ,string.format("%.0f", e_temp),align = "right"},
         }
 
         cells_alt_control =
@@ -248,6 +312,8 @@ while true do
             {1, 2 ,string.format("%.2f", target_speed),align = "right"},
             {1, 3 ,string.format("%.2f", vertical_speed),align = "right"},
 
+
+
         }
 
     end
@@ -259,6 +325,8 @@ while true do
             end
         end,
         function () engine.setThrottle(throttle_axis) end,
+        function () if e_set_mix then engine.setMixture(e_set_mix) end end,
+        function () if e_set_cool then engine.setCooling(e_set_cool) end end,
         function () servo_r.setTargetAngle(servo_r_angle) end,
         function () servo_l.setTargetAngle(servo_l_angle) end,
         function () module_screen_1.drawCells({cells = cells})end,
