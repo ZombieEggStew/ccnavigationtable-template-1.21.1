@@ -7,6 +7,8 @@ local e = peripheral.wrap("front")
 -- 或：peripheral.find("ccpe:engine")
 ```
 
+## [示例——温度与混合比控制](../examples/trainer_aircraft_2.zh.md)
+
 ## 读与写
 
 - **读方法** `mainThread=false` 直读 controller 缓存状态——最多滞后 1 tick，高频轮询几乎零成本。
@@ -31,27 +33,6 @@ local e = peripheral.wrap("front")
 | `getCooling()` | false | number | 冷却风门 0..1（默认 1.0） |
 | `setCooling(0~1)` | true | boolean | 风门：只缩 K_DUCT 风道散热分量，只能降；**无门控**（纯存值，仅装冷却气道时被消费） |
 | `isWarmingUp()` | false | boolean | 蒸汽暖机中（T<100°C 只烧不发电） |
-
-## 示例——巡航控制
-
-```lua
-local e = peripheral.wrap("front")
-
--- 启动
-e.setThrottle(0.25)          -- 25% 油门：64rpm，蒸汽燃料耐用 4 倍
-
--- 经济巡航（流体引擎）：拉杆做海拔补偿
-local nat = e.getAutoRichness()          -- 自然高度混合比（不含杆值）
-if nat > 1.0 then
-    e.setMixture(math.max(0.6, 1 / nat)) -- 补偿：m_eff ≈ 1.0
-end
-
--- 盯温度
-print(string.format("T = %.1f°C  eco = %.2f  fuel = %s",
-    e.getTemperature(), e.getFuelEconomyFactor(), e.getActiveFuel().type))
-```
-
-**过载不停机**——对齐 Create 应力源：照常运行烧油，goggle 顶部红字「网络过载」提示。停机原因：缺燃料/缺水、油门 0、流体过热（T≤200°C 恢复）、蒸汽暖机未完成。
 
 ## 状态档位（流体引擎，按 `getTemperature()`）
 
