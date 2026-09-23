@@ -54,7 +54,7 @@ How the multipliers matter:
 
 The **economy factor** is an AND-gated, time-unlocked discount (0.75–1.0):
 
-- Requires **both** `|T − 155°C| ≤ 10` **and** `|actual mixture − 1| ≤ 0.05` (flat-bottom window).
+- Requires **both** `|T − 155°C| ≤ 10` **and** `0.8 ≤ actual mixture ≤ 1.1` (flat-bottom window).
 - Staying inside the window for **15 s** ramps the factor in to **×0.75** (25% fuel saving); leaving it decays back in **6 s**. Holding the conditions is what matters — briefly passing through earns nothing.
 - If the mixture is wrong there is **no penalty**, just no reward.
 - The economy factor multiplies consumption **only** — it never feeds back into heat.

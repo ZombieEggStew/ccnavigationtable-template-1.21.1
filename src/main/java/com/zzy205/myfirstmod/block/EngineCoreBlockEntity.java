@@ -281,14 +281,18 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected float mixture = 1.0f;
     /** 服务端每 tick 的实际混合比（杆 × 高空自动富油），NBT 同步给客户端供 Goggle 显示——客户端无法可靠获得运动体真实高度，必须以服务端值为准 */
     protected float lastEffectiveMixture = 1f;
+    /** 服务端每 tick 的自动富油系数（自然高度混合比 = 1 + 0.45×(1−气压)，钳 [1.0, MIXTURE_ALT_MAX]，不含杆值）；Lua getAutoRichness 读缓存，不随 NBT 同步（无客户端消费者） */
+    protected float lastAutoRichness = 1f;
 
     // ---- P6/P7：最佳工作温度经济区（P7：双因素 AND 门控 + 时间解锁进度；方案见 memo/engine-module.md 节 7/10） ----
     /** 经济区最大折扣（×，P7 由 0.8 调高到 0.75 = 省 25%）；双因素持续达标、解锁进度满时达到 */
     public static final float ECO_MIN = 0.75f;
     /** 温度平底窗半径（°C）：|T−T_opt(eff)| ≤ 此值 = 温度达标 */
     public static final float ECO_FLAT = 10f;
-    /** 混合比平底窗：|m_eff − 1| ≤ 此值 = 混合比达标（P7；与温度窗并列，双达标才解锁经济） */
-    public static final float ECO_MIX_FLAT = 0.05f;
+    /** 混合比平底窗下限：m_eff ≥ 此值 = 混合比达标（P7；与温度窗并列，双达标才解锁经济；0.8 = 过稀失火阈值边界） */
+    public static final float ECO_MIX_MIN = 0.8f;
+    /** 混合比平底窗上限：m_eff ≤ 此值 = 混合比达标（P7；与温度窗并列，双达标才解锁经济） */
+    public static final float ECO_MIX_MAX = 1.1f;
     /** 经济解锁速率（/s）：达标时 ecoProgress += 此值/20，15s 缓慢累积满（保持才奖励，快速掠过不奖励） */
     public static final float ECO_UNLOCK_RATE = 1f / 15f;
     /** 经济流失速率（/s）：不达标时 ecoProgress −= 此值/20，6s 归零（离开窗口快速失去折扣） */
@@ -409,7 +413,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // P7 修订：混合比纯存值、无门控——杆值 = mixture 直取；非流体引擎（蒸汽）因 effectiveMixture 强制 1.0
         // 且无流体室不耗油，存值不生效（见 steamEngine 分支）。
         float leverMixture = mixture;                                             // 杆值（油耗直接 × 杆值）
-        float effectiveMixture = steamEngine ? 1f : leverMixture * autoRichness(); // 实际混合比（发热/eco 窗口/显示用）
+        float autoRich = steamEngine ? 1f : autoRichness();                        // 自然高度混合比（自动富油，不含杆值；蒸汽无此轴恒 1.0）
+        lastAutoRichness = autoRich;
+        float effectiveMixture = steamEngine ? 1f : leverMixture * autoRich;       // 实际混合比（发热/eco 窗口/显示用）
         lastEffectiveMixture = effectiveMixture;
         float mixtureHeatFactor = steamEngine ? 1f : heatFactor(effectiveMixture);
         lastHeatFactor = mixtureHeatFactor; // P7：同步给 Goggle 发热系数行（服务端权威）
@@ -1111,7 +1117,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /**
      * P7 经济解锁进度（双因素 AND 门控 + 时间积分）：温度与混合比<b>同时</b>持续在平底窗内
-     * （|T−ENGINE_T_OPT|≤ECO_FLAT ∧ |m_eff−1|≤ECO_MIX_FLAT）→ 缓慢累积（ECO_UNLOCK_RATE，15s 满）；
+     * （|T−ENGINE_T_OPT|≤ECO_FLAT ∧ ECO_MIX_MIN≤m_eff≤ECO_MIX_MAX）→ 缓慢累积（ECO_UNLOCK_RATE，15s 满）；
      * 离开窗口/停机 → 快速流失（ECO_DECAY_RATE，6s 归零）。保持才奖励、快速掠过不奖励；
      * 混合比不对 = 无奖励也无惩罚（温度控得再好也没用）。
      * P7 修订：经济系数<b>不以冷却气道为门控</b>（无气道同样生效）——setMixture/setCooling 均无门控（纯存值），冷却气道只是风门数值的消费载体。
@@ -1120,7 +1126,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                                       boolean runningFluid) {
         boolean satisfied = runningFluid
                 && Math.abs(temp - tOptEff) <= ECO_FLAT
-                && Math.abs(mEff - 1f) <= ECO_MIX_FLAT;
+                && mEff >= ECO_MIX_MIN && mEff <= ECO_MIX_MAX;
         if (satisfied)
             return Math.min(1f, progress + ECO_UNLOCK_RATE / 20f);
         return Math.max(0f, progress - ECO_DECAY_RATE / 20f);
@@ -1363,6 +1369,18 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
 
         /**
+         * 当前<b>自然高度混合比</b>（高空自动富油系数，<b>不含玩家设定的杆值</b>）：
+         * 海平面 = 1.0；气压随高度下降 → 化油器按进气体积配油 → 空气稀天然变浓，最高 ×{@code MIXTURE_ALT_MAX}（Y≈260）。
+         * P7：自动富油只降温不进油耗——该读数是「海拔补偿该拉多少杆」的参考：
+         * 目标是 m_eff = 杆 × autoRichness ≈ 1.0 → 杆 ≈ 1 / getAutoRichness()。
+         * 蒸汽引擎无混合比轴 → 恒 1.0。
+         */
+        @LuaFunction
+        public final double getAutoRichness() {
+            return lastAutoRichness;
+        }
+
+        /**
          * 设置混合比（0.6~1.4，越界钳制；非法参数返回 false）。
          * P5/P7 经济性/热管理杆：只影响<b>油耗</b>（P7：×杆值，自动富油不进油耗）与<b>温度</b>（×凸热因子，m_eff=杆×autoRichness）——
          * 稀=省油但更热，浓=费油但降温；应力/转速完全不受影响。
@@ -1388,7 +1406,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         /**
          * P7：当前经济系数（0.75~1.0；停机 / 油门 0 → 1.0 无意义）。
          * 服务端每 tick 计算并同步（读缓存，≤1 tick 滞后）；温度与<b>实际混合比</b>双因素持续达标
-         * （|T−T_opt(eff)|≤10 ∧ |m_eff−1|≤0.05）→ 解锁进度缓慢累积（15s 满）渐入 0.75，离开窗口 6s 流失；
+         * （|T−T_opt(eff)|≤10 ∧ 0.8≤m_eff≤1.1）→ 解锁进度缓慢累积（15s 满）渐入 0.75，离开窗口 6s 流失；
          * 混合比不对 → 无奖励无惩罚。
          */
         @LuaFunction

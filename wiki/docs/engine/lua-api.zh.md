@@ -24,6 +24,7 @@ local e = peripheral.wrap("front")
 | `getMixture()` | false | number | 混合比杆 0.6..1.4（仅流体引擎；蒸汽恒 1.0） |
 | `setMixture(x)` | true | boolean | 混合比：油耗 × 杆值、温度 × 热因子；**无门控**（纯存值，非流体引擎不生效） |
 | `getEffectiveMixture()` | false | number | 实际混合比 = 杆 × 高空自动富油（经济窗口与发热反馈用；高空 > 杆值） |
+| `getAutoRichness()` | false | number | 自然高度混合比 = 仅高空自动富油系数（不含杆值）：海平面 1.0，Y≈260 最高 ×1.25（蒸汽恒 1.0）。海拔补偿参考——拉到 ≈ 1 / getAutoRichness() 使 m_eff ≈ 1.0 |
 | `getFuelEconomyFactor()` | false | number | 经济系数 0.75..1.0（温度+混合比双达标渐入 15s；混合比不对无奖励无惩罚） |
 | `hasAirDuct()` | false | boolean | 是否装冷却气道（信息用；setMixture/setCooling 均无门控，装风道时风门值才被 K_DUCT 分量消费） |
 | `getActiveFuel()` | false | table | 活动燃料：流体 `{type="fluid", fluid=<id>, optimalTemp=155}`；蒸汽 `{type="steam", optimalTemp=155}`；停机 `{type="none"}` |
@@ -40,9 +41,9 @@ local e = peripheral.wrap("front")
 e.setThrottle(0.25)          -- 25% 油门：64rpm，蒸汽燃料耐用 4 倍
 
 -- 经济巡航（流体引擎）：拉杆做海拔补偿
-local m = e.getEffectiveMixture()
-if m > 1.05 then
-    e.setMixture(math.max(0.6, e.getMixture() - 0.05))  -- 朝 m_eff ≈ 1.0 拉稀
+local nat = e.getAutoRichness()          -- 自然高度混合比（不含杆值）
+if nat > 1.0 then
+    e.setMixture(math.max(0.6, 1 / nat)) -- 补偿：m_eff ≈ 1.0
 end
 
 -- 盯温度
