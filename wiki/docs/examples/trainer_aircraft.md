@@ -69,7 +69,7 @@ Right screen (module ID 1), top to bottom:
 
 ## Flight Operations
 
-1. Hold a Diesel Generators fuel can, right-click the fluid port between the landing gear to fill the aircraft with fuel
+1. Hold a Diesel Generators fuel bucket, right-click the fluid port between the landing gear to fill the aircraft with fuel
 2. Sit on the seat
 3. Flip the engine switch on
 4. Hold Space to push the throttle to gear 1 for slow taxiing (hold Ctrl to reduce throttle)
