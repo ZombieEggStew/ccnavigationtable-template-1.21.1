@@ -27,6 +27,7 @@
 | 植物油 Plant Oil | Create: Diesel Generators（`createdieselgenerators:plant_oil`） | 1.0 | ×0.5 | ×0.5 |
 | 珊瑚 Coral | Create Propulsion: Simulated（`createpropulsion:coral`） | 1.0 | ×1.25 | ×1.25 |
 | 松节油 Turpentine | Create Propulsion: Simulated（`createpropulsion:turpentine`） | 1.5 | ×1.0 | ×1.0 |
+| 浮空混合物 Levitite Blend | Aeronautics（`aeronautics:levitite_blend`） | 1.25 | ×0.5 | ×0.75 |
 
 各倍率的意义：
 

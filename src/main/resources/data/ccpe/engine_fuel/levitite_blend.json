@@ -1,0 +1,6 @@
+{
+  "fluid": "aeronautics:levitite_blend",
+  "consumption": 1.25,
+  "heat": 0.5,
+  "stress": 0.75
+}

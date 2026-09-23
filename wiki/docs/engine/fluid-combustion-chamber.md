@@ -27,6 +27,7 @@ The mod ships the following fuels in `data/ccpe/engine_fuel/*.json` (you need th
 | Plant Oil | Create: Diesel Generators (`createdieselgenerators:plant_oil`) | 1.0 | ×0.5 | ×0.5 |
 | Coral | Create Propulsion: Simulated (`createpropulsion:coral`) | 1.0 | ×1.25 | ×1.25 |
 | Turpentine | Create Propulsion: Simulated (`createpropulsion:turpentine`) | 1.5 | ×1.0 | ×1.0 |
+| Levitite Blend | Aeronautics (`aeronautics:levitite_blend`) | 1.25 | ×0.5 | ×0.75 |
 
 How the multipliers matter:
 
