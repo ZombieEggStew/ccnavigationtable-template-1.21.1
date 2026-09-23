@@ -11,6 +11,10 @@ local function reset_screen(screen)
     screen.setTextColour(0x00FF00)
 end
 
+local COLOR_OK = 0x54fc54
+local COLOR_WARN = 0xfcfc54
+local COLOR_DANGER = 0xfca800
+
 local N = 1
 local S = 14
 local ok = ss.initPropeller(N, S)
@@ -273,6 +277,23 @@ while true do
     local servo_r_angle = - target_pitch_angle - target_roll_angle
     local servo_l_angle = - target_pitch_angle + target_roll_angle
 
+    local fluid_fuel = engine.getFluidTanks()
+    local fluid_fuel_percent = 0
+
+    if fluid_fuel and #fluid_fuel > 0 then
+        for _,v in ipairs(fluid_fuel) do
+            fluid_fuel_percent = fluid_fuel_percent + (v.amount or 0) / 80
+        end
+    end
+
+    local fuel_color = COLOR_OK
+    if fluid_fuel_percent < 50 then
+        fuel_color = COLOR_WARN
+    end
+    if fluid_fuel_percent <= 20 then
+        fuel_color = COLOR_DANGER
+    end
+
 
     if math.abs(speed) < 0.001 then
         speed = 0
@@ -292,6 +313,7 @@ while true do
             {1,4,"Roll",align = "left"},
             {1,5,"Yaw",align = "left"},
             {1,6,"Tmp",align = "left"},
+            {1,7,"Fuel",align = "left"},
 
             {1, 1 ,string.format("%.1f", alt_current),align = "right"},
             {1, 2 ,string.format("%.2f", speed),align = "right"},
@@ -299,6 +321,7 @@ while true do
             {1, 4 ,string.format("%.2f", angle_roll),align = "right"},
             {1, 5 ,string.format("%.1f", angle.yaw),align = "right"},
             {1, 6 ,string.format("%.0f", e_temp),align = "right"},
+            {1, 7 ,string.format("%.0f%%", fluid_fuel_percent),fuel_color,align = "right"},
         }
 
         cells_alt_control =
