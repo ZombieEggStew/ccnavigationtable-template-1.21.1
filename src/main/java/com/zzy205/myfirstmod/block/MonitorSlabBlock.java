@@ -21,7 +21,6 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
@@ -53,15 +52,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 板式监视器（monitor_slab）：贴附式台阶状方块（slab 形状，表面后续可放置 Monitor 模块）。
+ * 板式监视器（monitor_slab）：台阶状方块（slab 形状，表面可放置 Monitor 模块）。
  * <p>
  * blockstate 结构参考 {@code create:stock_link}（FACE + 水平 FACING，实现照抄项目内已验证的
  * {@code fmc.json} / FmcBlock 模式，而非 vanilla DirectionalBlock 的 6 向 FACING）：
  * <ul>
- *   <li>附着在地板 / 天花板（{@code FACE}=FLOOR/CEILING）：{@code FACING} 随玩家水平朝向，四向可旋转（4×2 态）；</li>
- *   <li>附着在墙面（{@code FACE}=WALL）：{@code FACING} = 点击面，每个方向固定一个 state（4 态）。</li>
+ *   <li>地板 / 天花板形态（{@code FACE}=FLOOR/CEILING）：{@code FACING} 随玩家水平朝向，四向可旋转（4×2 态）；</li>
+ *   <li>墙面形态（{@code FACE}=WALL）：{@code FACING} = 点击面，每个方向固定一个 state（4 态）。</li>
  * </ul>
  * 共 12 态。放置时 {@code FACE} = 点击面、{@code FACING} = 玩家水平朝向反向（地板/天花板）或点击面（墙面）。
+ * <p>
+ * <b>可悬空放置</b>：无稳固检测（已删 {@code canSurvive} / {@code neighborChanged} / 支撑方向换算），
+ * 支撑方块破坏/不存在时不会掉落（对齐用户要求，区别于 FmcBlock / PitotTubeBlock 等贴附式方块）。
  * <p>
  * 选择框 = 16×8×16 台阶盒（照抄 quick_fill_fuel_vault：地板底半 y0..8 / 天花板顶半 y8..16 / 墙面 8px 厚贴墙）；
  * 音效对齐 quick_fill_fuel_vault（SoundType.COPPER）；扳手 = {@link IWrenchable}：**普通右键永不旋转**
@@ -155,28 +157,6 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
     @Override
     public @NotNull RenderShape getRenderShape(@NotNull BlockState state) {
         return RenderShape.MODEL;
-    }
-
-    /** monitor_slab 的支撑方块方向（FACE/FACING → 支撑方向）；附着方块 = {@code pos.relative(supportDirection)} */
-    public static Direction supportDirectionOf(BlockState state) {
-        return switch (state.getValue(FACE)) {
-            case FLOOR -> Direction.DOWN;
-            case CEILING -> Direction.UP;
-            case WALL -> state.getValue(FACING).getOpposite();
-        };
-    }
-
-    @Override
-    protected boolean canSurvive(@NotNull BlockState state, @NotNull LevelReader level, @NotNull BlockPos pos) {
-        BlockPos supportPos = pos.relative(supportDirectionOf(state));
-        return !level.getBlockState(supportPos).isAir();
-    }
-
-    @Override
-    public void neighborChanged(@NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos, @NotNull Block block, @NotNull BlockPos fromPos, boolean isMoving) {
-        if (!state.canSurvive(level, pos)) {
-            level.destroyBlock(pos, true);
-        }
     }
 
     @Override

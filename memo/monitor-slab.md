@@ -113,6 +113,12 @@
 - [ ] 关闭菜单保存频道；服务端自动分配（新 slab 从 0 起跳过占用）
 - [ ] 多 slab 同频道冲突顺延、存档重进频道保留（NBT 四路径）
 
+### 追加（同日）：slab 可悬空放置
+
+- 删除 `MonitorSlabBlock` 的稳固检测：`canSurvive` / `neighborChanged` / `supportDirectionOf`（基类默认 `canSurvive` 返回 true）。
+- 效果：支撑方块破坏/不存在时 slab **不掉落**，可悬空放置（对齐用户要求；区别于 FmcBlock / PitotTubeBlock 等贴附式方块）。
+- FACE/FACING blockstate 结构、选择框（按 FACE 分地板/天花板/墙面形态）、放置朝向逻辑均保留不变。
+
 ---
 
 ## 实施记录（9.25，基本流程已进游戏验证通过）
