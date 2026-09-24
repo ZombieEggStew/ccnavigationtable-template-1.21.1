@@ -2,16 +2,31 @@ package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
+import com.zzy205.myfirstmod.item.MyModItems;
+import com.zzy205.myfirstmod.monitor.ModuleType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.DirectionalBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
@@ -19,12 +34,20 @@ import net.minecraft.world.level.block.state.properties.AttachFace;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.level.BlockEvent;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -43,8 +66,11 @@ import java.util.Map;
  * （潜行右键拆除掉包；顶/底面右键旋转水平朝向，墙面态不可旋转）。
  * <p>
  * 当前为纯放置逻辑（无方块实体）；表面 Monitor 模块的放置/交互接入见后续步骤。
+ * <p>
+ * 表面模块：BE = {@link MonitorSlabBlockEntity}（{@link MonitorGridHost}），放置/交互/渲染走
+ * {@code MonitorSlabGridOverlay} / {@code MonitorSlabHitDetector} / {@code MonitorSlabRenderer}。
  */
-public class MonitorSlabBlock extends DirectionalBlock implements IWrenchable {
+public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
 
     public static final MapCodec<MonitorSlabBlock> CODEC = simpleCodec(MonitorSlabBlock::new);
     public static final EnumProperty<AttachFace> FACE = BlockStateProperties.ATTACH_FACE;
@@ -156,7 +182,101 @@ public class MonitorSlabBlock extends DirectionalBlock implements IWrenchable {
     }
 
     @Override
-    protected @NotNull MapCodec<? extends DirectionalBlock> codec() {
+    protected @NotNull MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
+    }
+
+    @Nullable
+    @Override
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+        return new MonitorSlabBlockEntity(pos, state);
+    }
+
+    @Nullable
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
+        return null;
+    }
+
+    @Override
+    public List<ItemStack> getDrops(BlockState state, LootParams.Builder params) {
+        List<ItemStack> drops = new ArrayList<>(super.getDrops(state, params));
+        BlockEntity blockEntity = params.getOptionalParameter(LootContextParams.BLOCK_ENTITY);
+        if (!(blockEntity instanceof MonitorSlabBlockEntity slabBE)) return drops;
+
+        for (var module : slabBE.getGridState().getAllModules().values()) {
+            ItemStack stack = MyModItems.monitorModuleStack(module.type());
+            if (!stack.isEmpty()) drops.add(stack);
+        }
+        for (int ignored = 0; ignored < slabBE.getGridState().getScreenRegions().size(); ignored++) {
+            drops.add(new ItemStack(MyModItems.MODULE_SCREEN.get()));
+        }
+        return drops;
+    }
+
+    /** 扳手潜行右键：拆除并掉落一个带完整 GridState 配置的 monitor_slab 物品（模块不单独掉落，对齐 MonitorBlock）。
+     *  仅命中侧面/底面时整块拆除；命中顶面（面板）时放行，交给 MonitorSlabGridOverlay 拆单个模块/屏幕（对齐 Monitor 的底座语义）。 */
+    @Override
+    public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
+        Level level = context.getLevel();
+        BlockPos pos = context.getClickedPos();
+        Player player = context.getPlayer();
+
+        // 顶面（面板）命中 → 不整块拆除，放行给 MonitorSlabGridOverlay 的模块/屏幕拆除 payload 处理
+        double localY = context.getClickLocation().y - pos.getY();
+        boolean onPanel = state.getValue(FACE) == AttachFace.FLOOR
+                && localY >= MonitorSlabBlockEntity.PANEL_Y_PX / 16.0 - 0.01
+                && localY <= 16.0 / 16.0 + 0.01;
+        if (onPanel) {
+            return InteractionResult.sidedSuccess(level.isClientSide);
+        }
+
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return InteractionResult.SUCCESS;
+        }
+
+        BlockEvent.BreakEvent event = new BlockEvent.BreakEvent(level, pos, level.getBlockState(pos), player);
+        NeoForge.EVENT_BUS.post(event);
+        if (event.isCanceled()) {
+            return InteractionResult.SUCCESS;
+        }
+
+        if (player != null) {
+            BlockEntity be = level.getBlockEntity(pos);
+            if (be instanceof MonitorSlabBlockEntity slabBE) {
+                CompoundTag tag = new CompoundTag();
+                slabBE.saveAdditional(tag, level.registryAccess());
+                BlockEntity.addEntityType(tag, MyModBlockEntities.monitor_slab_entity.get());
+                ItemStack stack = new ItemStack(this);
+                stack.set(DataComponents.BLOCK_ENTITY_DATA, CustomData.of(tag.copy()));
+                if (player.isCreative()) {
+                    if (!player.getInventory().add(stack)) {
+                        Block.popResource(level, pos, stack);
+                    }
+                } else {
+                    player.getInventory().placeItemBackInInventory(stack);
+                }
+            }
+        }
+
+        state.spawnAfterBreak(serverLevel, pos, ItemStack.EMPTY, true);
+        level.destroyBlock(pos, false);
+        IWrenchable.playRemoveSound(level, pos);
+        return InteractionResult.SUCCESS;
+    }
+
+    /** 手持 Monitor 模块物品时消费右键（客户端），避免原版继续处理模块物品；放置由 MonitorSlabGridOverlay 走 payload。 */
+    @Override
+    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level,
+                                              BlockPos pos, Player player, InteractionHand hand,
+                                              BlockHitResult hitResult) {
+        if (hand != InteractionHand.MAIN_HAND) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        if (!level.isClientSide) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+
+        if (ModuleType.fromItem(stack) != null) {
+            return ItemInteractionResult.SUCCESS;
+        }
+
+        return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 }

@@ -29,10 +29,33 @@ public final class Screen9GridRenderer {
         float originX();
         /** 屏幕面网格起点 y（块单位） */
         float originY();
-        /** 9 宫格基准面 z（块单位）：monitor_2 已含模块凸出（-MONITOR_2_MODULE_PROTRUDE_PX/16） */
+        /** 9 宫格基准面 z（块单位）：monitor_2 已含模块凸出（-MONITOR_2_MODULE_PROTRUDE_PX/16）；
+         *  水平顶面（{@link #horizontal()}=true）时作为<b>面板高度 y</b>（块单位，translate 用）。 */
         float z();
         /** 1 格的世界单位（Monitor 与 monitor_2 均为 1/16 块） */
         default float cellSize() { return 1f / 16f; }
+        /** 屏幕面是否水平（顶面，如 monitor_slab）：true 时整体「平移到 (originX, z, originY) + 绕 X +90° 摊平」，
+         *  本地 XY 绘制平面 → 世界 XZ，本地 +Z（文字/正面法线）→ 世界 +Y（朝上）。默认竖面（false），Monitor/monitor_2 零影响。 */
+        default boolean horizontal() { return false; }
+    }
+
+    /** 水平面包装后的内部局部平面：原点归零，避免与包装 translate 双重叠加。 */
+    private static ScreenPlane localPlane(ScreenPlane plane) {
+        float cell = plane.cellSize();
+        return new ScreenPlane() {
+            @Override public float originX() { return 0; }
+            @Override public float originY() { return 0; }
+            @Override public float z() { return 0; }
+            @Override public float cellSize() { return cell; }
+        };
+    }
+
+    /** 水平面包装：translate(originX, z, originY) + 绕 X +90°（本地 +Z → 世界 +Y）。返回包装后的局部平面。 */
+    private static ScreenPlane wrapHorizontal(PoseStack ps, ScreenPlane plane) {
+        ps.pushPose();
+        ps.translate(plane.originX(), plane.z(), plane.originY());
+        ps.mulPose(Axis.XP.rotationDegrees(90));
+        return localPlane(plane);
     }
 
     private static final RandomSource RANDOM = RandomSource.create(42L);
@@ -46,6 +69,11 @@ public final class Screen9GridRenderer {
                                     int light, int overlay) {
         // 屏幕渲染开关关闭：整个屏幕（9 宫格 + 内容）不绘制
         if (text != null && !text.isVisible()) return;
+
+        boolean horizontal = plane.horizontal();
+        if (horizontal) {
+            plane = wrapHorizontal(ps, plane);
+        }
 
         float cellSize = plane.cellSize();
         float borderSize = cellSize;
@@ -96,11 +124,20 @@ public final class Screen9GridRenderer {
         if (text != null && text.hasContent()) {
             renderScreenText(ps, buffer, scr, text, plane);
         }
+
+        if (horizontal) {
+            ps.popPose();
+        }
     }
 
     /** 在屏幕内区渲染格子文本缓冲（格子模型：每格字符 + 前景/背景色 + 图形层）。 */
     public static void renderScreenText(PoseStack ps, MultiBufferSource buffer,
                                         GridState.ScreenRegion scr, ScreenText text, ScreenPlane plane) {
+        boolean horizontal = plane.horizontal();
+        if (horizontal) {
+            plane = wrapHorizontal(ps, plane);
+        }
+
         float cellSize = plane.cellSize();
         float drawableInset = (float) ScreenText.DRAWABLE_INSET;
 
@@ -119,11 +156,16 @@ public final class Screen9GridRenderer {
             * ScreenText.RECT_UNITS_PER_PX);
         float innerHeightUnits = (float) ((scr.height() - 2f * drawableInset * 16f)
             * ScreenText.RECT_UNITS_PER_PX);
-        // 内容基准面 = 屏幕 9 宫格中心面（screen_center 模型 north 面在 z=0.7px）
-        float zBase = plane.z() + 0.7f / 16f;
+        // 内容基准面 = 屏幕 9 宫格中心面（screen_center 模型 north 面在 z=0.7px）。
+        // 水平顶面时本地 +Z → 世界 +Y（朝上），文字须在面板上方 → zBase 取负（与竖面相反）。
+        float zBase = plane.z() + (horizontal ? -0.7f : 0.7f) / 16f;
 
         ScreenTextRenderer.drawAll(ps, buffer, text, contentRight, contentTop,
             contentLeft, contentBottom, innerWidthUnits, innerHeightUnits, zBase);
+
+        if (horizontal) {
+            ps.popPose();
+        }
     }
 
     /** 渲染一个角模型，绕格子中心 Z 轴旋转（法线安全）。坐标均为块单位。 */

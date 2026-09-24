@@ -38,6 +38,8 @@ public final class MyModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<QuickFillFuelVaultBlockEntity>> quick_fill_fuel_vault_entity = BLOCK_ENTITY_TYPES.register("quick_fill_fuel_vault", () -> BlockEntityType.Builder.of(QuickFillFuelVaultBlockEntity::new, MyModBlocks.quick_fill_fuel_vault.get()).build(null));
     /** 快速装填流体储罐 BE：4000mb 单槽流体存储（无 GUI）；开盖动画由 Block tick 驱动（对齐 fluid_port/fuel_vault）；goggle tooltip 同 create:fluid_tank */
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<QuickFillFluidTankBlockEntity>> quick_fill_fluid_tank_entity = BLOCK_ENTITY_TYPES.register("quick_fill_fluid_tank", () -> BlockEntityType.Builder.of(QuickFillFluidTankBlockEntity::new, MyModBlocks.quick_fill_fluid_tank.get()).build(null));
+    /** 板式监视器 BE：表面 Monitor 棋盘网格（14×14，MonitorGridHost，见 MonitorSlabBlockEntity；对齐 monitor_2 表面小 Monitor 模式） */
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MonitorSlabBlockEntity>> monitor_slab_entity = BLOCK_ENTITY_TYPES.register("monitor_slab", () -> BlockEntityType.Builder.of(MonitorSlabBlockEntity::new, MyModBlocks.monitor_slab.get()).build(null));
 
     public static void register(IEventBus bus) {
         BLOCK_ENTITY_TYPES.register(bus);

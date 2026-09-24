@@ -1,0 +1,141 @@
+package com.zzy205.myfirstmod.block;
+
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
+import com.zzy205.myfirstmod.client.MonitorSlabGridOverlay;
+import com.zzy205.myfirstmod.monitor.GridState;
+import com.zzy205.myfirstmod.monitor.ModuleType;
+import com.zzy205.myfirstmod.monitor.ScreenText;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.Sheets;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
+import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.core.BlockPos;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * monitor_slab BER — 在顶面（面板）渲染已放置的模块模型与屏幕 9 宫格。
+ * <p>
+ * slab 本体由 blockstate 静态模型渲染，本 BER 只画表面内容。模块动画/微调见
+ * {@link ModuleRenderBehavior}；旋钮角度文字/按钮标签见 {@link ModuleSurfaceRenderer}；
+ * 屏幕 9 宫格/文字见 {@link Screen9GridRenderer}（水平面 {@link Screen9GridRenderer.ScreenPlane#horizontal()}）。
+ * <p>
+ * 朝向（水平顶面，模型朝向已核对 blockbench 模型）：
+ * <ul>
+ *   <li>button_1 底座/头部是竖在 XY 面的贴片（前脸 −Z，本地 z 0.625..1）→ 绕 X <b>+90°</b> 平躺，前脸朝上（+Y）；</li>
+ *   <li>toggle_switch / knob 底座原生平躺（前脸 +Y，本地底 y=0）→ 不旋转，直接放顶面。</li>
+ * </ul>
+ * 竖直锚点：button 本地原点在背面（z=0.625..1 向下延伸）→ 锚点 = 面板 + 1px（背面贴面板）；
+ * toggle/knob 本地底 y=0 → 锚点 = 面板。旋钮把手旋转轴（本地 Y）摊平后 = 世界 +Y，拖拽角度语义一致。
+ * <p>
+ * animProgress 使用 (BlockPos, moduleId) 复合 key，防止不同 slab 之间同 moduleId 的动画进度互相污染。
+ */
+public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlockEntity> {
+
+    /** 每个 slab 独立的动画进度表，外层 key=BlockPos，内层 key=moduleId */
+    private final Map<BlockPos, Map<Integer, Float>> animProgress = new HashMap<>();
+
+    public MonitorSlabRenderer(BlockEntityRendererProvider.Context ctx) {}
+
+    @Override
+    public void render(MonitorSlabBlockEntity be, float partialTick, PoseStack poseStack,
+                       MultiBufferSource buffer, int light, int overlay) {
+        BlockPos bePos = be.getBlockPos();
+        if (!be.hasContent()) return;
+        GridState grid = be.getGridState();
+
+        var beAnims = animProgress.computeIfAbsent(bePos, k -> new HashMap<>());
+        beAnims.keySet().removeIf(id -> !grid.getAllModules().containsKey(id));
+
+        // ── 渲染模块 ──
+        for (var mod : grid.getAllModules().values()) {
+            var bhv = ModuleRenderBehavior.of(mod.type());
+            boolean isKnob = mod.type() == ModuleType.KNOB;
+
+            // 顶面锚点（块单位）：网格起点 + 格位；模块微调按 monitor 竖面帧映射到顶面——
+            // offsetX（屏幕水平）→ 世界 X、offsetY（屏幕垂直）→ 世界 Z；offsetZ（屏幕法线/凸出）在顶面
+            // 不映射到高度（toggle/knob 会浮起 1px，用户进游戏确认后下沉；button 的 1px 凸出已含在 moduleBaseY）。
+            float px = (MonitorSlabBlockEntity.GRID_ORIGIN_X_PX + mod.gridX()) / 16f + bhv.offsetX();
+            float pz = (MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX + mod.gridY()) / 16f + bhv.offsetY();
+            float py = moduleBaseY(mod.type());
+
+            BakedModel model = MonitorPreloadedModels.getModel(mod.type());
+            if (model == null) continue;
+
+            float target;
+            if (isKnob) {
+                // 拖拽中优先使用客户端视觉角度（卡位微扭动）；否则跟随服务端角度
+                Float visual = MonitorSlabGridOverlay.getActiveKnobVisualAngle(bePos, mod.id());
+                target = visual != null ? visual : grid.getKnobAngle(mod.id());
+            } else {
+                target = grid.isPressed(mod.id()) ? 1f : 0f;
+            }
+            float next = ModuleRenderBehavior.stepAnim(beAnims, mod.id(), isKnob, target,
+                    bhv.animPressSpeed(), bhv.animReleaseSpeed());
+
+            poseStack.pushPose();
+            poseStack.translate(px, py, pz);
+            // 朝向校正（水平顶面）：button 贴片竖放（前脸 −Z）→ 绕 X +90° 平躺朝上；toggle/knob 底座已平躺 → 不转
+            if (mod.type() == ModuleType.BUTTON_1X1) {
+                poseStack.mulPose(Axis.XP.rotationDegrees(90));
+            }
+
+            // 底座
+            Screen9GridRenderer.renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), model, light, overlay);
+            // 额外部件（拉杆/把手/按钮头）。按钮灯带亮度：代码控制时用 Lua 亮度，否则跟随按下动画
+            float lightLevel = next;
+            if (mod.type() == ModuleType.BUTTON_1X1) {
+                lightLevel = grid.isLightCodeControlled(mod.id())
+                        ? grid.getLightBrightness(mod.id()) : next;
+            }
+            bhv.renderExtra(poseStack, buffer, next, lightLevel, light, overlay);
+            if (isKnob) {
+                ModuleSurfaceRenderer.renderKnobAngle(poseStack, buffer, bePos, mod.id(), light,
+                        grid.getKnobAngle(mod.id()), grid.getModuleConfig(mod.id()),
+                        ModuleSurfaceRenderer.SLAB);
+            }
+            if (mod.type() == ModuleType.BUTTON_1X1) {
+                ModuleSurfaceRenderer.renderButtonLabel(poseStack, buffer, grid.getButtonLabel(mod.id()), next, light);
+            }
+
+            poseStack.popPose();
+        }
+
+        // ── 渲染所有屏幕 9 宫格 ──
+        for (var screen : grid.getScreenRegions()) {
+            renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay);
+        }
+    }
+
+    /**
+     * 模块底座锚点（块单位）：button 本地原点在背面（本地 z 0.625..1 沿 −Y 延伸）→ 锚点 = 面板 + 1px 使背面贴面板；
+     * toggle/knob 本地底 y=0 → 锚点 = 面板（底座落面板，进游戏确认：offsetZ 不叠加，否则浮起 1px）。
+     */
+    private static float moduleBaseY(ModuleType type) {
+        return type == ModuleType.BUTTON_1X1
+                ? MonitorSlabBlockEntity.MODULE_SURFACE_Y_PX / 16f
+                : MonitorSlabBlockEntity.PANEL_Y_PX / 16f;
+    }
+
+    // ── 屏幕 9 宫格渲染（水平顶面） ──
+
+    /** slab 顶面屏幕面参数（块单位，水平面）：网格起点 = 面板内缩 1px；z() 作为面板高度（translate 用，已含模块凸出 1px）。 */
+    private static final Screen9GridRenderer.ScreenPlane SLAB_PLANE = new Screen9GridRenderer.ScreenPlane() {
+        @Override public float originX() { return MonitorSlabBlockEntity.GRID_ORIGIN_X_PX / 16f; }
+        @Override public float originY() { return MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX / 16f; }
+        @Override public float z() { return MonitorSlabBlockEntity.MODULE_SURFACE_Y_PX / 16f; }
+        @Override public boolean horizontal() { return true; }
+    };
+
+    private void renderScreen(PoseStack ps, MultiBufferSource buffer,
+                              GridState.ScreenRegion scr, ScreenText text, int light, int overlay) {
+        BakedModel corner = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_CORNER);
+        BakedModel edge   = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_EDGE);
+        BakedModel center = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_CENTER);
+
+        Screen9GridRenderer.renderScreen(ps, buffer, corner, edge, center, scr, text, SLAB_PLANE, light, overlay);
+    }
+}

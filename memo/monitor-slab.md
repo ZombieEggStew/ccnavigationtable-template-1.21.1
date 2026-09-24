@@ -1,0 +1,121 @@
+# monitor_slab 表面 Monitor 网格 + 模块安装方案
+
+> 需求（9.25）：复刻 monitor / monitor_2 的网格模型，能像 monitor 那样安装小零件（button_1 / toggle_switch / knob / screen）。
+> 阶段目标：**先简单跑通一遍流程验证可行性（仅地板放置 + BER + 无 Lua）**，之后再添加贴墙/贴天花板变体的模块放置、Lua 等。
+> 状态：**方案已定稿，实施中**。参考来源：monitor_2 完整接入记录见 `memo/control-desk-grid-slot.md`（MonitorGridHost 三件套复用、命中自遮挡坑、px 单位移植坑）。
+
+## 已确认设计（用户拍板）
+
+| 项 | 决定 |
+|---|---|
+| 网格尺寸 | **14×14**（顶面 16×16 px，四周各内缩 1px → 网格起点 (1,1)px，格=1px），`GridState(14, 14)` |
+| 支持的放置形态 | **仅地板（FLOOR）**：面板恒朝上，命中 = 水平面 y=slab 顶面（后续再扩贴墙/贴天花板） |
+| 渲染路径 | **只做 BER**：slab 本体继续 blockstate 静态模型，BER 只在顶面叠加模块/屏幕/装饰（后续再考虑 Flywheel） |
+| Lua | **本次不做**：BE 实现 `MonitorGridHost` 后，以后只需一行 capability 注册（MonitorPeripheral） |
+
+## 架构选型
+
+走 **Monitor 的「独立方块」模式**（不是 controlDesk 模式）：monitor_slab 是独立方块，照 `MonitorBlockEntity` 这条线 + 复用 **monitor_2 的接入方法**。
+
+**为什么好做**：
+1. 服务端/网络/Lua 三件套全部免费：`MonitorGridHost` 接口 + 8 个 payload（`MonitorPacketHandlers.findHost` 按 `instanceof MonitorGridHost` 分发）+ `ModuleHandle` 系列 Lua handle 都已参数化，monitor_2 已验证「新宿主零复制接入」。
+2. slab 比 monitor_2 简单：无 22.5° 倾斜、无 yaw/pitch/offset → 命中退化为「射线 vs 轴对齐水平平面」，渲染退化为「顶面平铺」。
+3. 渲染类全部共享：`Screen9GridRenderer`（9 宫格/文字）、`ModuleSurfaceRenderer`（旋钮角度/按钮标签）、`ModuleRenderBehavior`（按钮/钮子/旋钮动画）、`MonitorPreloadedModels`（模块模型）。
+
+## 面板几何（北向基准模型空间 px，单一来源放 `MonitorSlabBlockEntity`）
+
+- slab 模型 = 16×16×8 单盒（`models/block/monitor_slab/item.json`），地板放置 y0..8，**顶面 = 世界 y8/16 = pos.y + 0.5**。
+- 面板 = 整个顶面（x0..16 / z0..16），网格四周内缩 1px：
+  - 网格起点 (1, 1)px；格 (gx, gy) 占 px x∈[1+gx, 2+gx]、z∈[1+gy, 2+gy]。
+  - 网格 x 轴 → 模型 x；网格 y 轴 → 模型 z。
+- 模块凸出：模块模型按 monitor 竖面（-Z 正面）建模，顶面复用需**绕 X 旋转使正面朝 +Y**（初始旋转，符号进游戏首测校准）；模块背面贴面板、向外凸 ~1px（对齐 monitor_2 `MONITOR_2_MODULE_PROTRUDE_PX` 思路）。
+- 屏幕 9 宫格/文字复用 `Screen9GridRenderer`：`ScreenPlane` 加默认 `horizontal()=false`，水平面时整体「平移到面板锚点 + 绕 X 旋转」再走现有 XY 绘制（Monitor/monitor_2 默认 false 零影响）。
+
+## 改动文件清单
+
+| # | 文件 | 内容 | 参照 |
+|---|---|---|---|
+| 1 | `block/MonitorSlabBlockEntity.java`（新） | `implements MonitorGridHost`：懒加载 `GridState(14,14)` + 面板几何常量 + NBT 四路径 + `slabChanged()`=sendBlockUpdated+SyncGridPayload + 客户端注册表维护 | `ControlDeskBlockEntity` monitor_2 段 |
+| 2 | `block/MonitorSlabBlock.java`（改） | 加 `EntityBlock`（newBlockEntity/getTicker），父类换 `BaseEntityBlock`（FACE/FACING 本来就自己 add） | `MonitorBlock` |
+| 3 | `block/MyModBlockEntities.java`（改） | 注册 `monitor_slab_entity` 绑定 `monitor_slab` | 现有条目 |
+| 4 | `client/MonitorSlabHitDetector.java`（新） | 射线 vs 水平面板平面 + 落点在面板内 + 背面剔除 + 遮挡检测**排除自身方块**（monitor_2 自遮挡坑） | `Monitor2HitDetector` |
+| 5 | `client/MonitorSlabGridOverlay.java`（新） | 网格线 + 放置预览 + 右键放/拆模块 + 按钮/钮子/旋钮 + 屏幕两点放置 + 扳手拆除 + 打开 `MonitorModuleScreen` + tooltip；payload 原样复用 | `Monitor2GridOverlay` |
+| 6 | `client/MonitorSlabClientRegistry.java`（新） | slab 已加载坐标集合 | `MonitorClientRegistry` |
+| 7 | `block/MonitorSlabRenderer.java`（新） | BER：顶面叠加模块（ModuleRenderBehavior + MonitorPreloadedModels）+ 9 宫格/文字（Screen9GridRenderer + 顶面 ScreenPlane）+ 装饰（ModuleSurfaceRenderer，KnobDisplaySource.SLAB） | `MonitorRenderer` + `ControlDeskRenderer` monitor_2 段 |
+| 8 | `block/Screen9GridRenderer.java`（改） | `ScreenPlane` 加 `horizontal()`；水平面渲染支持 | 本次唯一动共享类的改动 |
+| 9 | `CCPeripheralExtenderClient.java`（改） | 注册 MonitorSlabRenderer + overlay 事件 | monitor_2 注册段 |
+
+## 免费获得（零新代码）
+
+8 个 payload 分发、`MonitorModuleScreen` 配置菜单、模块/屏幕共享渲染类、网格状态服务端权威。
+
+## 已知坑（照抄时规避）
+
+1. `getUpdatePacket()` 不能恢复默认实现（code-map 已知边界），NBT 走四路径（saveAdditional/loadAdditional 带 contains 守卫/writeSafe/getUpdateTag，蓝图兼容）。
+2. 命中/渲染共用同一组面板常量（渲染与检测严格互逆铁律）。
+3. 遮挡检测排除 slab 自身（monitor_2 踩过：面板与碰撞体重叠会被判自遮挡，`ClipContext.COLLIDER` 命中自身方块要放行）。
+4. 模块初始旋转符号（+90° X）与水平面 9 宫格旋转方向必须一致；水平面 `ScreenPlane.z()` 需带上凸出偏移，文字 zBase 0.7px 下沉在凸出范围内。
+5. 单位：slab 渲染用块单位（对齐 Screen9GridRenderer 现状），**不要**照抄 monitor_2 早期 px 直用（那套已重构为块单位）。
+6. 右键冲突：手持模块物品时 overlay 拦截右键走 payload，照抄 `Monitor2GridOverlay`。
+
+## 实施顺序
+
+① BE + 方块 + 注册（gradlew classes 验证）→ ② 客户端注册表 + 命中 → ③ overlay 交互 → ④ BER 渲染 → ⑤ 注册接线 → ⑥ 进游戏验证。
+
+## 验证清单（进游戏）
+
+- [ ] 地板放置 slab，手持模块物品（button/toggle/knob/screen）指向顶面 → 显示 14×14 网格
+- [ ] 右键放置模块，位置正确、模型摊在顶面上、凸出方向朝上
+- [ ] 按钮按压（含灯带/标签）、钮子切换、旋钮拖拽（角度文字）
+- [ ] 屏幕两点放置 → 9 宫格 + 文字渲染在顶面
+- [ ] 扳手蹲下右键拆除；方块破坏掉落
+- [ ] 存档重进（NBT 四路径）、多 slab 状态隔离
+- [ ] 拆除/放置与 MonitorModuleScreen 配置打开正常
+
+## 后续阶段（本次不做）
+
+- 贴墙 / 贴天花板变体的模块放置（命中平面方向按 FACE 变化，几何已预留）
+- Lua 外设（MonitorPeripheral capability 注册，约 20 行）
+- Flywheel Visual（性能优化）
+- Sable physics_block_properties、合成配方
+
+---
+
+## 实施记录（9.25，代码已完成，`gradlew classes` 通过，待进游戏验证）
+
+### 实际落地（与方案差异）
+
+1. **模块朝向（关键修正）**：核对 blockbench 模型 JSON 后确认——
+   - button_1 底座/头部 = XY 竖贴片，**前脸 −Z**（本地 z 0.625..1），摊平用**绕 X +90°**（−Z→+Y）；
+   - toggle_switch / knob 底座 = 原生平躺（前脸 +Y、本地底 y=0），**不旋转**。
+   - ⚠️ `ControlDeskRenderer.renderDeskTopModules` 的「button 绕 X −90°」是**错误朝向**（正面朝下）+ toggle offsetZ 当水平位移平移 1px——用户已确认这两点，且桌顶小模块功能被 `DESK_TOP_MODULES_ENABLED=false` 禁用、从未真正验证。**不要照抄它**。
+2. **模块锚点映射**（monitor 竖面帧 → 顶面）：offsetX→世界 X、offsetY→世界 Z、offsetZ（屏幕法线微调）→世界 Y（高度）；竖直锚点按类型：button = 面板+1px（本地 z 0.625..1 沿 −Y 延伸、背面贴面板），toggle/knob = 面板（本地底 y=0）。
+3. **9 宫格水平面**：`Screen9GridRenderer.ScreenPlane` 加 `horizontal()`（默认 false，Monitor/monitor_2 零影响）；水平时「translate(originX, z, originY) + 绕 X +90°」后走现有 XY 绘制（本地 −Z 正面 → 世界 +Y 朝上）。
+4. **扳手语义变化**（对齐 Monitor 底座语义）：顶面命中 → 放行给 overlay 拆单个模块/屏幕；侧面/底面 → 整块拆除（BE 数据存进物品，模块不丢）。之前「任意面拆除」行为只对无模块的旧版有效。
+
+### 首测校准点（进游戏重点核对）
+
+- [x] ✅ button / 屏幕模块位置正常（用户进游戏确认）
+- [x] ✅ **toggle/knob 下沉 1px**（用户确认浮起 1px → `MonitorSlabRenderer` 去掉 `py += offsetZ()`，offsetZ 在顶面不映射到高度；button 的 1px 凸出已含在 `moduleBaseY`）
+- [ ] 网格线是否可见（y=面板 0px 偏移，若 z-fight 把 `MonitorSlabGridOverlay.GRID_LINE_OFFSET` 提到 0.01）
+- [ ] 旋钮拖拽方向（`atan2(pz−cz, px−cx)` + renderExtra `Axis.YP −anim`，若反了翻转 atan2 符号）
+- [ ] 旋钮角度文字 / 按钮标签朝向（内部变换按竖面设计，顶面可能转 90° 或不可见，需要时给 SLAB 单独变换）
+- [ ] 屏幕两点放置、扳手拆除、配置菜单（MonitorModuleScreen）打开
+- [ ] 存档重进 NBT、多 slab 状态隔离
+
+### 改动文件
+
+| 文件 | 说明 |
+|---|---|
+| `block/MonitorSlabBlockEntity.java`（新） | MonitorGridHost 14×14 + 面板几何常量 + NBT 四路径 + slabChanged 同步 |
+| `block/MonitorSlabBlock.java`（改） | 父类换 BaseEntityBlock + EntityBlock + getDrops（模块掉落）+ onSneakWrenched（顶面放行/侧面整拆保数据）+ useItemOn（模块物品消费右键） |
+| `block/MyModBlockEntities.java`（改） | 注册 monitor_slab_entity |
+| `client/MonitorSlabClientRegistry.java`（新） | 已加载 slab 坐标集合 |
+| `client/MonitorSlabHitDetector.java`（新） | 射线 vs 水平面板平面（FLOOR）+ 背面剔除 + 排除自身遮挡 |
+| `client/MonitorSlabGridOverlay.java`（新） | 网格/预览/放置/按压/钮子/旋钮/屏幕/拆除/配置菜单 |
+| `block/MonitorSlabRenderer.java`（新） | BER：模块（button +90°/toggle·knob 平放）+ 9 宫格（水平 ScreenPlane）+ 表面装饰 |
+| `block/Screen9GridRenderer.java`（改） | ScreenPlane.horizontal() 水平面支持（唯一动共享类） |
+| `block/ModuleSurfaceRenderer.java`（改） | 加 KnobDisplaySource.SLAB |
+| `CCPeripheralExtenderClient.java`（改） | 注册 MonitorSlabRenderer + MonitorSlabGridOverlay |
+
+免费获得：8 个 payload 分发（`MonitorPacketHandlers.findHost`）、MonitorModuleScreen、共享渲染类。
