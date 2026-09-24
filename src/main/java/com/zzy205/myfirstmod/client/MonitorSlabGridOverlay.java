@@ -26,6 +26,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.AttachFace;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
@@ -100,6 +101,9 @@ public class MonitorSlabGridOverlay {
         float knobVisualAngle = 0f;
         /** 本次拖拽的卡位步长（0 = 自由模式，此时把手跟随服务端角度） */
         int knobDetentStep = 0;
+        /** 天花板形态：面板 (u,v,n) 为右手系（地板/贴墙为左手系），渲染 Rx(180) 翻转模块 Z 轴 → 同一
+         *  atan2 公式在画面上旋转方向相反，拖拽角需取反（beginKnobDrag 时按 FACE 设置，tick 沿用） */
+        boolean knobDragFlip = false;
 
         // ── 屏幕两点放置 ──
         boolean screenPlacing = false;
@@ -358,7 +362,8 @@ public class MonitorSlabGridOverlay {
         // ── 旋钮拖拽 ──
         if (hoveredModule != null && hoveredModule.type() == ModuleType.KNOB
                 && useDown && heldType == null && !interact.knobDragging) {
-            beginKnobDrag(interact, pos, px, pz, hoveredModule, grid);
+            boolean flipDrag = state.getValue(MonitorSlabBlock.FACE) == AttachFace.CEILING;
+            beginKnobDrag(interact, pos, px, pz, hoveredModule, grid, flipDrag);
         } else if (interact.knobDragging && !useDown) {
             interact.knobDragging = false;
             interact.knobDragModuleId = -1;
@@ -541,9 +546,11 @@ public class MonitorSlabGridOverlay {
     // ── 旋钮拖拽（slab：面板局部坐标直接由 MonitorSlabHitDetector 给出，无 yaw/pitch/tilt）──
 
     private static void beginKnobDrag(InteractionState state, BlockPos pos,
-                                      float px, float pz, MonitorModule module, GridState grid) {
+                                      float px, float pz, MonitorModule module, GridState grid,
+                                      boolean flipDrag) {
         state.knobDragging = true;
         state.knobDragModuleId = module.id();
+        state.knobDragFlip = flipDrag;
         state.knobCenterX = MonitorSlabBlockEntity.GRID_ORIGIN_X_PX
                 + module.gridX() + module.getWidth() / 2f;
         state.knobCenterZ = MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX
@@ -552,7 +559,8 @@ public class MonitorSlabGridOverlay {
         state.knobAccumAngle = grid.getKnobAngle(module.id());
         state.knobDetentStep = grid.getDetentStep(module.id());
         boolean physicalLimit = grid.getModuleConfig(module.id()).getBoolean("physical_limit");
-        state.knobPrevRawAngle = (float) Math.atan2(pz - state.knobCenterZ, px - state.knobCenterX);
+        float rawAngle = (float) Math.atan2(pz - state.knobCenterZ, px - state.knobCenterX);
+        state.knobPrevRawAngle = flipDrag ? -rawAngle : rawAngle;
         state.knobUnwrappedDelta = 0f;
         state.knobLastSoundAngle = state.knobAccumAngle;
         state.knobDisplayAngle = physicalLimit
@@ -625,6 +633,7 @@ public class MonitorSlabGridOverlay {
                 MonitorSlabBlockEntity.GRID_WIDTH, MonitorSlabBlockEntity.GRID_HEIGHT);
 
         float rawAngle = (float) Math.atan2(hit.pz() - state.knobCenterZ, hit.px() - state.knobCenterX);
+        if (state.knobDragFlip) rawAngle = -rawAngle;
         float diff = rawAngle - state.knobPrevRawAngle;
         if (diff > Math.PI) diff -= (float) (2 * Math.PI);
         else if (diff < -Math.PI) diff += (float) (2 * Math.PI);

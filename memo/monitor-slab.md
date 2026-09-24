@@ -80,6 +80,39 @@
 
 ---
 
+## 实施记录（2026-09-24，天花板遗留修复：模块 N 偏 1px + 旋钮拖拽方向）
+
+### 1. 天花板 button/toggle 模块模型向 N 偏 1px（已修复并复验通过 ✅）
+
+- **根因**：天花板分支变换链 `T(anchor)·Rx(180)·T(pivot)·Ry(facing)·T(−pivot)` 中，`Rx(180)` 直接绕锚点
+  （= 模型原点角）翻转，而非绕足迹中心 → 翻转后足迹中心 = `anchor + Rx(180)(pivot) = (px+0.5px, ·, pz−0.5px)`，
+  比格心 `(px+0.5px, ·, pz+0.5px)` 恒偏 **−Z（N）1px，与 facing 无关**（knob 枢轴 0 → 正常，对照成立）。
+- **修复**：`MonitorSlabRenderer` 天花板分支把 `Rx(180)` 用 pivot 平移对包住（绕足迹中心翻转）：
+  `T(anchor)·T(pivot)·Rx(180)·T(−pivot)·T(pivot)·Ry(facing)·T(−pivot)`。**旋转部分 `Rx(180)·Ry(facing)`
+  不变** → 标签朝向/按压/屏幕零回归；平移 = 纯 +1px（+Z 南移）。
+- **验证**：用户进游戏四朝向 button/toggle 均居中于网格，复验通过。
+
+### 2. 天花板旋钮拖拽方向反了（已修复，待复验）
+
+- **现象（用户报告）**：拖拽天花板 knob 时，光标绕旋钮转的方向与旋钮旋转方向相反。
+- **根因（推导）**：三形态面板帧的手性不同——地板/贴墙 `(u,v,n)` 为左手系（模块 +Z → 世界 +v̂），
+  天花板为右手系且渲染 `Rx(180)` 把模块 +Z 映射到 `−v̂`。同一拖拽公式 `atan2(pz−cz, px−cx)`
+  （把手渲染 `Axis.YP.rotationDegrees(−anim)`）在地板/贴墙让把手跟随光标，在天花板把手方向变为
+  `(cos anim, −sin anim)` → `Δanim = Δφ` 时把手以 −Δφ 旋转 = 方向反。地板/贴墙不受影响（逐面验算过）。
+- **修复**：`MonitorSlabGridOverlay` —— `beginKnobDrag` 按 `state.getValue(FACE) == CEILING` 设
+  `InteractionState.knobDragFlip`，`beginKnobDrag`/`tickKnobDrag` 的 rawAngle 在 flip 时取反
+  （初始 prev 与逐帧 raw 同时取反 → 解缠绕 delta 整体变号，跨象限仍正确）。
+- **验证**：gradlew classes 编译通过；待用户进游戏复验（天花板拖拽方向与地板一致，地板/贴墙不回归）。
+
+### 改动文件
+
+| 文件 | 说明 |
+|---|---|
+| `block/MonitorSlabRenderer.java`（改） | 天花板模块 `Rx(180)` 翻转绕足迹中心（修复 N 偏 1px） |
+| `client/MonitorSlabGridOverlay.java`（改） | 旋钮拖拽 rawAngle 按天花板取反（`knobDragFlip`） |
+
+---
+
 ## 实施记录（9.28，贴墙形态接入：预览网格 / 命中 / 渲染 / 拆除判定）
 
 ### 需求（用户报告）
@@ -294,6 +327,7 @@
 
 **⏳ 待后续确认**：
 - [ ] 旋钮拖拽方向手感（`atan2(pz−cz, px−cx)` + renderExtra `Axis.YP −anim`；若反了翻转 atan2 符号）
+  → **2026-09-24：天花板已修**（`MonitorSlabGridOverlay` 拖拽角按 FACE==CEILING 取反，见 9.24 追加记录；待复验）
 - [ ] 旋钮角度文字 / 按钮标签朝向（内部变换按竖面设计，顶面可能转 90° 或不可见，需要时给 SLAB 单独变换）
 - [ ] 存档重进 NBT（四路径）、多 slab 状态隔离
 
