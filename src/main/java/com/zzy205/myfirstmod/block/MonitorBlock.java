@@ -68,6 +68,9 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
     /** 棋盘网格相对屏幕面板每侧的内缩（格），形成 1 格边框（14×12 面板 → 12×10 网格） */
     public static final float GRID_INSET = 1f;
 
+    /** 挂顶时 case 整体下移量（模型像素）：避免 case 顶部与翻转后底座（y14..16）重叠（用户定稿 2px；渲染与命中双侧补偿） */
+    public static final float HANGING_CASE_DROP = 2f;
+
     /** VoxelShaper.forHorizontal 旋转原点：Y=8, 水平中心=8 */
     public static final float ROT_ORIGIN = 8f;
     /** 俯仰铰链（绕 X 轴，模型像素），位于 case 侧轴承中心 */
@@ -243,12 +246,14 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
 
     /**
      * 把「块局部空间」的射线反变换回「模型空间」（平铺、朝北）。
-     * 逆变换顺序与渲染正向相反：facing逆 → offset逆 → yaw逆 → pitch逆，旋转取负。
+     * 逆变换顺序与渲染正向相反：facing逆 → offset逆 → yaw逆 → pitch逆 → hanging case下移逆，旋转取负。
      *
-     * @param origin 块局部坐标（world - blockPos），长度 3 数组，就地修改
-     * @param dir    视线方向，长度 3 数组，就地修改
+     * @param origin  块局部坐标（world - blockPos），长度 3 数组，就地修改
+     * @param dir     视线方向，长度 3 数组，就地修改
+     * @param hanging 挂顶标志：case 渲染整体下移 {@link #HANGING_CASE_DROP}，此处补偿回来（渲染链最内层 → 逆变换最后一步）
      */
-    public static void inverseToModel(double[] origin, double[] dir, Direction facing, float yaw, float pitch, int offset) {
+    public static void inverseToModel(double[] origin, double[] dir, Direction facing, float yaw, float pitch, int offset,
+                                      boolean hanging) {
         double center = ROT_ORIGIN / 16.0;
         rotateYPoint(origin, center, center, Math.toRadians(facing.getOpposite().toYRot()));
         rotateYDir(dir, Math.toRadians(facing.getOpposite().toYRot()));
@@ -267,13 +272,21 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
         double dy = dir[1], dz = dir[2];
         dir[1] = dy * cos + dz * sin;
         dir[2] = -dy * sin + dz * cos;
+
+        if (hanging) {
+            origin[1] += HANGING_CASE_DROP / 16.0;
+        }
     }
 
     /**
      * 把「模型空间」点（平铺、朝北，块单位）正向变换到「块局部空间」（不含 facing 与方块偏移）。
-     * 顺序：pitch → yaw → offset（渲染 PoseStack 为 facing→offset→yaw→pitch，此为其互逆的点变换）。
+     * 顺序：hanging case下移 → pitch → yaw → offset（渲染 PoseStack 为 facing→offset→yaw→pitch→下移，此为其互逆的点变换）。
      */
-    public static void transformPointToLocal(double[] point, float yaw, float pitch, int offset) {
+    public static void transformPointToLocal(double[] point, float yaw, float pitch, int offset, boolean hanging) {
+        if (hanging) {
+            point[1] -= HANGING_CASE_DROP / 16.0;
+        }
+
         double pr = Math.toRadians(pitch);
         double cos = Math.cos(pr), sin = Math.sin(pr);
         double hingeY = HINGE_Y / 16.0, hingeZ = HINGE_Z / 16.0;
@@ -300,11 +313,12 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
      */
     @Nullable
     public static double[] intersectScreen(BlockPos pos, Direction facing, float yaw, float pitch, int offset,
+                                           boolean hanging,
                                            Vec3 origin, Vec3 dir, double maxDistance) {
         Vec3 block = Vec3.atLowerCornerOf(pos);
         double[] o = { origin.x - block.x, origin.y - block.y, origin.z - block.z };
         double[] d = { dir.x, dir.y, dir.z };
-        inverseToModel(o, d, facing, yaw, pitch, offset);
+        inverseToModel(o, d, facing, yaw, pitch, offset, hanging);
 
         double planeZ = PANEL_Z / 16.0;
         if (d[2] <= 1e-6) return null;   // 平行或从背面看 → 剔除
@@ -337,8 +351,9 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
      */
     @Nullable
     public static float[] rayToScreenLocal(BlockPos pos, Direction facing, float yaw, float pitch, int offset,
+                                           boolean hanging,
                                            Vec3 origin, Vec3 dir) {
-        double[] hit = intersectScreen(pos, facing, yaw, pitch, offset, origin, dir, Double.MAX_VALUE);
+        double[] hit = intersectScreen(pos, facing, yaw, pitch, offset, hanging, origin, dir, Double.MAX_VALUE);
         return hit == null ? null : new float[]{ (float) hit[1], (float) hit[2] };
     }
 
@@ -347,8 +362,9 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
      */
     @Nullable
     public static int[] rayToGrid(BlockPos pos, Direction facing, float yaw, float pitch, int offset,
+                                  boolean hanging,
                                   Vec3 origin, Vec3 dir) {
-        double[] hit = intersectScreen(pos, facing, yaw, pitch, offset, origin, dir, Double.MAX_VALUE);
+        double[] hit = intersectScreen(pos, facing, yaw, pitch, offset, hanging, origin, dir, Double.MAX_VALUE);
         return hit == null ? null : localToGrid((float) hit[1], (float) hit[2]);
     }
 

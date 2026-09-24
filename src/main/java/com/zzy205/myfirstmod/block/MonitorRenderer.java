@@ -77,6 +77,10 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         // case 与所有屏幕内容：随 facing + offset + yaw + pitch。
         // case 模型带 render_type=cutout（前脸有屏幕开孔），必须用 cutout 片，否则背景/屏幕文字被不透明前脸遮挡。
         MonitorTransform.applyPitch(poseStack, be.getPitchAngle());
+        // 挂顶时 case 整体下移（pitch 之后的最内层），避免 case 顶部与翻转后底座重叠；命中逆变换同步补偿
+        if (be.getBlockState().getValue(MonitorBlock.HANGING)) {
+            MonitorTransform.applyHangingCaseDrop(poseStack);
+        }
         if (!shellInstanced) {
             BakedModel caseModel = MonitorPreloadedModels.getMonitorCase();
             if (caseModel != null) {

@@ -42,7 +42,8 @@ final class KnobInteractionHandler {
         }
         boolean physicalLimit = monitorBE != null
                 && monitorBE.getGridState().getModuleConfig(module.id()).getBoolean("physical_limit");
-        state.knobPrevRawAngle = computeCrosshairAngle(pos, facing, yaw, pitch, offset,
+        boolean hanging = monitorBE != null && monitorBE.getBlockState().getValue(MonitorBlock.HANGING);
+        state.knobPrevRawAngle = computeCrosshairAngle(pos, facing, yaw, pitch, offset, hanging,
                 ray[0], ray[1], state.knobCenterX, state.knobCenterY);
         state.knobUnwrappedDelta = 0f;
         state.knobLastSoundAngle = state.knobAccumAngle;
@@ -75,8 +76,9 @@ final class KnobInteractionHandler {
         float yaw = monitorBE != null ? monitorBE.getYawAngle() : 0f;
         float pitch = monitorBE != null ? monitorBE.getPitchAngle() : 0f;
         int offset = monitorBE != null ? monitorBE.getOffset() : 0;
+        boolean hanging = monitorBE != null && monitorBE.getBlockState().getValue(MonitorBlock.HANGING);
         Vec3[] ray = crosshairRay(mc.level, pos, mc.player);
-        float rawAngle = computeCrosshairAngle(pos, state.knobDragFacing, yaw, pitch, offset,
+        float rawAngle = computeCrosshairAngle(pos, state.knobDragFacing, yaw, pitch, offset, hanging,
                 ray[0], ray[1], state.knobCenterX, state.knobCenterY);
         float diff = rawAngle - state.knobPrevRawAngle;
         if (diff > Math.PI) diff -= (float) (2 * Math.PI);
@@ -160,8 +162,9 @@ final class KnobInteractionHandler {
     }
 
     private static float computeCrosshairAngle(BlockPos pos, Direction facing, float yaw, float pitch, int offset,
+                                                boolean hanging,
                                                 Vec3 origin, Vec3 dir, float knobCx, float knobCy) {
-        float[] local = MonitorBlock.rayToScreenLocal(pos, facing, yaw, pitch, offset, origin, dir);
+        float[] local = MonitorBlock.rayToScreenLocal(pos, facing, yaw, pitch, offset, hanging, origin, dir);
         if (local == null) return 0f;
         return (float) Math.atan2(local[1] - knobCy, local[0] - knobCx);
     }

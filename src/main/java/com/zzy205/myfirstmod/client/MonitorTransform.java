@@ -55,4 +55,9 @@ public final class MonitorTransform {
         pose.mulPose(Axis.XP.rotationDegrees(pitch));
         pose.translate(0f, -MonitorBlock.HINGE_Y / 16f, -MonitorBlock.HINGE_Z / 16f);
     }
+
+    /** hanging case 下移：整体沿 -Y 平移（渲染最内层、pitch 之后；与命中逆变换 {@code MonitorBlock.inverseToModel} 的补偿严格互逆）。 */
+    public static void applyHangingCaseDrop(PoseStack pose) {
+        pose.translate(0f, -MonitorBlock.HANGING_CASE_DROP / 16f, 0f);
+    }
 }

@@ -229,6 +229,7 @@ public class MonitorGridOverlay {
         float monitorYaw = hit.yaw();
         float monitorPitch = hit.pitch();
         int monitorOffset = hit.offset();
+        boolean monitorHanging = level.getBlockState(pos).getValue(MonitorBlock.HANGING);
 
         GridState grid = null;
         MonitorBlockEntity monitorBE = level.getBlockEntity(pos) instanceof MonitorBlockEntity m ? m : null;
@@ -409,7 +410,7 @@ public class MonitorGridOverlay {
 
         // 1. 网格线（手持模块或屏幕物品时）
         if (showGrid) {
-            drawGridLines(outliner, pos, facing, monitorYaw, monitorPitch, monitorOffset, keyPrefix);
+            drawGridLines(outliner, pos, facing, monitorYaw, monitorPitch, monitorOffset, monitorHanging, keyPrefix);
         }
 
         // 1.5 屏幕放置预览
@@ -424,7 +425,7 @@ public class MonitorGridOverlay {
             boolean canPlace = grid.canPlaceScreen(minX, minY, maxX, maxY);
             int color = (bigEnough && canPlace) ? 0x4CDA64 : 0xFF5E5E;
             drawModuleOutline(outliner, pos, minX, minY, w, h, keyPrefix + "/screen_preview", color, facing,
-                    monitorYaw, monitorPitch, monitorOffset);
+                    monitorYaw, monitorPitch, monitorOffset, monitorHanging);
         }
 
         // 2. 放置预览 / 对准高亮
@@ -434,12 +435,12 @@ public class MonitorGridOverlay {
                 int color = ok ? 0x4CDA64 : 0xFF5E5E;
                 drawModuleOutline(outliner, pos, gp[0], gp[1],
                         heldType.width, heldType.height, keyPrefix + "/preview", color, facing,
-                        monitorYaw, monitorPitch, monitorOffset);
+                        monitorYaw, monitorPitch, monitorOffset, monitorHanging);
             } else if (hoveredModule != null) {
                 drawModuleOutline(outliner, pos, hoveredModule.gridX(), hoveredModule.gridY(),
                         hoveredModule.getWidth(), hoveredModule.getHeight(),
                         keyPrefix + "/hover", moduleColor, facing,
-                        monitorYaw, monitorPitch, monitorOffset);
+                        monitorYaw, monitorPitch, monitorOffset, monitorHanging);
             } else if (onScreenCell) {
                 // 悬停在屏幕上 → 高亮整个屏幕区域
                 var scr = grid.getScreenAt(gp[0], gp[1]);
@@ -451,7 +452,7 @@ public class MonitorGridOverlay {
                             | Config.MONITOR_OUTLINE_B.get();
                     drawModuleOutline(outliner, pos, scr.minX(), scr.minY(),
                             scr.width(), scr.height(), keyPrefix + "/screen_hover", screenColor, facing,
-                            monitorYaw, monitorPitch, monitorOffset);
+                            monitorYaw, monitorPitch, monitorOffset, monitorHanging);
                 }
             }
         }
@@ -542,10 +543,10 @@ public class MonitorGridOverlay {
      * 不在子次元时 plot 坐标即世界坐标，行为不变。
      */
     private static Vec3 world(BlockPos pos, float x, float y, float z, Direction f,
-                              float yaw, float pitch, int offset) {
-        // 模型空间 → 块局部（pitch → yaw → offset），再 facing + 方块偏移
+                              float yaw, float pitch, int offset, boolean hanging) {
+        // 模型空间 → 块局部（hanging下移 → pitch → yaw → offset），再 facing + 方块偏移
         double[] p = { x, y, z };
-        MonitorBlock.transformPointToLocal(p, yaw, pitch, offset);
+        MonitorBlock.transformPointToLocal(p, yaw, pitch, offset, hanging);
         Vec3 r = rot((float) p[0], (float) p[1], (float) p[2], f);
         return new Vec3(pos.getX() + r.x, pos.getY() + r.y, pos.getZ() + r.z);
     }
@@ -553,7 +554,7 @@ public class MonitorGridOverlay {
     // ── 网格线 ──
 
     private static void drawGridLines(Outliner o, BlockPos pos, Direction f,
-                                      float yaw, float pitch, int offset, String keyPrefix) {
+                                      float yaw, float pitch, int offset, boolean hanging, String keyPrefix) {
         float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;
         float x0 = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET) / 16f;
         float x1 = (MonitorBlock.SCREEN_X_MAX - MonitorBlock.GRID_INSET) / 16f;
@@ -563,14 +564,14 @@ public class MonitorGridOverlay {
 
         for (int i = 0; i <= GridState.GRID_WIDTH; i++) {
             float x = x0 + i / 16f;
-            Vec3 from = world(pos, x, y0, z, f, yaw, pitch, offset);
-            Vec3 to = world(pos, x, y1, z, f, yaw, pitch, offset);
+            Vec3 from = world(pos, x, y0, z, f, yaw, pitch, offset, hanging);
+            Vec3 to = world(pos, x, y1, z, f, yaw, pitch, offset, hanging);
             o.showLine(keyPrefix + "/grid_v" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
         for (int i = 0; i <= GridState.GRID_HEIGHT; i++) {
             float y = y0 + i / 16f;
-            Vec3 from = world(pos, x0, y, z, f, yaw, pitch, offset);
-            Vec3 to = world(pos, x1, y, z, f, yaw, pitch, offset);
+            Vec3 from = world(pos, x0, y, z, f, yaw, pitch, offset, hanging);
+            Vec3 to = world(pos, x1, y, z, f, yaw, pitch, offset, hanging);
             o.showLine(keyPrefix + "/grid_h" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
     }
@@ -579,7 +580,7 @@ public class MonitorGridOverlay {
 
     private static void drawModuleOutline(Outliner o, BlockPos pos,
                                            int gx, int gy, int w, int h, String slot, int color, Direction f,
-                                           float yaw, float pitch, int offset) {
+                                           float yaw, float pitch, int offset, boolean hanging) {
         float x0 = (MonitorBlock.SCREEN_X_MIN + MonitorBlock.GRID_INSET + gx) / 16f;
         float y0 = (MonitorBlock.SCREEN_Y_MIN + MonitorBlock.GRID_INSET + gy) / 16f;
         float x1 = x0 + w / 16f;
@@ -587,10 +588,10 @@ public class MonitorGridOverlay {
         float z = MonitorBlock.SCREEN_Z / 16f + GRID_LINE_OFFSET;
         float lw = (float) (1 / 128f * Config.MONITOR_OUTLINE_LINE_WIDTH.get());
 
-        Vec3 p00 = world(pos, x0, y0, z, f, yaw, pitch, offset);
-        Vec3 p10 = world(pos, x1, y0, z, f, yaw, pitch, offset);
-        Vec3 p11 = world(pos, x1, y1, z, f, yaw, pitch, offset);
-        Vec3 p01 = world(pos, x0, y1, z, f, yaw, pitch, offset);
+        Vec3 p00 = world(pos, x0, y0, z, f, yaw, pitch, offset, hanging);
+        Vec3 p10 = world(pos, x1, y0, z, f, yaw, pitch, offset, hanging);
+        Vec3 p11 = world(pos, x1, y1, z, f, yaw, pitch, offset, hanging);
+        Vec3 p01 = world(pos, x0, y1, z, f, yaw, pitch, offset, hanging);
 
         o.showLine(slot + "_top",    p00, p10).colored(color).lineWidth(lw);
         o.showLine(slot + "_right",  p10, p11).colored(color).lineWidth(lw);

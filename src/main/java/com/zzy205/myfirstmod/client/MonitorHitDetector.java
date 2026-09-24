@@ -61,12 +61,13 @@ public final class MonitorHitDetector {
             float pitch = monitor.getPitchAngle();
             int offset = monitor.getOffset();
             Direction facing = monitor.getBlockState().getValue(MonitorBlock.FACING);
+            boolean hanging = monitor.getBlockState().getValue(MonitorBlock.HANGING);
 
             SubLevel sub = SableCompat.getContainingSubLevel(level, pos);
             Vec3 o = sub != null ? SableCompat.toLocalPosition(sub, partialTick, eye) : eye;
             Vec3 d = sub != null ? SableCompat.toLocalDirection(sub, partialTick, view) : view;
 
-            double[] hit = MonitorBlock.intersectScreen(pos, facing, yaw, pitch, offset, o, d, reach);
+            double[] hit = MonitorBlock.intersectScreen(pos, facing, yaw, pitch, offset, hanging, o, d, reach);
             if (hit == null) continue;
 
             float sx = (float) hit[1];

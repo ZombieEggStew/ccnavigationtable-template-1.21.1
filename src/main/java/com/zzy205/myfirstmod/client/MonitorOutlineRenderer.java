@@ -74,9 +74,18 @@ public final class MonitorOutlineRenderer {
         } else {
             drawBox(yawedPose, lines, 0f, 2f / 16f, 6f / 16f, 1f, 11f / 16f, 10f / 16f, 0f);
         }
-        // case（随 pitch）
-        drawBox(yawedPose, lines, 1f / 16f, 3f / 16f, 4f / 16f,
-                15f / 16f, 15f / 16f, 9f / 16f, pitch);
+        // case（随 pitch）：挂顶时先绕模型铰链 pitch、再整体下移（与渲染链一致，避免与挂顶底座重叠）
+        if (hanging) {
+            poseStack.pushPose();
+            poseStack.translate(0f, -MonitorBlock.HANGING_CASE_DROP / 16f, 0f);
+            PoseStack.Pose droppedPose = poseStack.last();
+            drawBox(droppedPose, lines, 1f / 16f, 3f / 16f, 4f / 16f,
+                    15f / 16f, 15f / 16f, 9f / 16f, pitch);
+            poseStack.popPose();
+        } else {
+            drawBox(yawedPose, lines, 1f / 16f, 3f / 16f, 4f / 16f,
+                    15f / 16f, 15f / 16f, 9f / 16f, pitch);
+        }
 
         poseStack.popPose();
         poseStack.popPose();
