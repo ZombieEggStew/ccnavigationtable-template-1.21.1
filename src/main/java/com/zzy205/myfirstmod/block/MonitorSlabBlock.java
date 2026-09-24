@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.zzy205.myfirstmod.item.MyModItems;
+import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -63,8 +64,9 @@ import java.util.Map;
  * 共 12 态。放置时 {@code FACE} = 点击面、{@code FACING} = 玩家水平朝向反向（地板/天花板）或点击面（墙面）。
  * <p>
  * 选择框 = 16×8×16 台阶盒（照抄 quick_fill_fuel_vault：地板底半 y0..8 / 天花板顶半 y8..16 / 墙面 8px 厚贴墙）；
- * 音效对齐 quick_fill_fuel_vault（SoundType.COPPER）；扳手 = {@link IWrenchable} 默认处理
- * （潜行右键拆除掉包；顶/底面右键旋转水平朝向，墙面态不可旋转）。
+ * 音效对齐 quick_fill_fuel_vault（SoundType.COPPER）；扳手 = {@link IWrenchable}：**普通右键永不旋转**
+ * （配置菜单由客户端 overlay 打开，对齐 ControlDeskBlock），潜行右键按点击位置拆除（表面内容上拆单个模块/屏幕，
+ * 非内容且光板整拆掉包）。
  * <p>
  * 当前为纯放置逻辑（无方块实体）；表面 Monitor 模块的放置/交互接入见后续步骤。
  * <p>
@@ -216,14 +218,32 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 点击是否命中顶面（面板）。仅地板放置：面板 = 顶面，命中点 localY ≥ 面板高度（8/16）。
-     * 扳手右键旋转抑制（onWrenched）与整块拆除放行（onSneakWrenched）共用，单一来源。
+     * 点击是否命中表面内容（模块或屏幕）。仅地板放置（面板 = 顶面）：命中点换算到网格格后查 grid 占用
+     * （模块 ID ≥ 0 或屏幕格标记）。
+     * 扳手潜行右键拆除的「拆单个模块/屏幕」判定（{@link #onSneakWrenched}）与「整块拆除」判定共用，单一来源。
      */
-    private static boolean isPanelHit(BlockState state, UseOnContext context) {
+    private static boolean isSurfaceContentHit(BlockState state, UseOnContext context) {
         if (state.getValue(FACE) != AttachFace.FLOOR) return false;
+        double localX = context.getClickLocation().x - context.getClickedPos().getX();
         double localY = context.getClickLocation().y - context.getClickedPos().getY();
-        return localY >= MonitorSlabBlockEntity.PANEL_Y_PX / 16.0 - 0.01
-                && localY <= 16.0 / 16.0 + 0.01;
+        double localZ = context.getClickLocation().z - context.getClickedPos().getZ();
+        // 面板平面（y = 面板高度 8/16，容差）
+        if (localY < MonitorSlabBlockEntity.PANEL_Y_PX / 16.0 - 0.01
+                || localY > 16.0 / 16.0 + 0.01) {
+            return false;
+        }
+        // 网格区域（四周内缩 1px）
+        double ox = MonitorSlabBlockEntity.GRID_ORIGIN_X_PX / 16.0;
+        double oz = MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX / 16.0;
+        if (localX < ox || localX >= ox + MonitorSlabBlockEntity.GRID_WIDTH / 16.0) return false;
+        if (localZ < oz || localZ >= oz + MonitorSlabBlockEntity.GRID_HEIGHT / 16.0) return false;
+        if (!(context.getLevel().getBlockEntity(context.getClickedPos()) instanceof MonitorSlabBlockEntity slab)) {
+            return false;
+        }
+        int gx = (int) ((localX - ox) * 16.0);
+        int gy = (int) ((localZ - oz) * 16.0);
+        int cell = slab.getGridState().getCell(gx, gy);
+        return cell >= 0 || cell == GridState.SCREEN_CELL_MARKER;
     }
 
     /**
@@ -237,9 +257,9 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
 
     /** 扳手潜行右键：拆除并掉落一个带完整 GridState 配置的 monitor_slab 物品（模块不单独掉落，对齐 MonitorBlock）。
      *  <ul>
-     *   <li>命中顶面（面板）→ 放行，交给 MonitorSlabGridOverlay 拆单个模块/屏幕（对齐 Monitor 的底座语义）；</li>
-     *   <li>已装模块/屏幕 → 禁止整块拆除，提示先拆模块（对齐 ControlDeskBlock 的 desk_remove_blocked）；</li>
-     *   <li>光板（无内容）→ 整块拆除。</li>
+     *   <li>点击在表面内容（模块/屏幕）上 → 放行，交给 MonitorSlabGridOverlay 拆单个模块/屏幕（对齐 Monitor 的底座语义）；</li>
+     *   <li>点击不在表面内容上且已装模块/屏幕 → 禁止整块拆除，提示先拆模块（对齐 ControlDeskBlock 的 desk_remove_blocked）；</li>
+     *   <li>光板（无内容）→ 整块拆除（不判定点击面，顶面/侧面/底面均可）。</li>
      * </ul> */
     @Override
     public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
@@ -247,8 +267,8 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
         BlockPos pos = context.getClickedPos();
         Player player = context.getPlayer();
 
-        // 顶面（面板）命中 → 不整块拆除，放行给 MonitorSlabGridOverlay 的模块/屏幕拆除 payload 处理
-        if (isPanelHit(state, context)) {
+        // 点击在表面内容（模块/屏幕）上 → 不整块拆除，放行给 MonitorSlabGridOverlay 的模块/屏幕拆除 payload 处理
+        if (isSurfaceContentHit(state, context)) {
             return InteractionResult.sidedSuccess(level.isClientSide);
         }
 

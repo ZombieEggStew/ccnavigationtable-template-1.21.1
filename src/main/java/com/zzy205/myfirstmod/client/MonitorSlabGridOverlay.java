@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.client;
 import com.simibubi.create.AllItems;
 import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.Config;
+import com.zzy205.myfirstmod.block.MonitorSlabBlock;
 import com.zzy205.myfirstmod.block.MonitorSlabBlockEntity;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.monitor.GridState;
@@ -24,6 +25,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
@@ -43,8 +45,9 @@ import java.util.Map;
  *   <li>按钮按压 / 钮子切换 / 旋钮拖拽（命中走 {@link MonitorSlabHitDetector} 独立检测）</li>
  *   <li>扳手蹲下右键拆除模块 / 屏幕</li>
  *   <li>右键模块 / 屏幕打开配置菜单（{@link MonitorModuleScreen}）</li>
- *   <li>扳手普通右键（不蹲下）或 空手蹲下右键，命中顶面任意位置 → 打开板式监视器配置菜单
- *       {@link MonitorSlabConfigScreen}（频道滚轮条，全局频道系统；扳手右键不再旋转 FACING）</li>
+ *   <li>扳手普通右键（不蹲下）或 空手蹲下右键，命中 slab <b>任意位置</b>（含侧面）→ 打开板式监视器配置菜单
+ *       {@link MonitorSlabConfigScreen}（频道滚轮条，全局频道系统；扳手右键不再旋转 FACING）；
+ *       右键落在表面内容（模块/屏幕）上时优先打开对应模块配置菜单</li>
  * </ul>
  * 每帧重新 show，离开/换物品后自动消失（Outliner 语义）。交互状态按 BlockPos 隔离。
  * <p>
@@ -61,6 +64,9 @@ public class MonitorSlabGridOverlay {
 
     /** DEBUG_HIT 的日志节流计数器（每 N tick 打一次，防刷屏）。 */
     private static int debugHitTick = 0;
+
+    /** 菜单打开右键边沿检测（防连发，参考 ControlDeskPlacementOverlay） */
+    private static boolean lastUseDown;
 
     /** 单个 slab 的客户端交互状态（按 BlockPos 隔离）。 */
     static class InteractionState {
@@ -545,6 +551,31 @@ public class MonitorSlabGridOverlay {
     public static void onClientTick(ClientTickEvent.Pre event) {
         var mc = Minecraft.getInstance();
         if (mc.player == null) return;
+
+        // ── 配置菜单打开（扳手右键 slab 任意位置 / 空手蹲下右键，抄 ControlDeskPlacementOverlay）──
+        // 先判定右键的是不是表面内容（模块/屏幕）：面板内容命中由 onRenderLevel 打开对应配置菜单
+        // （MonitorModuleScreen，保持已验证逻辑）；这里只处理非内容命中（侧面 / 面板空格 / 面板外）→
+        // 打开板式监视器配置菜单 MonitorSlabConfigScreen（扳手右键不再旋转 FACING，服务端 onWrenched 一律消费）
+        if (mc.screen == null && mc.level != null) {
+            ItemStack held = mc.player.getMainHandItem();
+            boolean useDown = mc.options.keyUse.isDown();
+            boolean useEdge = useDown && !lastUseDown;
+            lastUseDown = useDown;
+            if (useEdge) {
+                boolean wrench = isWrench(held);
+                boolean emptySneak = held.isEmpty() && mc.player.isShiftKeyDown();
+                boolean openMenu = (wrench && !mc.player.isShiftKeyDown()) || emptySneak;
+                if (openMenu && mc.hitResult instanceof BlockHitResult hit
+                        && mc.level.getBlockState(hit.getBlockPos()).getBlock() instanceof MonitorSlabBlock) {
+                    BlockPos pos = hit.getBlockPos();
+                    var panelHit = MonitorSlabHitDetector.find(mc.level, mc.player, 1.0f);
+                    boolean onPanelContent = panelHit != null && panelHit.pos().equals(pos) && panelHit.grid() != null;
+                    if (!onPanelContent) {
+                        mc.setScreen(new MonitorSlabConfigScreen(pos));
+                    }
+                }
+            }
+        }
 
         var it = interactions.entrySet().iterator();
         while (it.hasNext()) {
