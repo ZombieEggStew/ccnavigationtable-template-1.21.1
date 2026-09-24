@@ -55,8 +55,22 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
         AttachFace face = state.getValue(MonitorSlabBlock.FACE);
         boolean wall = face == AttachFace.WALL;
         boolean ceiling = face == AttachFace.CEILING;
-        boolean panelMode = wall || ceiling; // 贴墙 / 贴天花板：需要面板变换（Rx(−90) 贴墙 / Rx(180) 翻下）；地板 = 世界帧直出
-        MonitorSlabBlockEntity.PanelFrame frame = MonitorSlabBlockEntity.panelFrame(state);
+        // 贴墙：面板变换（translate(panelOrigin) + Ry(faceYaw)·Rx(faceXRot)，模块/屏幕在面板局部帧内摊平）；
+        // 天花板：**地板渲染整体绕面板平面镜像**（R_face=Rx(180) 会让局部 Z 指向世界 −Z（北），屏幕 v 方向与模块
+        // 枢轴全偏北，用户实测 1 方块/1px；镜像只翻 Y 深度轴，面板平面内 X/Z 不受影响，直接复用地板逻辑最干净）
+        boolean panelMode = wall;
+        MonitorSlabBlockEntity.PanelFrame frame = panelMode ? MonitorSlabBlockEntity.panelFrame(state) : null;
+
+        if (ceiling) {
+            // 天花板 = 地板渲染整体绕面板平面（y = 8/16）镜像：
+            // translate(0,py,0)·scale(1,−1,1)·translate(0,−py,0)。
+            // 地板模块 base y（8/16、9/16）镜像后 = 8/16（贴面板）、7/16（凸出 1px 向下），与墙/天花板几何一致。
+            poseStack.pushPose();
+            float py = MonitorSlabBlockEntity.PANEL_Y_PX / 16f;
+            poseStack.translate(0, py, 0);
+            poseStack.scale(1f, -1f, 1f);
+            poseStack.translate(0, -py, 0);
+        }
 
         var beAnims = animProgress.computeIfAbsent(bePos, k -> new HashMap<>());
         beAnims.keySet().removeIf(id -> !grid.getAllModules().containsKey(id));
@@ -89,9 +103,8 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
 
             poseStack.pushPose();
             if (panelMode && frame != null) {
-                // 贴墙/贴天花板：锚点 = 面板局部 (px, pz, py) 按面板坐标系映射到世界，再套「水平摊平帧 → 面板帧」旋转
-                // （Rx(faceXRotDeg) 把模块从水平摊平转到面板法线——贴墙 −90° / 天花板 180° 翻下，Ry(faceYawDeg) 定向；
-                // 后续 pivot/button 在面板局部帧内照常）。
+                // 贴墙：锚点 = 面板局部 (px, pz, py) 按面板坐标系映射到世界，再套「水平摊平帧 → 面板帧」旋转
+                // （Rx(faceXRotDeg=−90) 把模块从水平摊平转到面板法线，Ry(faceYawDeg) 定向；后续 pivot/button 在面板局部帧内照常）。
                 double nOff = py - MonitorSlabBlockEntity.PANEL_Y_PX / 16f;
                 Vec3 anchor = MonitorSlabBlockEntity.panelLocalToWorld(frame, px, pz, nOff);
                 poseStack.translate(anchor.x, anchor.y, anchor.z);
@@ -104,7 +117,7 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
             // button/toggle 模型原点在角上（足迹中心 = 本地 (0.5,0.5)），knob 圆盘原点即中心（(0,0)）——
             // 若直接绕锚点（原点）转，模型会整体甩开且随 facing 偏移不同（用户确认症状）；位置不动（网格旋转不变，命中/放置无需旋转）。
             // 贴墙面板本身已按 FACING 定向（frame.faceYawDeg），面板局部帧内不再额外 facing 旋转；
-            // 天花板面板水平（同地板性质），从下往上看需补 180°（floor facing + 180）。
+            // 天花板 = 地板值（已整体镜像，见 moduleFacingDeg）。
             float facingDeg = moduleFacingDeg(state, face);
             float pivotX = modulePivotX(mod.type());
             float pivotZ = modulePivotZ(mod.type());
@@ -144,9 +157,9 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
         }
 
         // ── 渲染所有屏幕 9 宫格（外框网格对齐、内容朝向跟随 FACING；内容由 Screen9GridRenderer 绕屏幕中心单独旋转）──
-        // 贴墙/贴天花板：整体包一层面板坐标系变换（translate(panelOrigin) + Ry(faceYaw)·Rx(faceXRot)），水平 ScreenPlane
-        // 在面板局部帧内摊平 → 屏幕面 = 贴墙面板/天花板底面；贴墙面板局部帧内内容已朝上（grid y = 世界 +Y），
-        // 天花板从下往上看需补 180°（floor inPlane + 180）。
+        // 贴墙：整体包一层面板坐标系变换（translate(panelOrigin) + Ry(faceYaw)·Rx(faceXRot)），水平 ScreenPlane
+        // 在面板局部帧内摊平 → 屏幕面 = 贴墙面板；面板局部帧内内容已朝上（grid y = 世界 +Y），无需平面内旋转（inPlane=0）。
+        // 天花板：地板渲染（已整体镜像）直出，inPlane = floor 值。
         float inPlane = screenInPlaneDeg(state, face);
         Screen9GridRenderer.ScreenPlane slabPlane = slabPlane(inPlane, panelMode);
         for (var screen : grid.getScreenRegions()) {
@@ -161,22 +174,22 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
                 renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay, slabPlane);
             }
         }
+
+        if (ceiling) {
+            poseStack.popPose();
+        }
     }
 
     /** 模块面板局部帧内的 facing 旋转（度）：地板 = blockstate y 旋转的负值（俯视顺时针）；贴墙 = 0（面板已按 FACING 定向）；
-     *  天花板 = 地板值 + 180（从下往上看左右/上下镜像，补 180 才从 FACING 方向读正）。 */
+     *  天花板 = 地板值（整体镜像已翻转视图方向，无需额外补偿）。 */
     private static float moduleFacingDeg(BlockState state, AttachFace face) {
-        if (face == AttachFace.WALL) return 0f;
-        float deg = facingYRotation(state);
-        return face == AttachFace.CEILING ? deg + 180f : deg;
+        return face == AttachFace.WALL ? 0f : facingYRotation(state);
     }
 
     /** 屏幕内容平面内旋转角（度）：地板 = 俯视顺时针跟随 FACING；贴墙 = 0（面板局部帧内已朝上）；
-     *  天花板 = 地板值 + 180（从下往上看镜像补偿）。 */
+     *  天花板 = 地板值（整体镜像后内容方向不变，无需补偿）。 */
     private static float screenInPlaneDeg(BlockState state, AttachFace face) {
-        if (face == AttachFace.WALL) return 0f;
-        float deg = facingInPlaneDeg(state);
-        return face == AttachFace.CEILING ? (deg + 180f) % 360f : deg;
+        return face == AttachFace.WALL ? 0f : facingInPlaneDeg(state);
     }
 
     /**

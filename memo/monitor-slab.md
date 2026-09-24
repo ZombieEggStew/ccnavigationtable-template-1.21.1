@@ -125,14 +125,14 @@
 ### 追加（同日）：贴天花板（CEILING）形态接入
 
 - 面板 = **底面 y8/16（朝下）**，法线 −Y；水平面板同地板惯例：**grid x → +X / grid y → +Z（世界对齐）**，
-  面板变换 **R_face = Rx(180)**（把水平摊平的模块翻到朝下）。
-- **模块/屏幕朝向 = 地板值 + 180°**（从下往上看左右/上下镜像，补 180° 才从 FACING 方向读正）：
-  `moduleFacingDeg = facingYRotation + 180`（wall=0）、`screenInPlaneDeg = (facingInPlaneDeg + 180) % 360`（wall=0）。
-- 模块凸出沿 −Y：button 锚点 y = 8/16 − 1/16 = 7/16（1px 悬在面板下方）。
-- 改动：`PanelFrame` 加 `faceXRotDeg`（墙 = −90 / 天花板 = 180，替换原硬编码 Rx(−90)）；`panelFrame` 加 CEILING 分支；
-  `MonitorSlabRenderer` panelMode（wall||ceiling）统一模块/屏幕面板变换 + 朝向；`MonitorSlabBlock.isPanelSurfaceContentHit`
-  支持 WALL+CEILING；命中/overlay 走 panelFrame 自动生效。
-- ⚠️ 校准点（进游戏确认）：天花板模块标签/屏幕文字从下往上看是否在 FACING 方向读正；若 90° 或镜像翻转 `+180` 的符号。
+  `panelFrame` 帧供命中检测 / 网格绘制 / 扳手判定（grid/hit 层面与地板一致，首版即正确）。
+- ⚠️ **渲染用「地板渲染整体绕面板平面镜像」**（`translate(0, 8/16, 0)·scale(1,−1,1)·translate(0,−8/16,0)`）：
+  模块/屏幕全部沿用已验证的地板逻辑（世界对齐 + floor facing/inPlane + z()=9/16）。镜像只翻 Y 深度轴，
+  面板平面内 X/Z 不受影响 → 枢轴、屏幕 v 方向、文字方向全对。
+- **不要用 R_face=Rx(180) 面板变换做天花板**：Rx(180) 把局部 Z 变成世界 −Z（北），而屏幕 v 方向 / 模块枢轴都沿局部 Z 走 →
+  屏幕整体偏北约一个方块、开关/按钮偏北 1px（用户实测，9.28 首版踩过）。
+- 模块朝向 = floor facingYRotation（镜像已翻转视图方向，**无需 +180**；初版 +180 是错误推导，已去掉）。
+- 校准点（进游戏确认）：旋钮拖拽方向在顶面可能镜像（从下往上看，面板局部 atan2 语义一致但渲染轴反向）。
 
 ### 验证清单（进游戏）
 
