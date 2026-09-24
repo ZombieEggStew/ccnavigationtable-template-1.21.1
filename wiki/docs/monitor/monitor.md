@@ -23,6 +23,10 @@ After obtaining the Monitor peripheral instance (see [Overview](overview.md) for
     - Rotation & offset: freely set rotation and offset
 - **Remove**: sneak + right-click the Monitor base while holding a wrench to remove it. A removed Monitor keeps its modules and settings. Breaking it directly separates the Monitor from its modules
 
+!!! info "Upside-down variant"
+    Since version 1.1.6, Monitors can be hung upside-down from ceilings: right-click the bottom face of a block to place the upside-down variant
+    ![monitor_hanging](../img/monitor_hanging.png)
+
 ---
 
 ## Module / Screen Query
