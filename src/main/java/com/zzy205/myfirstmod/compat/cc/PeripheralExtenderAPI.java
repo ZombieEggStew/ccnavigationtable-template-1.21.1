@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.compat.cc;
 
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.block.MonitorSlabBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlock;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
@@ -326,6 +327,11 @@ public class PeripheralExtenderAPI implements ILuaAPI {
         // 显示器频道 → 返回显示器自身的 CC:T 外设
         MonitorBlockEntity monitor = MonitorRegistry.get(channel);
         if (monitor != null) return monitor.getPeripheral();
+
+        // 板式监视器（monitor_slab）频道 → 返回 slab 自身的 CC:T 外设
+        // （与显示器共享全局频道命名空间，直接复用 MonitorPeripheral，type = "ccpe:monitor_slab"）
+        BlockEntity slabOwner = GlobalChannelRegistry.get(channel);
+        if (slabOwner instanceof MonitorSlabBlockEntity slab) return slab.getPeripheral();
 
         // 控制台已不在 pe 频道查找：控制台频道是物理体作用域（复用短程链接器频道空间），
         // 请改用 require("ccpe.sensor_system").getPeripheral(channel) 获取（作用域 = 调用电脑所在物理体）

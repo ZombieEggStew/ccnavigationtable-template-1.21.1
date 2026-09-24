@@ -38,8 +38,8 @@ public final class Screen9GridRenderer {
          *  本地 XY 绘制平面 → 世界 XZ，本地 +Z（文字/正面法线）→ 世界 +Y（朝上）。默认竖面（false），Monitor/monitor_2 零影响。 */
         default boolean horizontal() { return false; }
         /** 水平顶面（{@link #horizontal()}=true）时的<b>平面内旋转</b>（度，正 = 俯视顺时针，与 blockstate y 同向）：
-         *  绕屏幕区域中心旋转内容（9 宫格 + 文字），区域位置不动——monitor_slab 模块朝向已跟随 FACING，
-         *  屏幕内容需同步跟随。默认 0（Monitor/monitor_2 零影响）。 */
+         *  只绕屏幕区域中心旋转<b>内容（文字/图形）</b>，9 宫格外框保持网格对齐——monitor_slab 模块朝向已跟随 FACING，
+         *  屏幕内容需同步跟随（外框旋转会宽高互换/错位）。默认 0（Monitor/monitor_2 零影响）。 */
         default float inPlaneRotationDeg() { return 0f; }
     }
 
@@ -63,8 +63,9 @@ public final class Screen9GridRenderer {
     }
 
     /**
-     * 水平面内容绕<b>屏幕区域中心</b>做平面内旋转（正 = 俯视顺时针，与 blockstate y 同向）。
-     * 在摊平后的局部 XY 帧里等价于绕本地 Z（= 世界 −Y）转，内容朝向变化、区域位置不动。
+     * 水平面<b>内容</b>绕<b>屏幕区域中心</b>做平面内旋转（正 = 俯视顺时针，与 blockstate y 同向）。
+     * 在摊平后的局部 XY 帧里等价于绕本地 Z（= 世界 −Y）转，内容朝向变化、区域位置不动（仅文字/图形，
+     * 9 宫格外框不参与——renderScreen 外框保持网格对齐）。
      * 必须紧接 {@link #wrapHorizontal} 之后调用（此时坐标为局部 0 基）。
      */
     private static void applyInPlaneRotation(PoseStack ps, GridState.ScreenRegion scr, ScreenPlane plane, float inPlane) {
@@ -92,8 +93,9 @@ public final class Screen9GridRenderer {
         boolean horizontal = plane.horizontal();
         float inPlane = plane.inPlaneRotationDeg();
         if (horizontal) {
+            // 只摊平、不整体旋转：9 宫格外框保持网格对齐（monitor_slab 正方形网格内屏幕区域位置固定，
+            // 外框整体旋转会导致宽高互换/错位，如 4×5 → 5×4）；内容单独绕屏幕中心旋转见下方文字部分
             plane = wrapHorizontal(ps, plane);
-            applyInPlaneRotation(ps, scr, plane, inPlane);
         }
 
         float cellSize = plane.cellSize();
@@ -141,9 +143,16 @@ public final class Screen9GridRenderer {
             ps.popPose();
         }
 
-        // ── 屏幕字符 / 图形 ──
+        // ── 屏幕字符 / 图形（内容跟随 FACING：绕屏幕区域中心旋转，9 宫格外框不动）──
         if (text != null && text.hasContent()) {
-            renderScreenText(ps, buffer, scr, text, plane);
+            if (horizontal && inPlane != 0f) {
+                ps.pushPose();
+                applyInPlaneRotation(ps, scr, plane, inPlane);
+                renderTextContent(ps, buffer, scr, text, plane, true);
+                ps.popPose();
+            } else {
+                renderTextContent(ps, buffer, scr, text, plane, horizontal);
+            }
         }
 
         if (horizontal) {
@@ -161,6 +170,17 @@ public final class Screen9GridRenderer {
             applyInPlaneRotation(ps, scr, plane, inPlane);
         }
 
+        renderTextContent(ps, buffer, scr, text, plane, horizontal);
+
+        if (horizontal) {
+            ps.popPose();
+        }
+    }
+
+    /** 格子文本绘制体（调用方已处理水平 wrap / 平面内旋转）；horizontal 决定文字 zBase 方向（水平面文字须在面板上方）。 */
+    private static void renderTextContent(PoseStack ps, MultiBufferSource buffer,
+                                          GridState.ScreenRegion scr, ScreenText text, ScreenPlane plane,
+                                          boolean horizontal) {
         float cellSize = plane.cellSize();
         float drawableInset = (float) ScreenText.DRAWABLE_INSET;
 
@@ -180,15 +200,12 @@ public final class Screen9GridRenderer {
         float innerHeightUnits = (float) ((scr.height() - 2f * drawableInset * 16f)
             * ScreenText.RECT_UNITS_PER_PX);
         // 内容基准面 = 屏幕 9 宫格中心面（screen_center 模型 north 面在 z=0.7px）。
-        // 水平顶面时本地 +Z → 世界 +Y（朝上），文字须在面板上方 → zBase 取负（与竖面相反）。
-        float zBase = plane.z() + (horizontal ? -0.7f : 0.7f) / 16f;
+        // 水平顶面 wrap 后 world Y = 平移 y(面板 9/16) − 本地z；用户 9.27 指定内容落在 8.3/16
+        // （zBase = +0.7px → 世界 y = 9/16 − 0.7/16 = 8.3/16，与竖面同值 0.7px，贴合屏幕面板表面）。
+        float zBase = plane.z() + 0.7f / 16f;
 
         ScreenTextRenderer.drawAll(ps, buffer, text, contentRight, contentTop,
             contentLeft, contentBottom, innerWidthUnits, innerHeightUnits, zBase);
-
-        if (horizontal) {
-            ps.popPose();
-        }
     }
 
     /** 渲染一个角模型，绕格子中心 Z 轴旋转（法线安全）。坐标均为块单位。 */

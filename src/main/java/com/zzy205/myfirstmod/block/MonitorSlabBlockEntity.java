@@ -3,10 +3,12 @@ package com.zzy205.myfirstmod.block;
 import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
 import com.zzy205.myfirstmod.client.MonitorSlabClientRegistry;
 import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
+import com.zzy205.myfirstmod.compat.cc.MonitorPeripheral;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.monitor.ScreenText;
 import com.zzy205.myfirstmod.network.SyncGridPayload;
+import dan200.computercraft.api.peripheral.IPeripheral;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -63,6 +65,10 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
     private int channel = -1;
     /** 所有已被占用的全局频道号快照（服务端设置，客户端经 updateTag 同步，配置菜单用它跳过已占用频道）。 */
     private int[] occupiedChannels = new int[0];
+
+    /** CC:T 外设实例（懒加载），避免直接在 BE 上实现 IPeripheral 导致 getType() 冲突（对齐 {@link MonitorBlockEntity}）。 */
+    @Nullable
+    private IPeripheral peripheral;
 
     public MonitorSlabBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.monitor_slab_entity.get(), pos, state);
@@ -135,6 +141,21 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
         this.occupiedChannels = GlobalChannelRegistry.occupiedChannelsArray();
         this.setChanged();
         this.level.sendBlockUpdated(this.getBlockPos(), this.getBlockState(), this.getBlockState(), 3);
+    }
+
+    // ═══════════════ CC:T 外设（照抄 MonitorBlockEntity，直接复用 MonitorPeripheral） ═══════════════
+
+    /**
+     * 获取 CC:T 外设实例（懒加载）。直接复用 {@link MonitorPeripheral}（宿主参数化为
+     * {@link MonitorGridHost}，type = "ccpe:monitor_slab"）：模块/屏幕查询 handle 与
+     * 音效方法完全同款，作用在本 slab 的 14×14 网格上（对齐 monitor_2 复用方式）。
+     * 经 {@code pe.getPeripheral(ch)} / {@code peripheral.wrap} 获取。
+     */
+    public IPeripheral getPeripheral() {
+        if (peripheral == null) {
+            peripheral = new MonitorPeripheral(this, "ccpe:monitor_slab");
+        }
+        return peripheral;
     }
 
     // ═══════════════ MonitorGridHost 实现（照抄 monitor_2 段） ═══════════════

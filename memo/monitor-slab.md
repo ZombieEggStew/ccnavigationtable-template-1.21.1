@@ -75,7 +75,6 @@
 ## 后续阶段（本次不做）
 
 - 贴墙 / 贴天花板变体的模块放置（命中平面方向按 FACE 变化，几何已预留）
-- Lua 外设（MonitorPeripheral capability 注册，约 20 行；届时 slab 频道可经 `pe.getPeripheral(ch)` 寻址）
 - Flywheel Visual（性能优化）
 - Sable physics_block_properties、合成配方
 
@@ -119,6 +118,41 @@
 - 效果：支撑方块破坏/不存在时 slab **不掉落**，可悬空放置（对齐用户要求；区别于 FmcBlock / PitotTubeBlock 等贴附式方块）。
 - FACE/FACING blockstate 结构、选择框（按 FACE 分地板/天花板/墙面形态）、放置朝向逻辑均保留不变。
 
+### 追加（同日）：Lua 接口（直接复用 MonitorPeripheral）
+
+- `MonitorSlabBlockEntity` 加 `getPeripheral()` 懒加载：**`new MonitorPeripheral(this, "ccpe:monitor_slab")`**（宿主参数化为 `MonitorGridHost`，模块/屏幕查询 handle 与音效方法全免费，对齐 monitor_2 的复用方式）。
+- `CCPeripheralCapabilities` 注册 `monitor_slab_entity` → `getPeripheral()`（`peripheral.wrap` / `peripheral.find` 可用）。
+- `pe.getPeripheral(ch)`（`PeripheralExtenderAPI`）查找链加 slab 分支：`GlobalChannelRegistry.get(ch)` instanceof `MonitorSlabBlockEntity` → `getPeripheral()`（与显示器共享全局频道命名空间，slab 频道即外设寻址）。
+
+### 验证清单（Lua，进游戏）
+
+- [ ] 电脑 `peripheral.wrap("ccpe:monitor_slab")` 或 `pe.getPeripheral(ch)`（ch = slab 频道）→ 返回外设，type = "ccpe:monitor_slab"
+- [ ] `getCellModule(x,y)` / `getModule(id)` 返回按钮/钮子/旋钮/屏幕 handle（ButtonModuleHandle 按压/灯带、KnobModuleHandle 角度、ScreenModuleHandle 文本绘制）
+- [ ] `playSound` / `playNiceSound` 音效正常
+- [ ] 多 slab 各按自己频道寻址、互不串扰
+
+### 追加（同日）：屏幕 9 宫格旋转 bug 修复
+
+- **bug（用户发现）**：`Screen9GridRenderer.renderScreen` 的 `applyInPlaneRotation` 作用在**整个屏幕绘制**（9 宫格外框 + 内容一起绕屏幕区域中心旋转）——非方形屏幕（如 4×5）在东西朝向（FACING = east/west，inPlane 90°/270°）被绕中心转成 **5×4**（外框宽高互换、与网格错位）；north/south（0°/180°）外框看起来正常，即用户看到的「某些方向整个屏幕模块意外旋转」。
+- **修复**：外框**不再参与**平面内旋转（保持网格对齐——正方形网格内屏幕区域位置固定）；文字/图形内容单独 `pushPose + applyInPlaneRotation` 绕屏幕区域中心跟随 FACING 旋转（对齐普通模块标签的跟随语义）。文字绘制体抽为私有 `renderTextContent`（`renderScreenText` 与 `renderScreen` 共用，zBase 负号按 horizontal 传参）。
+- Monitor / monitor_2 竖面零影响（`horizontal()=false`、`inPlane=0`，走原路径）。
+
+### 验证清单（屏幕旋转，进游戏）
+
+- [ ] 东西朝向放置 slab + 4×5 屏幕：外框保持 4×5 网格对齐（不再变 5×4）
+- [ ] 屏幕上的字跟随 slab 朝向（从 slab 正面方向看字是正的，像普通模块标签那样）
+- [ ] north/south/east/west 四个朝向各放一个屏幕确认
+- [ ] Monitor / monitor_2 屏幕渲染不受影响（回归）
+
+### 追加（同日）：屏幕显示内容下沉 1px
+
+- 用户进游戏确认：屏幕内容（文字/图形）比预期高 1px。
+- 第一次改动符号搞反：水平面 zBase 从 −0.7px 改成 −1.7px（本地 −Z = 世界 +Y，越负越高）→ 反而抬高 1px。
+- 修正：水平面 zBase = **+0.3px**（wrap 后 world Y = 平移 y(9/16) − 本地z，故正 z 下沉）→ 世界 y = 9/16 − 0.3/16 = 8.7/16，比原 −0.7px（9.7/16）低 1px，落在屏幕中心面板表面上方防 z-fight。
+- 仍悬浮：再降 0.3px → 水平面 zBase = **+0.6px**（世界 y = 9/16 − 0.6/16 = 8.4/16）。
+- 仍悬浮：用户指定 **8.3/16** → 水平面 zBase = **+0.7px**（9/16 − 0.7/16，与竖面同值 0.7px，贴合屏幕中心面板表面）。
+- Monitor / monitor_2 竖面不受影响（`horizontal=false` 原 0.7px 不变，现两分支同值合并为 0.7f）。
+
 ---
 
 ## 实施记录（9.25，基本流程已进游戏验证通过）
@@ -143,7 +177,7 @@
 - [x] 模块/屏幕放置与位置正确（button 正面朝上、toggle/knob 平躺；按钮与屏幕模块位置正常）
 - [x] toggle/knob **下沉 1px**（浮起 1px → 去掉 `py += offsetZ()`，offsetZ 在顶面不映射到高度）
 - [x] **模块朝向跟随 slab FACING**（正方形面板 + 14×14 网格 90° 旋转不变，命中/放置无需旋转；`facingYRotation` = blockstate y 旋转的负值：north 0/east −90/south −180/west −270）
-- [x] **屏幕 9 宫格/文字内容跟随 FACING**（`inPlaneRotationDeg()` + `applyInPlaneRotation` 绕屏幕区域中心转内容、位置不动；`facingInPlaneDeg` = +y）
+- [x] **屏幕 9 宫格/文字内容跟随 FACING**（`inPlaneRotationDeg()` + `applyInPlaneRotation` 绕屏幕区域中心转内容、位置不动；`facingInPlaneDeg` = +y）——⚠️ 后修复：当时外框也一起转了（见 9.27 追加记录）
 - [x] **模块旋转枢轴修正**（button/toggle 偏移且随方向不同、knob 正常 → 根因：模型原点不在几何中心——knob 圆盘原点=圆心，button/toggle 原点在角上（足迹中心 = 本地 (0.5,0.5)）；修复：facing 旋转绕**模块足迹中心**（`modulePivotX/Z`：button/toggle = 0.5/16，knob = 0））
 - [x] 网格线可见（y=面板 0px 偏移，未 z-fight；若日后出现再把 `GRID_LINE_OFFSET` 提到 0.01）
 - [x] 扳手语义：顶面拆单模块/屏幕；已装内容整拆被禁止并提示「请先拆除表面已安装的模块，再拆除板式监视器」；光板整拆保数据；已装内容时顶面扳手右键禁止旋转

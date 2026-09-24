@@ -120,7 +120,7 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
             poseStack.popPose();
         }
 
-        // ── 渲染所有屏幕 9 宫格（内容朝向跟随 FACING，位置不动）──
+        // ── 渲染所有屏幕 9 宫格（外框网格对齐、内容朝向跟随 FACING；内容由 Screen9GridRenderer 绕屏幕中心单独旋转）──
         float inPlane = facingInPlaneDeg(be.getBlockState());
         Screen9GridRenderer.ScreenPlane slabPlane = slabPlane(inPlane);
         for (var screen : grid.getScreenRegions()) {
@@ -163,9 +163,10 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
     }
 
     /**
-     * 屏幕内容平面内旋转角（度，正 = 俯视顺时针 = blockstate y 同向）：
+     * 屏幕<b>内容</b>平面内旋转角（度，正 = 俯视顺时针 = blockstate y 同向）：
      * 水平面帧里绕本地 Z（= 世界 −Y）转，等价于世界绕 +Y 的负向旋转，故直接取 +y（与模块的
      * {@link #facingYRotation} 相反符号但同为俯视顺时针，两处分别推导、进游戏校准）。
+     * 只作用于文字/图形内容（9 宫格外框保持网格对齐，见 {@code Screen9GridRenderer.renderScreen}）。
      */
     private static float facingInPlaneDeg(BlockState state) {
         return switch (state.getValue(MonitorSlabBlock.FACING)) {
