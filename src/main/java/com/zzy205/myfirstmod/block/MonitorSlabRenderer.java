@@ -162,9 +162,11 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
         // ── 渲染所有屏幕 9 宫格（外框网格对齐、内容朝向跟随 FACING；内容由 Screen9GridRenderer 绕屏幕中心单独旋转）──
         // 贴墙：整体包一层面板坐标系变换（translate(panelOrigin) + Ry(faceYaw)·Rx(faceXRot)），水平 ScreenPlane
         // 在面板局部帧内摊平 → 屏幕面 = 贴墙面板；面板局部帧内内容已朝上（grid y = 世界 +Y），无需平面内旋转（inPlane=0）。
-        // 天花板：屏幕内容映射必须 (内容X→+X, 内容Y→+Z, 前脸(模型−Z面)→−Y 朝下)——该帧 (u,v,n) 是左手系，
-        // 只能用反射 R_ref = Rx(90)·scale(1,1,−1)（内容平面内是恒等，不镜像文字；深度 → 世界 Y）。
-        // 反射翻转绕序：9 宫格模型与字形需 reverseWinding 补偿（ceilingScreenPlane.mirrorWinding()）；
+        // 天花板：屏幕内容映射 (内容X→−X, 内容Y→+Z, 前脸(模型−Z面)→−Y 朝下)——该帧 (u,v,n) 是左手系。
+        // ⚠️ 2026-09-24 修复：原 Rx(90)·scale(1,1,−1) 只反射<b>深度轴</b>，内容 X 仍朝 +X → 从下方看内容
+        // 整体<b>水平镜像</b>（整行顺序反 + 每个字符左右反，用户实测）；改 scale(−1,1,−1) 连 X 一起反射
+        // → 内容 X 朝 −X 回正（col1 回到西侧、字形不镜像）。现变换 det=+1（两个负号抵消）→ 不翻转绕序
+        // → ceilingScreenPlane.mirrorWinding() 需为 false。
         // 用垂直 ScreenPlane 路径（绘制在帧 XY 平面），z() = −1/16（沿帧 Z = +Y 世界 = 面板下方 1px），
         // 内容 inPlane = −facingInPlaneDeg（绕帧 Z = +Y 世界旋转，与地板绕 −Y 反向同效）。
         for (var screen : grid.getScreenRegions()) {
@@ -180,7 +182,7 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
                 poseStack.pushPose();
                 poseStack.translate(frame.panelOrigin().x, frame.panelOrigin().y, frame.panelOrigin().z);
                 poseStack.mulPose(Axis.XP.rotationDegrees(90));
-                poseStack.scale(1f, 1f, -1f);
+                poseStack.scale(-1f, 1f, -1f);
                 renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay,
                         ceilingScreenPlane(screenInPlaneDeg(state, face)));
                 poseStack.popPose();
@@ -285,13 +287,19 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
      * z() = <b>−1/16</b>（帧 +Z → 世界 +Y，取负 = 面板下方 1px）；内容按 {@code inPlaneDeg} 绕帧 Z（= +Y 世界）旋转。
      * 反射翻转绕序 → {@link #mirrorWinding()}=true，9 宫格模型与字形反转绕序补偿。
      */
+    /**
+     * 天花板屏幕面（块单位，<b>垂直路径</b> horizontal()=false，配合外层 translate(panelOrigin)+Rx(90)·scale(−1,1,−1)
+     * 使用）：9 宫格在帧的 XY 平面（= 面板平面）绘制；内容前脸（模型 −Z 面）→ 帧 −Z → 世界 −Y（朝下）。
+     * z() = <b>−1/16</b>（帧 +Z → 世界 +Y，取负 = 面板下方 1px）；内容按 {@code inPlaneDeg} 绕帧 Z（= +Y 世界）旋转。
+     * <b>2026-09-24 修复</b>：外层 scale(−1,1,−1) 为 det+1（两个负号抵消）→ 不翻转绕序 → mirrorWinding()=false
+     * （原 scale(1,1,−1) 是 det−1 才需要 true；且原变换只反射深度，内容 X 未反射导致水平镜像，已随 scale 修正）。
+     */
     private static Screen9GridRenderer.ScreenPlane ceilingScreenPlane(float inPlaneDeg) {
         return new Screen9GridRenderer.ScreenPlane() {
             @Override public float originX() { return MonitorSlabBlockEntity.GRID_ORIGIN_X_PX / 16f; }
             @Override public float originY() { return MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX / 16f; }
             @Override public float z() { return -MonitorSlabBlockEntity.MODULE_PROTRUDE_PX / 16f; }
             @Override public float inPlaneRotationDeg() { return inPlaneDeg; }
-            @Override public boolean mirrorWinding() { return true; }
         };
     }
 

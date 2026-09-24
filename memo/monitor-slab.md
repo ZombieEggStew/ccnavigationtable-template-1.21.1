@@ -114,11 +114,25 @@
   相对玩家朝向随之翻转，与地板语义对称；网格 / 命中 / 放置坐标不受影响（天花板面板帧不依赖 FACING）。
 - **验证**：gradlew classes 编译通过；待用户进游戏复验（天花板 slab 放置后内容朝向符合需求，地板不回归）。
 
+### 4. 天花板屏幕字符水平镜像（整行顺序反 + 每个字符左右反，2026-09-24 已修，待复验）
+
+- **现象（用户报告）**：天花板 slab 上屏幕模块的字符**整体水平镜像**——整行字符顺序反了，同时每个字符
+  也左右反了；东西朝向还有"奇怪的偏移"。地板/贴墙不受影响。
+- **根因（推导确认）**：天花板屏幕外层变换 `Rx(90)·scale(1,1,−1)` 里 `scale(1,1,−1)` 只反射
+  <b>深度轴（Z）</b>，内容 X 轴仍映射到世界 +X → 从下方看内容整体水平镜像（col1 在东侧、字形左缘在
+  东侧 = 整行顺序反 + 每字符左右反；E/W 再叠加 inPlane 旋转后表现为"奇怪的偏移"）。
+  该变换 det=−1，配合 `mirrorWinding()=true` 只补偿了绕序，没修正内容镜像。
+- **修复**：`MonitorSlabRenderer` 天花板屏幕外层 `scale(1,1,−1)` → **`scale(−1,1,−1)`**（X 一起反射 →
+  内容 X → 世界 −X，col1 回西侧、字形不镜像）；`ceilingScreenPlane.mirrorWinding()` **true → false**
+  （scale(−1,1,−1) 两个负号抵消，det=+1 → 不再翻转绕序）。inPlane=−facingInPlaneDeg、z()=−1/16、9 宫格
+  模型/字形绕序均不需再改。
+- **验证**：gradlew classes 编译通过；待用户进游戏复验（N/S 字符不再镜像、E/W 不再偏移，文字正常）。
+
 ### 改动文件
 
 | 文件 | 说明 |
 |---|---|
-| `block/MonitorSlabRenderer.java`（改） | 天花板模块 `Rx(180)` 翻转绕足迹中心（修复 N 偏 1px） |
+| `block/MonitorSlabRenderer.java`（改） | 天花板模块 `Rx(180)` 翻转绕足迹中心（修复 N 偏 1px）；天花板屏幕外层 `scale(1,1,−1)`→`scale(−1,1,−1)` + mirrorWinding 置 false（修复字符水平镜像） |
 | `client/MonitorSlabGridOverlay.java`（改） | 旋钮拖拽 rawAngle 按天花板取反（`knobDragFlip`） |
 | `block/MonitorSlabBlock.java`（改） | 天花板放置 FACING = 玩家水平朝向（与地板差 180°） |
 
