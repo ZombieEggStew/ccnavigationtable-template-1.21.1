@@ -139,7 +139,7 @@
   原位、内容水平回正、z 不变。
 - **验证**：gradlew classes 编译通过；待用户进游戏复验（屏幕外框留在原网格位置、不飞西边邻格）。
 
-### 5. 地板 E/W 朝向非方形屏幕内容偏移（**已定位，未修，用户考虑修法中，2026-09-24**）
+### 5. 地板 E/W 朝向非方形屏幕内容偏移（**已按转置语义修复，待用户进游戏复验，2026-09-24**）
 
 #### 现象（用户实测，任务 2/3 + 后续确认）
 
@@ -184,10 +184,25 @@
   `slabPlane(inPlaneDeg, wall)`、`facingInPlaneDeg(state)`。
 - 天花板屏幕同用 inPlane（`−facingInPlaneDeg`），非方形 E/W 同样会溢出——修地板时需一并考虑（同共享类）。
 - 9.27 记录：非方形屏幕外框曾整体旋转成 5×4 与网格错位（已弃），本次只动内容不碰外框。
+- **终版（2026-09-24，用户拍板）＝转置语义（第 4 种方案，优于 A/B/C）**：把逻辑格子改成「正面视角」——
+  E/W 时 cols/rows 与物理区域宽高互换（5×3 物理屏 = 3 列 × 5 行），渲染转 90° 后天然填满、字形 1px 方形、
+  无缩放无白边、内容贴角。上面的几何约束只在「格子沿网格轴定义」时成立；格子正面化后约束消失。
+  代价 = 格子语义与 N/S 不一致（E/W 屏幕行宽变小，Lua 侧看到 3 列 × 5 行）。
 
 #### 状态
 
-- **未修改代码**（用户拍板先考虑方案 A/B/C，2026-09-24 待定）。
+- **终版 = 转置语义（用户拍板，2026-09-24，替代方案 A）**：E/W 屏幕内容改按<b>正面视角</b>定义与渲染，不再缩放：
+  - <b>数据层</b> `block/MonitorSlabBlockEntity.java`：`screenInnerWidthPx/HeightPx`（setTextScale 推格子用）
+    对 E/W（FACING=E/W 且 FACE≠WALL，`isScreenTransposed()`）宽高互换 → E/W 屏幕逻辑格子 = 正面视角
+    （5×3 物理区域 → 3 列 × 5 行）；贴墙 inPlane=0 不转置；N/S 宽高不变。
+  - <b>渲染层</b> `block/Screen9GridRenderer.java`：`applyInPlaneRotation` 去掉方案 A 的等比缩放（恢复纯旋转）；
+    `renderTextContent` 新增 `transposed` 参数（`isQuarterTurn(inPlane)`，inPlane 归一化后 = 90°/270° 时），
+    可绘制区 = 9 宫格内区绕区域中心 `(cx,cy)` 转 90° 的矩形（X 向 = 区域高、Z 向 = 区域宽，居中于区域中心，
+    含 DRAWABLE_INSET，innerWidth/HeightUnits 同步互换），配合调用方 inPlane 旋转正好填满外框 →
+    字形 1px 方形、满框、无白边、内容贴角；方形屏幕宽高相同 → 转置路径与普通路径完全一致（零影响）；
+    N/S（0°/180°）不转置；Monitor/monitor_2 inPlane=0 零影响。
+- **验证**：gradlew classes 编译通过；待用户进游戏复验（E/W 非方形屏幕内容满框、1px 字形、正面可读、
+  贴角不居中；N/S、方形、贴墙屏幕不回归；天花板 E/W 一并复验）。
 
 ### 改动文件
 
@@ -196,6 +211,8 @@
 | `block/MonitorSlabRenderer.java`（改） | 天花板模块 `Rx(180)` 翻转绕足迹中心（修复 N 偏 1px）；天花板屏幕外层 `scale(1,1,−1)`→`scale(−1,1,−1)` + mirrorWinding 置 false（修复字符水平镜像） |
 | `client/MonitorSlabGridOverlay.java`（改） | 旋钮拖拽 rawAngle 按天花板取反（`knobDragFlip`） |
 | `block/MonitorSlabBlock.java`（改） | 天花板放置 FACING = 玩家水平朝向（与地板差 180°） |
+| `block/Screen9GridRenderer.java`（改） | E/W 内容转置语义：`applyInPlaneRotation` 去掉方案 A 缩放；`renderTextContent` 按 transposed（inPlane 90/270）用转置可绘制区（替代 §5 方案 A） |
+| `block/MonitorSlabBlockEntity.java`（改） | `screenInnerWidthPx/HeightPx` 按 E/W 正面视角宽高互换（`isScreenTransposed()`），setTextScale 推导转置格子 |
 
 ---
 

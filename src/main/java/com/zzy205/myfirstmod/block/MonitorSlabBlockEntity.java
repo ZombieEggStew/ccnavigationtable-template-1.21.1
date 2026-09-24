@@ -10,6 +10,7 @@ import com.zzy205.myfirstmod.monitor.ScreenText;
 import com.zzy205.myfirstmod.network.SyncGridPayload;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.Connection;
@@ -452,12 +453,28 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
         return getGridState().getScreenById(id) != null;
     }
 
+    /** 屏幕「正面视角」内区宽（px）：E/W 朝向（地板/天花板，内容 inPlane 转 90°）时宽高互换——正面看 5×3 区域
+     *  = 3 宽 × 5 高（竖屏），逻辑格子须按正面视角推导（setTextScale 用），渲染层转 90° 后正好填满
+     *  （转置语义，见 memo/monitor-slab.md §5）。贴墙 inPlane=0 不转置；N/S 宽高不变。 */
     private double screenInnerWidthPx(GridState.ScreenRegion scr) {
-        return scr.width() - 2 * ScreenText.DRAWABLE_INSET * 16;
+        double w = scr.width() - 2 * ScreenText.DRAWABLE_INSET * 16;
+        double h = scr.height() - 2 * ScreenText.DRAWABLE_INSET * 16;
+        return isScreenTransposed() ? h : w;
     }
 
+    /** 屏幕「正面视角」内区高（px），同 {@link #screenInnerWidthPx}（E/W 转置时返回物理宽）。 */
     private double screenInnerHeightPx(GridState.ScreenRegion scr) {
-        return scr.height() - 2 * ScreenText.DRAWABLE_INSET * 16;
+        double w = scr.width() - 2 * ScreenText.DRAWABLE_INSET * 16;
+        double h = scr.height() - 2 * ScreenText.DRAWABLE_INSET * 16;
+        return isScreenTransposed() ? w : h;
+    }
+
+    /** 屏幕内容是否按「正面视角转置」渲染/推导：E/W 朝向（FACING=EAST/WEST）的地板/天花板（非贴墙）。 */
+    private boolean isScreenTransposed() {
+        BlockState state = getBlockState();
+        Direction facing = state.getValue(MonitorSlabBlock.FACING);
+        return state.getValue(MonitorSlabBlock.FACE) != AttachFace.WALL
+                && (facing == Direction.EAST || facing == Direction.WEST);
     }
 
     @Override

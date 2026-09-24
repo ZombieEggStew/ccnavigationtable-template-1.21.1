@@ -77,6 +77,10 @@ public final class Screen9GridRenderer {
      * （仅文字/图形，9 宫格外框不参与——renderScreen 外框保持网格对齐）。
      * 水平面必须紧接 {@link #wrapHorizontal} 之后调用（此时坐标为局部 0 基）；天花板等垂直帧直接在帧内调用。
      * 屏幕中心 = 平面原点 + 区域中心格（含 originX/originY，Monitor/monitor_2 的 inPlane=0 不受影响）。
+     * <p>
+     * E/W 非方形屏幕（inPlane=90°/270°）<b>不在此缩放</b>——已改<b>转置语义</b>
+     * （见 {@link #renderTextContent} 的 transposed 参数与 {@code memo/monitor-slab.md} §5）：
+     * 内容按正面视角（宽高互换）绘制，转 90° 后天然填满外框，无需缩放。
      */
     private static void applyInPlaneRotation(PoseStack ps, GridState.ScreenRegion scr, ScreenPlane plane, float inPlane) {
         if (inPlane == 0f) return;
@@ -86,6 +90,12 @@ public final class Screen9GridRenderer {
         ps.translate(cx, cy, 0f);
         ps.mulPose(Axis.ZP.rotationDegrees(inPlane));
         ps.translate(-cx, -cy, 0f);
+    }
+
+    /** inPlane 是否为 90°/270°（转置语义生效的朝向：E/W，地板/天花板；含负角与跨 360）。 */
+    private static boolean isQuarterTurn(float inPlane) {
+        float rot = ((inPlane % 360f) + 360f) % 360f;
+        return rot == 90f || rot == 270f;
     }
 
     private static final RandomSource RANDOM = RandomSource.create(42L);
@@ -157,15 +167,16 @@ public final class Screen9GridRenderer {
         // ── 屏幕字符 / 图形（内容跟随 FACING：绕屏幕区域中心旋转，9 宫格外框不动）──
         // 水平面在 wrap 后的局部帧内旋转；垂直帧（天花板 = 反射帧）直接在帧内旋转，
         // 旋转轴均为本地 Z（水平面 = 世界 −Y；天花板反射帧 = 世界 +Y，inPlane 已取反），与 blockstate y 同向。
-        // inPlane=0（Monitor/monitor_2）零影响。
+        // inPlane=0（Monitor/monitor_2）零影响。E/W（90°/270°）转置语义见 renderTextContent。
         if (text != null && text.hasContent()) {
+            boolean transposed = isQuarterTurn(inPlane);
             if (inPlane != 0f) {
                 ps.pushPose();
                 applyInPlaneRotation(ps, scr, plane, inPlane);
-                renderTextContent(ps, buffer, scr, text, plane, horizontal, mirror);
+                renderTextContent(ps, buffer, scr, text, plane, horizontal, mirror, transposed);
                 ps.popPose();
             } else {
-                renderTextContent(ps, buffer, scr, text, plane, horizontal, mirror);
+                renderTextContent(ps, buffer, scr, text, plane, horizontal, mirror, transposed);
             }
         }
 
@@ -185,7 +196,7 @@ public final class Screen9GridRenderer {
             applyInPlaneRotation(ps, scr, plane, inPlane);
         }
 
-        renderTextContent(ps, buffer, scr, text, plane, horizontal, mirror);
+        renderTextContent(ps, buffer, scr, text, plane, horizontal, mirror, isQuarterTurn(inPlane));
 
         if (horizontal) {
             ps.popPose();
@@ -193,10 +204,12 @@ public final class Screen9GridRenderer {
     }
 
     /** 格子文本绘制体（调用方已处理水平 wrap / 平面内旋转）；horizontal 决定文字 zBase 方向（水平面文字须在面板上方），
-     *  mirror 决定字形绕序是否反转（反射帧补偿）。 */
+     *  mirror 决定字形绕序是否反转（反射帧补偿）；transposed=true（E/W 朝向，inPlane=90°/270°）时内容按
+     *  <b>正面视角</b>绘制——可绘制区 = 屏幕 9 宫格内区绕区域中心转 90° 的矩形（宽高互换、居中于区域中心），
+     *  配合调用方的 inPlane 旋转正好填满外框：字形 1px 方形、无缩放无白边（转置语义，见 memo/monitor-slab.md §5）。 */
     private static void renderTextContent(PoseStack ps, MultiBufferSource buffer,
                                           GridState.ScreenRegion scr, ScreenText text, ScreenPlane plane,
-                                          boolean horizontal, boolean mirror) {
+                                          boolean horizontal, boolean mirror, boolean transposed) {
         float cellSize = plane.cellSize();
         float drawableInset = (float) ScreenText.DRAWABLE_INSET;
 
@@ -207,14 +220,31 @@ public final class Screen9GridRenderer {
 
         // 可绘制区域 = 屏幕 9 宫格内区再内缩 DRAWABLE_INSET（1/64 块）。
         // 内容原点：DRAWABLE_INSET 已包含在这里，格子 / drawRect 共用这组边界。
-        float contentRight = scrX + scrW - drawableInset;
-        float contentTop = scrY + scrH - drawableInset;
-        float contentLeft = scrX + drawableInset;
-        float contentBottom = scrY + drawableInset;
-        float innerWidthUnits = (float) ((scr.width() - 2f * drawableInset * 16f)
-            * ScreenText.RECT_UNITS_PER_PX);
-        float innerHeightUnits = (float) ((scr.height() - 2f * drawableInset * 16f)
-            * ScreenText.RECT_UNITS_PER_PX);
+        // E/W 转置：可绘制区 = 内区绕区域中心 (cx,cy) 转 90° 的矩形（X 向 = 区域高、Z 向 = 区域宽，
+        // 居中于区域中心），配合调用方转 90° 后正好填满内区；方形屏幕宽高相同 → 与普通路径完全一致（零影响）。
+        float contentRight, contentTop, contentLeft, contentBottom;
+        float innerWidthUnits, innerHeightUnits;
+        if (transposed) {
+            float cx = plane.originX() + (scr.minX() + scr.maxX() + 1f) * cellSize / 2f;
+            float cy = plane.originY() + (scr.minY() + scr.maxY() + 1f) * cellSize / 2f;
+            contentLeft = cx - scrH / 2f + drawableInset;
+            contentRight = cx + scrH / 2f - drawableInset;
+            contentBottom = cy - scrW / 2f + drawableInset;
+            contentTop = cy + scrW / 2f - drawableInset;
+            innerWidthUnits = (float) ((scr.height() - 2f * drawableInset * 16f)
+                * ScreenText.RECT_UNITS_PER_PX);
+            innerHeightUnits = (float) ((scr.width() - 2f * drawableInset * 16f)
+                * ScreenText.RECT_UNITS_PER_PX);
+        } else {
+            contentRight = scrX + scrW - drawableInset;
+            contentTop = scrY + scrH - drawableInset;
+            contentLeft = scrX + drawableInset;
+            contentBottom = scrY + drawableInset;
+            innerWidthUnits = (float) ((scr.width() - 2f * drawableInset * 16f)
+                * ScreenText.RECT_UNITS_PER_PX);
+            innerHeightUnits = (float) ((scr.height() - 2f * drawableInset * 16f)
+                * ScreenText.RECT_UNITS_PER_PX);
+        }
         // 内容基准面 = 屏幕 9 宫格中心面（screen_center 模型 north 面在 z=0.7px）。
         // 水平顶面 wrap 后 world Y = 平移 y(面板 9/16) − 本地z；用户 9.27 指定内容落在 8.3/16
         // （zBase = +0.7px → 世界 y = 9/16 − 0.7/16 = 8.3/16，与竖面同值 0.7px，贴合屏幕面板表面）。
