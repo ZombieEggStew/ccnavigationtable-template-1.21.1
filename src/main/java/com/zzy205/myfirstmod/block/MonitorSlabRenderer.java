@@ -13,24 +13,27 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.AttachFace;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * monitor_slab BER — 在顶面（面板）渲染已放置的模块模型与屏幕 9 宫格。
+ * monitor_slab BER — 在面板（地板 = 顶面；贴墙 = 朝向 FACING 的竖直边界）上渲染已放置的模块模型与屏幕 9 宫格。
  * <p>
  * slab 本体由 blockstate 静态模型渲染，本 BER 只画表面内容。模块动画/微调见
  * {@link ModuleRenderBehavior}；旋钮角度文字/按钮标签见 {@link ModuleSurfaceRenderer}；
  * 屏幕 9 宫格/文字见 {@link Screen9GridRenderer}（水平面 {@link Screen9GridRenderer.ScreenPlane#horizontal()}）。
  * <p>
- * 朝向（水平顶面，模型朝向已核对 blockbench 模型）：
+ * 朝向（水平顶面，模型朝向已核对 blockbench 模型；贴墙 = 面板坐标系 {@link MonitorSlabBlockEntity#panelFrame}
+ * 单一来源，水平摊平帧 → 面板帧 = Ry(faceYaw)·Rx(−90)，模块/屏幕在面板局部帧内摊平，内容自动朝上）：
  * <ul>
- *   <li>button_1 底座/头部是竖在 XY 面的贴片（前脸 −Z，本地 z 0.625..1）→ 绕 X <b>+90°</b> 平躺，前脸朝上（+Y）；</li>
- *   <li>toggle_switch / knob 底座原生平躺（前脸 +Y，本地底 y=0）→ 不旋转，直接放顶面。</li>
+ *   <li>button_1 底座/头部是竖在 XY 面的贴片（前脸 −Z，本地 z 0.625..1）→ 绕 X <b>+90°</b> 平躺，前脸朝外；</li>
+ *   <li>toggle_switch / knob 底座原生平躺（前脸 +Y，本地底 y=0）→ 不旋转，直接放面板。</li>
  * </ul>
  * 竖直锚点：button 本地原点在背面（z=0.625..1 向下延伸）→ 锚点 = 面板 + 1px（背面贴面板）；
- * toggle/knob 本地底 y=0 → 锚点 = 面板。旋钮把手旋转轴（本地 Y）摊平后 = 世界 +Y，拖拽角度语义一致。
+ * toggle/knob 本地底 y=0 → 锚点 = 面板。旋钮把手旋转轴（本地 Y）摊平后 = 面板法线，拖拽角度语义一致。
  * <p>
  * animProgress 使用 (BlockPos, moduleId) 复合 key，防止不同 slab 之间同 moduleId 的动画进度互相污染。
  */
@@ -48,6 +51,10 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
         if (!be.hasContent()) return;
         GridState grid = be.getGridState();
 
+        BlockState state = be.getBlockState();
+        boolean wall = state.getValue(MonitorSlabBlock.FACE) == AttachFace.WALL;
+        MonitorSlabBlockEntity.PanelFrame frame = MonitorSlabBlockEntity.panelFrame(state);
+
         var beAnims = animProgress.computeIfAbsent(bePos, k -> new HashMap<>());
         beAnims.keySet().removeIf(id -> !grid.getAllModules().containsKey(id));
 
@@ -56,8 +63,8 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
             var bhv = ModuleRenderBehavior.of(mod.type());
             boolean isKnob = mod.type() == ModuleType.KNOB;
 
-            // 顶面锚点（块单位）：网格起点 + 格位；模块微调按 monitor 竖面帧映射到顶面——
-            // offsetX（屏幕水平）→ 世界 X、offsetY（屏幕垂直）→ 世界 Z；offsetZ（屏幕法线/凸出）在顶面
+            // 面板局部锚点（块单位）：网格起点 + 格位；模块微调按 monitor 竖面帧映射到面板——
+            // offsetX（屏幕水平）→ grid x、offsetY（屏幕垂直）→ grid y；offsetZ（屏幕法线/凸出）在面板
             // 不映射到高度（toggle/knob 会浮起 1px，用户进游戏确认后下沉；button 的 1px 凸出已含在 moduleBaseY）。
             float px = (MonitorSlabBlockEntity.GRID_ORIGIN_X_PX + mod.gridX()) / 16f + bhv.offsetX();
             float pz = (MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX + mod.gridY()) / 16f + bhv.offsetY();
@@ -78,11 +85,22 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
                     bhv.animPressSpeed(), bhv.animReleaseSpeed());
 
             poseStack.pushPose();
-            poseStack.translate(px, py, pz);
+            if (wall && frame != null) {
+                // 贴墙：锚点 = 面板局部 (px, pz, py) 按面板坐标系映射到世界，再套「水平摊平帧 → 面板帧」旋转
+                // （Rx(−90) 把模块从水平摊平转到面板法线，Ry(faceYaw) 定向到 FACING；后续 pivot/button 在面板局部帧内照常）。
+                double nOff = py - MonitorSlabBlockEntity.PANEL_Y_PX / 16f;
+                Vec3 anchor = MonitorSlabBlockEntity.panelLocalToWorld(frame, px, pz, nOff);
+                poseStack.translate(anchor.x, anchor.y, anchor.z);
+                if (frame.faceYawDeg() != 0f) poseStack.mulPose(Axis.YP.rotationDegrees(frame.faceYawDeg()));
+                poseStack.mulPose(Axis.XP.rotationDegrees(-90));
+            } else {
+                poseStack.translate(px, py, pz);
+            }
             // 朝向跟随 slab FACING：绕<b>模块足迹中心</b> Y 旋转（与 blockstate 对模型本体的 y 旋转一致）。
             // button/toggle 模型原点在角上（足迹中心 = 本地 (0.5,0.5)），knob 圆盘原点即中心（(0,0)）——
             // 若直接绕锚点（原点）转，模型会整体甩开且随 facing 偏移不同（用户确认症状）；位置不动（网格旋转不变，命中/放置无需旋转）。
-            float facingDeg = facingYRotation(be.getBlockState());
+            // 贴墙面板本身已按 FACING 定向（frame.faceYawDeg），面板局部帧内不再额外 facing 旋转。
+            float facingDeg = wall ? 0f : facingYRotation(state);
             float pivotX = modulePivotX(mod.type());
             float pivotZ = modulePivotZ(mod.type());
             if (pivotX != 0f || pivotZ != 0f) {
@@ -94,7 +112,7 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
             if (pivotX != 0f || pivotZ != 0f) {
                 poseStack.translate(-pivotX, 0f, -pivotZ);
             }
-            // 朝向校正（水平顶面）：button 贴片竖放（前脸 −Z）→ 绕 X +90° 平躺朝上；toggle/knob 底座已平躺 → 不转
+            // 朝向校正（水平摊平）：button 贴片竖放（前脸 −Z）→ 绕 X +90° 平躺朝上；toggle/knob 底座已平躺 → 不转
             if (mod.type() == ModuleType.BUTTON_1X1) {
                 poseStack.mulPose(Axis.XP.rotationDegrees(90));
             }
@@ -121,10 +139,21 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
         }
 
         // ── 渲染所有屏幕 9 宫格（外框网格对齐、内容朝向跟随 FACING；内容由 Screen9GridRenderer 绕屏幕中心单独旋转）──
-        float inPlane = facingInPlaneDeg(be.getBlockState());
+        // 贴墙：整体包一层面板坐标系变换（translate(panelOrigin) + Ry(faceYaw)·Rx(−90)），水平 ScreenPlane
+        // 在面板局部帧内摊平 → 屏幕面 = 贴墙面板；面板局部帧内内容已朝上（grid y = 世界 +Y），无需平面内旋转（inPlane=0）。
+        float inPlane = wall ? 0f : facingInPlaneDeg(state);
         Screen9GridRenderer.ScreenPlane slabPlane = slabPlane(inPlane);
         for (var screen : grid.getScreenRegions()) {
-            renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay, slabPlane);
+            if (wall && frame != null) {
+                poseStack.pushPose();
+                poseStack.translate(frame.panelOrigin().x, frame.panelOrigin().y, frame.panelOrigin().z);
+                if (frame.faceYawDeg() != 0f) poseStack.mulPose(Axis.YP.rotationDegrees(frame.faceYawDeg()));
+                poseStack.mulPose(Axis.XP.rotationDegrees(-90));
+                renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay, slabPlane);
+                poseStack.popPose();
+            } else {
+                renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay, slabPlane);
+            }
         }
     }
 

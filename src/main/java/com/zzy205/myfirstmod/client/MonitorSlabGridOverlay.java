@@ -25,6 +25,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
@@ -40,7 +41,8 @@ import java.util.Map;
 /**
  * monitor_slab 表面 Monitor 的客户端交互（对齐 {@link Monitor2GridOverlay}）：
  * <ul>
- *   <li>手持 Monitor 模块物品（toggle_switch / knob / button / screen）→ 顶面显示 14×14 棋盘网格</li>
+ *   <li>手持 Monitor 模块物品（toggle_switch / knob / button / screen）→ 面板显示 14×14 棋盘网格
+ *       （地板 = 顶面水平网格；贴墙 = 朝向 FACING 的竖直面板网格）</li>
  *   <li>右键放置模块 / 屏幕两点放置（payload 复用 Monitor 的包，pos = slab 方块）</li>
  *   <li>按钮按压 / 钮子切换 / 旋钮拖拽（命中走 {@link MonitorSlabHitDetector} 独立检测）</li>
  *   <li>扳手蹲下右键拆除模块 / 屏幕</li>
@@ -51,7 +53,8 @@ import java.util.Map;
  * </ul>
  * 每帧重新 show，离开/换物品后自动消失（Outliner 语义）。交互状态按 BlockPos 隔离。
  * <p>
- * 几何：面板 = slab 顶面（世界 y = pos.y + 0.5），网格 14×14（起点 (1,1)px，格=1px）。
+ * 几何：面板按 blockstate 的 FACE/FACING 取 {@link MonitorSlabBlockEntity#panelFrame} 单一来源
+ * （地板水平面 / 贴墙竖直边界），网格 14×14（起点 (1,1)px，格=1px）。
  * 无 yaw/pitch/tilt，网格线 / 模块框全部轴对齐绘制（块单位，double 运算兼容 Sable plot 坐标）。
  */
 public class MonitorSlabGridOverlay {
@@ -156,7 +159,7 @@ public class MonitorSlabGridOverlay {
         Level level = player.level();
         float partialTick = (float) event.getPartialTick().getGameTimeDeltaTicks();
 
-        // ── 独立命中检测：瞄准 slab 顶面 ──
+        // ── 独立命中检测：瞄准 slab 面板（地板顶面 / 贴墙竖直边界）──
         MonitorSlabHitDetector.SlabHit hit = MonitorSlabHitDetector.find(level, player, partialTick);
         if (hit == null) {
             if (DEBUG_HIT && (++debugHitTick & 19) == 0) {
@@ -172,6 +175,9 @@ public class MonitorSlabGridOverlay {
         float px = hit.px();
         float pz = hit.pz();
         int[] gp = hit.grid();
+
+        // 面板几何按 blockstate 的 FACE/FACING 取（地板水平面 / 贴墙竖直边界），命中/渲染共用单一来源
+        BlockState state = level.getBlockState(pos);
 
         // DEBUG：命中数值日志（节流每 20 tick 一次）
         if (DEBUG_HIT && (++debugHitTick & 19) == 0) {
@@ -203,7 +209,7 @@ public class MonitorSlabGridOverlay {
 
         // DEBUG：命中点可视化（黄色十字 = 命中点；白色框 = 面板；青色框 = 网格区域）
         if (DEBUG_HIT) {
-            drawHitDebug(outliner, pos, px, pz, gp, keyPrefix);
+            drawHitDebug(outliner, pos, state, px, pz, gp, keyPrefix);
         }
 
         int moduleColor = (Config.MONITOR_OUTLINE_A.get() << 24)
@@ -361,7 +367,7 @@ public class MonitorSlabGridOverlay {
 
         // 1. 网格线（手持模块或屏幕物品时）
         if (showGrid) {
-            drawGridLines(outliner, pos, keyPrefix);
+            drawGridLines(outliner, pos, state, keyPrefix);
         }
 
         // 1.5 屏幕放置预览
@@ -375,7 +381,7 @@ public class MonitorSlabGridOverlay {
             boolean bigEnough = w >= GridState.SCREEN_MIN_SIZE && h >= GridState.SCREEN_MIN_SIZE;
             boolean canPlace = grid.canPlaceScreen(minX, minY, maxX, maxY);
             int color = (bigEnough && canPlace) ? 0x4CDA64 : 0xFF5E5E;
-            drawModuleOutline(outliner, pos, minX, minY, w, h, keyPrefix + "/screen_preview", color);
+            drawModuleOutline(outliner, pos, state, minX, minY, w, h, keyPrefix + "/screen_preview", color);
         }
 
         // 2. 放置预览 / 对准高亮
@@ -383,10 +389,10 @@ public class MonitorSlabGridOverlay {
             if (heldType != null && gp != null) {
                 boolean ok = grid.canPlace(gp[0], gp[1], heldType.width, heldType.height);
                 int color = ok ? 0x4CDA64 : 0xFF5E5E;
-                drawModuleOutline(outliner, pos, gp[0], gp[1],
+                drawModuleOutline(outliner, pos, state, gp[0], gp[1],
                         heldType.width, heldType.height, keyPrefix + "/preview", color);
             } else if (hoveredModule != null) {
-                drawModuleOutline(outliner, pos, hoveredModule.gridX(), hoveredModule.gridY(),
+                drawModuleOutline(outliner, pos, state, hoveredModule.gridX(), hoveredModule.gridY(),
                         hoveredModule.getWidth(), hoveredModule.getHeight(),
                         keyPrefix + "/hover", moduleColor);
             } else if (onScreenCell) {
@@ -397,7 +403,7 @@ public class MonitorSlabGridOverlay {
                             | (Config.MONITOR_OUTLINE_R.get() << 16)
                             | (Config.MONITOR_OUTLINE_G.get() << 8)
                             | Config.MONITOR_OUTLINE_B.get();
-                    drawModuleOutline(outliner, pos, scr.minX(), scr.minY(),
+                    drawModuleOutline(outliner, pos, state, scr.minX(), scr.minY(),
                             scr.width(), scr.height(), keyPrefix + "/screen_hover", screenColor);
                 }
             }
@@ -414,14 +420,24 @@ public class MonitorSlabGridOverlay {
         graphics.renderTooltip(mc.font, hoveredTooltip, x, y);
     }
 
-    // ── slab 顶面网格 / 模块框（轴对齐，块单位，double 运算兼容 Sable plot 坐标）──
+    // ── slab 面板网格 / 模块框（按 blockstate 的 FACE/FACING 面板坐标系，块单位，double 运算兼容 Sable plot 坐标）──
 
-    /** 面板局部坐标 [px, pz, py]（模型空间 px）→ 世界（slab 顶面水平放置，无 yaw/tilt）。 */
-    private static Vec3 world(BlockPos pos, float px, float pz, float py) {
-        return new Vec3(pos.getX() + px / 16.0, pos.getY() + py / 16.0, pos.getZ() + pz / 16.0);
+    /**
+     * 面板局部坐标 [px, pz, py]（px 沿 grid x、pz 沿 grid y，面板内模型空间 px；py = 面板高度 px，
+     * 地板 = 世界 Y、贴墙 = 面板法线方向）→ 世界（块单位）。
+     * 地板形态退化为 pos + (px/16, py/16, pz/16)（与旧实现一致）；贴墙形态画在朝向 FACING 的竖直面板上。
+     */
+    private static Vec3 world(BlockPos pos, BlockState state, float px, float pz, float py) {
+        MonitorSlabBlockEntity.PanelFrame frame = MonitorSlabBlockEntity.panelFrame(state);
+        if (frame == null) { // 不应发生（天花板本阶段不支持）；回退旧地板映射
+            return new Vec3(pos.getX() + px / 16.0, pos.getY() + py / 16.0, pos.getZ() + pz / 16.0);
+        }
+        double n = (py - MonitorSlabBlockEntity.PANEL_Y_PX) / 16.0;
+        Vec3 rel = MonitorSlabBlockEntity.panelLocalToWorld(frame, px / 16.0, pz / 16.0, n);
+        return new Vec3(pos.getX() + rel.x, pos.getY() + rel.y, pos.getZ() + rel.z);
     }
 
-    private static void drawGridLines(Outliner o, BlockPos pos, String keyPrefix) {
+    private static void drawGridLines(Outliner o, BlockPos pos, BlockState state, String keyPrefix) {
         float y = MonitorSlabBlockEntity.PANEL_Y_PX + GRID_LINE_OFFSET;
         float x0 = MonitorSlabBlockEntity.GRID_ORIGIN_X_PX;
         float z0 = MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX;
@@ -431,14 +447,14 @@ public class MonitorSlabGridOverlay {
 
         for (int i = 0; i <= MonitorSlabBlockEntity.GRID_WIDTH; i++) {
             float x = x0 + i;
-            Vec3 from = world(pos, x, z0, y);
-            Vec3 to = world(pos, x, z1, y);
+            Vec3 from = world(pos, state, x, z0, y);
+            Vec3 to = world(pos, state, x, z1, y);
             o.showLine(keyPrefix + "/grid_v" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
         for (int i = 0; i <= MonitorSlabBlockEntity.GRID_HEIGHT; i++) {
             float z = z0 + i;
-            Vec3 from = world(pos, x0, z, y);
-            Vec3 to = world(pos, x1, z, y);
+            Vec3 from = world(pos, state, x0, z, y);
+            Vec3 to = world(pos, state, x1, z, y);
             o.showLine(keyPrefix + "/grid_h" + i, from, to).colored(0xFFFFFF).lineWidth(lw);
         }
     }
@@ -452,21 +468,21 @@ public class MonitorSlabGridOverlay {
      *   <li>红色小框 = localToGrid 得到的格 (gp)</li>
      * </ul>
      */
-    private static void drawHitDebug(Outliner o, BlockPos pos, float px, float pz, int[] gp, String keyPrefix) {
+    private static void drawHitDebug(Outliner o, BlockPos pos, BlockState state, float px, float pz, int[] gp, String keyPrefix) {
         float y = MonitorSlabBlockEntity.PANEL_Y_PX + GRID_LINE_OFFSET;
         // 命中点十字（黄）
-        marker(o, pos, px, pz, y, 0xFFFF00, keyPrefix + "/dbg_hit");
+        marker(o, pos, state, px, pz, y, 0xFFFF00, keyPrefix + "/dbg_hit");
         // 面板边界（白，细线）
-        drawRectLines(o, pos, 0f, 0f, 16f, 16f, y, 0xFFFFFF, keyPrefix + "/dbg_panel", 1 / 128f);
+        drawRectLines(o, pos, state, 0f, 0f, 16f, 16f, y, 0xFFFFFF, keyPrefix + "/dbg_panel", 1 / 128f);
         // 网格区域边界（青，细线）
-        drawRectLines(o, pos,
+        drawRectLines(o, pos, state,
                 MonitorSlabBlockEntity.GRID_ORIGIN_X_PX, MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX,
                 MonitorSlabBlockEntity.GRID_ORIGIN_X_PX + MonitorSlabBlockEntity.GRID_WIDTH,
                 MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX + MonitorSlabBlockEntity.GRID_HEIGHT,
                 y, 0x00FFFF, keyPrefix + "/dbg_grid", 1 / 128f);
         // gp 格（红，粗线）
         if (gp != null) {
-            drawRectLines(o, pos,
+            drawRectLines(o, pos, state,
                     MonitorSlabBlockEntity.GRID_ORIGIN_X_PX + gp[0],
                     MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX + gp[1],
                     MonitorSlabBlockEntity.GRID_ORIGIN_X_PX + gp[0] + 1,
@@ -475,34 +491,34 @@ public class MonitorSlabGridOverlay {
         }
     }
 
-    /** DEBUG：在 (px, pz, py)（模型空间 px）画一个小十字线。 */
-    private static void marker(Outliner o, BlockPos pos, float px, float pz, float py, int color, String key) {
+    /** DEBUG：在 (px, pz, py)（面板局部 px）画一个小十字线。 */
+    private static void marker(Outliner o, BlockPos pos, BlockState state, float px, float pz, float py, int color, String key) {
         float r = 0.5f; // 十字半长（px）
-        Vec3 c = world(pos, px, pz, py);
-        Vec3 dx = world(pos, px + r, pz, py);
-        Vec3 dy = world(pos, px, pz + r, py);
-        Vec3 dxn = world(pos, px - r, pz, py);
-        Vec3 dyn = world(pos, px, pz - r, py);
+        Vec3 c = world(pos, state, px, pz, py);
+        Vec3 dx = world(pos, state, px + r, pz, py);
+        Vec3 dy = world(pos, state, px, pz + r, py);
+        Vec3 dxn = world(pos, state, px - r, pz, py);
+        Vec3 dyn = world(pos, state, px, pz - r, py);
         o.showLine(key + "_x", dxn, dx).colored(color).lineWidth(1 / 32f);
         o.showLine(key + "_y", dyn, dy).colored(color).lineWidth(1 / 32f);
     }
 
-    /** DEBUG：在顶面 (x0,z0)-(x1,z1) 画矩形四边（模型空间 px）。 */
-    private static void drawRectLines(Outliner o, BlockPos pos,
+    /** DEBUG：在面板 (x0,z0)-(x1,z1) 画矩形四边（面板局部 px）。 */
+    private static void drawRectLines(Outliner o, BlockPos pos, BlockState state,
                                       float x0, float z0, float x1, float z1,
                                       float y, int color, String key, float lw) {
-        Vec3 p00 = world(pos, x0, z0, y);
-        Vec3 p10 = world(pos, x1, z0, y);
-        Vec3 p11 = world(pos, x1, z1, y);
-        Vec3 p01 = world(pos, x0, z1, y);
+        Vec3 p00 = world(pos, state, x0, z0, y);
+        Vec3 p10 = world(pos, state, x1, z0, y);
+        Vec3 p11 = world(pos, state, x1, z1, y);
+        Vec3 p01 = world(pos, state, x0, z1, y);
         o.showLine(key + "_t", p00, p10).colored(color).lineWidth(lw);
         o.showLine(key + "_r", p10, p11).colored(color).lineWidth(lw);
         o.showLine(key + "_b", p11, p01).colored(color).lineWidth(lw);
         o.showLine(key + "_l", p01, p00).colored(color).lineWidth(lw);
     }
 
-    /** 模块/屏幕占位框：网格格 (gx, gy) 起 w×h 格，画在顶面。 */
-    private static void drawModuleOutline(Outliner o, BlockPos pos,
+    /** 模块/屏幕占位框：网格格 (gx, gy) 起 w×h 格，画在面板上。 */
+    private static void drawModuleOutline(Outliner o, BlockPos pos, BlockState state,
                                           int gx, int gy, int w, int h, String slot, int color) {
         float x0 = MonitorSlabBlockEntity.GRID_ORIGIN_X_PX + gx;
         float z0 = MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX + gy;
@@ -511,10 +527,10 @@ public class MonitorSlabGridOverlay {
         float y = MonitorSlabBlockEntity.PANEL_Y_PX + GRID_LINE_OFFSET;
         float lw = (float) (1 / 128f * Config.MONITOR_OUTLINE_LINE_WIDTH.get());
 
-        Vec3 p00 = world(pos, x0, z0, y);
-        Vec3 p10 = world(pos, x1, z0, y);
-        Vec3 p11 = world(pos, x1, z1, y);
-        Vec3 p01 = world(pos, x0, z1, y);
+        Vec3 p00 = world(pos, state, x0, z0, y);
+        Vec3 p10 = world(pos, state, x1, z0, y);
+        Vec3 p11 = world(pos, state, x1, z1, y);
+        Vec3 p01 = world(pos, state, x0, z1, y);
 
         o.showLine(slot + "_top",    p00, p10).colored(color).lineWidth(lw);
         o.showLine(slot + "_right",  p10, p11).colored(color).lineWidth(lw);

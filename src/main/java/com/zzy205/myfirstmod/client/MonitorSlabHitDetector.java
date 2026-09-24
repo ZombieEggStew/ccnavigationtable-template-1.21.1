@@ -8,21 +8,23 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * monitor_slab 表面 Monitor 的独立命中检测器（仅地板 FLOOR 放置）。
+ * monitor_slab 表面 Monitor 的独立命中检测器（地板 FLOOR + 贴墙 WALL）。
  * <p>
  * 与 {@link Monitor2HitDetector} 同一思路但不依赖原版 {@code mc.hitResult}，而是遍历
- * {@link MonitorSlabClientRegistry} 的候选 slab，用玩家视线射线与<b>水平面板平面</b>
- * （世界 y = pos.y + 0.5，slab 顶面）求交。slab 无 yaw/pitch/tilt，面板轴对齐——
- * 命中退化为「射线 vs 水平平面」，比 monitor_2 的 22.5° 倾斜变换简单得多。
+ * {@link MonitorSlabClientRegistry} 的候选 slab，用玩家视线射线与<b>面板平面</b>求交。
+ * 面板几何按 blockstate 的 FACE/FACING 取 {@link MonitorSlabBlockEntity#panelFrame} 单一来源：
+ * 地板 = 水平面 y8/16，贴墙 = 朝向 FACING 的 8px 竖直边界。slab 无 yaw/pitch/tilt，
+ * 命中退化为「射线 vs 轴对齐平面」，比 monitor_2 的 22.5° 倾斜变换简单得多。
  * <p>
- * 背面剔除：面板朝上，视线必须从上往下（射线 y 分量 < 0）才能命中。
- * 遮挡检测：COLLIDER 排除 slab 自身（面板与 slab 碰撞体顶面重合，不排除会自遮挡，
+ * 背面剔除：射线方向必须有沿面板法线的分量（d·n &lt; 0）才能命中。
+ * 遮挡检测：COLLIDER 排除 slab 自身（面板与 slab 碰撞体重合，不排除会自遮挡，
  * 对齐 monitor_2 的踩坑修复）。
  */
 public final class MonitorSlabHitDetector {
@@ -72,7 +74,7 @@ public final class MonitorSlabHitDetector {
             Vec3 o = sub != null ? SableCompat.toLocalPosition(sub, partialTick, eye) : eye;
             Vec3 d = sub != null ? SableCompat.toLocalDirection(sub, partialTick, view) : view;
 
-            double[] hit = intersectPanel(pos, o, d, reach);
+            double[] hit = intersectPanel(level.getBlockState(pos), pos, o, d, reach);
             if (hit == null) {
                 if (trace) {
                     CCPeripheralExtender.LOGGER.info("[SlabTrace] {} 求交失败（背面/平行/超距）", pos.toShortString());
@@ -146,25 +148,32 @@ public final class MonitorSlabHitDetector {
     }
 
     /**
-     * 视线射线 → 面板平面求交（返回 {@code [t, px, pz]}：t 射线参数块单位，px/pz 落点模型空间 px；
-     * 未命中返回 null）。
+     * 视线射线 → 面板平面求交（返回 {@code [t, px, pz]}：t 射线参数块单位，px/pz 落点<b>面板局部坐标</b>
+     * （grid x / grid y 方向，模型空间 px，0..16）；未命中返回 null）。
      * <p>
-     * 面板 = 水平面 世界 y = pos.y + 0.5（slab 顶面 y8/16）；背面剔除：面板法线 +Y，
-     * 视线 y 分量必须为负（从上往下看）才能命中。
+     * 面板平面与朝向按 blockstate 的 FACE/FACING 取 {@link MonitorSlabBlockEntity#panelFrame}：
+     * 地板 = 水平面 y8/16（法线 +Y）、贴墙 = 朝向 FACING 的 8px 边界（法线 = FACING，竖直面）。
+     * 背面剔除：射线方向必须有沿法线的分量（d·n &lt; 0，即从面板正面看过去），
+     * 否则面板另一侧（slab 背面/内部）也能被命中。
      */
     @Nullable
-    private static double[] intersectPanel(BlockPos pos, Vec3 origin, Vec3 dir, double maxDistance) {
-        Vec3 block = Vec3.atLowerCornerOf(pos);
-        double[] o = { origin.x - block.x, origin.y - block.y, origin.z - block.z };
-        double[] d = { dir.x, dir.y, dir.z };
+    private static double[] intersectPanel(BlockState state, BlockPos pos, Vec3 origin, Vec3 dir, double maxDistance) {
+        MonitorSlabBlockEntity.PanelFrame frame = MonitorSlabBlockEntity.panelFrame(state);
+        if (frame == null) return null; // 天花板本阶段不支持
 
-        double planeY = MonitorSlabBlockEntity.PANEL_Y_PX / 16.0;
-        if (d[1] >= -1e-6) return null;   // 平行或从背面（下方）看 → 剔除
-        double t = (planeY - o[1]) / d[1];
+        Vec3 block = Vec3.atLowerCornerOf(pos);
+        Vec3 o = origin.subtract(block);
+        Vec3 d = dir;
+        Vec3 p0 = frame.panelOrigin();
+
+        double dDotN = d.dot(frame.nDir());
+        if (dDotN >= -1e-6) return null;   // 平行或从背面（面板内侧）看 → 剔除
+        double t = p0.subtract(o).dot(frame.nDir()) / dDotN;
         if (t < 0 || t > maxDistance) return null;
 
-        double px = (o[0] + t * d[0]) * 16.0;
-        double pz = (o[2] + t * d[2]) * 16.0;
+        Vec3 rel = o.add(d.scale(t)).subtract(p0);
+        double px = rel.dot(frame.uDir()) * 16.0;
+        double pz = rel.dot(frame.vDir()) * 16.0;
         return new double[]{ t, px, pz };
     }
 

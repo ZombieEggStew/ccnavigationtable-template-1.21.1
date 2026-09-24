@@ -36,6 +36,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -198,12 +199,15 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 点击是否命中表面内容（模块或屏幕）。仅地板放置（面板 = 顶面）：命中点换算到网格格后查 grid 占用
-     * （模块 ID ≥ 0 或屏幕格标记）。
+     * 点击是否命中表面内容（模块或屏幕）。命中点换算到网格格后查 grid 占用（模块 ID ≥ 0 或屏幕格标记）。
+     * 地板：面板 = 顶面（y8/16）；贴墙：面板 = 朝向 FACING 的竖直边界（{@link MonitorSlabBlockEntity#panelFrame}，
+     * 与命中检测/渲染共用单一来源）。天花板本阶段不支持。
      * 扳手潜行右键拆除的「拆单个模块/屏幕」判定（{@link #onSneakWrenched}）与「整块拆除」判定共用，单一来源。
      */
     private static boolean isSurfaceContentHit(BlockState state, UseOnContext context) {
-        if (state.getValue(FACE) != AttachFace.FLOOR) return false;
+        if (state.getValue(FACE) != AttachFace.FLOOR) {
+            return isWallSurfaceContentHit(state, context);
+        }
         double localX = context.getClickLocation().x - context.getClickedPos().getX();
         double localY = context.getClickLocation().y - context.getClickedPos().getY();
         double localZ = context.getClickLocation().z - context.getClickedPos().getZ();
@@ -222,6 +226,32 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
         }
         int gx = (int) ((localX - ox) * 16.0);
         int gy = (int) ((localZ - oz) * 16.0);
+        int cell = slab.getGridState().getCell(gx, gy);
+        return cell >= 0 || cell == GridState.SCREEN_CELL_MARKER;
+    }
+
+    /** 贴墙形态的表面内容命中：面板局部坐标（grid x / grid y，面板平面内容差内）→ 网格格 → 查占用。 */
+    private static boolean isWallSurfaceContentHit(BlockState state, UseOnContext context) {
+        if (state.getValue(FACE) != AttachFace.WALL) return false;
+        MonitorSlabBlockEntity.PanelFrame frame = MonitorSlabBlockEntity.panelFrame(state);
+        if (frame == null) return false;
+
+        Vec3 p = context.getClickLocation()
+                .subtract(Vec3.atLowerCornerOf(context.getClickedPos()))
+                .subtract(frame.panelOrigin());
+        // 面板平面（法线方向容差；地板面板在局部帧原点 = 面板平面，贴墙同理）
+        if (Math.abs(p.dot(frame.nDir())) > 0.01) return false;
+        double u = p.dot(frame.uDir());
+        double v = p.dot(frame.vDir());
+        double ox = MonitorSlabBlockEntity.GRID_ORIGIN_X_PX / 16.0;
+        double oz = MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX / 16.0;
+        if (u < ox || u >= ox + MonitorSlabBlockEntity.GRID_WIDTH / 16.0) return false;
+        if (v < oz || v >= oz + MonitorSlabBlockEntity.GRID_HEIGHT / 16.0) return false;
+        if (!(context.getLevel().getBlockEntity(context.getClickedPos()) instanceof MonitorSlabBlockEntity slab)) {
+            return false;
+        }
+        int gx = (int) ((u - ox) * 16.0);
+        int gy = (int) ((v - oz) * 16.0);
         int cell = slab.getGridState().getCell(gx, gy);
         return cell >= 0 || cell == GridState.SCREEN_CELL_MARKER;
     }

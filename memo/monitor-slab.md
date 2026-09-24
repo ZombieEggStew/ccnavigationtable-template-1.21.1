@@ -80,6 +80,54 @@
 
 ---
 
+## 实施记录（9.28，贴墙形态接入：预览网格 / 命中 / 渲染 / 拆除判定）
+
+### 需求（用户报告）
+
+贴墙放置的 slab 表面模块**预览网格仍是地面形态（XZ 平面）**——命中检测、网格绘制、BER 渲染、扳手拆除判定全部只按地板水平面处理，看贴墙 slab 时网格画在 slab 半高处的 XZ 平面上。修复 = 让贴墙（WALL）形态的面板系统按「朝向 FACING 的 8px 竖直边界」工作（用户拍板：面板朝外、网格 y 轴朝上；**天花板本阶段不做**）。
+
+### 面板几何（单一来源 `MonitorSlabBlockEntity.panelFrame(BlockState)`）
+
+| FACE/FACING | 面板平面（相对 pos，块单位） | grid x | grid y | 法线 | 面板→世界旋转 R_face |
+|---|---|---|---|---|---|
+| FLOOR | (0, 8/16, 0) | +X | +Z | +Y | 无 |
+| WALL north | (0, 0, 8/16) | +X | +Y | −Z | Rx(−90) |
+| WALL south | (0, 0, 8/16) | −X | +Y | +Z | Ry(180)·Rx(−90) |
+| WALL east | (8/16, 0, 0) | +Z | +Y | +X | Ry(−90)·Rx(−90) |
+| WALL west | (8/16, 0, 0) | −Z | +Y | −X | Ry(+90)·Rx(−90) |
+| CEILING | 本阶段不支持，返回 null | | | | |
+
+- 关键推导：blockstate 模型旋转 = `Ry(−θy)·Rx(−θx)` **绕块中心 (8,8,8)**（对照 `BlockModelRotation` 源码 + vanilla ButtonBlock AABB 实测验证）→ 贴墙 slab 占据朝向 FACING 的 8px 半块、面板 = 该边界；grid x = 面板「水平向右」（从面板正面看），grid y = 世界 +Y（朝上）。
+- `PanelFrame`（panelOrigin / uDir / vDir / nDir / faceYawDeg）+ `panelLocalToWorld(frame, u, v, n)`；地板公式退化为旧映射（`pos + (px/16, py/16, pz/16)`），零回归。
+- 面板局部 [px, pz, py]（px 沿 grid x、pz 沿 grid y、py = 面板高度 px）→ 世界 = `pos + P + (px/16)u + (pz/16)v + ((py−8)/16)n`。
+
+### 改动
+
+| 文件 | 说明 |
+|---|---|
+| `block/MonitorSlabBlockEntity.java`（改） | `PanelFrame` record + `panelFrame(BlockState)` + `panelLocalToWorld`（单一来源；FLOOR 保持旧公式数值一致） |
+| `client/MonitorSlabHitDetector.java`（改） | `intersectPanel` 改按 `panelFrame` 求交任意面板平面：`d·n < 0` 背面剔除（FLOOR 退化为原 d.y<0）、`t = (p0−o)·n / d·n`、落点局部坐标 `rel·u·16 / rel·v·16`；候选枚举带 `level.getBlockState(pos)` |
+| `client/MonitorSlabGridOverlay.java`（改） | `world()` 按面板坐标系映射；`drawGridLines`/`drawModuleOutline`/`drawRectLines`/`marker`/`drawHitDebug` 全部带 blockstate；旋钮拖拽/屏幕放置/拆除/菜单逻辑本来只用面板局部坐标 + 网格格，零改动 |
+| `block/MonitorSlabRenderer.java`（改） | 贴墙模块：锚点 = `panelLocalToWorld(frame, px, pz, py−8/16)` + `mulPose(Ry(faceYawDeg))` + `mulPose(Rx(−90))`，随后 pivot/button Rx(+90) 在面板局部帧内照常（button 两次 X 旋转互抵 = 竖立贴面板）；**贴墙免 facing 旋转**（面板已按 FACING 定向，facingDeg=0）；屏幕：整体包 `translate(panelOrigin) + Ry·Rx(−90)`，水平 ScreenPlane 在局部帧内摊平，**inPlane=0**（面板局部帧内内容已朝上） |
+| `block/MonitorSlabBlock.java`（改） | `isSurfaceContentHit` 加贴墙分支 `isWallSurfaceContentHit`（面板局部坐标 → 网格格 → 查占用；地板分支逐字未动） |
+
+### 验证清单（进游戏）
+
+- [ ] 贴墙 slab（north/south/east/west 各一），手持模块物品 → 网格画在**朝向玩家的竖直面板**上（不再是 XZ 平面）
+- [ ] 右键放置 button/toggle/knob：位置正确、贴墙摊平、button 前脸朝外
+- [ ] 屏幕两点放置 → 9 宫格 + 文字在面板上、文字朝上可读（贴墙免 inPlane 旋转）
+- [ ] 旋钮拖拽手感（面板局部 atan2 语义与地板一致，若方向反了翻转 atan2 符号）
+- [ ] 按钮按压/灯带、钮子切换、扳手蹲下右键拆单模块（贴墙面板上）
+- [ ] 扳手右键面板空格 / 侧面 → 配置菜单；已装内容顶面扳手右键不旋转
+- [ ] 地板 slab 全流程回归（网格/放置/渲染/拆除不回归）
+- [ ] 天花板 slab 保持不可放置模块（返回 null 无网格）
+
+### 已知校准点
+
+- 贴墙模块标签/旋钮角度文字朝向：内部按面板局部帧推导（label up = 世界 +Y），如进游戏发现转 90° 或镜像，给贴墙单独变换（对齐 memo 9.25 的 SLAB 待确认项）。
+
+---
+
 ## 实施记录（9.27，配置菜单与信号系统）
 
 ### 方案（用户拍板）
