@@ -88,16 +88,17 @@
 
 ### 面板几何（单一来源 `MonitorSlabBlockEntity.panelFrame(BlockState)`）
 
-| FACE/FACING | 面板平面（相对 pos，块单位） | grid x | grid y | 法线 | 面板→世界旋转 R_face |
+| FACE/FACING | 面板平面原点（相对 pos，块单位） | grid x | grid y | 法线 | 面板→世界旋转 R_face |
 |---|---|---|---|---|---|
 | FLOOR | (0, 8/16, 0) | +X | +Z | +Y | 无 |
 | WALL north | (0, 0, 8/16) | +X | +Y | −Z | Rx(−90) |
-| WALL south | (0, 0, 8/16) | −X | +Y | +Z | Ry(180)·Rx(−90) |
+| WALL south | **(1, 0, 8/16)** | −X | +Y | +Z | Ry(180)·Rx(−90) |
 | WALL east | (8/16, 0, 0) | +Z | +Y | +X | Ry(−90)·Rx(−90) |
-| WALL west | (8/16, 0, 0) | −Z | +Y | −X | Ry(+90)·Rx(−90) |
+| WALL west | **(8/16, 0, 1)** | −Z | +Y | −X | Ry(+90)·Rx(−90) |
 | CEILING | 本阶段不支持，返回 null | | | | |
 
 - 关键推导：blockstate 模型旋转 = `Ry(−θy)·Rx(−θx)` **绕块中心 (8,8,8)**（对照 `BlockModelRotation` 源码 + vanilla ButtonBlock AABB 实测验证）→ 贴墙 slab 占据朝向 FACING 的 8px 半块、面板 = 该边界；grid x = 面板「水平向右」（从面板正面看），grid y = 世界 +Y（朝上）。
+- ⚠️ **面板原点 = 面板局部 (mx=0, mz=0) 角在世界的位置，不是碰撞盒最小角**：south（worldX=16−mx）/ west（worldZ=16−mx）模型 x 轴翻转，原点在 pos.x+1 / pos.z+1——首版取成碰撞盒最小角导致南墙/西墙网格与命中整体偏一个方块（用户实测报告，9.28 修复）。
 - `PanelFrame`（panelOrigin / uDir / vDir / nDir / faceYawDeg）+ `panelLocalToWorld(frame, u, v, n)`；地板公式退化为旧映射（`pos + (px/16, py/16, pz/16)`），零回归。
 - 面板局部 [px, pz, py]（px 沿 grid x、pz 沿 grid y、py = 面板高度 px）→ 世界 = `pos + P + (px/16)u + (pz/16)v + ((py−8)/16)n`。
 

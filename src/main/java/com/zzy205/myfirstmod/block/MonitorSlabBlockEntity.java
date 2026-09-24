@@ -86,9 +86,11 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
             case CEILING -> null; // 本阶段仅地板 + 贴墙
             case WALL -> switch (state.getValue(MonitorSlabBlock.FACING)) {
                 case NORTH -> new PanelFrame(new Vec3(0, 0, y), new Vec3(1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 0, -1), 0f);
-                case SOUTH -> new PanelFrame(new Vec3(0, 0, y), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 0, 1), 180f);
+                // 面板原点 = 面板局部 (mx=0, mz=0) 角在世界的位置：south/west 模型 x 轴翻转（worldX=16−mx / worldZ=16−mx），
+                // 原点在 pos.x+1 / pos.z+1，不是碰撞盒的最小角（踩过：网格/命中整体偏一个方块）
+                case SOUTH -> new PanelFrame(new Vec3(1, 0, y), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 0, 1), 180f);
                 case EAST -> new PanelFrame(new Vec3(y, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 1, 0), new Vec3(1, 0, 0), -90f);
-                default -> new PanelFrame(new Vec3(y, 0, 0), new Vec3(0, 0, -1), new Vec3(0, 1, 0), new Vec3(-1, 0, 0), 90f); // WEST
+                default -> new PanelFrame(new Vec3(y, 0, 1), new Vec3(0, 0, -1), new Vec3(0, 1, 0), new Vec3(-1, 0, 0), 90f); // WEST
             };
         };
     }
