@@ -9,6 +9,9 @@ import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.createmod.catnip.math.VoxelShaper;
+import net.createmod.catnip.placement.IPlacementHelper;
+import net.createmod.catnip.placement.PlacementHelpers;
+import net.createmod.catnip.placement.PlacementOffset;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -46,6 +49,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * 控制台方块 — 底座由 blockstate 静态模型渲染；踏板/操纵杆为可安装控件物品（pedal/joystick）。
@@ -77,6 +81,15 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             Shapes.or(Block.box(0, 0, 0, 16, 16, 8), Block.box(0, 0, 8, 16, 8, 16)),
             Direction.NORTH
     );
+
+    /** 拓展坞安装虚影助手 id：手持控制台方块物品对准已放置的控制台时，显示加装拓展坞后的 slab 半透明虚影
+     *  （同 engine core / 流体燃烧室的 catnip PlacementClient 虚影机制，见 {@link DeskFormPlacementHelper}） */
+    private static final int dockPlacementHelperId = PlacementHelpers.register(
+            new DeskFormPlacementHelper(stack -> stack.is(MyModBlocks.my_control_desk.get().asItem()), DOCKED));
+
+    /** 挡板安装虚影助手 id：手持 create:brass_casing 对准已放置的控制台时，显示加装挡板后的 3/4 楼梯半透明虚影 */
+    private static final int bafflePlacementHelperId = PlacementHelpers.register(
+            new DeskFormPlacementHelper(stack -> stack.is(AllBlocks.BRASS_CASING.get().asItem()), BAFFLED));
 
     // ── 控件安装位（北向基准 0..16 模型空间，随 FACING 旋转；供安装/拆除预览框与拆除判定使用） ──
     // 北侧空区 z0..8 分成左/中/右：左踏板 x11..16、操纵杆 x5..11、右踏板 x0..5（操作者面朝南，左=东=+X）
@@ -712,5 +725,66 @@ public class ControlDeskBlock extends BaseEntityBlock implements IWrenchable {
             case BAFFLE -> result.add(bafflePlaceBox(facing, pos));
         }
         return result;
+    }
+
+    // ================= 拓展坞 / 挡板安装虚影助手 =================
+
+    /**
+     * 控制台形态安装虚影助手（拓展坞 DOCKED / 挡板 BAFFLED 共用）：手持对应物品
+     * （控制台方块物品 → 拓展坞；create:brass_casing → 挡板）对准已放置的控制台时，
+     * 由 catnip {@code PlacementClient} 自动渲染<b>半透明呼吸虚影</b>（GhostBlocks）——
+     * 虚影显示安装后的形态（{@code formProperty}=true，保持 FACING），
+     * 与 engine core / 流体燃烧室的放置虚影同一机制（匹配手持物品 + 准星方块 → getOffset → GhostBlocks）；
+     * 右键安装仍走 {@link #useItemOn} 的 DOCK/BAFFLE 分支（本助手只负责虚影渲染，不介入放置）。
+     * 虚影位置 = 当前方块自身（拓展坞/挡板是"原地改装"成新形态，不放置新方块）。
+     * <p>参考来源：Create {@code PoleHelper} / catnip {@code IPlacementHelper}（引擎延长/燃烧室贴附助手同款机制）。
+     */
+    private static class DeskFormPlacementHelper implements IPlacementHelper {
+
+        private final Predicate<ItemStack> itemPredicate;
+        private final BooleanProperty formProperty;
+
+        DeskFormPlacementHelper(Predicate<ItemStack> itemPredicate, BooleanProperty formProperty) {
+            this.itemPredicate = itemPredicate;
+            this.formProperty = formProperty;
+        }
+
+        @Override
+        public Predicate<ItemStack> getItemPredicate() {
+            // 惰性求值：不能在方块类静态初始化时急切解引用 DeferredHolder（注册期间未绑定会 NPE）
+            return itemPredicate;
+        }
+
+        @Override
+        public Predicate<BlockState> getStatePredicate() {
+            return state -> state.getBlock() instanceof ControlDeskBlock;
+        }
+
+        @Override
+        public PlacementOffset getOffset(Player player, Level world, BlockState state, BlockPos pos, BlockHitResult ray) {
+            // 形态互斥：已装拓展坞 / 已装挡板 → 装不了，不显示虚影
+            if (state.getValue(DOCKED) || state.getValue(BAFFLED))
+                return PlacementOffset.fail();
+            // 北侧区域已被控件占用（PEDAL / JOYSTICK / JOYSTICK_3）或已装拓展坞 → 装不了，不显示虚影
+            // （与服务端 install(DOCK/BAFFLE) 的互斥判定一致；客户端 BE 状态经 update 包同步）
+            if (world.getBlockEntity(pos) instanceof ControlDeskBlockEntity desk
+                    && (desk.isInstalled(ControlDeskBlockEntity.ControlType.PEDAL)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.JOYSTICK_3)
+                    || desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK)))
+                return PlacementOffset.fail();
+            return PlacementOffset.success(pos);
+        }
+
+        @Override
+        public PlacementOffset getOffset(Player player, Level world, BlockState state, BlockPos pos,
+                                         BlockHitResult ray, ItemStack heldItem) {
+            // 覆写默认实现（默认 ghost state = 手持物品的 defaultBlockState）：
+            // ghost state = 安装后的形态（formProperty=true，保持 FACING），虚影才显示"扩展"出的部分
+            PlacementOffset offset = getOffset(player, world, state, pos, ray);
+            if (!offset.isSuccessful())
+                return offset;
+            return offset.withGhostState(state.setValue(formProperty, true));
+        }
     }
 }

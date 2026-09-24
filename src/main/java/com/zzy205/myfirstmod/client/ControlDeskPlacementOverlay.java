@@ -414,7 +414,10 @@ public class ControlDeskPlacementOverlay {
 
     /**
      * 手持控制台方块物品：显示拓展坞安装预览框（北向基准 0,0,0,16,8,8 = 桌体北侧整块空区，随 FACING 旋转）。
-     * 仅显示预览框 —— 无半透明 ghost 实物；已装拓展坞变红（不可重复安装）。
+     * 仅显示预览框 —— 无半透明 ghost 实物（虚影由 catnip PlacementClient 驱动，见 ControlDeskBlock 的
+     * DeskFormPlacementHelper）；已装拓展坞变红（不可重复安装）。
+     * 线框 = {@link ControlDeskBlock#dockPlaceBox}（modelToWorld 纯坐标，无 gridWorld 的 +0.06 抬高，
+     * 否则安装预览框会比实际放置盒高 ~1px；与拆除预览/服务端拆除判定共用同一 AABB）。
      */
     private static void showDockBox(Minecraft mc, BlockHitResult hit) {
         BlockPos pos = hit.getBlockPos();
@@ -423,11 +426,7 @@ public class ControlDeskPlacementOverlay {
         Direction facing = state.getValue(ControlDeskBlock.FACING);
         boolean installed = state.getValue(ControlDeskBlock.DOCKED) || state.getValue(ControlDeskBlock.BAFFLED);
 
-        Vec3 p0 = gridWorld(pos, 0, 0, 0, facing);
-        Vec3 p1 = gridWorld(pos, 16, 8, 8, facing);
-        AABB box = new AABB(
-                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
-                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+        AABB box = ControlDeskBlock.dockPlaceBox(facing, pos);
         Outliner.getInstance().showAABB("control-desk/box-dock/" + pos.toShortString(), box)
                 .colored(installed ? COLOR_INVALID : COLOR_VALID)
                 .lineWidth(1 / 16f);
@@ -435,7 +434,10 @@ public class ControlDeskPlacementOverlay {
 
     /**
      * 手持 create:brass_casing：显示挡板安装预览框（北向基准 0,0,0,16,16,8 = 桌体北侧整块全高区域，随 FACING 旋转）。
-     * 仅显示预览框 —— 无半透明 ghost 实物；与拓展坞互斥 + 已装挡板：变红（不可安装）。
+     * 仅显示预览框 —— 无半透明 ghost 实物（虚影由 catnip PlacementClient 驱动，见 ControlDeskBlock 的
+     * DeskFormPlacementHelper）；与拓展坞互斥 + 已装挡板：变红（不可安装）。
+     * 线框 = {@link ControlDeskBlock#bafflePlaceBox}（modelToWorld 纯坐标，无 gridWorld 的 +0.06 抬高，
+     * 否则安装预览框会比实际放置盒高 ~1px；与拆除预览/服务端拆除判定共用同一 AABB）。
      */
     private static void showBaffleBox(Minecraft mc, BlockHitResult hit) {
         BlockPos pos = hit.getBlockPos();
@@ -454,11 +456,7 @@ public class ControlDeskPlacementOverlay {
                     || desk.isInstalled(ControlDeskBlockEntity.ControlType.DOCK);
         }
 
-        Vec3 p0 = gridWorld(pos, 0, 0, 0, facing);
-        Vec3 p1 = gridWorld(pos, 16, 16, 8, facing);
-        AABB box = new AABB(
-                Math.min(p0.x, p1.x), Math.min(p0.y, p1.y), Math.min(p0.z, p1.z),
-                Math.max(p0.x, p1.x), Math.max(p0.y, p1.y), Math.max(p0.z, p1.z));
+        AABB box = ControlDeskBlock.bafflePlaceBox(facing, pos);
         Outliner.getInstance().showAABB("control-desk/box-baffle/" + pos.toShortString(), box)
                 .colored(docked || baffled || frontBlocked ? COLOR_INVALID : COLOR_VALID)
                 .lineWidth(1 / 16f);
