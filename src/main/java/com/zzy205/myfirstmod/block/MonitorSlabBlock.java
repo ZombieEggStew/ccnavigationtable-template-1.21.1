@@ -8,6 +8,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -214,8 +215,39 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
         return drops;
     }
 
+    /**
+     * 点击是否命中顶面（面板）。仅地板放置：面板 = 顶面，命中点 localY ≥ 面板高度（8/16）。
+     * 扳手右键旋转抑制（onWrenched）与整块拆除放行（onSneakWrenched）共用，单一来源。
+     */
+    private static boolean isPanelHit(BlockState state, UseOnContext context) {
+        if (state.getValue(FACE) != AttachFace.FLOOR) return false;
+        double localY = context.getClickLocation().y - context.getClickedPos().getY();
+        return localY >= MonitorSlabBlockEntity.PANEL_Y_PX / 16.0 - 0.01
+                && localY <= 16.0 / 16.0 + 0.01;
+    }
+
+    /**
+     * 扳手右键：顶面（面板）命中且已装模块/屏幕时<b>禁止旋转</b>（消费右键，放行给
+     * {@code MonitorSlabGridOverlay} 的模块交互——扳手右键模块会打开配置菜单，不能再同时旋转 FACING）；
+     * 其余情况走 {@link IWrenchable} 默认（Y 轴面旋转水平朝向）。
+     */
+    @Override
+    public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+        if (isPanelHit(state, context)) {
+            if (context.getLevel().getBlockEntity(context.getClickedPos()) instanceof MonitorSlabBlockEntity slab
+                    && slab.hasContent()) {
+                return InteractionResult.sidedSuccess(context.getLevel().isClientSide);
+            }
+        }
+        return IWrenchable.super.onWrenched(state, context);
+    }
+
     /** 扳手潜行右键：拆除并掉落一个带完整 GridState 配置的 monitor_slab 物品（模块不单独掉落，对齐 MonitorBlock）。
-     *  仅命中侧面/底面时整块拆除；命中顶面（面板）时放行，交给 MonitorSlabGridOverlay 拆单个模块/屏幕（对齐 Monitor 的底座语义）。 */
+     *  <ul>
+     *   <li>命中顶面（面板）→ 放行，交给 MonitorSlabGridOverlay 拆单个模块/屏幕（对齐 Monitor 的底座语义）；</li>
+     *   <li>已装模块/屏幕 → 禁止整块拆除，提示先拆模块（对齐 ControlDeskBlock 的 desk_remove_blocked）；</li>
+     *   <li>光板（无内容）→ 整块拆除。</li>
+     * </ul> */
     @Override
     public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
         Level level = context.getLevel();
@@ -223,15 +255,20 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
         Player player = context.getPlayer();
 
         // 顶面（面板）命中 → 不整块拆除，放行给 MonitorSlabGridOverlay 的模块/屏幕拆除 payload 处理
-        double localY = context.getClickLocation().y - pos.getY();
-        boolean onPanel = state.getValue(FACE) == AttachFace.FLOOR
-                && localY >= MonitorSlabBlockEntity.PANEL_Y_PX / 16.0 - 0.01
-                && localY <= 16.0 / 16.0 + 0.01;
-        if (onPanel) {
+        if (isPanelHit(state, context)) {
             return InteractionResult.sidedSuccess(level.isClientSide);
         }
 
         if (!(level instanceof ServerLevel serverLevel)) {
+            return InteractionResult.SUCCESS;
+        }
+
+        // 已装模块/屏幕：禁止整块拆除（服务端提示，对齐 ControlDeskBlock）
+        if (level.getBlockEntity(pos) instanceof MonitorSlabBlockEntity slab && slab.hasContent()) {
+            if (player != null) {
+                player.displayClientMessage(
+                        Component.translatable("gui.ccpe.monitor_slab.remove_blocked"), true);
+            }
             return InteractionResult.SUCCESS;
         }
 

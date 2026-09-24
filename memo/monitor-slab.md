@@ -108,12 +108,12 @@
 | 文件 | 说明 |
 |---|---|
 | `block/MonitorSlabBlockEntity.java`（新） | MonitorGridHost 14×14 + 面板几何常量 + NBT 四路径 + slabChanged 同步 |
-| `block/MonitorSlabBlock.java`（改） | 父类换 BaseEntityBlock + EntityBlock + getDrops（模块掉落）+ onSneakWrenched（顶面放行/侧面整拆保数据）+ useItemOn（模块物品消费右键） |
+| `block/MonitorSlabBlock.java`（改） | 父类换 BaseEntityBlock + EntityBlock + getDrops（模块掉落）+ onSneakWrenched（顶面放行拆单模块/已装内容禁止整拆并提示「gui.ccpe.monitor_slab.remove_blocked」对齐 ControlDeskBlock/侧面底面光板才整拆保数据）+ useItemOn（模块物品消费右键）+ **onWrenched（顶面命中且已装内容 → 禁止旋转，放行给 overlay；`isPanelHit` 与 onSneakWrenched 共用）** |
 | `block/MyModBlockEntities.java`（改） | 注册 monitor_slab_entity |
 | `client/MonitorSlabClientRegistry.java`（新） | 已加载 slab 坐标集合 |
 | `client/MonitorSlabHitDetector.java`（新） | 射线 vs 水平面板平面（FLOOR）+ 背面剔除 + 排除自身遮挡 |
 | `client/MonitorSlabGridOverlay.java`（新） | 网格/预览/放置/按压/钮子/旋钮/屏幕/拆除/配置菜单 |
-| `block/MonitorSlabRenderer.java`（新） | BER：模块（button +90°/toggle·knob 平放）+ 9 宫格（水平 ScreenPlane）+ 表面装饰 |
+| `block/MonitorSlabRenderer.java`（新） | BER：模块（button +90°/toggle·knob 平放，offsetZ 不映射高度）+ 9 宫格（水平 ScreenPlane）+ 表面装饰 |
 | `block/Screen9GridRenderer.java`（改） | ScreenPlane.horizontal() 水平面支持（唯一动共享类） |
 | `block/ModuleSurfaceRenderer.java`（改） | 加 KnobDisplaySource.SLAB |
 | `CCPeripheralExtenderClient.java`（改） | 注册 MonitorSlabRenderer + MonitorSlabGridOverlay |

@@ -12,6 +12,7 @@
   "block.ccpe.transmission_peripheral": "Electronic Transmission",
   "block.ccpe.my_monitor": "Monitor",
   "block.ccpe.monitor_slab": "Monitor Slab",
+  "gui.ccpe.monitor_slab.remove_blocked": "Remove installed modules from the slab surface first",
   "block.ccpe.my_control_desk": "Control Desk",
   "block.ccpe.aero_bearing": "Aero Bearing",
   "block.ccpe.servo_bearing": "Servo Bearing",
