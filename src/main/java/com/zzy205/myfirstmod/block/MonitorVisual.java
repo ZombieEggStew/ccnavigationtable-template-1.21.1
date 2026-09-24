@@ -188,6 +188,10 @@ public class MonitorVisual extends AbstractBlockEntityVisual<MonitorBlockEntity>
             instance.rotateAround(new Quaternionf().rotateY((float) Math.toRadians(yaw)),
                     MonitorBlock.NECK_X / 16f, 0f, MonitorBlock.NECK_Z / 16f);
         }
+        // caseDrop 须在 pitch 之前调用（顶点先 pitch 后 drop），保证绕模型铰链旋转后再平移，与 BER/描边一致
+        if (caseDrop) {
+            instance.translate(0f, -MonitorBlock.HANGING_CASE_DROP / 16f, 0f);
+        }
         if (pitch != 0f) {
             instance.rotateAround(new Quaternionf().rotateX((float) Math.toRadians(pitch)),
                     0f, MonitorBlock.HINGE_Y / 16f, MonitorBlock.HINGE_Z / 16f);
@@ -195,9 +199,6 @@ public class MonitorVisual extends AbstractBlockEntityVisual<MonitorBlockEntity>
         if (hangingFlip) {
             instance.rotateAround(new Quaternionf().rotateX((float) Math.toRadians(180f)),
                     0.5f, 0.5f, 0.5f);
-        }
-        if (caseDrop) {
-            instance.translate(0f, -MonitorBlock.HANGING_CASE_DROP / 16f, 0f);
         }
     }
 

@@ -246,11 +246,11 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
 
     /**
      * 把「块局部空间」的射线反变换回「模型空间」（平铺、朝北）。
-     * 逆变换顺序与渲染正向相反：facing逆 → offset逆 → yaw逆 → pitch逆 → hanging case下移逆，旋转取负。
+     * 逆变换顺序与渲染正向相反：facing逆 → offset逆 → yaw逆 → hanging case下移逆 → pitch逆，旋转取负。
      *
      * @param origin  块局部坐标（world - blockPos），长度 3 数组，就地修改
      * @param dir     视线方向，长度 3 数组，就地修改
-     * @param hanging 挂顶标志：case 渲染整体下移 {@link #HANGING_CASE_DROP}，此处补偿回来（渲染链最内层 → 逆变换最后一步）
+     * @param hanging 挂顶标志：渲染为「先 pitch 后 drop」，故逆变换在 yaw 逆之后、pitch 逆之前补偿下移
      */
     public static void inverseToModel(double[] origin, double[] dir, Direction facing, float yaw, float pitch, int offset,
                                       boolean hanging) {
@@ -263,6 +263,10 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
         rotateYPoint(origin, NECK_X / 16.0, NECK_Z / 16.0, Math.toRadians(-yaw));
         rotateYDir(dir, Math.toRadians(-yaw));
 
+        if (hanging) {
+            origin[1] += HANGING_CASE_DROP / 16.0;
+        }
+
         double pr = Math.toRadians(pitch);
         double cos = Math.cos(pr), sin = Math.sin(pr);
         double hingeY = HINGE_Y / 16.0, hingeZ = HINGE_Z / 16.0;
@@ -272,27 +276,23 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
         double dy = dir[1], dz = dir[2];
         dir[1] = dy * cos + dz * sin;
         dir[2] = -dy * sin + dz * cos;
-
-        if (hanging) {
-            origin[1] += HANGING_CASE_DROP / 16.0;
-        }
     }
 
     /**
      * 把「模型空间」点（平铺、朝北，块单位）正向变换到「块局部空间」（不含 facing 与方块偏移）。
-     * 顺序：hanging case下移 → pitch → yaw → offset（渲染 PoseStack 为 facing→offset→yaw→pitch→下移，此为其互逆的点变换）。
+     * 顺序：pitch → hanging case下移 → yaw → offset（渲染 PoseStack 为 facing→offset→yaw→drop→pitch，此为其互逆的点变换）。
      */
     public static void transformPointToLocal(double[] point, float yaw, float pitch, int offset, boolean hanging) {
-        if (hanging) {
-            point[1] -= HANGING_CASE_DROP / 16.0;
-        }
-
         double pr = Math.toRadians(pitch);
         double cos = Math.cos(pr), sin = Math.sin(pr);
         double hingeY = HINGE_Y / 16.0, hingeZ = HINGE_Z / 16.0;
         double ly = point[1] - hingeY, lz = point[2] - hingeZ;
         point[1] = hingeY + ly * cos - lz * sin;
         point[2] = hingeZ + ly * sin + lz * cos;
+
+        if (hanging) {
+            point[1] -= HANGING_CASE_DROP / 16.0;
+        }
 
         rotateYPoint(point, NECK_X / 16.0, NECK_Z / 16.0, Math.toRadians(yaw));
 
