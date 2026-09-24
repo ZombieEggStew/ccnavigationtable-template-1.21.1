@@ -104,12 +104,23 @@
   （初始 prev 与逐帧 raw 同时取反 → 解缠绕 delta 整体变号，跨象限仍正确）。
 - **验证**：gradlew classes 编译通过；待用户进游戏复验（天花板拖拽方向与地板一致，地板/贴墙不回归）。
 
+### 3. 天花板 slab 放置方向绕 Y 转 180°（用户拍板，2026-09-24）
+
+- **需求**：放置附着在天花板上的 slab 时，FACING 绕 Y 转 180°——原天花板放置方向与用户需求相反。
+- **改动**：`MonitorSlabBlock.getStateForPlacement` —— 地板保持 `facing = 玩家水平朝向反向`
+  （`getHorizontalDirection().getOpposite()`，已验证语义不变），**天花板改为 `facing = 玩家水平朝向`
+  （去掉 getOpposite，即与地板差 180°）**；墙面仍 = 点击面。类注释同步更新。
+- **影响**：天花板 slab 的 FACING 状态值随放置方向翻转 180° → 表面内容（模块标签 / 屏幕文字）的
+  相对玩家朝向随之翻转，与地板语义对称；网格 / 命中 / 放置坐标不受影响（天花板面板帧不依赖 FACING）。
+- **验证**：gradlew classes 编译通过；待用户进游戏复验（天花板 slab 放置后内容朝向符合需求，地板不回归）。
+
 ### 改动文件
 
 | 文件 | 说明 |
 |---|---|
 | `block/MonitorSlabRenderer.java`（改） | 天花板模块 `Rx(180)` 翻转绕足迹中心（修复 N 偏 1px） |
 | `client/MonitorSlabGridOverlay.java`（改） | 旋钮拖拽 rawAngle 按天花板取反（`knobDragFlip`） |
+| `block/MonitorSlabBlock.java`（改） | 天花板放置 FACING = 玩家水平朝向（与地板差 180°） |
 
 ---
 

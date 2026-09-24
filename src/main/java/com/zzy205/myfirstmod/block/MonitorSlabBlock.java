@@ -61,7 +61,8 @@ import java.util.Map;
  *   <li>地板 / 天花板形态（{@code FACE}=FLOOR/CEILING）：{@code FACING} 随玩家水平朝向，四向可旋转（4×2 态）；</li>
  *   <li>墙面形态（{@code FACE}=WALL）：{@code FACING} = 点击面，每个方向固定一个 state（4 态）。</li>
  * </ul>
- * 共 12 态。放置时 {@code FACE} = 点击面、{@code FACING} = 玩家水平朝向反向（地板/天花板）或点击面（墙面）。
+ * 共 12 态。放置时 {@code FACE} = 点击面；{@code FACING} = 地板 = 玩家水平朝向反向 / 天花板 = 玩家水平朝向
+ * （绕 Y 与地板差 180°，用户 2026-09-24 拍板）/ 墙面 = 点击面。
  * <p>
  * <b>可悬空放置</b>：无稳固检测（已删 {@code canSurvive} / {@code neighborChanged} / 支撑方向换算），
  * 支撑方块破坏/不存在时不会掉落（对齐用户要求，区别于 FmcBlock / PitotTubeBlock 等贴附式方块）。
@@ -143,7 +144,11 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
         AttachFace face = clickedFace == Direction.DOWN ? AttachFace.CEILING
                 : clickedFace == Direction.UP ? AttachFace.FLOOR
                 : AttachFace.WALL;
-        Direction facing = face == AttachFace.WALL ? clickedFace : context.getHorizontalDirection().getOpposite();
+        // 天花板：FACING = 玩家水平朝向（与地板差 180°；用户 2026-09-24 拍板：天花板放置方向绕 Y 转 180°，
+        // 否则天花板 slab 的内容朝向与需求相反）。地板保持原语义（玩家朝向反向），墙面 = 点击面。
+        Direction facing = face == AttachFace.WALL ? clickedFace
+                : face == AttachFace.CEILING ? context.getHorizontalDirection()
+                : context.getHorizontalDirection().getOpposite();
 
         return defaultBlockState()
                 .setValue(FACE, face)
