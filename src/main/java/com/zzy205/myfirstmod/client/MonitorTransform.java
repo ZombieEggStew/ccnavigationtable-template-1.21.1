@@ -18,6 +18,14 @@ public final class MonitorTransform {
 
     private MonitorTransform() {}
 
+    /** hanging：绕方块中心 X 轴 180°（模型空间最内层，仅底座/支架渲染路径使用；屏幕主体不翻转）。 */
+    public static void applyHanging(PoseStack pose) {
+        float c = MonitorBlock.ROT_ORIGIN / 16f;
+        pose.translate(c, c, c);
+        pose.mulPose(Axis.XP.rotationDegrees(180f));
+        pose.translate(-c, -c, -c);
+    }
+
     /** facing：绕方块中心 Y 轴（外层，90° 步进朝向）。 */
     public static void applyFacing(PoseStack pose, Direction facing) {
         float c = MonitorBlock.ROT_ORIGIN / 16f;

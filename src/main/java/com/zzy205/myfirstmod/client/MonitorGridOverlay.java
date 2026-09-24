@@ -28,6 +28,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
@@ -169,14 +170,18 @@ public class MonitorGridOverlay {
         // 缓存本帧命中结果供 MonitorUseInterceptor 读取（tick 内姿态滞后一帧，不能现算）
         lastFrameScreenHovered = hit != null;
 
-        // ── 底座命中：屏幕未命中时，退回原版 pick 判断准心是否在 Monitor 底座（碰撞体 y 0..2/16）上 ──
+        // ── 底座命中：屏幕未命中时，退回原版 pick 判断准心是否在 Monitor 底座（落地 y 0..2/16；挂顶 y 14..16/16）上 ──
         BlockPos basePos = null;
         MonitorBlockEntity baseBE = null;
         if (hit == null && mc.hitResult instanceof BlockHitResult bhr) {
             BlockPos p = bhr.getBlockPos();
-            if (level.getBlockState(p).getBlock() instanceof MonitorBlock) {
+            BlockState blockState = level.getBlockState(p);
+            if (blockState.getBlock() instanceof MonitorBlock) {
                 double localY = bhr.getLocation().y - p.getY();
-                if (localY >= -0.01 && localY <= 2.0 / 16.0 + 0.01) {
+                boolean onBase = blockState.getValue(MonitorBlock.HANGING)
+                        ? localY >= 14.0 / 16.0 - 0.01 && localY <= 16.0 / 16.0 + 0.01
+                        : localY >= -0.01 && localY <= 2.0 / 16.0 + 0.01;
+                if (onBase) {
                     basePos = p;
                     baseBE = level.getBlockEntity(p) instanceof MonitorBlockEntity m ? m : null;
                 }

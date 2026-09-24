@@ -59,11 +59,18 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         MonitorTransform.applyOffset(poseStack, be.getOffset());
         MonitorTransform.applyYaw(poseStack, be.getYawAngle());
 
-        // bearing：随 facing + offset + yaw，不随 pitch
+        // bearing：随 facing + offset + yaw，不随 pitch；挂顶时绕方块中心 X 轴 180° 翻转
+        // （底座/支架颠倒贴天花板，屏幕主体不动，对齐 blockstate 静态底座的 x:180）。
+        // 翻转是模型空间最内层变换（先于 yaw/offset/facing 作用于顶点），保证 bearing 与 case 位移一致。
         if (!shellInstanced) {
             BakedModel bearingModel = MonitorPreloadedModels.getMonitorBearing();
             if (bearingModel != null) {
+                poseStack.pushPose();
+                if (be.getBlockState().getValue(MonitorBlock.HANGING)) {
+                    MonitorTransform.applyHanging(poseStack);
+                }
                 Screen9GridRenderer.renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), bearingModel, light, overlay);
+                poseStack.popPose();
             }
         }
 

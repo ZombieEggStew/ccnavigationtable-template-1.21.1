@@ -30,6 +30,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -50,6 +51,8 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
 
     public static final MapCodec<MonitorBlock> CODEC = simpleCodec(MonitorBlock::new);
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
+    /** 挂顶标志：true = 底座/支架倒挂贴天花板（屏幕主体保持正立，对齐 simulated:altitude_sensor 模式） */
+    public static final BooleanProperty HANGING = BlockStateProperties.HANGING;
 
     /** 屏幕表面在模型空间的位置（case_exterior 前脸: box(1,3,4,15,15,9)） */
     public static final float SCREEN_Z = 4f;
@@ -78,11 +81,26 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
     private static final VoxelShape BASE_SHAPE = Block.box(0, 0, 0, 16, 2, 16);
     private static final VoxelShaper BASE_SHAPER = VoxelShaper.forHorizontal(BASE_SHAPE, Direction.NORTH);
 
+    /** 挂顶底座碰撞体（静态，贴天花板：y14..16） */
+    private static final VoxelShape HANGING_BASE_SHAPE = Block.box(0, 14, 0, 16, 16, 16);
+    private static final VoxelShaper HANGING_BASE_SHAPER = VoxelShaper.forHorizontal(HANGING_BASE_SHAPE, Direction.NORTH);
+
     /** 选择框（北向基准）：base + bracket_exterior + case_exterior + box_back */
     private static final VoxelShaper SHAPE = VoxelShaper.forHorizontal(
             Shapes.or(
                     Block.box(0, 0, 0, 16, 2, 16),
                     Block.box(0, 2, 6, 16, 11, 10),
+                    Block.box(1, 3, 3, 15, 15, 9),
+                    Block.box(3, 5, 9, 13, 13, 12)
+            ),
+            Direction.NORTH
+    );
+
+    /** 挂顶选择框（北向基准）：底座+支架 y 镜像翻转，屏幕主体（case/box_back）不变 */
+    private static final VoxelShaper HANGING_SHAPE = VoxelShaper.forHorizontal(
+            Shapes.or(
+                    Block.box(0, 14, 0, 16, 16, 16),
+                    Block.box(0, 5, 6, 16, 14, 10),
                     Block.box(1, 3, 3, 15, 15, 9),
                     Block.box(3, 5, 9, 13, 13, 12)
             ),
@@ -95,12 +113,16 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING);
+        builder.add(FACING, HANGING);
     }
 
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        return this.defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+        // 点击方块底面（天花板）→ 挂顶放置；否则落地放置。facing 语义不变（屏幕主体不翻转，仍朝玩家）。
+        boolean hanging = context.getClickedFace() == Direction.DOWN;
+        return this.defaultBlockState()
+                .setValue(FACING, context.getHorizontalDirection().getOpposite())
+                .setValue(HANGING, hanging);
     }
 
     @Override public RenderShape getRenderShape(BlockState state) { return RenderShape.MODEL; }
@@ -123,13 +145,13 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext ctx) {
-        return SHAPE.get(state.getValue(FACING));
+        return (state.getValue(HANGING) ? HANGING_SHAPE : SHAPE).get(state.getValue(FACING));
     }
 
     @Override
     public VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext ctx) {
-        // 可动 case 不参与碰撞，实体碰撞仅由静态底座承担
-        return BASE_SHAPER.get(state.getValue(FACING));
+        // 可动 case 不参与碰撞，实体碰撞仅由静态底座承担（挂顶时底座在顶部 y14..16）
+        return (state.getValue(HANGING) ? HANGING_BASE_SHAPER : BASE_SHAPER).get(state.getValue(FACING));
     }
 
     @Nullable @Override
@@ -153,10 +175,12 @@ public class MonitorBlock extends BaseEntityBlock implements IWrenchable {
         BlockPos pos = context.getClickedPos();
         Player player = context.getPlayer();
 
-        // 仅当命中底座（碰撞体 y 0..2/16）时拆卸整台 Monitor；
+        // 仅当命中底座（落地 y 0..2/16；挂顶 y 14..16/16）时拆卸整台 Monitor；
         // 命中可动面板时放行，交给 MonitorGridOverlay 的模块/屏幕拆除 payload 处理。
         double localY = context.getClickLocation().y - pos.getY();
-        boolean onBase = localY >= -0.01 && localY <= 2.0 / 16.0 + 0.01;
+        boolean onBase = state.getValue(HANGING)
+                ? localY >= 14.0 / 16.0 - 0.01 && localY <= 16.0 / 16.0 + 0.01
+                : localY >= -0.01 && localY <= 2.0 / 16.0 + 0.01;
         if (!onBase) {
             return InteractionResult.sidedSuccess(level.isClientSide);
         }
