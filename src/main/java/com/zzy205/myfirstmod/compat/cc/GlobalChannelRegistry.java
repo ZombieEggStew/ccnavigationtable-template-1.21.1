@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.compat.cc;
 
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.block.MonitorSlabBlockEntity;
 import com.zzy205.myfirstmod.block.PeripheralExtenderBlockEntity;
 import com.zzy205.myfirstmod.channel.ChannelRegistry;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -33,6 +34,9 @@ public final class GlobalChannelRegistry {
             } else if (be instanceof MonitorBlockEntity monitor) {
                 try { monitor.refreshOccupiedChannels(); }
                 catch (Exception e) { LOGGER.debug("Failed to refresh monitor channel snapshot", e); }
+            } else if (be instanceof MonitorSlabBlockEntity slab) {
+                try { slab.refreshOccupiedChannels(); }
+                catch (Exception e) { LOGGER.debug("Failed to refresh monitor slab channel snapshot", e); }
             }
         }
     }

@@ -276,7 +276,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
 
         SuperByteBuffer handle = placedBuffer(MyModPartialModels.CONTROL_DESK_THROTTLE_HANDLE, state, facing,
                 be.getThrottlePlaceX(), be.getThrottlePlaceZ(),
-                ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM, backRot);
+                ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, backRot);
         if (smooth != 0f) {
             handle.translate(smooth, 0f, 0f);
         }
@@ -301,7 +301,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
                                            PoseStack ms, MultiBufferSource bufferSource, int light, int backRot) {
         SuperByteBuffer buffer = placedBuffer(model, state, facing,
                 be.getThrottlePlaceX(), be.getThrottlePlaceZ(),
-                ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM, backRot);
+                ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, backRot);
         buffer.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 

@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
+import com.zzy205.myfirstmod.client.MonitorSlabGridOverlay;
 import com.zzy205.myfirstmod.monitor.ButtonLabel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -47,6 +48,16 @@ public final class ModuleSurfaceRenderer {
         }
         @Override public int hoveredModuleId(BlockPos pos) {
             return Monitor2GridOverlay.getHoveredKnobModuleId(pos);
+        }
+    };
+
+    /** monitor_slab 宿主（MonitorSlabGridOverlay）。 */
+    public static final KnobDisplaySource SLAB = new KnobDisplaySource() {
+        @Override public Float activeAngle(BlockPos pos, int moduleId) {
+            return MonitorSlabGridOverlay.getActiveKnobAngle(pos, moduleId);
+        }
+        @Override public int hoveredModuleId(BlockPos pos) {
+            return MonitorSlabGridOverlay.getHoveredKnobModuleId(pos);
         }
     };
 

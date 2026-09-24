@@ -188,6 +188,14 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 板式监视器（monitor_slab）：贴附式台阶状方块（slab 形状，表面后续放置 Monitor 模块），blockstate 结构参考 create:stock_link（FACE + 水平 FACING 共 12 态：地板/天花板四向可旋转、墙面每方向固定一态，实现照抄 FmcBlock 模式），选择框/音效照抄 quick_fill_fuel_vault（SoundType.COPPER），见 MonitorSlabBlock；当前纯放置逻辑，无方块实体 */
+    public static final DeferredBlock<MonitorSlabBlock> monitor_slab =
+            registerBlocks("monitor_slab", () -> new MonitorSlabBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.COPPER).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     /** 冷却气道（cooling_air_duct）：6 面贴附 × 每面 2 旋转 = 12 态纯静态方块（无 BE，见 CoolingAirDuctBlock）；纯散热模块（计入 K_DUCT，装 ≥1 个解锁 setCooling 风门；混合比拉稀权已改由流体燃烧室门控）；音效对齐发动机核心（SoundType.NETHERITE_BLOCK） */
     public static final DeferredBlock<CoolingAirDuctBlock> cooling_air_duct =
             registerBlocks("cooling_air_duct", () -> new CoolingAirDuctBlock(BlockBehaviour.Properties.of().

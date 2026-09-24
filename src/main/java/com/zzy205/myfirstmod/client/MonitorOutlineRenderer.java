@@ -45,6 +45,8 @@ public final class MonitorOutlineRenderer {
 
         event.setCanceled(true);
 
+        boolean hanging = state.getValue(MonitorBlock.HANGING);
+
         PoseStack poseStack = event.getPoseStack();
         Vec3 camera = event.getCamera().getPosition();
         poseStack.pushPose();
@@ -53,8 +55,12 @@ public final class MonitorOutlineRenderer {
 
         VertexConsumer lines = event.getMultiBufferSource().getBuffer(RenderType.lines());
 
-        // 底座：固定，不随 yaw/pitch
-        drawBox(poseStack.last(), lines, 0f, 0f, 0f, 1f, 2f / 16f, 1f, 0f);
+        // 底座：固定，不随 yaw/pitch（挂顶时在顶部 y14..16）
+        if (hanging) {
+            drawBox(poseStack.last(), lines, 0f, 14f / 16f, 0f, 1f, 1f, 1f, 0f);
+        } else {
+            drawBox(poseStack.last(), lines, 0f, 0f, 0f, 1f, 2f / 16f, 1f, 0f);
+        }
 
         // bearing + case：都随 offset + yaw；case 额外随 pitch
         poseStack.pushPose();
@@ -62,11 +68,24 @@ public final class MonitorOutlineRenderer {
         MonitorTransform.applyYaw(poseStack, yaw);
         PoseStack.Pose yawedPose = poseStack.last();
 
-        // bearing（不随 pitch）
-        drawBox(yawedPose, lines, 0f, 2f / 16f, 6f / 16f, 1f, 11f / 16f, 10f / 16f, 0f);
-        // case（随 pitch）
-        drawBox(yawedPose, lines, 1f / 16f, 3f / 16f, 4f / 16f,
-                15f / 16f, 15f / 16f, 9f / 16f, pitch);
+        // bearing（不随 pitch）：挂顶时 y 镜像（y2..11 → y5..14），屏幕主体不变
+        if (hanging) {
+            drawBox(yawedPose, lines, 0f, 5f / 16f, 6f / 16f, 1f, 14f / 16f, 10f / 16f, 0f);
+        } else {
+            drawBox(yawedPose, lines, 0f, 2f / 16f, 6f / 16f, 1f, 11f / 16f, 10f / 16f, 0f);
+        }
+        // case（随 pitch）：挂顶时先绕模型铰链 pitch、再整体下移（与渲染链一致，避免与挂顶底座重叠）
+        if (hanging) {
+            poseStack.pushPose();
+            poseStack.translate(0f, -MonitorBlock.HANGING_CASE_DROP / 16f, 0f);
+            PoseStack.Pose droppedPose = poseStack.last();
+            drawBox(droppedPose, lines, 1f / 16f, 3f / 16f, 4f / 16f,
+                    15f / 16f, 15f / 16f, 9f / 16f, pitch);
+            poseStack.popPose();
+        } else {
+            drawBox(yawedPose, lines, 1f / 16f, 3f / 16f, 4f / 16f,
+                    15f / 16f, 15f / 16f, 9f / 16f, pitch);
+        }
 
         poseStack.popPose();
         poseStack.popPose();

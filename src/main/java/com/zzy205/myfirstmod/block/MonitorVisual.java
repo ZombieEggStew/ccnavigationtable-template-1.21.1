@@ -100,9 +100,10 @@ public class MonitorVisual extends AbstractBlockEntityVisual<MonitorBlockEntity>
 
         this.bearing.setIdentityTransform();
         this.shell.setIdentityTransform();
-        // bearing 不随 pitch，case 叠加 pitch
-        this.applyShell(this.bearing, facing, yaw, offset, 0f);
-        this.applyShell(this.shell, facing, yaw, offset, pitch);
+        // bearing 不随 pitch，case 叠加 pitch；挂顶时仅 bearing 翻转（底座/支架颠倒，屏幕主体不动）
+        this.applyShell(this.bearing, facing, yaw, offset, 0f, state.getValue(MonitorBlock.HANGING), false);
+        // case 挂顶时整体下移（pitch 之后最内层），与 BER 的 applyHangingCaseDrop 同链
+        this.applyShell(this.shell, facing, yaw, offset, pitch, false, state.getValue(MonitorBlock.HANGING));
         this.bearing.setChanged();
         this.shell.setChanged();
 
@@ -148,7 +149,7 @@ public class MonitorVisual extends AbstractBlockEntityVisual<MonitorBlockEntity>
 
             // 底座
             mv.base.setIdentityTransform();
-            this.applyShell(mv.base, facing, yaw, offset, pitch);
+            this.applyShell(mv.base, facing, yaw, offset, pitch, false, state.getValue(MonitorBlock.HANGING));
             mv.base.translate(px, py, pz);
             if (bhv.usePressDepth()) mv.base.translate(0f, 0f, PRESS_DEPTH * next / 16f);
             this.applyInitialRotation(mv.base, mod.type());
@@ -156,7 +157,7 @@ public class MonitorVisual extends AbstractBlockEntityVisual<MonitorBlockEntity>
 
             // 额外部件：底座变换 + 部件动画（与 ModuleRenderBehavior.renderExtra 一致）
             mv.extra.setIdentityTransform();
-            this.applyShell(mv.extra, facing, yaw, offset, pitch);
+            this.applyShell(mv.extra, facing, yaw, offset, pitch, false, state.getValue(MonitorBlock.HANGING));
             mv.extra.translate(px, py, pz);
             if (bhv.usePressDepth()) mv.extra.translate(0f, 0f, PRESS_DEPTH * next / 16f);
             this.applyInitialRotation(mv.extra, mod.type());
@@ -173,8 +174,11 @@ public class MonitorVisual extends AbstractBlockEntityVisual<MonitorBlockEntity>
         }
     }
 
-    /** 平移到位 + facing → offset → yaw → pitch（与 MonitorTransform 的 PoseStack 顺序一致，后调为内层先作用于顶点）。 */
-    private void applyShell(TransformedInstance instance, Direction facing, float yaw, int offset, float pitch) {
+    /** 平移到位 + facing → offset → yaw → pitch（与 MonitorTransform 的 PoseStack 顺序一致，后调为内层先作用于顶点）。
+     *  hangingFlip = 挂顶翻转（仅 bearing）：模型空间最内层（先于 yaw/offset/facing 作用于顶点），与 BER 的 applyHanging 同链。
+     *  caseDrop = 挂顶 case 下移（仅 shell/模块）：pitch 之后的最内层，与 BER 的 applyHangingCaseDrop 同链。 */
+    private void applyShell(TransformedInstance instance, Direction facing, float yaw, int offset, float pitch,
+                            boolean hangingFlip, boolean caseDrop) {
         instance.translate(this.getVisualPosition());
         instance.rotateCenteredDegrees(-facing.getOpposite().toYRot(), Direction.UP);
         if (offset != 0) {
@@ -184,9 +188,17 @@ public class MonitorVisual extends AbstractBlockEntityVisual<MonitorBlockEntity>
             instance.rotateAround(new Quaternionf().rotateY((float) Math.toRadians(yaw)),
                     MonitorBlock.NECK_X / 16f, 0f, MonitorBlock.NECK_Z / 16f);
         }
+        // caseDrop 须在 pitch 之前调用（顶点先 pitch 后 drop），保证绕模型铰链旋转后再平移，与 BER/描边一致
+        if (caseDrop) {
+            instance.translate(0f, -MonitorBlock.HANGING_CASE_DROP / 16f, 0f);
+        }
         if (pitch != 0f) {
             instance.rotateAround(new Quaternionf().rotateX((float) Math.toRadians(pitch)),
                     0f, MonitorBlock.HINGE_Y / 16f, MonitorBlock.HINGE_Z / 16f);
+        }
+        if (hangingFlip) {
+            instance.rotateAround(new Quaternionf().rotateX((float) Math.toRadians(180f)),
+                    0.5f, 0.5f, 0.5f);
         }
     }
 

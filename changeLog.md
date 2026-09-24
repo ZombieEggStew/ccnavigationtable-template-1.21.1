@@ -113,4 +113,10 @@
 
 - engine.getFluidTanks() now mainThread = false
 
+1.1.6
+- Fixed the control desk throttle clipping through the desk surface
 
+- Monitors can now be hung upside-down from ceilings : only the base and bearing flip, while the screen body (case) stays upright —
+  hit-testing, interaction, config menu and removal all keep their ground behavior.
+
+- Added the Monitor Slab, a step-shaped monitor block with a 14×14 surface grid. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/monitor/monitor-slab/

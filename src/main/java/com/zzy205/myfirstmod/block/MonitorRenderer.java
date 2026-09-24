@@ -59,16 +59,27 @@ public class MonitorRenderer implements BlockEntityRenderer<MonitorBlockEntity> 
         MonitorTransform.applyOffset(poseStack, be.getOffset());
         MonitorTransform.applyYaw(poseStack, be.getYawAngle());
 
-        // bearing：随 facing + offset + yaw，不随 pitch
+        // bearing：随 facing + offset + yaw，不随 pitch；挂顶时绕方块中心 X 轴 180° 翻转
+        // （底座/支架颠倒贴天花板，屏幕主体不动，对齐 blockstate 静态底座的 x:180）。
+        // 翻转是模型空间最内层变换（先于 yaw/offset/facing 作用于顶点），保证 bearing 与 case 位移一致。
         if (!shellInstanced) {
             BakedModel bearingModel = MonitorPreloadedModels.getMonitorBearing();
             if (bearingModel != null) {
+                poseStack.pushPose();
+                if (be.getBlockState().getValue(MonitorBlock.HANGING)) {
+                    MonitorTransform.applyHanging(poseStack);
+                }
                 Screen9GridRenderer.renderModel(poseStack, buffer.getBuffer(Sheets.solidBlockSheet()), bearingModel, light, overlay);
+                poseStack.popPose();
             }
         }
 
         // case 与所有屏幕内容：随 facing + offset + yaw + pitch。
-        // case 模型带 render_type=cutout（前脸有屏幕开孔），必须用 cutout 片，否则背景/屏幕文字被不透明前脸遮挡。
+        // 挂顶时 case 整体下移：先 drop 后 pitch（顶点先 pitch 后 drop），保证绕模型铰链旋转后再平移，
+        // 与描边（MonitorOutlineRenderer）和命中逆变换（inverseToModel）一致；初始位置（pitch=0）不受影响。
+        if (be.getBlockState().getValue(MonitorBlock.HANGING)) {
+            MonitorTransform.applyHangingCaseDrop(poseStack);
+        }
         MonitorTransform.applyPitch(poseStack, be.getPitchAngle());
         if (!shellInstanced) {
             BakedModel caseModel = MonitorPreloadedModels.getMonitorCase();

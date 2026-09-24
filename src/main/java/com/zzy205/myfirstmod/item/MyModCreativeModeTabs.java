@@ -49,6 +49,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModItems.CONTROL_MONITOR_2);
                 // 4. 监视器
                 output.accept(MyModBlocks.monitor);
+                output.accept(MyModBlocks.monitor_slab); // 板式监视器（slab 形状，6 向贴附；表面模块放置待接入）
                 output.accept(MyModItems.MODULE_BUTTON_1);
                 output.accept(MyModItems.MODULE_TOGGLE_SWITCH);
                 output.accept(MyModItems.MODULE_KNOB);

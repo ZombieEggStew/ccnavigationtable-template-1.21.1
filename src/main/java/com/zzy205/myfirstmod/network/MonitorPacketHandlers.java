@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.network;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
 import com.zzy205.myfirstmod.block.MonitorGridHost;
+import com.zzy205.myfirstmod.block.MonitorSlabBlockEntity;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import net.minecraft.world.item.ItemStack;
@@ -17,6 +18,7 @@ import org.jetbrains.annotations.Nullable;
  * <ul>
  *   <li>{@link SyncGridPayload} — 服务端→客户端：棋盘网格状态同步（Monitor 与 controlDesk 的 monitor_2 共用）</li>
  *   <li>{@link MonitorChannelPayload} / {@link MonitorBackgroundPayload} / {@link MonitorTransformPayload} — 频道 / 背景 / 可动变换</li>
+ *   <li>{@link MonitorSlabChannelPayload} — monitor_slab 全局频道</li>
  *   <li>{@link PlaceModulePayload} / {@link RemoveModulePayload} — 模块放置 / 移除（含物品消耗与返还）</li>
  *   <li>{@link ModulePressPayload} / {@link ModuleKnobRotatePayload} / {@link ModuleConfigPayload} — 按钮 / 旋钮 / 配置</li>
  *   <li>{@link PlaceScreenPayload} / {@link RemoveScreenPayload} — 屏幕放置 / 移除</li>
@@ -69,6 +71,18 @@ public final class MonitorPacketHandlers {
                 MonitorChannelPayload.STREAM_CODEC,
                 (payload, ctx) -> {
                     var be = PacketHelper.findBE(ctx.player().level(), payload.monitorPos(), MonitorBlockEntity.class);
+                    if (be != null) {
+                        be.setChannel(payload.channel());
+                    }
+                }
+        );
+
+        // 客户端→服务端：保存 monitor_slab 全局频道（与显示器共享全局频道命名空间，自动分配/冲突顺延在 BE）
+        registrar.playToServer(
+                MonitorSlabChannelPayload.TYPE,
+                MonitorSlabChannelPayload.STREAM_CODEC,
+                (payload, ctx) -> {
+                    var be = PacketHelper.findBE(ctx.player().level(), payload.pos(), MonitorSlabBlockEntity.class);
                     if (be != null) {
                         be.setChannel(payload.channel());
                     }

@@ -24,9 +24,11 @@ import com.zzy205.myfirstmod.block.ControlDeskRenderer;
 import com.zzy205.myfirstmod.block.MonitorVisual;
 import com.zzy205.myfirstmod.block.MonitorPreloadedModels;
 import com.zzy205.myfirstmod.block.MonitorRenderer;
+import com.zzy205.myfirstmod.block.MonitorSlabRenderer;
 import com.zzy205.myfirstmod.block.MyModPartialModels;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
 import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
+import com.zzy205.myfirstmod.client.MonitorSlabGridOverlay;
 import com.zzy205.myfirstmod.client.MonitorUseInterceptor;
 import com.zzy205.myfirstmod.client.MonitorHoverInterceptor;
 import com.zzy205.myfirstmod.client.MonitorBackgrounds;
@@ -70,6 +72,7 @@ public class CCPeripheralExtenderClient {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         MonitorGridOverlay.register();
         Monitor2GridOverlay.register();
+        MonitorSlabGridOverlay.register();
         MonitorUseInterceptor.register();
         MonitorHoverInterceptor.register();
         ControlDeskPlacementOverlay.register();
@@ -228,6 +231,9 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.steam_power_chamber_entity.get(),
                 SteamPowerChamberRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.monitor_slab_entity.get(),
+                MonitorSlabRenderer::new);
     }
 
     @SubscribeEvent

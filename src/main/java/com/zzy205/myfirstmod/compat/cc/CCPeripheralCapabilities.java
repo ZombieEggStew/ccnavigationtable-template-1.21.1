@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.compat.cc;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.EngineCoreBlockEntity;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
+import com.zzy205.myfirstmod.block.MonitorSlabBlockEntity;
 import com.zzy205.myfirstmod.block.MyBearingBlockEntity;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
 import com.zzy205.myfirstmod.block.RedstoneTransceiverBlockEntity;
@@ -41,6 +42,12 @@ public final class CCPeripheralCapabilities {
                 PeripheralCapability.get(),
                 MyModBlockEntities.monitor_entity.get(),
                 (be, side) -> ((MonitorBlockEntity) be).getPeripheral()
+        );
+        // monitor_slab 作为 CC:T 外设（直接复用 MonitorPeripheral，type = "ccpe:monitor_slab"）
+        event.registerBlockEntity(
+                PeripheralCapability.get(),
+                MyModBlockEntities.monitor_slab_entity.get(),
+                (be, side) -> ((MonitorSlabBlockEntity) be).getPeripheral()
         );
         event.registerBlockEntity(
                 PeripheralCapability.get(),
