@@ -62,6 +62,7 @@ plugins:
             Temperature & Cooling Model: 温度与冷却模型
             Modular Monitor: 模块化监视器
             Monitor: 监视器
+            Monitor Slab: 板式监视器
             Button Module: 按钮模块
             Switch Module: 开关模块
             Knob Module: 旋钮模块
@@ -153,6 +154,7 @@ nav:
   - Modular Monitor:
     - Overview: monitor/overview.md
     - Monitor: monitor/monitor.md
+    - Monitor Slab: monitor/monitor-slab.md
     - Button Module: monitor/button.md
     - Switch Module: monitor/switch.md
     - Knob Module: monitor/knob.md
