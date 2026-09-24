@@ -113,4 +113,5 @@
 
 - engine.getFluidTanks() now mainThread = false
 
-
+1.1.6
+- 修复油门2的渲染问题
