@@ -7,8 +7,6 @@ import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
@@ -16,7 +14,6 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
@@ -70,7 +67,7 @@ import java.util.Map;
  * 选择框 = 16×8×16 台阶盒（照抄 quick_fill_fuel_vault：地板底半 y0..8 / 天花板顶半 y8..16 / 墙面 8px 厚贴墙）；
  * 音效对齐 quick_fill_fuel_vault（SoundType.COPPER）；扳手 = {@link IWrenchable}：**普通右键永不旋转**
  * （配置菜单由客户端 overlay 打开，对齐 ControlDeskBlock），潜行右键按点击位置拆除（表面内容上拆单个模块/屏幕，
- * 非内容且光板整拆掉包）。
+ * 非内容且光板整拆返还普通物品——不保留 BE 数据/NBT，与手动破坏一致，2026-09-24 用户拍板）。
  * <p>
  * 当前为纯放置逻辑（无方块实体）；表面 Monitor 模块的放置/交互接入见后续步骤。
  * <p>
@@ -271,7 +268,8 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
         return InteractionResult.SUCCESS;
     }
 
-    /** 扳手潜行右键：拆除并掉落一个带完整 GridState 配置的 monitor_slab 物品（模块不单独掉落，对齐 MonitorBlock）。
+    /** 扳手潜行右键：拆除并返还一个<b>普通 monitor_slab 物品</b>（不保留 BE 数据 / NBT，与手动破坏一致；
+     *  2026-09-24 用户拍板；原「带完整 GridState 配置物品」行为已废弃）。
      *  <ul>
      *   <li>点击在表面内容（模块/屏幕）上 → 放行，交给 MonitorSlabGridOverlay 拆单个模块/屏幕（对齐 Monitor 的底座语义）；</li>
      *   <li>点击不在表面内容上且已装模块/屏幕 → 禁止整块拆除，提示先拆模块（对齐 ControlDeskBlock 的 desk_remove_blocked）；</li>
@@ -307,21 +305,15 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
             return InteractionResult.SUCCESS;
         }
 
+        // 返还普通 monitor_slab 物品（不保留 BE 数据 / NBT，与手动破坏一致；2026-09-24 用户拍板）
         if (player != null) {
-            BlockEntity be = level.getBlockEntity(pos);
-            if (be instanceof MonitorSlabBlockEntity slabBE) {
-                CompoundTag tag = new CompoundTag();
-                slabBE.saveAdditional(tag, level.registryAccess());
-                BlockEntity.addEntityType(tag, MyModBlockEntities.monitor_slab_entity.get());
-                ItemStack stack = new ItemStack(this);
-                stack.set(DataComponents.BLOCK_ENTITY_DATA, CustomData.of(tag.copy()));
-                if (player.isCreative()) {
-                    if (!player.getInventory().add(stack)) {
-                        Block.popResource(level, pos, stack);
-                    }
-                } else {
-                    player.getInventory().placeItemBackInInventory(stack);
+            ItemStack stack = new ItemStack(this);
+            if (player.isCreative()) {
+                if (!player.getInventory().add(stack)) {
+                    Block.popResource(level, pos, stack);
                 }
+            } else {
+                player.getInventory().placeItemBackInInventory(stack);
             }
         }
 

@@ -1,0 +1,7 @@
+{
+  "selector": "ccpe:monitor_slab",
+  "properties": {
+    "sable:mass": 0.5,
+    "sable:volume": 0.5
+  }
+}

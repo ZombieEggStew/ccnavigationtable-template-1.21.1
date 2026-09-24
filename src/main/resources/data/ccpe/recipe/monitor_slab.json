@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:iron_sheet"
+    },
+    "X": {
+      "item": "create:transmitter"
+    },
+    "Y": {
+      "item": "create:electron_tube"
+    }
+  },
+  "pattern": [
+    "   ",
+    " X ",
+    "#Y#"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:monitor_slab"
+  }
+}
