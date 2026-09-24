@@ -90,6 +90,10 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
                     bhv.animPressSpeed(), bhv.animReleaseSpeed());
 
             poseStack.pushPose();
+            // 模块足迹中心相对锚点的枢轴（button/toggle = (0.5,0,0.5)，knob = 0）：facing 旋转与天花板翻转
+            // 都绕足迹中心进行（否则模型绕原点角转/翻会整体甩开或偏 1px）。先算好供各分支使用。
+            float pivotX = modulePivotX(mod.type());
+            float pivotZ = modulePivotZ(mod.type());
             if (wall && frame != null) {
                 // 贴墙：锚点 = 面板局部 (px, pz, py) 按面板坐标系映射到世界，再套「水平摊平帧 → 面板帧」旋转
                 // （Rx(faceXRotDeg=−90) 把模块从水平摊平转到面板法线，Ry(faceYawDeg) 定向；后续 pivot/button 在面板局部帧内照常）。
@@ -100,11 +104,16 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
                 if (frame.faceXRotDeg() != 0f) poseStack.mulPose(Axis.XP.rotationDegrees(frame.faceXRotDeg()));
             } else if (ceiling && frame != null) {
                 // 天花板：锚点 = 面板局部（grid x/y，法线 −Y 凸出 1px），Rx(180) 把水平摊平的模块翻到朝下。
-                // Rx(180) 是 det+1 旋转（绕序正常）；它翻转局部 Z（= 世界 −Z），故 facing 与枢轴 v 分量需补偿（见下）。
+                // Rx(180) 是 det+1 旋转（绕序正常）；它翻转局部 Z（= 世界 −Z），故 facing 需补偿（moduleFacingDeg）。
+                // ⚠️ Rx(180) 必须绕<b>模块足迹中心</b>翻转（先 translate(pivot) → 翻转 → 反向平移），不能直接绕
+                // 模型原点角翻：直接翻会把足迹中心从锚点 +0.5px 翻到锚点 −0.5px，整体向 N 偏 1px（用户实测；
+                // 推导：中心 z = anchor.z + Rx(180)(pivot).z = pz − 0.5/16，应为 pz + 0.5/16；与 facing 无关，恒偏 N）。
                 double nOff = py - MonitorSlabBlockEntity.PANEL_Y_PX / 16f;
                 Vec3 anchor = MonitorSlabBlockEntity.panelLocalToWorld(frame, px, pz, nOff);
                 poseStack.translate(anchor.x, anchor.y, anchor.z);
+                if (pivotX != 0f || pivotZ != 0f) poseStack.translate(pivotX, 0f, pivotZ);
                 poseStack.mulPose(Axis.XP.rotationDegrees(180));
+                if (pivotX != 0f || pivotZ != 0f) poseStack.translate(-pivotX, 0f, -pivotZ);
             } else {
                 poseStack.translate(px, py, pz);
             }
@@ -112,11 +121,9 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
             // button/toggle 模型原点在角上（足迹中心 = 本地 (0.5,0.5)），knob 圆盘原点即中心（(0,0)）——
             // 若直接绕锚点（原点）转，模型会整体甩开且随 facing 偏移不同（用户确认症状）；位置不动（网格旋转不变，命中/放置无需旋转）。
             // 贴墙面板本身已按 FACING 定向（frame.faceYawDeg），面板局部帧内不再额外 facing 旋转；
-            // 天花板 Rx(180) 翻转局部 Z，facing 需补偿（moduleFacingDeg）；枢轴 p = 足迹中心 (0.5,0,0.5) 在
-            // Rx(180) 局部帧里就是 (0.5,0,0.5)，**不要取反**（取反会北偏 1px，用户实测；已推导所有朝向正确）。
+            // 天花板 Rx(180) 翻转局部 Z，facing 需补偿（moduleFacingDeg）；facing 旋转同样绕足迹中心
+            // （pivotZ 不要取反——取反会把中心推到另一侧，北偏 + 西偏各 1px，用户实测；现翻转已绕中心，无需再补偿）。
             float facingDeg = moduleFacingDeg(state, face);
-            float pivotX = modulePivotX(mod.type());
-            float pivotZ = modulePivotZ(mod.type());
             if (pivotX != 0f || pivotZ != 0f) {
                 poseStack.translate(pivotX, 0f, pivotZ);
             }
