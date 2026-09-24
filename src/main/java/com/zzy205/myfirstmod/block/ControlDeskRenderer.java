@@ -70,9 +70,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
     protected void renderSafe(ControlDeskBlockEntity be, float partialTicks, PoseStack ms,
                               MultiBufferSource bufferSource, int light, int overlay) {
         Level level = be.getLevel();
-        // 【临时调试】强制关闭 Flywheel 分支，仅走 BER 全量渲染（验证 throttle 穿模是否出在 BER y=7 分支）。
-        // 还原时改回：boolean shellInstanced = level != null && VisualizationManager.supportsVisualization(level);
-        boolean shellInstanced = false;
+        boolean shellInstanced = level != null && VisualizationManager.supportsVisualization(level);
         // Flywheel 可用时控件模型由 ControlDeskVisual 实例化渲染，BER 只补画 monitor_2 屏幕动态内容
         // （屏幕 9 宫格 + 文字无法用 Flywheel 表达）；Flywheel 不可用时全量渲染。
 
@@ -278,7 +276,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
 
         SuperByteBuffer handle = placedBuffer(MyModPartialModels.CONTROL_DESK_THROTTLE_HANDLE, state, facing,
                 be.getThrottlePlaceX(), be.getThrottlePlaceZ(),
-                ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM, backRot);
+                ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, backRot);
         if (smooth != 0f) {
             handle.translate(smooth, 0f, 0f);
         }
@@ -303,7 +301,7 @@ public class ControlDeskRenderer extends SafeBlockEntityRenderer<ControlDeskBloc
                                            PoseStack ms, MultiBufferSource bufferSource, int light, int backRot) {
         SuperByteBuffer buffer = placedBuffer(model, state, facing,
                 be.getThrottlePlaceX(), be.getThrottlePlaceZ(),
-                ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.THROTTLE_PLACE_Y_BOTTOM, backRot);
+                ControlDeskBlockEntity.THROTTLE_MODEL_CENTER, ControlDeskBlockEntity.MODEL_PLACE_Y, backRot);
         buffer.light(light).renderInto(ms, bufferSource.getBuffer(RenderType.cutoutMipped()));
     }
 

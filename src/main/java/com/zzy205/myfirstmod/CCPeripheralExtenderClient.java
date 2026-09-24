@@ -132,16 +132,14 @@ public class CCPeripheralExtenderClient {
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
-        // 【临时调试】控制台 Flywheel Visual 已注释关闭：进游戏验证 throttle 穿模是否出在 BER y=7 分支。
-        // 还原时取消下面两行注释（并同步把 ControlDeskRenderer.renderSafe 的 shellInstanced 恢复原逻辑）。
         // 注册 Flywheel Visual（控制台踏板/操纵杆叠加渲染）。
         // monitor_2 表面小 Monitor 的屏幕 9 宫格 + 文字无法用 Flywheel 表达，仍需 BER 绘制，
         // 故不跳过 vanilla 渲染（对齐 Monitor 模式）；ControlDeskRenderer 内部在 Flywheel
         // 可用时跳过控件模型（由 Visual 实例化），仅补画 monitor_2 屏幕动态内容。
-        // SimpleBlockEntityVisualizer.builder(MyModBlockEntities.control_desk_entity.get())
-        //         .factory(ControlDeskVisual::new)
-        //         .neverSkipVanillaRender()
-        //         .apply();
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.control_desk_entity.get())
+                .factory(ControlDeskVisual::new)
+                .neverSkipVanillaRender()
+                .apply();
 
         // 注册 Flywheel Visual（Monitor 外壳：bearing/case 实例化渲染）。
         // 动态内容（背景/模块/屏幕/文字）仍在 BER，故不跳过 vanilla 渲染；
