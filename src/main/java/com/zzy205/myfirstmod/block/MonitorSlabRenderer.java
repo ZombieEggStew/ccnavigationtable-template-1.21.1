@@ -182,7 +182,17 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
                 poseStack.pushPose();
                 poseStack.translate(frame.panelOrigin().x, frame.panelOrigin().y, frame.panelOrigin().z);
                 poseStack.mulPose(Axis.XP.rotationDegrees(90));
+                // ⚠️ 反射 X（内容水平镜像回正）必须绕<b>屏幕中心</b>：原 scale(−1,1,−1) 绕面板西缘（x=0）反射，
+                // 导致整个屏幕被翻到西边邻格并镜像（用户实测：网格 (0,0)-(5,5) 的屏幕出现在西边邻格 (9,0)-(14,5)）。
+                // 用 T(cx)·S·T(−cx) 把反射枢轴移到屏幕中心 → 屏幕留在原位、内容水平回正、z 不变。
+                float cell = 1f / 16f;
+                float cx = MonitorSlabBlockEntity.GRID_ORIGIN_X_PX / 16f
+                        + (screen.minX() + screen.maxX() + 1f) * cell / 2f;
+                float cy = MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX / 16f
+                        + (screen.minY() + screen.maxY() + 1f) * cell / 2f;
+                poseStack.translate(cx, cy, 0f);
                 poseStack.scale(-1f, 1f, -1f);
+                poseStack.translate(-cx, -cy, 0f);
                 renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay,
                         ceilingScreenPlane(screenInPlaneDeg(state, face)));
                 poseStack.popPose();
