@@ -200,13 +200,13 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
 
     /**
      * 点击是否命中表面内容（模块或屏幕）。命中点换算到网格格后查 grid 占用（模块 ID ≥ 0 或屏幕格标记）。
-     * 地板：面板 = 顶面（y8/16）；贴墙：面板 = 朝向 FACING 的竖直边界（{@link MonitorSlabBlockEntity#panelFrame}，
-     * 与命中检测/渲染共用单一来源）。天花板本阶段不支持。
+     * 地板：面板 = 顶面（y8/16）；贴墙：面板 = 朝向 FACING 的竖直边界；天花板：面板 = 底面（y8/16，朝下）。
+     * 后两者走 {@link MonitorSlabBlockEntity#panelFrame}（与命中检测/渲染共用单一来源）。
      * 扳手潜行右键拆除的「拆单个模块/屏幕」判定（{@link #onSneakWrenched}）与「整块拆除」判定共用，单一来源。
      */
     private static boolean isSurfaceContentHit(BlockState state, UseOnContext context) {
         if (state.getValue(FACE) != AttachFace.FLOOR) {
-            return isWallSurfaceContentHit(state, context);
+            return isPanelSurfaceContentHit(state, context);
         }
         double localX = context.getClickLocation().x - context.getClickedPos().getX();
         double localY = context.getClickLocation().y - context.getClickedPos().getY();
@@ -230,16 +230,17 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
         return cell >= 0 || cell == GridState.SCREEN_CELL_MARKER;
     }
 
-    /** 贴墙形态的表面内容命中：面板局部坐标（grid x / grid y，面板平面内容差内）→ 网格格 → 查占用。 */
-    private static boolean isWallSurfaceContentHit(BlockState state, UseOnContext context) {
-        if (state.getValue(FACE) != AttachFace.WALL) return false;
+    /** 贴墙 / 贴天花板形态的表面内容命中：面板局部坐标（grid x / grid y，面板平面内容差内）→ 网格格 → 查占用。 */
+    private static boolean isPanelSurfaceContentHit(BlockState state, UseOnContext context) {
+        AttachFace face = state.getValue(FACE);
+        if (face != AttachFace.WALL && face != AttachFace.CEILING) return false;
         MonitorSlabBlockEntity.PanelFrame frame = MonitorSlabBlockEntity.panelFrame(state);
         if (frame == null) return false;
 
         Vec3 p = context.getClickLocation()
                 .subtract(Vec3.atLowerCornerOf(context.getClickedPos()))
                 .subtract(frame.panelOrigin());
-        // 面板平面（法线方向容差；地板面板在局部帧原点 = 面板平面，贴墙同理）
+        // 面板平面（法线方向容差；面板在局部帧原点 = 面板平面）
         if (Math.abs(p.dot(frame.nDir())) > 0.01) return false;
         double u = p.dot(frame.uDir());
         double v = p.dot(frame.vDir());

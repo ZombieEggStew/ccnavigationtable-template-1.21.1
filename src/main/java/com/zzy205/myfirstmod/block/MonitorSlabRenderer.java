@@ -52,7 +52,10 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
         GridState grid = be.getGridState();
 
         BlockState state = be.getBlockState();
-        boolean wall = state.getValue(MonitorSlabBlock.FACE) == AttachFace.WALL;
+        AttachFace face = state.getValue(MonitorSlabBlock.FACE);
+        boolean wall = face == AttachFace.WALL;
+        boolean ceiling = face == AttachFace.CEILING;
+        boolean panelMode = wall || ceiling; // 贴墙 / 贴天花板：需要面板变换（Rx(−90) 贴墙 / Rx(180) 翻下）；地板 = 世界帧直出
         MonitorSlabBlockEntity.PanelFrame frame = MonitorSlabBlockEntity.panelFrame(state);
 
         var beAnims = animProgress.computeIfAbsent(bePos, k -> new HashMap<>());
@@ -85,22 +88,24 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
                     bhv.animPressSpeed(), bhv.animReleaseSpeed());
 
             poseStack.pushPose();
-            if (wall && frame != null) {
-                // 贴墙：锚点 = 面板局部 (px, pz, py) 按面板坐标系映射到世界，再套「水平摊平帧 → 面板帧」旋转
-                // （Rx(−90) 把模块从水平摊平转到面板法线，Ry(faceYaw) 定向到 FACING；后续 pivot/button 在面板局部帧内照常）。
+            if (panelMode && frame != null) {
+                // 贴墙/贴天花板：锚点 = 面板局部 (px, pz, py) 按面板坐标系映射到世界，再套「水平摊平帧 → 面板帧」旋转
+                // （Rx(faceXRotDeg) 把模块从水平摊平转到面板法线——贴墙 −90° / 天花板 180° 翻下，Ry(faceYawDeg) 定向；
+                // 后续 pivot/button 在面板局部帧内照常）。
                 double nOff = py - MonitorSlabBlockEntity.PANEL_Y_PX / 16f;
                 Vec3 anchor = MonitorSlabBlockEntity.panelLocalToWorld(frame, px, pz, nOff);
                 poseStack.translate(anchor.x, anchor.y, anchor.z);
                 if (frame.faceYawDeg() != 0f) poseStack.mulPose(Axis.YP.rotationDegrees(frame.faceYawDeg()));
-                poseStack.mulPose(Axis.XP.rotationDegrees(-90));
+                if (frame.faceXRotDeg() != 0f) poseStack.mulPose(Axis.XP.rotationDegrees(frame.faceXRotDeg()));
             } else {
                 poseStack.translate(px, py, pz);
             }
             // 朝向跟随 slab FACING：绕<b>模块足迹中心</b> Y 旋转（与 blockstate 对模型本体的 y 旋转一致）。
             // button/toggle 模型原点在角上（足迹中心 = 本地 (0.5,0.5)），knob 圆盘原点即中心（(0,0)）——
             // 若直接绕锚点（原点）转，模型会整体甩开且随 facing 偏移不同（用户确认症状）；位置不动（网格旋转不变，命中/放置无需旋转）。
-            // 贴墙面板本身已按 FACING 定向（frame.faceYawDeg），面板局部帧内不再额外 facing 旋转。
-            float facingDeg = wall ? 0f : facingYRotation(state);
+            // 贴墙面板本身已按 FACING 定向（frame.faceYawDeg），面板局部帧内不再额外 facing 旋转；
+            // 天花板面板水平（同地板性质），从下往上看需补 180°（floor facing + 180）。
+            float facingDeg = moduleFacingDeg(state, face);
             float pivotX = modulePivotX(mod.type());
             float pivotZ = modulePivotZ(mod.type());
             if (pivotX != 0f || pivotZ != 0f) {
@@ -139,22 +144,39 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
         }
 
         // ── 渲染所有屏幕 9 宫格（外框网格对齐、内容朝向跟随 FACING；内容由 Screen9GridRenderer 绕屏幕中心单独旋转）──
-        // 贴墙：整体包一层面板坐标系变换（translate(panelOrigin) + Ry(faceYaw)·Rx(−90)），水平 ScreenPlane
-        // 在面板局部帧内摊平 → 屏幕面 = 贴墙面板；面板局部帧内内容已朝上（grid y = 世界 +Y），无需平面内旋转（inPlane=0）。
-        float inPlane = wall ? 0f : facingInPlaneDeg(state);
-        Screen9GridRenderer.ScreenPlane slabPlane = slabPlane(inPlane);
+        // 贴墙/贴天花板：整体包一层面板坐标系变换（translate(panelOrigin) + Ry(faceYaw)·Rx(faceXRot)），水平 ScreenPlane
+        // 在面板局部帧内摊平 → 屏幕面 = 贴墙面板/天花板底面；贴墙面板局部帧内内容已朝上（grid y = 世界 +Y），
+        // 天花板从下往上看需补 180°（floor inPlane + 180）。
+        float inPlane = screenInPlaneDeg(state, face);
+        Screen9GridRenderer.ScreenPlane slabPlane = slabPlane(inPlane, panelMode);
         for (var screen : grid.getScreenRegions()) {
-            if (wall && frame != null) {
+            if (panelMode && frame != null) {
                 poseStack.pushPose();
                 poseStack.translate(frame.panelOrigin().x, frame.panelOrigin().y, frame.panelOrigin().z);
                 if (frame.faceYawDeg() != 0f) poseStack.mulPose(Axis.YP.rotationDegrees(frame.faceYawDeg()));
-                poseStack.mulPose(Axis.XP.rotationDegrees(-90));
+                if (frame.faceXRotDeg() != 0f) poseStack.mulPose(Axis.XP.rotationDegrees(frame.faceXRotDeg()));
                 renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay, slabPlane);
                 poseStack.popPose();
             } else {
                 renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay, slabPlane);
             }
         }
+    }
+
+    /** 模块面板局部帧内的 facing 旋转（度）：地板 = blockstate y 旋转的负值（俯视顺时针）；贴墙 = 0（面板已按 FACING 定向）；
+     *  天花板 = 地板值 + 180（从下往上看左右/上下镜像，补 180 才从 FACING 方向读正）。 */
+    private static float moduleFacingDeg(BlockState state, AttachFace face) {
+        if (face == AttachFace.WALL) return 0f;
+        float deg = facingYRotation(state);
+        return face == AttachFace.CEILING ? deg + 180f : deg;
+    }
+
+    /** 屏幕内容平面内旋转角（度）：地板 = 俯视顺时针跟随 FACING；贴墙 = 0（面板局部帧内已朝上）；
+     *  天花板 = 地板值 + 180（从下往上看镜像补偿）。 */
+    private static float screenInPlaneDeg(BlockState state, AttachFace face) {
+        if (face == AttachFace.WALL) return 0f;
+        float deg = facingInPlaneDeg(state);
+        return face == AttachFace.CEILING ? (deg + 180f) % 360f : deg;
     }
 
     /**
@@ -206,15 +228,20 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
         };
     }
 
-    // ── 屏幕 9 宫格渲染（水平顶面） ──
+    // ── 屏幕 9 宫格渲染（水平顶面 / 贴墙面板 / 天花板底面） ──
 
-    /** slab 顶面屏幕面参数（块单位，水平面）：网格起点 = 面板内缩 1px；z() 作为面板高度（translate 用，已含模块凸出 1px）；
+    /** 面板屏幕面参数（块单位，水平面）：网格起点 = 面板内缩 1px；z() 作为 wrap 的 translate y——
+     *  地板 = 世界 y（面板 8/16 + 凸出 1px = 9/16）；<b>贴墙/贴天花板 = 面板局部帧内沿法线</b>（面板已含在
+     *  panelOrigin，只需凸出 1/16，否则屏幕整体飘出面板约 8px ≈ 半个方块，用户实测）；
      *  内容按 {@code inPlaneDeg} 绕屏幕区域中心旋转（跟随 FACING，位置不动）。每帧按当前 blockstate 构造。 */
-    private static Screen9GridRenderer.ScreenPlane slabPlane(float inPlaneDeg) {
+    private static Screen9GridRenderer.ScreenPlane slabPlane(float inPlaneDeg, boolean panelMode) {
         return new Screen9GridRenderer.ScreenPlane() {
             @Override public float originX() { return MonitorSlabBlockEntity.GRID_ORIGIN_X_PX / 16f; }
             @Override public float originY() { return MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX / 16f; }
-            @Override public float z() { return MonitorSlabBlockEntity.MODULE_SURFACE_Y_PX / 16f; }
+            @Override public float z() {
+                return panelMode ? MonitorSlabBlockEntity.MODULE_PROTRUDE_PX / 16f
+                        : MonitorSlabBlockEntity.MODULE_SURFACE_Y_PX / 16f;
+            }
             @Override public boolean horizontal() { return true; }
             @Override public float inPlaneRotationDeg() { return inPlaneDeg; }
         };

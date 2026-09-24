@@ -42,7 +42,7 @@ import java.util.Map;
  * monitor_slab 表面 Monitor 的客户端交互（对齐 {@link Monitor2GridOverlay}）：
  * <ul>
  *   <li>手持 Monitor 模块物品（toggle_switch / knob / button / screen）→ 面板显示 14×14 棋盘网格
- *       （地板 = 顶面水平网格；贴墙 = 朝向 FACING 的竖直面板网格）</li>
+ *       （地板 = 顶面水平网格；贴墙 = 朝向 FACING 的竖直面板网格；天花板 = 底面水平网格）</li>
  *   <li>右键放置模块 / 屏幕两点放置（payload 复用 Monitor 的包，pos = slab 方块）</li>
  *   <li>按钮按压 / 钮子切换 / 旋钮拖拽（命中走 {@link MonitorSlabHitDetector} 独立检测）</li>
  *   <li>扳手蹲下右键拆除模块 / 屏幕</li>
@@ -54,7 +54,7 @@ import java.util.Map;
  * 每帧重新 show，离开/换物品后自动消失（Outliner 语义）。交互状态按 BlockPos 隔离。
  * <p>
  * 几何：面板按 blockstate 的 FACE/FACING 取 {@link MonitorSlabBlockEntity#panelFrame} 单一来源
- * （地板水平面 / 贴墙竖直边界），网格 14×14（起点 (1,1)px，格=1px）。
+ * （地板顶面 / 贴墙竖直边界 / 天花板底面），网格 14×14（起点 (1,1)px，格=1px）。
  * 无 yaw/pitch/tilt，网格线 / 模块框全部轴对齐绘制（块单位，double 运算兼容 Sable plot 坐标）。
  */
 public class MonitorSlabGridOverlay {
@@ -159,7 +159,7 @@ public class MonitorSlabGridOverlay {
         Level level = player.level();
         float partialTick = (float) event.getPartialTick().getGameTimeDeltaTicks();
 
-        // ── 独立命中检测：瞄准 slab 面板（地板顶面 / 贴墙竖直边界）──
+        // ── 独立命中检测：瞄准 slab 面板（地板顶面 / 贴墙竖直边界 / 天花板底面）──
         MonitorSlabHitDetector.SlabHit hit = MonitorSlabHitDetector.find(level, player, partialTick);
         if (hit == null) {
             if (DEBUG_HIT && (++debugHitTick & 19) == 0) {
@@ -429,7 +429,7 @@ public class MonitorSlabGridOverlay {
      */
     private static Vec3 world(BlockPos pos, BlockState state, float px, float pz, float py) {
         MonitorSlabBlockEntity.PanelFrame frame = MonitorSlabBlockEntity.panelFrame(state);
-        if (frame == null) { // 不应发生（天花板本阶段不支持）；回退旧地板映射
+        if (frame == null) { // 不应发生（panelFrame 对三种 FACE 都返回帧）；回退旧地板映射
             return new Vec3(pos.getX() + px / 16.0, pos.getY() + py / 16.0, pos.getZ() + pz / 16.0);
         }
         double n = (py - MonitorSlabBlockEntity.PANEL_Y_PX) / 16.0;

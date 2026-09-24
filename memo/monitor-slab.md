@@ -112,6 +112,28 @@
 | `block/MonitorSlabRenderer.java`（改） | 贴墙模块：锚点 = `panelLocalToWorld(frame, px, pz, py−8/16)` + `mulPose(Ry(faceYawDeg))` + `mulPose(Rx(−90))`，随后 pivot/button Rx(+90) 在面板局部帧内照常（button 两次 X 旋转互抵 = 竖立贴面板）；**贴墙免 facing 旋转**（面板已按 FACING 定向，facingDeg=0）；屏幕：整体包 `translate(panelOrigin) + Ry·Rx(−90)`，水平 ScreenPlane 在局部帧内摊平，**inPlane=0**（面板局部帧内内容已朝上） |
 | `block/MonitorSlabBlock.java`（改） | `isSurfaceContentHit` 加贴墙分支 `isWallSurfaceContentHit`（面板局部坐标 → 网格格 → 查占用；地板分支逐字未动） |
 
+### 追加（同日）：贴墙屏幕模块飘出面板约半个方块
+
+- **bug（用户实测）**：旋钮/开关/按钮贴墙位置正确，但**屏幕 9 宫格悬浮在面板外约 8px ≈ 半个方块**。
+- **根因**：贴墙屏幕渲染 = `translate(panelOrigin) + Ry·Rx(−90)`（局部帧 u/n/v）后走水平 `ScreenPlane` 的
+  `wrapHorizontal`（`translate(originX, z, originY)` 沿局部 u/n/v）。`slabPlane.z()` 复用了地板惯例的
+  `MODULE_SURFACE_Y_PX/16 = 9/16`——地板上是世界 y 面板高度，贴墙局部帧里却被当作沿面板法线平移 9/16；
+  而面板原点（panelOrigin）已落在面板平面上（n=0），只需凸出 1px。
+- **修复**：`slabPlane(inPlaneDeg, panelMode)` 按 panelMode 分支取 `z() = MODULE_PROTRUDE_PX/16 (1/16)`；地板不变。
+- 文字 zBase 相对几何不变（wrap 后 n = 1/16 − 0.7/16 = 0.3/16，防 z-fight，与地板同语义）。
+
+### 追加（同日）：贴天花板（CEILING）形态接入
+
+- 面板 = **底面 y8/16（朝下）**，法线 −Y；水平面板同地板惯例：**grid x → +X / grid y → +Z（世界对齐）**，
+  面板变换 **R_face = Rx(180)**（把水平摊平的模块翻到朝下）。
+- **模块/屏幕朝向 = 地板值 + 180°**（从下往上看左右/上下镜像，补 180° 才从 FACING 方向读正）：
+  `moduleFacingDeg = facingYRotation + 180`（wall=0）、`screenInPlaneDeg = (facingInPlaneDeg + 180) % 360`（wall=0）。
+- 模块凸出沿 −Y：button 锚点 y = 8/16 − 1/16 = 7/16（1px 悬在面板下方）。
+- 改动：`PanelFrame` 加 `faceXRotDeg`（墙 = −90 / 天花板 = 180，替换原硬编码 Rx(−90)）；`panelFrame` 加 CEILING 分支；
+  `MonitorSlabRenderer` panelMode（wall||ceiling）统一模块/屏幕面板变换 + 朝向；`MonitorSlabBlock.isPanelSurfaceContentHit`
+  支持 WALL+CEILING；命中/overlay 走 panelFrame 自动生效。
+- ⚠️ 校准点（进游戏确认）：天花板模块标签/屏幕文字从下往上看是否在 FACING 方向读正；若 90° 或镜像翻转 `+180` 的符号。
+
 ### 验证清单（进游戏）
 
 - [ ] 贴墙 slab（north/south/east/west 各一），手持模块物品 → 网格画在**朝向玩家的竖直面板**上（不再是 XZ 平面）

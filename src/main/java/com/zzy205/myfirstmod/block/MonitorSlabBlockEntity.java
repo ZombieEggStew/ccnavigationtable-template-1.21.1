@@ -61,12 +61,13 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
     /**
      * 面板几何（世界朝向，块单位，相对方块 pos）：面板平面点 {@code panelOrigin}、面板平面内两轴
      * {@code uDir}（grid x 方向）/ {@code vDir}（grid y 方向）、面板法线 {@code nDir}（朝外）、
-     * 从「水平摊平局部帧（右=X/前=Y/上=Z）」到「面板局部帧」的旋转（{@code faceYawDeg} + 绕 X −90°，仅非地板形态使用）。
+     * 从「水平摊平局部帧（右=X/前=Y/上=Z）」到「面板局部帧」的旋转（{@code faceYawDeg} + {@code faceXRotDeg}，
+     * 仅非地板形态使用；贴墙 = Ry(yaw)·Rx(−90)，天花板 = Rx(180)）。
      * <p>
      * 命中检测（{@code MonitorSlabHitDetector}）、网格绘制（{@code MonitorSlabGridOverlay}）、
      * 渲染（{@code MonitorSlabRenderer}）、扳手拆除判定（{@code MonitorSlabBlock}）全部共用，单一来源。
      */
-    public record PanelFrame(Vec3 panelOrigin, Vec3 uDir, Vec3 vDir, Vec3 nDir, float faceYawDeg) {}
+    public record PanelFrame(Vec3 panelOrigin, Vec3 uDir, Vec3 vDir, Vec3 nDir, float faceYawDeg, float faceXRotDeg) {}
 
     /**
      * 按 blockstate 的 FACE/FACING 返回面板几何（单一来源，渲染与检测严格互逆）。
@@ -74,7 +75,7 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
      *   <li>地板（FLOOR）：面板 = 顶面 y8/16，grid x → +X / grid y → +Z / 法线 +Y；</li>
      *   <li>贴墙（WALL）：面板 = 朝向 FACING 的 8px 边界（贴墙放置时面对的那一面），
      *       grid x → 面板「水平向右」（north +X / south −X / east +Z / west −Z）、grid y → +Y（朝上）、法线 = FACING；</li>
-     *   <li>天花板（CEILING）：本阶段不支持，返回 null。</li>
+     *   <li>天花板（CEILING）：面板 = 底面 y8/16（朝下），grid x → +X / grid y → +Z / 法线 −Y（水平面板同地板惯例）。</li>
      * </ul>
      */
     @Nullable
@@ -82,15 +83,15 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
         AttachFace face = state.getValue(MonitorSlabBlock.FACE);
         float y = PANEL_Y_PX / 16f;
         return switch (face) {
-            case FLOOR -> new PanelFrame(new Vec3(0, y, 0), new Vec3(1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 1, 0), 0f);
-            case CEILING -> null; // 本阶段仅地板 + 贴墙
+            case FLOOR -> new PanelFrame(new Vec3(0, y, 0), new Vec3(1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 1, 0), 0f, 0f);
+            case CEILING -> new PanelFrame(new Vec3(0, y, 0), new Vec3(1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, -1, 0), 0f, 180f);
             case WALL -> switch (state.getValue(MonitorSlabBlock.FACING)) {
-                case NORTH -> new PanelFrame(new Vec3(0, 0, y), new Vec3(1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 0, -1), 0f);
+                case NORTH -> new PanelFrame(new Vec3(0, 0, y), new Vec3(1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 0, -1), 0f, -90f);
                 // 面板原点 = 面板局部 (mx=0, mz=0) 角在世界的位置：south/west 模型 x 轴翻转（worldX=16−mx / worldZ=16−mx），
                 // 原点在 pos.x+1 / pos.z+1，不是碰撞盒的最小角（踩过：网格/命中整体偏一个方块）
-                case SOUTH -> new PanelFrame(new Vec3(1, 0, y), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 0, 1), 180f);
-                case EAST -> new PanelFrame(new Vec3(y, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 1, 0), new Vec3(1, 0, 0), -90f);
-                default -> new PanelFrame(new Vec3(y, 0, 1), new Vec3(0, 0, -1), new Vec3(0, 1, 0), new Vec3(-1, 0, 0), 90f); // WEST
+                case SOUTH -> new PanelFrame(new Vec3(1, 0, y), new Vec3(-1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 0, 1), 180f, -90f);
+                case EAST -> new PanelFrame(new Vec3(y, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 1, 0), new Vec3(1, 0, 0), -90f, -90f);
+                default -> new PanelFrame(new Vec3(y, 0, 1), new Vec3(0, 0, -1), new Vec3(0, 1, 0), new Vec3(-1, 0, 0), 90f, -90f); // WEST
             };
         };
     }

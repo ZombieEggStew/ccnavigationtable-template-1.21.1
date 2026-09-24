@@ -15,13 +15,13 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * monitor_slab 表面 Monitor 的独立命中检测器（地板 FLOOR + 贴墙 WALL）。
+ * monitor_slab 表面 Monitor 的独立命中检测器（地板 FLOOR + 贴墙 WALL + 贴天花板 CEILING）。
  * <p>
  * 与 {@link Monitor2HitDetector} 同一思路但不依赖原版 {@code mc.hitResult}，而是遍历
  * {@link MonitorSlabClientRegistry} 的候选 slab，用玩家视线射线与<b>面板平面</b>求交。
  * 面板几何按 blockstate 的 FACE/FACING 取 {@link MonitorSlabBlockEntity#panelFrame} 单一来源：
- * 地板 = 水平面 y8/16，贴墙 = 朝向 FACING 的 8px 竖直边界。slab 无 yaw/pitch/tilt，
- * 命中退化为「射线 vs 轴对齐平面」，比 monitor_2 的 22.5° 倾斜变换简单得多。
+ * 地板 = 水平面 y8/16、贴墙 = 朝向 FACING 的 8px 竖直边界、天花板 = 底面 y8/16（朝下）。
+ * slab 无 yaw/pitch/tilt，命中退化为「射线 vs 轴对齐平面」，比 monitor_2 的 22.5° 倾斜变换简单得多。
  * <p>
  * 背面剔除：射线方向必须有沿面板法线的分量（d·n &lt; 0）才能命中。
  * 遮挡检测：COLLIDER 排除 slab 自身（面板与 slab 碰撞体重合，不排除会自遮挡，
@@ -152,14 +152,15 @@ public final class MonitorSlabHitDetector {
      * （grid x / grid y 方向，模型空间 px，0..16）；未命中返回 null）。
      * <p>
      * 面板平面与朝向按 blockstate 的 FACE/FACING 取 {@link MonitorSlabBlockEntity#panelFrame}：
-     * 地板 = 水平面 y8/16（法线 +Y）、贴墙 = 朝向 FACING 的 8px 边界（法线 = FACING，竖直面）。
+     * 地板 = 水平面 y8/16（法线 +Y）、贴墙 = 朝向 FACING 的 8px 边界（法线 = FACING，竖直面）、
+     * 天花板 = 底面 y8/16（法线 −Y）。
      * 背面剔除：射线方向必须有沿法线的分量（d·n &lt; 0，即从面板正面看过去），
      * 否则面板另一侧（slab 背面/内部）也能被命中。
      */
     @Nullable
     private static double[] intersectPanel(BlockState state, BlockPos pos, Vec3 origin, Vec3 dir, double maxDistance) {
         MonitorSlabBlockEntity.PanelFrame frame = MonitorSlabBlockEntity.panelFrame(state);
-        if (frame == null) return null; // 天花板本阶段不支持
+        if (frame == null) return null;
 
         Vec3 block = Vec3.atLowerCornerOf(pos);
         Vec3 o = origin.subtract(block);
