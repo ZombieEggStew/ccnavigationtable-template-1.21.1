@@ -86,12 +86,14 @@ public final class ScreenTextRenderer {
      * @param innerWidthUnits   可绘制区宽（drawRect 单位，图形层裁剪用）
      * @param innerHeightUnits  可绘制区高（drawRect 单位，图形层裁剪用）
      * @param zBase             内容基准面（屏幕 9 宫格中心面，世界坐标，块）
+     * @param reverseWinding    反射帧（行列式 −1，如天花板底面）下翻转字形绕序，补偿背面剔除
      */
     public static void drawAll(PoseStack ps, MultiBufferSource buffer, ScreenText text,
                                float fullRight, float fullTop, float left, float bottom,
-                               float innerWidthUnits, float innerHeightUnits, float zBase) {
+                               float innerWidthUnits, float innerHeightUnits, float zBase,
+                               boolean reverseWinding) {
         drawCellBackgrounds(ps, buffer, text, fullRight, fullTop, left, bottom, zBase);
-        drawCells(ps, buffer, text, fullRight, fullTop, left, bottom, zBase);
+        drawCells(ps, buffer, text, fullRight, fullTop, left, bottom, zBase, reverseWinding);
         drawRects(ps, buffer, text, fullRight, fullTop, left, bottom, zBase);
         drawLines(ps, buffer, text, fullRight, fullTop, left, bottom, zBase);
         drawCircles(ps, buffer, text, fullRight, fullTop, left, bottom, zBase);
@@ -159,7 +161,8 @@ public final class ScreenTextRenderer {
 
     /** 绘制全部非空格子的字形。 */
     private static void drawCells(PoseStack ps, MultiBufferSource buffer, ScreenText text,
-                                  float fullRight, float fullTop, float left, float bottom, float zBase) {
+                                  float fullRight, float fullTop, float left, float bottom, float zBase,
+                                  boolean reverseWinding) {
         int cols = text.getCols();
         int rows = text.getRows();
         float cellW = cellWidth(fullRight, left, cols);
@@ -180,7 +183,7 @@ public final class ScreenTextRenderer {
                 float yTop = cellTop(fullTop, cellH, row) - yOffset;
                 float yBottom = yTop - glyph;
                 glyphQuad(vc, pose, ch, xLeft, yBottom, xRight, yTop,
-                        text.getCellFg(col, row), z);
+                        text.getCellFg(col, row), z, reverseWinding);
             }
         }
     }
@@ -195,9 +198,12 @@ public final class ScreenTextRenderer {
      * 「北面局部 X 轴」与「屏幕逻辑 X 轴」相反，不翻转则每个字符左右镜像
      * （见 memo/record_screen_text.md 踩坑记录）。
      * RenderType.textPolygonOffset 使用 POSITION_COLOR_TEX_LIGHTMAP 格式，必须补 UV2（fullbright 发光）。
+     * <p>
+     * {@code reverseWinding}=true（反射帧，如天花板底面）时交换第 2/第 4 个顶点，反转绕序补偿背面剔除。
      */
     private static void glyphQuad(VertexConsumer vc, Matrix4f pose, char ch,
-                                  float x0, float y0, float x1, float y1, int colour, float z) {
+                                  float x0, float y0, float x1, float y1, int colour, float z,
+                                  boolean reverseWinding) {
         int code = ch & 0xFF; // 仅支持 ASCII / Latin-1
         int col = code % GLYPHS_PER_ROW;
         int row = code / GLYPHS_PER_ROW;
@@ -212,10 +218,18 @@ public final class ScreenTextRenderer {
         float b = (colour & 0xFF) / 255f;
 
         // 左顶点采 uRight、右顶点采 uLeft（水平翻转，纠正北面镜像）
-        vc.addVertex(pose, x0, y0, z).setColor(r, g, b, 1f).setUv(uRight, vBottom).setLight(LightTexture.FULL_BRIGHT);
-        vc.addVertex(pose, x0, y1, z).setColor(r, g, b, 1f).setUv(uRight, vTop).setLight(LightTexture.FULL_BRIGHT);
-        vc.addVertex(pose, x1, y1, z).setColor(r, g, b, 1f).setUv(uLeft, vTop).setLight(LightTexture.FULL_BRIGHT);
-        vc.addVertex(pose, x1, y0, z).setColor(r, g, b, 1f).setUv(uLeft, vBottom).setLight(LightTexture.FULL_BRIGHT);
+        if (reverseWinding) {
+            // 0,1,2,3 → 0,3,2,1：左下→右下→右上→左上（反射帧绕序补偿）
+            vc.addVertex(pose, x0, y0, z).setColor(r, g, b, 1f).setUv(uRight, vBottom).setLight(LightTexture.FULL_BRIGHT);
+            vc.addVertex(pose, x1, y0, z).setColor(r, g, b, 1f).setUv(uLeft, vBottom).setLight(LightTexture.FULL_BRIGHT);
+            vc.addVertex(pose, x1, y1, z).setColor(r, g, b, 1f).setUv(uLeft, vTop).setLight(LightTexture.FULL_BRIGHT);
+            vc.addVertex(pose, x0, y1, z).setColor(r, g, b, 1f).setUv(uRight, vTop).setLight(LightTexture.FULL_BRIGHT);
+        } else {
+            vc.addVertex(pose, x0, y0, z).setColor(r, g, b, 1f).setUv(uRight, vBottom).setLight(LightTexture.FULL_BRIGHT);
+            vc.addVertex(pose, x0, y1, z).setColor(r, g, b, 1f).setUv(uRight, vTop).setLight(LightTexture.FULL_BRIGHT);
+            vc.addVertex(pose, x1, y1, z).setColor(r, g, b, 1f).setUv(uLeft, vTop).setLight(LightTexture.FULL_BRIGHT);
+            vc.addVertex(pose, x1, y0, z).setColor(r, g, b, 1f).setUv(uLeft, vBottom).setLight(LightTexture.FULL_BRIGHT);
+        }
     }
 
     // ── 图形层（自由定位 + z 层级，仅限可绘制区域内） ──

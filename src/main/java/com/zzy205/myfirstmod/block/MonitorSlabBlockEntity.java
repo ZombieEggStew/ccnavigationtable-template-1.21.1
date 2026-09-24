@@ -84,8 +84,8 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
         float y = PANEL_Y_PX / 16f;
         return switch (face) {
             case FLOOR -> new PanelFrame(new Vec3(0, y, 0), new Vec3(1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 1, 0), 0f, 0f);
-            // 天花板渲染 = 地板渲染整体绕面板平面镜像（见 MonitorSlabRenderer），不走面板变换 → faceYaw/X 无意义；
-            // 帧只供命中检测 / 网格绘制 / 扳手判定使用（面板 = 底面 y8/16，grid x→+X / grid y→+Z / 法线 −Y）
+            // 天花板渲染用 det+1 旋转（模块 Rx(180) / 屏幕垂直帧 Rx(+90)，见 MonitorSlabRenderer），不走面板变换
+            // → faceYaw/X 无意义；帧只供命中检测 / 网格绘制 / 扳手判定使用（面板 = 底面 y8/16，grid x→+X / grid y→+Z / 法线 −Y）
             case CEILING -> new PanelFrame(new Vec3(0, y, 0), new Vec3(1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, -1, 0), 0f, 0f);
             case WALL -> switch (state.getValue(MonitorSlabBlock.FACING)) {
                 case NORTH -> new PanelFrame(new Vec3(0, 0, y), new Vec3(1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 0, -1), 0f, -90f);
