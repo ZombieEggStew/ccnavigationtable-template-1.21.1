@@ -2,7 +2,7 @@
 
 > 需求（9.25）：复刻 monitor / monitor_2 的网格模型，能像 monitor 那样安装小零件（button_1 / toggle_switch / knob / screen）。
 > 阶段目标：**先简单跑通一遍流程验证可行性（仅地板放置 + BER + 无 Lua）**，之后再添加贴墙/贴天花板变体的模块放置、Lua 等。
-> 状态：**方案已定稿，实施中**。参考来源：monitor_2 完整接入记录见 `memo/control-desk-grid-slot.md`（MonitorGridHost 三件套复用、命中自遮挡坑、px 单位移植坑）。
+> 状态：**基本流程已跑通（用户 9.25 进游戏确认）**：模块/屏幕安装交互、跟随 FACING 旋转、扳手语义全部可用；剩余校准点见「验证结果」。参考来源：monitor_2 完整接入记录见 `memo/control-desk-grid-slot.md`（MonitorGridHost 三件套复用、命中自遮挡坑、px 单位移植坑）。
 
 ## 已确认设计（用户拍板）
 
@@ -28,7 +28,7 @@
 - 面板 = 整个顶面（x0..16 / z0..16），网格四周内缩 1px：
   - 网格起点 (1, 1)px；格 (gx, gy) 占 px x∈[1+gx, 2+gx]、z∈[1+gy, 2+gy]。
   - 网格 x 轴 → 模型 x；网格 y 轴 → 模型 z。
-- 模块凸出：模块模型按 monitor 竖面（-Z 正面）建模，顶面复用需**绕 X 旋转使正面朝 +Y**（初始旋转，符号进游戏首测校准）；模块背面贴面板、向外凸 ~1px（对齐 monitor_2 `MONITOR_2_MODULE_PROTRUDE_PX` 思路）。
+- 模块摊平（初始旋转）：button 前脸 −Z → 绕 X **+90°**（−Z→+Y）；toggle/knob 原生平躺（前脸 +Y）不转。竖直锚点按类型：button = 面板+1px（本地 z 0.625..1 沿 −Y 延伸、背面贴面板），toggle/knob = 面板（本地底 y=0）。
 - 屏幕 9 宫格/文字复用 `Screen9GridRenderer`：`ScreenPlane` 加默认 `horizontal()=false`，水平面时整体「平移到面板锚点 + 绕 X 旋转」再走现有 XY 绘制（Monitor/monitor_2 默认 false 零影响）。
 
 ## 改动文件清单
@@ -81,7 +81,7 @@
 
 ---
 
-## 实施记录（9.25，代码已完成，`gradlew classes` 通过，待进游戏验证）
+## 实施记录（9.25，基本流程已进游戏验证通过）
 
 ### 实际落地（与方案差异）
 
@@ -89,22 +89,30 @@
    - button_1 底座/头部 = XY 竖贴片，**前脸 −Z**（本地 z 0.625..1），摊平用**绕 X +90°**（−Z→+Y）；
    - toggle_switch / knob 底座 = 原生平躺（前脸 +Y、本地底 y=0），**不旋转**。
    - ⚠️ `ControlDeskRenderer.renderDeskTopModules` 的「button 绕 X −90°」是**错误朝向**（正面朝下）+ toggle offsetZ 当水平位移平移 1px——用户已确认这两点，且桌顶小模块功能被 `DESK_TOP_MODULES_ENABLED=false` 禁用、从未真正验证。**不要照抄它**。
-2. **模块锚点映射**（monitor 竖面帧 → 顶面）：offsetX→世界 X、offsetY→世界 Z、offsetZ（屏幕法线微调）→世界 Y（高度）；竖直锚点按类型：button = 面板+1px（本地 z 0.625..1 沿 −Y 延伸、背面贴面板），toggle/knob = 面板（本地底 y=0）。
-3. **9 宫格水平面**：`Screen9GridRenderer.ScreenPlane` 加 `horizontal()`（默认 false，Monitor/monitor_2 零影响）；水平时「translate(originX, z, originY) + 绕 X +90°」后走现有 XY 绘制（本地 −Z 正面 → 世界 +Y 朝上）。
-4. **扳手语义变化**（对齐 Monitor 底座语义）：顶面命中 → 放行给 overlay 拆单个模块/屏幕；侧面/底面 → 整块拆除（BE 数据存进物品，模块不丢）。之前「任意面拆除」行为只对无模块的旧版有效。
+2. **模块锚点映射**（monitor 竖面帧 → 顶面）：offsetX→世界 X、offsetY→世界 Z；**offsetZ（屏幕法线微调）在顶面不映射到高度**（用户确认 toggle/knob 会浮起 1px，`py += offsetZ()` 已去掉）；竖直锚点按类型：button = 面板+1px（本地 z 0.625..1 沿 −Y 延伸、背面贴面板），toggle/knob = 面板（本地底 y=0）。
+3. **9 宫格水平面**：`Screen9GridRenderer.ScreenPlane` 加 `horizontal()`（默认 false，Monitor/monitor_2 零影响）；水平时「translate(originX, z, originY) + 绕 X +90°」后走现有 XY 绘制（本地 −Z 正面 → 世界 +Y 朝上）；文字 zBase 符号翻转（水平面本地 +Z → 世界 −Y，文字需在面板上方）。
+4. **扳手语义**（对齐 Monitor 底座语义 + controlDesk 防误拆）：
+   - 顶面命中 → 放行给 overlay 拆单个模块/屏幕；
+   - 侧面/底面命中且已装内容 → **禁止整拆**，提示「gui.ccpe.monitor_slab.remove_blocked」（对齐 `desk_remove_blocked`）；
+   - 光板 → 整块拆除（BE 数据存进物品，模块不丢）；
+   - 顶面命中且已装内容 → 扳手右键**禁止旋转**（放行给 overlay 配置菜单）。
 
-### 首测校准点（进游戏重点核对）
+### 验证结果（9.25 用户进游戏确认，基本流程跑通）
 
-- [x] ✅ button / 屏幕模块位置正常（用户进游戏确认）
-- [x] ✅ **toggle/knob 下沉 1px**（用户确认浮起 1px → `MonitorSlabRenderer` 去掉 `py += offsetZ()`，offsetZ 在顶面不映射到高度；button 的 1px 凸出已含在 `moduleBaseY`）
-- [x] ✅ **模块朝向跟随 slab FACING**（用户确认：正方形面板 + 14×14 网格 90° 旋转不变，命中/放置无需旋转；`MonitorSlabRenderer` 每个模块绕自身锚点加 `facingYRotation` = blockstate y 旋转的负值（north 0/east −90/south −180/west −270），位置不动；旋转符号如与贴图方向相反需翻转）
-- [x] ✅ **屏幕 9 宫格/文字内容跟随 FACING**（`Screen9GridRenderer.ScreenPlane` 加 `inPlaneRotationDeg()`（水平面内旋转，正 = 俯视顺时针），`applyInPlaneRotation` 绕屏幕区域中心旋转内容、位置不动；`MonitorSlabRenderer` 每帧按 blockstate 构造带 `facingInPlaneDeg`（= +y）的平面；Monitor/monitor_2 默认 0 零影响。模块与屏幕两处旋转符号分别推导，进游戏一起校准）
-- [x] ✅ **模块跟随 FACING 的旋转枢轴修正**（用户报告 button/toggle 偏移且随方向不同、knob 正常 → 根因：模型原点不在几何中心——knob 圆盘原点=圆心（绕锚点转位置不变），button/toggle 原点在角上（足迹中心 = 本地 (0.5,0.5)，绕原点转整体甩开且随旋转角偏移不同）。修复：facing 旋转绕<b>模块足迹中心</b>（`modulePivotX/Z`：button/toggle = 0.5/16，knob = 0），位置固定）
-- [ ] 网格线是否可见（y=面板 0px 偏移，若 z-fight 把 `MonitorSlabGridOverlay.GRID_LINE_OFFSET` 提到 0.01）
-- [ ] 旋钮拖拽方向（`atan2(pz−cz, px−cx)` + renderExtra `Axis.YP −anim`，若反了翻转 atan2 符号）
+**✅ 已验证**：
+- [x] 模块/屏幕放置与位置正确（button 正面朝上、toggle/knob 平躺；按钮与屏幕模块位置正常）
+- [x] toggle/knob **下沉 1px**（浮起 1px → 去掉 `py += offsetZ()`，offsetZ 在顶面不映射到高度）
+- [x] **模块朝向跟随 slab FACING**（正方形面板 + 14×14 网格 90° 旋转不变，命中/放置无需旋转；`facingYRotation` = blockstate y 旋转的负值：north 0/east −90/south −180/west −270）
+- [x] **屏幕 9 宫格/文字内容跟随 FACING**（`inPlaneRotationDeg()` + `applyInPlaneRotation` 绕屏幕区域中心转内容、位置不动；`facingInPlaneDeg` = +y）
+- [x] **模块旋转枢轴修正**（button/toggle 偏移且随方向不同、knob 正常 → 根因：模型原点不在几何中心——knob 圆盘原点=圆心，button/toggle 原点在角上（足迹中心 = 本地 (0.5,0.5)）；修复：facing 旋转绕**模块足迹中心**（`modulePivotX/Z`：button/toggle = 0.5/16，knob = 0））
+- [x] 网格线可见（y=面板 0px 偏移，未 z-fight；若日后出现再把 `GRID_LINE_OFFSET` 提到 0.01）
+- [x] 扳手语义：顶面拆单模块/屏幕；已装内容整拆被禁止并提示「请先拆除表面已安装的模块，再拆除板式监视器」；光板整拆保数据；已装内容时顶面扳手右键禁止旋转
+- [x] 屏幕两点放置、扳手拆除、配置菜单（MonitorModuleScreen）打开
+
+**⏳ 待后续确认**：
+- [ ] 旋钮拖拽方向手感（`atan2(pz−cz, px−cx)` + renderExtra `Axis.YP −anim`；若反了翻转 atan2 符号）
 - [ ] 旋钮角度文字 / 按钮标签朝向（内部变换按竖面设计，顶面可能转 90° 或不可见，需要时给 SLAB 单独变换）
-- [ ] 屏幕两点放置、扳手拆除、配置菜单（MonitorModuleScreen）打开
-- [ ] 存档重进 NBT、多 slab 状态隔离
+- [ ] 存档重进 NBT（四路径）、多 slab 状态隔离
 
 ### 改动文件
 
@@ -116,7 +124,7 @@
 | `client/MonitorSlabClientRegistry.java`（新） | 已加载 slab 坐标集合 |
 | `client/MonitorSlabHitDetector.java`（新） | 射线 vs 水平面板平面（FLOOR）+ 背面剔除 + 排除自身遮挡 |
 | `client/MonitorSlabGridOverlay.java`（新） | 网格/预览/放置/按压/钮子/旋钮/屏幕/拆除/配置菜单 |
-| `block/MonitorSlabRenderer.java`（新） | BER：模块（button +90°/toggle·knob 平放，offsetZ 不映射高度，**绕自身锚点加 facingYRotation 跟随 FACING**）+ 9 宫格（水平 ScreenPlane）+ 表面装饰 |
+| `block/MonitorSlabRenderer.java`（新） | BER：模块（button +90°/toggle·knob 平放，offsetZ 不映射高度，**facing 旋转绕足迹中心 `modulePivotX/Z` 跟随 FACING**）+ 9 宫格（水平 ScreenPlane + 每帧 `facingInPlaneDeg` 平面内旋转）+ 表面装饰 |
 | `block/Screen9GridRenderer.java`（改） | ScreenPlane.horizontal() 水平面支持 + **inPlaneRotationDeg() 平面内旋转（绕屏幕区域中心，内容跟随 FACING，位置不动）** |
 | `block/ModuleSurfaceRenderer.java`（改） | 加 KnobDisplaySource.SLAB |
 | `CCPeripheralExtenderClient.java`（改） | 注册 MonitorSlabRenderer + MonitorSlabGridOverlay |
