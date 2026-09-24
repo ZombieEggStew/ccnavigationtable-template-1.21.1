@@ -16,6 +16,7 @@ import com.zzy205.myfirstmod.network.PlaceScreenPayload;
 import com.zzy205.myfirstmod.network.RemoveModulePayload;
 import com.zzy205.myfirstmod.network.RemoveScreenPayload;
 import com.zzy205.myfirstmod.screen.MonitorModuleScreen;
+import com.zzy205.myfirstmod.screen.MonitorSlabConfigScreen;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -42,6 +43,8 @@ import java.util.Map;
  *   <li>按钮按压 / 钮子切换 / 旋钮拖拽（命中走 {@link MonitorSlabHitDetector} 独立检测）</li>
  *   <li>扳手蹲下右键拆除模块 / 屏幕</li>
  *   <li>右键模块 / 屏幕打开配置菜单（{@link MonitorModuleScreen}）</li>
+ *   <li>扳手普通右键（不蹲下）或 空手蹲下右键，命中顶面任意位置 → 打开板式监视器配置菜单
+ *       {@link MonitorSlabConfigScreen}（频道滚轮条，全局频道系统；扳手右键不再旋转 FACING）</li>
  * </ul>
  * 每帧重新 show，离开/换物品后自动消失（Outliner 语义）。交互状态按 BlockPos 隔离。
  * <p>
@@ -269,6 +272,16 @@ public class MonitorSlabGridOverlay {
         if (screenAt != null && (shiftUseEdge || holdingWrench && useEdge)
             && heldType == null && !holdingScreen) {
             mc.setScreen(new MonitorModuleScreen(pos, grid, GridState.SCREEN_NAME, screenAt.id(), screenAt.tooltipText()));
+            return;
+        }
+
+        // ── 打开板式监视器配置菜单（频道，抄 ControlDeskConfigScreen）：扳手普通右键（不蹲下）或 空手蹲下右键，命中顶面任意位置 ──
+        // 悬停模块/屏幕时上方已优先打开 MonitorModuleScreen（模块配置），不冲突；
+        // 扳手右键不再旋转 FACING（服务端 MonitorSlabBlock.onWrenched 一律消费），光板也能打开
+        if (heldType == null && !holdingScreen
+                && ((holdingWrench && useEdge && !shiftHeld)
+                || (held.isEmpty() && shiftUseEdge))) {
+            mc.setScreen(new MonitorSlabConfigScreen(pos));
             return;
         }
 

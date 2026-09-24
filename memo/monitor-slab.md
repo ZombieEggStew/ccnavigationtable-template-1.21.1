@@ -75,9 +75,39 @@
 ## 后续阶段（本次不做）
 
 - 贴墙 / 贴天花板变体的模块放置（命中平面方向按 FACE 变化，几何已预留）
-- Lua 外设（MonitorPeripheral capability 注册，约 20 行）
+- Lua 外设（MonitorPeripheral capability 注册，约 20 行；届时 slab 频道可经 `pe.getPeripheral(ch)` 寻址）
 - Flywheel Visual（性能优化）
 - Sable physics_block_properties、合成配方
+
+---
+
+## 实施记录（9.27，配置菜单与信号系统）
+
+### 方案（用户拍板）
+
+- **配置菜单**：右键菜单抄 `ControlDeskConfigScreen`，但**只保留第一行频道滚轮条**（slab 表面模块配置已走 `MonitorModuleScreen`，不需要已安装控件列表）。
+- **信号系统**：slab 频道走**全局频道系统**（`GlobalChannelRegistry`，与显示器/传感器共享命名空间，**不是** controlDesk 的物理体作用域空间）；自动分配（-1 → 最小空闲）、冲突顺延、跳过已占用频道的逻辑全部照 `MonitorBlockEntity` / `MonitorMenuScreen`。
+- **打开方式（用户拍板，完全照 Control Desk）**：扳手右键（不蹲下）命中顶面任意位置 → 直接打开配置菜单（**光板也打开**），扳手右键**不再旋转 FACING**（`onWrenched` 一律消费，对齐 `ControlDeskBlock`）；空手蹲下右键同样打开。
+
+### 实际落地
+
+| 文件 | 说明 |
+|---|---|
+| `block/MonitorSlabBlockEntity.java`（改） | 全局频道：`channel`/`occupiedChannels` 字段 + onLoad 注册（-1 自动分配，对齐 Monitor）+ setRemoved 注销 + `getChannel`/`setChannel`（<0 忽略，register 冲突顺延）+ `refreshOccupiedChannels`；NBT 四路径加 `Channel`/`OccupiedChannels`（writeSafe 只存 Channel） |
+| `compat/cc/GlobalChannelRegistry.java`（改） | `broadcastRefresh` 加 `MonitorSlabBlockEntity` 分支（slab 占用变化广播给全部全局频道设备，反之亦然） |
+| `network/MonitorSlabChannelPayload.java`（新） | client→server 保存 slab 全局频道；处理器加在 `MonitorPacketHandlers`（Monitor 家族） |
+| `screen/MonitorSlabConfigScreen.java`（新） | 抄 ControlDeskConfigScreen：192×169 背景 + 频道滚轮条（跳过已占用）+ 完成按钮；无物理体判断（全局频道恒可用）；关闭时发 payload |
+| `block/MonitorSlabBlock.java`（改） | `onWrenched` 一律消费（永不旋转）；`useItemOn` 加空手蹲下右键消费（服务端也消费） |
+| `client/MonitorSlabGridOverlay.java`（改） | 顶面命中 +（扳手普通右键 或 空手蹲下右键）→ 打开 `MonitorSlabConfigScreen`；悬停模块/屏幕时仍优先 `MonitorModuleScreen` |
+| lang | 加 `gui.ccpe.monitor_slab.channel_title` |
+
+### 验证清单（进游戏）
+
+- [ ] 扳手右键顶面（光板/已装内容）→ 打开配置菜单；扳手右键不再旋转 FACING
+- [ ] 空手蹲下右键顶面 → 打开配置菜单
+- [ ] 频道滚轮滚动跳过已占用频道（与 Monitor / 传感器共用命名空间，互相可见占用）
+- [ ] 关闭菜单保存频道；服务端自动分配（新 slab 从 0 起跳过占用）
+- [ ] 多 slab 同频道冲突顺延、存档重进频道保留（NBT 四路径）
 
 ---
 

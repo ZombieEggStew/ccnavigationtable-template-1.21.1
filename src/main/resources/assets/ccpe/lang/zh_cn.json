@@ -13,6 +13,7 @@
   "block.ccpe.my_monitor": "监视器",
   "block.ccpe.monitor_slab": "板式监视器",
   "gui.ccpe.monitor_slab.remove_blocked": "请先拆除表面已安装的模块，再拆除板式监视器",
+  "gui.ccpe.monitor_slab.channel_title": "板式监视器频道",
   "block.ccpe.my_control_desk": "控制台",
   "block.ccpe.aero_bearing": "航空轴承",
   "block.ccpe.servo_bearing": "舵机轴承",

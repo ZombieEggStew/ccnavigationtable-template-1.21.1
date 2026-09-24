@@ -227,19 +227,12 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
     }
 
     /**
-     * 扳手右键：顶面（面板）命中且已装模块/屏幕时<b>禁止旋转</b>（消费右键，放行给
-     * {@code MonitorSlabGridOverlay} 的模块交互——扳手右键模块会打开配置菜单，不能再同时旋转 FACING）；
-     * 其余情况走 {@link IWrenchable} 默认（Y 轴面旋转水平朝向）。
+     * 扳手普通右键（不蹲下）：一律消费右键，不再旋转方块（配置菜单由客户端
+     * {@code MonitorSlabGridOverlay} 打开，对齐 {@code ControlDeskBlock.onWrenched}）。
      */
     @Override
     public InteractionResult onWrenched(BlockState state, UseOnContext context) {
-        if (isPanelHit(state, context)) {
-            if (context.getLevel().getBlockEntity(context.getClickedPos()) instanceof MonitorSlabBlockEntity slab
-                    && slab.hasContent()) {
-                return InteractionResult.sidedSuccess(context.getLevel().isClientSide);
-            }
-        }
-        return IWrenchable.super.onWrenched(state, context);
+        return InteractionResult.SUCCESS;
     }
 
     /** 扳手潜行右键：拆除并掉落一个带完整 GridState 配置的 monitor_slab 物品（模块不单独掉落，对齐 MonitorBlock）。
@@ -308,6 +301,12 @@ public class MonitorSlabBlock extends BaseEntityBlock implements IWrenchable {
                                               BlockPos pos, Player player, InteractionHand hand,
                                               BlockHitResult hitResult) {
         if (hand != InteractionHand.MAIN_HAND) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+
+        // 空手 + 蹲下右键：消费右键（配置菜单由客户端 MonitorSlabGridOverlay 打开，对齐 ControlDeskBlock.useItemOn）
+        if (stack.isEmpty() && player != null && player.isShiftKeyDown()) {
+            return ItemInteractionResult.SUCCESS;
+        }
+
         if (!level.isClientSide) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 
         if (ModuleType.fromItem(stack) != null) {

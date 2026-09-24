@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.block;
 
 import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
 import com.zzy205.myfirstmod.client.MonitorSlabClientRegistry;
+import com.zzy205.myfirstmod.compat.cc.GlobalChannelRegistry;
 import com.zzy205.myfirstmod.monitor.GridState;
 import com.zzy205.myfirstmod.monitor.ModuleType;
 import com.zzy205.myfirstmod.monitor.ScreenText;
@@ -58,6 +59,11 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
     /** 表面棋盘网格状态（14×14，懒加载）。 */
     private GridState gridState;
 
+    /** 全局频道号（-1 表示尚未注册，加载时自动分配；与显示器/传感器共享全局频道命名空间，对齐 {@link MonitorBlockEntity}）。 */
+    private int channel = -1;
+    /** 所有已被占用的全局频道号快照（服务端设置，客户端经 updateTag 同步，配置菜单用它跳过已占用频道）。 */
+    private int[] occupiedChannels = new int[0];
+
     public MonitorSlabBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.monitor_slab_entity.get(), pos, state);
     }
@@ -69,12 +75,24 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
             // 客户端独立命中检测（MonitorSlabHitDetector）依赖此注册表枚举候选 slab
             MonitorSlabClientRegistry.add(this.getBlockPos());
         }
+        if (this.level != null && !this.level.isClientSide) {
+            // 全局频道注册（照 MonitorBlockEntity）：-1 自动分配最小空闲频道，冲突顺延
+            int assigned = GlobalChannelRegistry.register(this.channel, this);
+            if (assigned != this.channel) {
+                this.channel = assigned;
+                this.setChanged();
+            }
+            refreshOccupiedChannels();
+        }
     }
 
     @Override
     public void setRemoved() {
         if (this.level != null && this.level.isClientSide) {
             MonitorSlabClientRegistry.remove(this.getBlockPos());
+        }
+        if (this.level != null && !this.level.isClientSide) {
+            GlobalChannelRegistry.unregister(this.channel, this);
         }
         super.setRemoved();
     }
@@ -85,6 +103,38 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
             MonitorSlabClientRegistry.remove(this.getBlockPos());
         }
         super.onChunkUnloaded();
+    }
+
+    // ═══════════════ 全局频道（信号系统，对齐 MonitorBlockEntity） ═══════════════
+
+    /** 全局频道号。 */
+    public int getChannel() {
+        return channel;
+    }
+
+    /** 获取已占用全局频道号数组（客户端配置菜单用它跳过已占用频道）。 */
+    public int[] getOccupiedChannels() {
+        return occupiedChannels;
+    }
+
+    /** 更新全局频道号（服务端调用）：重新注册（冲突顺延）并同步客户端。 */
+    public void setChannel(int newChannel) {
+        if (level == null || level.isClientSide) return;
+        // -1 表示客户端尚未同步到真实频道，直接忽略，避免误触发自动重分配
+        if (newChannel < 0) return;
+        if (newChannel == this.channel) return;
+        int assigned = GlobalChannelRegistry.register(newChannel, this);
+        this.channel = assigned;
+        setChanged();
+        level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+    }
+
+    /** 从全局注册表同步 occupiedChannels 快照到本 BE，并通知客户端（占用集合变化时由 GlobalChannelRegistry 广播调用）。 */
+    public void refreshOccupiedChannels() {
+        if (this.level == null || this.level.isClientSide) return;
+        this.occupiedChannels = GlobalChannelRegistry.occupiedChannelsArray();
+        this.setChanged();
+        this.level.sendBlockUpdated(this.getBlockPos(), this.getBlockState(), this.getBlockState(), 3);
     }
 
     // ═══════════════ MonitorGridHost 实现（照抄 monitor_2 段） ═══════════════
@@ -503,10 +553,14 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
     // ═══════════════ NBT（四路径：saveAdditional / loadAdditional / writeSafe / getUpdateTag） ═══════════════
 
     private static final String TAG_GRID_STATE = "GridState";
+    private static final String TAG_CHANNEL = "Channel";
+    private static final String TAG_OCCUPIED_CHANNELS = "OccupiedChannels";
 
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.putInt(TAG_CHANNEL, channel);
+        tag.putIntArray(TAG_OCCUPIED_CHANNELS, occupiedChannels);
         if (gridState != null) {
             tag.put(TAG_GRID_STATE, gridState.save(registries));
         }
@@ -515,14 +569,17 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        if (tag.contains(TAG_CHANNEL)) channel = tag.getInt(TAG_CHANNEL);
+        if (tag.contains(TAG_OCCUPIED_CHANNELS)) occupiedChannels = tag.getIntArray(TAG_OCCUPIED_CHANNELS);
         if (tag.contains(TAG_GRID_STATE)) {
             getGridState().load(registries, tag.getCompound(TAG_GRID_STATE));
         }
     }
 
-    /** Create 原理图 / 装置搬运时的「安全 NBT」（Schematicannon 打印保留表面模块）。 */
+    /** Create 原理图 / 装置搬运时的「安全 NBT」（Schematicannon 打印保留表面模块与频道号）。 */
     @Override
     public void writeSafe(CompoundTag compound, HolderLookup.Provider registries) {
+        compound.putInt(TAG_CHANNEL, channel);
         if (gridState != null) {
             compound.put(TAG_GRID_STATE, gridState.save(registries));
         }
@@ -531,6 +588,8 @@ public class MonitorSlabBlockEntity extends BlockEntity implements MonitorGridHo
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         CompoundTag tag = super.getUpdateTag(registries);
+        tag.putInt(TAG_CHANNEL, channel);
+        tag.putIntArray(TAG_OCCUPIED_CHANNELS, occupiedChannels);
         if (gridState != null) {
             tag.put(TAG_GRID_STATE, gridState.save(registries));
         }
