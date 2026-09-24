@@ -12,6 +12,7 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -78,6 +79,21 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
 
             poseStack.pushPose();
             poseStack.translate(px, py, pz);
+            // 朝向跟随 slab FACING：绕<b>模块足迹中心</b> Y 旋转（与 blockstate 对模型本体的 y 旋转一致）。
+            // button/toggle 模型原点在角上（足迹中心 = 本地 (0.5,0.5)），knob 圆盘原点即中心（(0,0)）——
+            // 若直接绕锚点（原点）转，模型会整体甩开且随 facing 偏移不同（用户确认症状）；位置不动（网格旋转不变，命中/放置无需旋转）。
+            float facingDeg = facingYRotation(be.getBlockState());
+            float pivotX = modulePivotX(mod.type());
+            float pivotZ = modulePivotZ(mod.type());
+            if (pivotX != 0f || pivotZ != 0f) {
+                poseStack.translate(pivotX, 0f, pivotZ);
+            }
+            if (facingDeg != 0f) {
+                poseStack.mulPose(Axis.YP.rotationDegrees(facingDeg));
+            }
+            if (pivotX != 0f || pivotZ != 0f) {
+                poseStack.translate(-pivotX, 0f, -pivotZ);
+            }
             // 朝向校正（水平顶面）：button 贴片竖放（前脸 −Z）→ 绕 X +90° 平躺朝上；toggle/knob 底座已平躺 → 不转
             if (mod.type() == ModuleType.BUTTON_1X1) {
                 poseStack.mulPose(Axis.XP.rotationDegrees(90));
@@ -104,9 +120,11 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
             poseStack.popPose();
         }
 
-        // ── 渲染所有屏幕 9 宫格 ──
+        // ── 渲染所有屏幕 9 宫格（内容朝向跟随 FACING，位置不动）──
+        float inPlane = facingInPlaneDeg(be.getBlockState());
+        Screen9GridRenderer.ScreenPlane slabPlane = slabPlane(inPlane);
         for (var screen : grid.getScreenRegions()) {
-            renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay);
+            renderScreen(poseStack, buffer, screen, grid.getScreenText(screen.id()), light, overlay, slabPlane);
         }
     }
 
@@ -120,22 +138,65 @@ public class MonitorSlabRenderer implements BlockEntityRenderer<MonitorSlabBlock
                 : MonitorSlabBlockEntity.PANEL_Y_PX / 16f;
     }
 
+    /** 模块足迹中心相对锚点的 x 偏移（块单位）：button/toggle 模型原点在角上（足迹中心 = 本地 (0.5,0.5)）；knob 圆盘原点即中心（(0,0)）。 */
+    private static float modulePivotX(ModuleType type) {
+        return type == ModuleType.KNOB ? 0f : 0.5f / 16f;
+    }
+
+    /** 模块足迹中心相对锚点的 z 偏移（块单位），同 {@link #modulePivotX}。 */
+    private static float modulePivotZ(ModuleType type) {
+        return type == ModuleType.KNOB ? 0f : 0.5f / 16f;
+    }
+
+    /**
+     * blockstate 对模型本体的 y 旋转（地板放置：facing=north=0 / east=90 / south=180 / west=270，俯视顺时针），
+     * 渲染用其<b>负值</b>（Minecraft 矩阵正角 = 俯视逆时针）。模块绕自身锚点转同样的角度即与本体朝向一致；
+     * 符号如与顶面贴图方向相反，进游戏首测翻转（校准点）。
+     */
+    private static float facingYRotation(BlockState state) {
+        return switch (state.getValue(MonitorSlabBlock.FACING)) {
+            case EAST -> -90f;
+            case SOUTH -> -180f;
+            case WEST -> -270f; // ≡ +90°
+            default -> 0f;      // NORTH
+        };
+    }
+
+    /**
+     * 屏幕内容平面内旋转角（度，正 = 俯视顺时针 = blockstate y 同向）：
+     * 水平面帧里绕本地 Z（= 世界 −Y）转，等价于世界绕 +Y 的负向旋转，故直接取 +y（与模块的
+     * {@link #facingYRotation} 相反符号但同为俯视顺时针，两处分别推导、进游戏校准）。
+     */
+    private static float facingInPlaneDeg(BlockState state) {
+        return switch (state.getValue(MonitorSlabBlock.FACING)) {
+            case EAST -> 90f;
+            case SOUTH -> 180f;
+            case WEST -> 270f;
+            default -> 0f; // NORTH
+        };
+    }
+
     // ── 屏幕 9 宫格渲染（水平顶面） ──
 
-    /** slab 顶面屏幕面参数（块单位，水平面）：网格起点 = 面板内缩 1px；z() 作为面板高度（translate 用，已含模块凸出 1px）。 */
-    private static final Screen9GridRenderer.ScreenPlane SLAB_PLANE = new Screen9GridRenderer.ScreenPlane() {
-        @Override public float originX() { return MonitorSlabBlockEntity.GRID_ORIGIN_X_PX / 16f; }
-        @Override public float originY() { return MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX / 16f; }
-        @Override public float z() { return MonitorSlabBlockEntity.MODULE_SURFACE_Y_PX / 16f; }
-        @Override public boolean horizontal() { return true; }
-    };
+    /** slab 顶面屏幕面参数（块单位，水平面）：网格起点 = 面板内缩 1px；z() 作为面板高度（translate 用，已含模块凸出 1px）；
+     *  内容按 {@code inPlaneDeg} 绕屏幕区域中心旋转（跟随 FACING，位置不动）。每帧按当前 blockstate 构造。 */
+    private static Screen9GridRenderer.ScreenPlane slabPlane(float inPlaneDeg) {
+        return new Screen9GridRenderer.ScreenPlane() {
+            @Override public float originX() { return MonitorSlabBlockEntity.GRID_ORIGIN_X_PX / 16f; }
+            @Override public float originY() { return MonitorSlabBlockEntity.GRID_ORIGIN_Z_PX / 16f; }
+            @Override public float z() { return MonitorSlabBlockEntity.MODULE_SURFACE_Y_PX / 16f; }
+            @Override public boolean horizontal() { return true; }
+            @Override public float inPlaneRotationDeg() { return inPlaneDeg; }
+        };
+    }
 
     private void renderScreen(PoseStack ps, MultiBufferSource buffer,
-                              GridState.ScreenRegion scr, ScreenText text, int light, int overlay) {
+                              GridState.ScreenRegion scr, ScreenText text, int light, int overlay,
+                              Screen9GridRenderer.ScreenPlane plane) {
         BakedModel corner = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_CORNER);
         BakedModel edge   = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_EDGE);
         BakedModel center = MonitorPreloadedModels.getExtra(MonitorPreloadedModels.SCREEN_CENTER);
 
-        Screen9GridRenderer.renderScreen(ps, buffer, corner, edge, center, scr, text, SLAB_PLANE, light, overlay);
+        Screen9GridRenderer.renderScreen(ps, buffer, corner, edge, center, scr, text, plane, light, overlay);
     }
 }

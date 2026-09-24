@@ -37,6 +37,10 @@ public final class Screen9GridRenderer {
         /** 屏幕面是否水平（顶面，如 monitor_slab）：true 时整体「平移到 (originX, z, originY) + 绕 X +90° 摊平」，
          *  本地 XY 绘制平面 → 世界 XZ，本地 +Z（文字/正面法线）→ 世界 +Y（朝上）。默认竖面（false），Monitor/monitor_2 零影响。 */
         default boolean horizontal() { return false; }
+        /** 水平顶面（{@link #horizontal()}=true）时的<b>平面内旋转</b>（度，正 = 俯视顺时针，与 blockstate y 同向）：
+         *  绕屏幕区域中心旋转内容（9 宫格 + 文字），区域位置不动——monitor_slab 模块朝向已跟随 FACING，
+         *  屏幕内容需同步跟随。默认 0（Monitor/monitor_2 零影响）。 */
+        default float inPlaneRotationDeg() { return 0f; }
     }
 
     /** 水平面包装后的内部局部平面：原点归零，避免与包装 translate 双重叠加。 */
@@ -58,6 +62,21 @@ public final class Screen9GridRenderer {
         return localPlane(plane);
     }
 
+    /**
+     * 水平面内容绕<b>屏幕区域中心</b>做平面内旋转（正 = 俯视顺时针，与 blockstate y 同向）。
+     * 在摊平后的局部 XY 帧里等价于绕本地 Z（= 世界 −Y）转，内容朝向变化、区域位置不动。
+     * 必须紧接 {@link #wrapHorizontal} 之后调用（此时坐标为局部 0 基）。
+     */
+    private static void applyInPlaneRotation(PoseStack ps, GridState.ScreenRegion scr, ScreenPlane plane, float inPlane) {
+        if (inPlane == 0f) return;
+        float cell = plane.cellSize();
+        float cx = (scr.minX() + scr.maxX() + 1f) * cell / 2f;
+        float cy = (scr.minY() + scr.maxY() + 1f) * cell / 2f;
+        ps.translate(cx, cy, 0f);
+        ps.mulPose(Axis.ZP.rotationDegrees(inPlane));
+        ps.translate(-cx, -cy, 0f);
+    }
+
     private static final RandomSource RANDOM = RandomSource.create(42L);
 
     private Screen9GridRenderer() {}
@@ -71,8 +90,10 @@ public final class Screen9GridRenderer {
         if (text != null && !text.isVisible()) return;
 
         boolean horizontal = plane.horizontal();
+        float inPlane = plane.inPlaneRotationDeg();
         if (horizontal) {
             plane = wrapHorizontal(ps, plane);
+            applyInPlaneRotation(ps, scr, plane, inPlane);
         }
 
         float cellSize = plane.cellSize();
@@ -134,8 +155,10 @@ public final class Screen9GridRenderer {
     public static void renderScreenText(PoseStack ps, MultiBufferSource buffer,
                                         GridState.ScreenRegion scr, ScreenText text, ScreenPlane plane) {
         boolean horizontal = plane.horizontal();
+        float inPlane = plane.inPlaneRotationDeg();
         if (horizontal) {
             plane = wrapHorizontal(ps, plane);
+            applyInPlaneRotation(ps, scr, plane, inPlane);
         }
 
         float cellSize = plane.cellSize();

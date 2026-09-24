@@ -97,6 +97,9 @@
 
 - [x] ✅ button / 屏幕模块位置正常（用户进游戏确认）
 - [x] ✅ **toggle/knob 下沉 1px**（用户确认浮起 1px → `MonitorSlabRenderer` 去掉 `py += offsetZ()`，offsetZ 在顶面不映射到高度；button 的 1px 凸出已含在 `moduleBaseY`）
+- [x] ✅ **模块朝向跟随 slab FACING**（用户确认：正方形面板 + 14×14 网格 90° 旋转不变，命中/放置无需旋转；`MonitorSlabRenderer` 每个模块绕自身锚点加 `facingYRotation` = blockstate y 旋转的负值（north 0/east −90/south −180/west −270），位置不动；旋转符号如与贴图方向相反需翻转）
+- [x] ✅ **屏幕 9 宫格/文字内容跟随 FACING**（`Screen9GridRenderer.ScreenPlane` 加 `inPlaneRotationDeg()`（水平面内旋转，正 = 俯视顺时针），`applyInPlaneRotation` 绕屏幕区域中心旋转内容、位置不动；`MonitorSlabRenderer` 每帧按 blockstate 构造带 `facingInPlaneDeg`（= +y）的平面；Monitor/monitor_2 默认 0 零影响。模块与屏幕两处旋转符号分别推导，进游戏一起校准）
+- [x] ✅ **模块跟随 FACING 的旋转枢轴修正**（用户报告 button/toggle 偏移且随方向不同、knob 正常 → 根因：模型原点不在几何中心——knob 圆盘原点=圆心（绕锚点转位置不变），button/toggle 原点在角上（足迹中心 = 本地 (0.5,0.5)，绕原点转整体甩开且随旋转角偏移不同）。修复：facing 旋转绕<b>模块足迹中心</b>（`modulePivotX/Z`：button/toggle = 0.5/16，knob = 0），位置固定）
 - [ ] 网格线是否可见（y=面板 0px 偏移，若 z-fight 把 `MonitorSlabGridOverlay.GRID_LINE_OFFSET` 提到 0.01）
 - [ ] 旋钮拖拽方向（`atan2(pz−cz, px−cx)` + renderExtra `Axis.YP −anim`，若反了翻转 atan2 符号）
 - [ ] 旋钮角度文字 / 按钮标签朝向（内部变换按竖面设计，顶面可能转 90° 或不可见，需要时给 SLAB 单独变换）
@@ -113,8 +116,8 @@
 | `client/MonitorSlabClientRegistry.java`（新） | 已加载 slab 坐标集合 |
 | `client/MonitorSlabHitDetector.java`（新） | 射线 vs 水平面板平面（FLOOR）+ 背面剔除 + 排除自身遮挡 |
 | `client/MonitorSlabGridOverlay.java`（新） | 网格/预览/放置/按压/钮子/旋钮/屏幕/拆除/配置菜单 |
-| `block/MonitorSlabRenderer.java`（新） | BER：模块（button +90°/toggle·knob 平放，offsetZ 不映射高度）+ 9 宫格（水平 ScreenPlane）+ 表面装饰 |
-| `block/Screen9GridRenderer.java`（改） | ScreenPlane.horizontal() 水平面支持（唯一动共享类） |
+| `block/MonitorSlabRenderer.java`（新） | BER：模块（button +90°/toggle·knob 平放，offsetZ 不映射高度，**绕自身锚点加 facingYRotation 跟随 FACING**）+ 9 宫格（水平 ScreenPlane）+ 表面装饰 |
+| `block/Screen9GridRenderer.java`（改） | ScreenPlane.horizontal() 水平面支持 + **inPlaneRotationDeg() 平面内旋转（绕屏幕区域中心，内容跟随 FACING，位置不动）** |
 | `block/ModuleSurfaceRenderer.java`（改） | 加 KnobDisplaySource.SLAB |
 | `CCPeripheralExtenderClient.java`（改） | 注册 MonitorSlabRenderer + MonitorSlabGridOverlay |
 
