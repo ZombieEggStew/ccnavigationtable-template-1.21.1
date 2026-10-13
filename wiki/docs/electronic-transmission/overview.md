@@ -16,9 +16,9 @@ The **Electronic Transmission** is a Create kinetic transmission controlled pure
 
 | Method | Description |
 |---|---|
-| `setRatio(ratio)` | Set the gear ratio (≥0), ratio mode `mainThread=true` |
+| `setRatio(ratio)` | Set the gear ratio (**negative = output runs opposite to the input**), ratio mode `mainThread=true` |
 | `getRatio()` | Get the current gear ratio |
-| `setTargetSpeed(speed)` | Directly set the downstream speed (0~256.00) `mainThread=true` |
+| `setTargetSpeed(speed)` | Directly set the downstream speed (**-256.00 ~ 256.00**, negative = opposite to the input) `mainThread=true` |
 | `getTargetSpeed()` | Get the target speed |
 
 ```lua
@@ -27,14 +27,23 @@ local t = peripheral.find("ccpe:transmission_peripheral")
 -- Ratio mode: downstream = upstream × ratio
 t.setRatio(0.5)   -- Slow the downstream to 50%
 t.setRatio(3.0)   -- Speed the downstream up 3× (capped at 256 RPM)
+t.setRatio(-1.0)  -- Negative ratio: downstream runs opposite to the upstream, same speed
 
--- Target mode: directly set the downstream speed (0~256, 2 decimal places)
+-- Target mode: directly set the downstream speed (-256 ~ 256, 2 decimal places)
 t.setTargetSpeed(128.56)
+t.setTargetSpeed(-128.56)  -- Negative speed: runs opposite to the upstream at 128.56 RPM
 print(t.getTargetSpeed())  -- 128.56
 
 -- Query the current state
 print(t.getRatio())
 ```
+
+!!! info "Negative values reverse the output"
+    `setTargetSpeed(-128)` / `setRatio(-0.5)` make the downstream rotate **opposite to the
+    input** (Create's native sequenced-gearshift reversal semantics). The sign only changes
+    direction — the magnitude is still capped at **256 RPM** — and the goggles tooltip shows
+    the negative target / output speed. Stress is charged on `|output − input|`, so reversing
+    (Δ = |output| + |input|) costs more stress than slowing down in the same direction.
 
 ## Servo Mode
 

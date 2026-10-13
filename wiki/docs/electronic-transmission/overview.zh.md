@@ -17,9 +17,9 @@
 
 | 方法 | 说明 |
 |---|---|
-| `setRatio(ratio)` | 设置变速比（≥0），比例模式 `mainThread=true` |
+| `setRatio(ratio)` | 设置变速比（**负值 = 输出与输入反向**），比例模式 `mainThread=true` |
 | `getRatio()` | 获取当前变速比 |
-| `setTargetSpeed(speed)` | 直接设定下游转速（0~256.00）`mainThread=true` |
+| `setTargetSpeed(speed)` | 直接设定下游转速（**-256.00 ~ 256.00**，负值 = 与输入反向）`mainThread=true` |
 | `getTargetSpeed()` | 获取目标转速 |
 
 
@@ -30,14 +30,22 @@ local t = peripheral.find("ccpe:transmission_peripheral")
 -- 比率模式：下游 = 上游 × 比率
 t.setRatio(0.5)   -- 下游降速至 50%
 t.setRatio(3.0)   -- 下游加速至 3 倍（上限 256 RPM）
+t.setRatio(-1.0)  -- 负比率：下游与上游反向、同速
 
--- 目标模式：直接设定下游转速（0~256，保留两位小数）
+-- 目标模式：直接设定下游转速（-256 ~ 256，保留两位小数）
 t.setTargetSpeed(128.56)
+t.setTargetSpeed(-128.56)  -- 负转速：下游与上游反向、128.56 RPM
 print(t.getTargetSpeed())  -- 128.56
 
 -- 查询当前状态
 print(t.getRatio())
 ```
+
+!!! info "负值 = 反向"
+    `setTargetSpeed(-128)` / `setRatio(-0.5)` 会让下游与**输入反向**旋转（Create 原生
+    sequenced gearshift 的反向语义）。取负只改变方向，幅度上限仍是 **256 RPM**；护目镜
+    tooltip 中的目标转速 / 输出转速会显示负号。应力按 `|输出转速 − 输入转速|` 计费，
+    所以反向（Δ = |输出| + |输入|）比同向降速更耗应力。
 
 ## 舵机模式
 

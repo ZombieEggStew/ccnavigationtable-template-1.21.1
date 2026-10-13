@@ -29,7 +29,8 @@ import org.jetbrains.annotations.Nullable;
  * -- 变速器模式
  * local t = peripheral.wrap("right")
  * t.setRatio(0.5)   -- 下游速度 = 上游 × 50%
- * t.setTargetSpeed(128) -- 或直接指定下游转速
+ * t.setTargetSpeed(128)  -- 或直接指定下游转速
+ * t.setTargetSpeed(-128) -- 负值 = 下游与输入反向（幅度上限 256 RPM）
  *
  * -- 舵机模式（服务器权威角度定位，类 TiltAdapter 段式精确同步）
  * t.setServoMode(true)
@@ -53,7 +54,7 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
     public static final float MAX_SERVO_ANGLE = 180f;
     /** 舵机输出转速上限（RPM） */
     public static final float MAX_SERVO_RPM = 96f;
-    /** 变速器模式目标转速上限（RPM） */
+    /** 变速器模式目标转速绝对值上限（RPM）；负值表示与输入反向 */
     public static final float MAX_TRANSMISSION_RPM = 256f;
 
     /** 到位后保留 modifier 的 tick 数，让下游钳到端点（Create sequenced gearshift 语义） */
@@ -65,13 +66,13 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
 
     private static final float VALUE_EPSILON = 1e-4f;
 
-    /** 当前变速比 0.0 ~ 1.0，默认全速 */
+    /** 当前变速比（允许 >1.0 加速；负值 = 输出反向），默认全速 */
     private double ratio = 1.0;
 
     /** 目标转速模式（true 时 ratio 由 targetSpeed / sourceSpeed 自动计算） */
     private boolean useTargetMode = false;
 
-    /** 目标下游转速 0.0 ~ 256.0 */
+    /** 目标下游转速 -256.0 ~ 256.0；负值 = 与输入反向 */
     private double targetSpeed = 256.0;
 
     // ── 舵机模式状态（服务端权威，客户端经 NBT 每 tick 同步）──
@@ -133,11 +134,11 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
             return ratio;
         }
 
-        /** 设置变速比；舵机模式下拒绝并返回 false */
+        /** 设置变速比（负值 = 输出反向）；舵机模式下拒绝并返回 false */
         @LuaFunction(mainThread = true)
         public final boolean setRatio(double r) {
             if (servoMode) return false;
-            double newRatio = Math.max(r, 0.0);  // 允许 >1.0 加速
+            double newRatio = r;  // 允许 >1.0 加速；负值反向。实际输出幅度由 getRotationSpeedModifier 钳到 ±256 RPM
             if (!useTargetMode && Math.abs(ratio - newRatio) < VALUE_EPSILON) return true;
 
             useTargetMode = false;
@@ -154,11 +155,11 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
             return targetSpeed;
         }
 
-        /** 设置目标下游转速；舵机模式下拒绝并返回 false */
+        /** 设置目标下游转速（-256 ~ 256，负值 = 与输入反向）；舵机模式下拒绝并返回 false */
         @LuaFunction(mainThread = true)
         public final boolean setTargetSpeed(double speed) {
             if (servoMode) return false;
-            double clamped = Mth.clamp(speed, 0.0, MAX_TRANSMISSION_RPM);
+            double clamped = Mth.clamp(speed, -MAX_TRANSMISSION_RPM, MAX_TRANSMISSION_RPM);
             double rounded = Math.round(clamped * 100.0) / 100.0;
             if (useTargetMode && Math.abs(targetSpeed - rounded) < VALUE_EPSILON) return true;
 
@@ -531,10 +532,10 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
                         .withStyle(ChatFormatting.AQUA));
     }
 
-    /** 变速器模式下游输出转速（RPM，绝对值） */
+    /** 变速器模式下游输出转速（RPM，带符号：负值 = 与输入反向） */
     private float getOutputSpeed() {
         if (!hasSource()) return 0f;
-        return Math.abs(getSpeed() * getRotationSpeedModifier(getSourceFacing().getOpposite()));
+        return getSpeed() * getRotationSpeedModifier(getSourceFacing().getOpposite());
     }
 
     // ═══════════════ 速度修改 ═══════════════
@@ -554,9 +555,9 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
         if (useTargetMode) {
             return (float) (targetSpeed / sourceSpeed);
         }
-        // 比率模式：限制实际输出 ≤ 256
+        // 比率模式：实际输出幅度限制在 ±256 RPM（负比率 = 反向）
         float maxRatio = MAX_TRANSMISSION_RPM / sourceSpeed;
-        return (float) Math.min(ratio, maxRatio);
+        return (float) Mth.clamp(ratio, -maxRatio, maxRatio);
     }
 
     private void applySpeed() {
@@ -578,7 +579,8 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
      * 应力影响（Create 网络按 {@code impact × |输入转速|} 计费，tooltip 同公式）：
      * <ul>
      *   <li>变速器模式：实际应力 = Config.servoStressImpact × |输出转速 − 输入转速|
-     *       （ratio = 1 时 Δ = 0 不耗应力），impact 反算为 {@code 系数 × Δ / |输入转速|}；</li>
+     *       （带符号差值：ratio = 1 时 Δ = 0 不耗应力；反向时 Δ = |输出| + |输入|，比同向降速更耗应力），
+     *       impact 反算为 {@code 系数 × Δ / |输入转速|}；</li>
      *   <li>舵机模式：实际应力 = Config.servoModeStressImpact × |真实输出转速|
      *       （输出可被 setServoSpeed 覆盖/加速；静止时输出为 0 不耗应力）。</li>
      * </ul>
@@ -595,12 +597,13 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
                 impact = Config.SERVO_MODE_STRESS_IMPACT.get().floatValue() * realOutputSpeed / sourceSpeed;
             }
         } else {
-            float inputSpeed = Math.abs(getTheoreticalSpeed());
-            if (inputSpeed < 0.01f) {
+            float inputSpeed = getTheoreticalSpeed();  // 带符号，与 getOutputSpeed 同一参照系
+            if (Math.abs(inputSpeed) < 0.01f) {
                 impact = 0f;
             } else {
+                // 带符号差值：反向输出（如 输入 64 / 输出 -64）Δ = 128，比同向降速更耗应力
                 float delta = Math.abs(getOutputSpeed() - inputSpeed);
-                impact = Config.SERVO_STRESS_IMPACT.get().floatValue() * delta / inputSpeed;
+                impact = Config.SERVO_STRESS_IMPACT.get().floatValue() * delta / Math.abs(inputSpeed);
             }
         }
         this.lastStressApplied = impact;
