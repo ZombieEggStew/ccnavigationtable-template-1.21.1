@@ -42,7 +42,8 @@ print(t.getRatio())
     `setTargetSpeed(-128)` / `setRatio(-0.5)` make the downstream rotate **opposite to the
     input** (Create's native sequenced-gearshift reversal semantics). The sign only changes
     direction — the magnitude is still capped at **256 RPM** — and the goggles tooltip shows
-    the negative target / output speed. Stress is charged on `|output − input|`, so reversing
+    the negative target / output speed (both **relative to the input direction**: positive = same
+    direction as the input, negative = opposite). Stress is charged on `|output − input|`, so reversing
     (Δ = |output| + |input|) costs more stress than slowing down in the same direction.
 
 ## Servo Mode

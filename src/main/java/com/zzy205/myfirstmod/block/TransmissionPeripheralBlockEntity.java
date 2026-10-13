@@ -532,10 +532,25 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
                         .withStyle(ChatFormatting.AQUA));
     }
 
-    /** 变速器模式下游输出转速（RPM，带符号：负值 = 与输入反向） */
-    private float getOutputSpeed() {
+    /** 变速器模式下游输出转速（RPM，**方块内部参照系**：符号 = Create 网络传给下游的转速符号），供应力计算用。 */
+    private float getRawOutputSpeed() {
         if (!hasSource()) return 0f;
         return getSpeed() * getRotationSpeedModifier(getSourceFacing().getOpposite());
+    }
+
+    /**
+     * 变速器模式下游输出转速（RPM，**以输入方向为参照**，供护目镜显示）。
+     * <p>
+     * {@link #getRawOutputSpeed()} 的符号是 Create 网络内部转速的符号（下游由
+     * {@code 上游转速 × modifier} 传播而来，见 RotationPropagator.getConveyedSpeed），它取决于网络本身的
+     * 正负，与输入轴的视觉转向无关。直接显示内部符号会出现「目标 +64 而输出 −64」的矛盾（下游实际与输入同向）。
+     * 这里按 modifier 的符号换算到输入参照系：正 = 与输入同向，负 = 与输入反向，与 {@code targetSpeed} /
+     * {@code ratio} 的正负号含义一致。
+     */
+    private float getOutputSpeed() {
+        float raw = getRawOutputSpeed();
+        if (raw == 0f) return 0f;
+        return Math.abs(raw) * Math.signum(getRotationSpeedModifier(getSourceFacing().getOpposite()));
     }
 
     // ═══════════════ 速度修改 ═══════════════
@@ -597,12 +612,12 @@ public class TransmissionPeripheralBlockEntity extends SplitShaftBlockEntity {
                 impact = Config.SERVO_MODE_STRESS_IMPACT.get().floatValue() * realOutputSpeed / sourceSpeed;
             }
         } else {
-            float inputSpeed = getTheoreticalSpeed();  // 带符号，与 getOutputSpeed 同一参照系
+            float inputSpeed = getTheoreticalSpeed();  // 带符号，与 getRawOutputSpeed 同一参照系
             if (Math.abs(inputSpeed) < 0.01f) {
                 impact = 0f;
             } else {
-                // 带符号差值：反向输出（如 输入 64 / 输出 -64）Δ = 128，比同向降速更耗应力
-                float delta = Math.abs(getOutputSpeed() - inputSpeed);
+                // 带符号差值（两者同为内部参照系）：反向输出（如 输入 64 / 输出 -64）Δ = 128，比同向降速更耗应力
+                float delta = Math.abs(getRawOutputSpeed() - inputSpeed);
                 impact = Config.SERVO_STRESS_IMPACT.get().floatValue() * delta / Math.abs(inputSpeed);
             }
         }

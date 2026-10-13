@@ -122,9 +122,6 @@
 - Added the Monitor Slab, a step-shaped monitor block with a 14×14 surface grid. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/monitor/monitor-slab/
 
 1.1.7
-- Transmission peripheral: `setTargetSpeed` now accepts **negative speeds (-256 ~ 256)** and
-  `setRatio` accepts **negative ratios** — a negative value makes the downstream rotate
-  **opposite to the input** (Create's native sequenced-gearshift reversal). The sign only
-  changes the direction; the magnitude limit stays 256 RPM.
-  Stress is now charged on the signed difference `|output − input|`, so reversing costs more
-  stress than slowing down in the same direction.
+- Transmission peripheral: `setTargetSpeed` now accepts **negative speeds (-256 ~ 256)**  and `setRatio` accepts **negative ratios** — a negative value makes the downstream rotate **opposite to the input**.
+
+  Stress is now charged on the signed difference `|output − input|`, so reversing costs more stress than slowing down in the same direction.
