@@ -2,12 +2,14 @@ package com.zzy205.myfirstmod.block;
 
 import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
 import com.simibubi.create.foundation.particle.AirParticleData;
+import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
 import dev.ryanhcode.sable.api.physics.force.ForceGroup;
 import dev.ryanhcode.sable.api.physics.force.QueuedForceGroup;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.companion.math.JOMLConversion;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Registry;
@@ -15,10 +17,14 @@ import net.minecraft.core.Vec3i;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3d;
 
@@ -97,11 +103,25 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
     public static final float PARTICLE_DRAG = 0.7F;
 
     /** 平均飞行速度，单位 <b>块/tick</b>（1 块/tick = 20 块/秒）。原版 create:backtank 用 0.05 */
-    public static final float PARTICLE_SPEED = 0.30F;
+    public static final float PARTICLE_SPEED = 1.0F;
 
     /** 位移长度（格）：越大概率尾巴越长；寿命 = 位移长度 / {@link #PARTICLE_SPEED} ⇒ 现在约 8~15 tick */
-    public static final double PARTICLE_TRAVEL_MIN = 2.5D;
-    public static final double PARTICLE_TRAVEL_MAX = 4.5D;
+    public static final double PARTICLE_TRAVEL_MIN = 6.0D;
+    public static final double PARTICLE_TRAVEL_MAX = 10.0D;
+
+    /** 喷口被挡时：射线可走距离短于它就完全不生成粒子（对应电扇气流被截断到 0） */
+    public static final double MIN_PARTICLE_TRAVEL = 0.2D;
+
+    /**
+     * 其它物理体是否也挡粒子。
+     * <ul>
+     * <li>{@code true}（默认）：和普通方块一样挡住 —— 别的物理体横在喷口前面就没有气流；</li>
+     * <li>{@code false}：只有自身物理体与主世界的方块挡（原版 {@code create:encased_fan} 的
+     *     {@code getFlowLimit} 只查自己那一层的 {@code getBlockState}，看不到别的物理体，
+     *     所以它的气流不会被别的物理体截断）。</li>
+     * </ul>
+     */
+    public static final boolean PARTICLES_BLOCKED_BY_OTHER_BODIES = true;
 
     /** 纯视觉：排气方向与"机体受力反方向"不符时翻这里（不影响物理） */
     public static final boolean INVERT_PARTICLE_FLOW = false;
@@ -202,6 +222,18 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
         final Vec3 u = v.cross(axis).normalize();
 
         final Vec3 center = Vec3.atCenterOf(this.worldPosition);
+        final Vec3 flowDir = axis.scale(flowSign);
+        final Vec3 mouth = center.add(axis.scale(0.55D));
+
+        // 与 create:encased_fan 一致：气流遇方块即止（自身物理体 + 其它物理体都算）。
+        // 电扇那边是 AirCurrent.getFlowLimit() 把 maxDistance 截到第一个挡路方块的碰撞形状深度；
+        // 这里等价地沿排气方向打一条碰撞射线，把粒子位移截断在命中点。
+        final double clear = this.clearDistance(mouth, flowDir, PARTICLE_TRAVEL_MAX + 0.1D);
+
+        if (clear < MIN_PARTICLE_TRAVEL) {
+            return; // 喷口被挡死 → 不生成粒子
+        }
+
         final RandomSource random = level.random;
 
         for (int i = 0; i < count; i++) {
@@ -209,18 +241,77 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
             final double theta = random.nextDouble() * Math.PI * 2.0D;
             final Vec3 spread = u.scale(Math.cos(theta) * radius).add(v.scale(Math.sin(theta) * radius));
 
-            // 起点：方块中心沿喷口方向外移 0.55 格（喷口外一点）
-            final Vec3 start = center.add(axis.scale(0.55D)).add(spread);
             // AirParticleData 的 dx/dy/dz 不是速度而是"目标相对起点的位移"；
             // 寿命 = 位移长度 / PARTICLE_SPEED（上限 60 tick）
-            final double travel = PARTICLE_TRAVEL_MIN
+            final double wanted = PARTICLE_TRAVEL_MIN
                     + random.nextDouble() * (PARTICLE_TRAVEL_MAX - PARTICLE_TRAVEL_MIN);
-            final Vec3 flow = axis.scale(flowSign * travel);
+            // 被挡就只喷到挡板前（短于 MIN_PARTICLE_TRAVEL 的干脆不要）
+            final double travel = Math.min(wanted, clear);
+
+            if (travel < MIN_PARTICLE_TRAVEL) {
+                continue;
+            }
+
+            // 起点：喷口外一点（0.55 格）+ 口面随机偏移
+            final Vec3 start = mouth.add(spread);
+            final Vec3 flow = flowDir.scale(travel);
 
             level.addParticle(new AirParticleData(PARTICLE_DRAG, PARTICLE_SPEED),
                     start.x, start.y, start.z,
                     flow.x, flow.y, flow.z);
         }
+    }
+
+    /**
+     * 沿排气方向测"最远能走多远"——遇到方块（含其它物理体的方块）就停在它的碰撞形状上。
+     * <p>
+     * 语义对齐 {@code create:encased_fan}：{@code AirCurrent.getFlowLimit()}
+     * （{@code AirCurrent.java:229-257}）用 {@code state.getCollisionShape()} 找出第一处挡路
+     * 方块并把 {@code maxDistance} 截到那里，所以电扇的气流/粒子到障碍物为止。这里用
+     * {@link ClipContext.Block#COLLIDER} + {@link ClipContext.Fluid#NONE} 复现同一语义
+     * （只挡实体碰撞形状，不挡水/空气）。
+     * <p>
+     * 坐标系：射线在本物理体的 plot 局部系里发出；Sable 的 {@code Level.clip} 补丁会连带检测
+     * 其它物理体与主世界，命中其它物理体时 {@link BlockHitResult#getLocation()} 位于<b>那个</b>
+     * 物理体的局部系，需先投到世界再投回本物理体局部系（同
+     * {@code TrailingWheelMountBlockEntity#computeMaxExtensionToTerrain} 的做法）。
+     */
+    private double clearDistance(final Vec3 start, final Vec3 flowDir, final double wanted) {
+        final Level level = this.level;
+
+        if (level == null) {
+            return 0.0D;
+        }
+
+        final Vec3 end = start.add(flowDir.scale(wanted));
+        final ClipContext clip = new ClipContext(start, end,
+                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, CollisionContext.empty());
+        final BlockHitResult hit = level.clip(clip);
+
+        if (hit.getType() == HitResult.Type.MISS) {
+            return wanted;
+        }
+
+        final SubLevel hitSubLevel = Sable.HELPER.getContaining(level, hit.getLocation());
+
+        if (hitSubLevel != null && !PARTICLES_BLOCKED_BY_OTHER_BODIES
+                && hitSubLevel != Sable.HELPER.getContaining(this)) {
+            return wanted; // 忽略"别的物理体"造成的遮挡
+        }
+
+        final Vec3 hitLocal;
+
+        if (hitSubLevel == null) {
+            // 命中自身 plot / 主世界：坐标本来就是本体的局部系
+            hitLocal = hit.getLocation();
+        } else {
+            final Vec3 world = hitSubLevel.logicalPose().transformPosition(hit.getLocation());
+            final SubLevel own = Sable.HELPER.getContaining(this);
+            hitLocal = own == null ? world : own.logicalPose().transformPositionInverse(world);
+        }
+
+        // 留 0.03 格余量，避免粒子正好卡在方块表面
+        return Math.max(0.0D, hitLocal.subtract(start).length() - 0.03D);
     }
 
     /** 背后的气流源（电扇）；缺失 / 朝向不匹配 → null */
