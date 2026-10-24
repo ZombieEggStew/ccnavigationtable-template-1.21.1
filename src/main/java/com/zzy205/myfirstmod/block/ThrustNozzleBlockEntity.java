@@ -116,16 +116,17 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
     // ── 排气粒子（自研 ccpe:exhaust：扫掠碰撞 + 撞墙向四周扩散，见 client/particle/ExhaustParticle） ──
 
     /**
-     * {@code true} = 用自研排气粒子（扫掠碰撞 + 撞墙向四周扩散，见 §3.6）；
-     * {@code false} = <b>现行</b> {@code create:air} 插值粒子（只在起点→终点之间插值、永不碰撞）。
+     * {@code true} = 用自研排气粒子（<b>现行</b>，扫掠碰撞 + 撞墙向四周扩散，见 §3.6）；
+     * {@code false} = 回退到 {@code create:air} 插值粒子（只在起点→终点之间插值、永不碰撞）。
      * <p>
-     * <b>已实测回退</b>：自研版的撞墙扩散观感不好（用户进游戏验证后判定不如旧版），默认关闭。
-     * 代码与注册都保留着，想再试直接把这里改回 {@code true} 即可，不用重写。
+     * 历史：v5 第一版撞墙"没反应"，根因是 {@code ExhaustCollision} 忘了把
+     * {@code getCollisionShape} 返回的方块局部 AABB 加上方块坐标（已修，见该文件注释）；
+     * 修好后重新打开这一版。要退回旧观感把这里改 {@code false} 即可。
      * <p>
      * 旧的环绕常量（{@link #PARTICLE_DRAG} / {@link #PARTICLE_SPEED} / {@code PARTICLE_TRAVEL_*}）
      * 只在 {@code false} 时生效；新粒子的旋钮见下面 {@code EXHAUST_*}。
      */
-    public static final boolean USE_EXHAUST_PARTICLE = false;
+    public static final boolean USE_EXHAUST_PARTICLE = true;
 
     /** 出生尺寸（块，即四边形边长），寿命内会膨胀到约 1.37 倍 */
     public static final float EXHAUST_SCALE = 2.0F;

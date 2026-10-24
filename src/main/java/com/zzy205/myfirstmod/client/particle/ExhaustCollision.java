@@ -10,6 +10,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
@@ -130,14 +131,19 @@ public final class ExhaustCollision {
                         continue;
                     }
 
-                    final VoxelShape shape = state.getCollisionShape(level, pos);
+                    final VoxelShape shape = state.getCollisionShape(level, pos, CollisionContext.empty());
 
                     if (shape.isEmpty()) {
                         continue;
                     }
 
                     for (final AABB box : shape.toAabbs()) {
-                        final Hit hit = slab(start, movement, box, radius);
+                        // 注意：getCollisionShape 返回的 AABB 是**方块局部坐标**（0~1），
+                        // 必须加上方块坐标才是世界/plot 坐标（这里直接把偏移传给 slab，不新建 AABB）。
+                        // 漏了这一步 ⇒ 所有候选盒都堆在原点附近，粒子永远撞不到东西
+                        // —— v5 第一版的「撞墙没反应」就是这个。
+                        final Hit hit = slab(start, movement, box, radius,
+                                pos.getX(), pos.getY(), pos.getZ());
 
                         if (hit != null && (best == null || hit.fraction() < best.fraction())) {
                             best = hit;
@@ -150,16 +156,22 @@ public final class ExhaustCollision {
         return best;
     }
 
-    /** 球体（按半径膨胀 AABB）与一段位移的 slab 相交测试；命中返回进入点比例与面法线 */
-    private static @Nullable Hit slab(final Vec3 start, final Vec3 movement, final AABB box, final double radius) {
+    /**
+     * 球体（按半径膨胀 AABB）与一段位移的 slab 相交测试；命中返回进入点比例与面法线。
+     *
+     * @param box      方块局部坐标的碰撞盒（0~1）
+     * @param ox/oy/oz 该方块的位置偏移（box + 偏移 = 当前坐标系里的实际碰撞盒）
+     */
+    private static @Nullable Hit slab(final Vec3 start, final Vec3 movement, final AABB box, final double radius,
+                                      final int ox, final int oy, final int oz) {
         double entry = 0.0D;
         double exit = 1.0D;
         int normalAxis = -1;
         double normalSign = 0.0D;
 
         for (int axis = 0; axis < 3; axis++) {
-            final double min = (axis == 0 ? box.minX : axis == 1 ? box.minY : box.minZ) - radius;
-            final double max = (axis == 0 ? box.maxX : axis == 1 ? box.maxY : box.maxZ) + radius;
+            final double min = (axis == 0 ? box.minX + ox : axis == 1 ? box.minY + oy : box.minZ + oz) - radius;
+            final double max = (axis == 0 ? box.maxX + ox : axis == 1 ? box.maxY + oy : box.maxZ + oz) + radius;
             final double origin = axis == 0 ? start.x : axis == 1 ? start.y : start.z;
             final double delta = axis == 0 ? movement.x : axis == 1 ? movement.y : movement.z;
 

@@ -131,7 +131,7 @@ group.applyAndRecordPointForce(centerOf(worldPosition), impulse)             // 
 | v2 | 完全复刻 `create:air_flow` + 把喷管加进 `create:fan_transparent` 标签，每 tick 追加 N 颗 | **观感不好，已回退**（标签还会让电扇的实体推力/批量加工穿过喷管生效） |
 | v3 | 在 v1 上加**遮挡射线** | 现行基础 |
 | v4 | 遮挡射线改到**世界系**（主世界方块才挡得住，§3.4） | 现行 |
-| v5 | **自研粒子 `ccpe:exhaust`** + 扫掠碰撞 + 撞墙散射（§3.6） | 已回退（`USE_EXHAUST_PARTICLE = false`） |
+| v5 | **自研粒子 `ccpe:exhaust`** + 扫掠碰撞 + 撞墙散射（§3.6） | 现行（第一版碰撞坐标系写错、撞墙无反应，已修） |
 
 ### 3.3 当前参数（用户在 v1 基础上调过）
 
@@ -198,10 +198,10 @@ group.applyAndRecordPointForce(centerOf(worldPosition), impulse)             // 
 mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题。真要绝对干净就得自研粒子类型
 （新 ParticleType + provider + 精灵图），当前不做。
 
-### 3.6 v5：自研排气粒子 `ccpe:exhaust`（扫掠碰撞 + 撞墙向四周扩散）—— **已回退（观感不如 v4）**
+### 3.6 v5：自研排气粒子 `ccpe:exhaust`（扫掠碰撞 + 撞墙向四周扩散）
 
-> 现状：`USE_EXHAUST_PARTICLE = false`，默认走 v4 的 `create:air` 路径。
-> v5 的代码与注册全部保留，想再试把开关改回 `true` 即可。以下留作再次尝试时的记录。
+> 现状：`USE_EXHAUST_PARTICLE = true`（**现行**）。
+> 第一版曾因下方「致命 bug」导致撞墙毫无反应而被回退，修好后重新启用，待进游戏复核。
 
 **为什么自研**：`create:air` 是「起点→终点插值」的纯视觉粒子（`hasPhysics = false`，永不碰撞），
 而且 `AirParticleMixin` 每 tick 重投影，做不出「撞到方块停下并散开」的效果。
@@ -236,6 +236,15 @@ mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题�
 
 **撞墙公式**（`ExhaustParticle#scatter`，照搬参考实现 `ThrusterParticle#collide`）：
 法向只留 10%，切向按入射角保留 `sqrt(1-inc²)`，再加法线垂面上随机方位的 `speed×inc` 散射，整体 ×0.9。
+
+**致命 bug（第一版回退的原因，已修）**
+
+- `getCollisionShape(level, pos).toAabbs()` 返回的 AABB 是**方块局部坐标（0~1）**，必须加 `pos` 偏移才是
+  世界/plot 坐标。第一版漏了这一步 ⇒ 所有候选碰撞盒都堆在原点附近 ⇒ `slab` 永远 `null` ⇒
+  **碰撞代码每 tick 都在跑但永远撞不到东西**，表现就是「粒子直接穿过墙/地面」。
+  现在 `slab(...)` 直接接收 `ox/oy/oz` 偏移（不新建 AABB，零额外分配）。
+- 教训：这类「算得对但坐标系错了」的 bug 不会报错也不会卡顿，只能靠进游戏看表现；
+  参考实现的 `ParticleCollision.java:80-84` 里那几个 `+ pos.getX()` 就是容易被漏掉的细节。
 
 **关键坑**
 
