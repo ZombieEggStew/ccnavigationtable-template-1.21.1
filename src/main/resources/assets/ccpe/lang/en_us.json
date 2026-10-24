@@ -43,6 +43,7 @@
   "block.ccpe.ins": "Inertial Navigation System",
   "block.ccpe.fmc": "Flight Management Computer",
   "block.ccpe.aic": "Aviation Integrated Computer",
+  "block.ccpe.thrust_nozzle": "Directional Thrust Nozzle",
   "block.ccpe.red_position_light": "Red Position Light",
   "block.ccpe.green_position_light": "Green Position Light",
   "block.ccpe.white_position_light": "White Position Light",

@@ -41,6 +41,9 @@ public final class MyModBlockEntities {
     /** 板式监视器 BE：表面 Monitor 棋盘网格（14×14，MonitorGridHost，见 MonitorSlabBlockEntity；对齐 monitor_2 表面小 Monitor 模式） */
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MonitorSlabBlockEntity>> monitor_slab_entity = BLOCK_ENTITY_TYPES.register("monitor_slab", () -> BlockEntityType.Builder.of(MonitorSlabBlockEntity::new, MyModBlocks.monitor_slab.get()).build(null));
 
+    /** 定向喷管 BE：Sable BlockEntitySubLevelActor（每 physics substep 沿喷口轴向施加恒定推力，无表面依赖） */
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ThrustNozzleBlockEntity>> thrust_nozzle_entity = BLOCK_ENTITY_TYPES.register("thrust_nozzle", () -> BlockEntityType.Builder.of(ThrustNozzleBlockEntity::new, MyModBlocks.thrust_nozzle.get()).build(null));
+
     public static void register(IEventBus bus) {
         BLOCK_ENTITY_TYPES.register(bus);
     }
