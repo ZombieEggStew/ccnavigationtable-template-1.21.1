@@ -41,9 +41,9 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
 
     /** 不透明度上限（参考实现 0.46） */
     private static final float ALPHA_MAX = 0.46F;
-    /** 寿命前 18% 淡入、后 38% 淡出 */
-    private static final float FADE_IN_END = 0.18F;
-    private static final float FADE_OUT_START = 0.62F;
+    /** 寿命前 10% 淡入、后 25% 淡出 */
+    private static final float FADE_IN_END = 0.1F;
+    private static final float FADE_OUT_START = 0.75F;
 
     /** 尺寸：出生 = baseScale × 0.42，死亡 = baseScale × (0.42 + 0.95) */
     private static final float SIZE_START = 0.42F;
@@ -65,14 +65,14 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
 
     // ── 撞墙反应（纯反弹 + 铺开，不涉及任何重力） ──
 
-    /** 法向反弹系数：入射法向速度的 45% 反向弹回（0 = 完全不弹、贴着表面滑；1 = 完全弹性） */
-    private static final double BOUNCE = 0.45D;
+    /** 法向反弹系数：入射法向速度的 10% 反向弹回（0 = 完全不弹、贴着表面滑；1 = 完全弹性） */
+    private static final double BOUNCE = 0.1D;
     /** 切向保留：入射切向速度的 90% 继续沿表面滑 */
     private static final double TANGENT_KEEP = 0.9D;
     /** 随机溅射：在法线垂面上随机方位的散射速度 = 入射法向速度 × 本系数 */
     private static final double SPREAD_KEEP = 0.8D;
-    /** 撞后整体速度保留比例（撞一下掉 15% 动能感，避免越弹越快） */
-    private static final double ENERGY_KEEP = 0.85D;
+    /** 撞后整体速度保留比例（撞一下掉 20% 动能感，避免越弹越快） */
+    private static final double ENERGY_KEEP = 0.8D;
 
     /**
      * 碰撞半径 = quadSize × 本系数（再夹到 {@link #MIN_COLLISION_RADIUS}~{@link #MAX_COLLISION_RADIUS}）。

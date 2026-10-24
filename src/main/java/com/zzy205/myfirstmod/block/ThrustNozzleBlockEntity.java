@@ -129,13 +129,13 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
     public static final boolean USE_EXHAUST_PARTICLE = true;
 
     /** 出生尺寸（块，即四边形边长），寿命内会膨胀到约 1.37 倍。2.0 太大（实测反馈），已降到 0.6 */
-    public static final float EXHAUST_SCALE = 0.6F;
+    public static final float EXHAUST_SCALE = 0.3F;
 
     /** 基准寿命（tick），实际探测时再加 0~9 的随机 */
-    public static final int EXHAUST_LIFETIME = 22;
+    public static final int EXHAUST_LIFETIME = 16;
 
     /** 出生速度（块/tick，沿排气方向）；之后按水平 0.935 / 垂直 0.965 阻尼衰减 */
-    public static final double EXHAUST_SPEED = 0.9D;
+    public static final double EXHAUST_SPEED = 2.0D;
 
     /** 出生速度的随机倍率区间（让排气有快慢差，不像整齐的一束） */
     public static final double EXHAUST_SPEED_RANDOM_MIN = 0.85D;
