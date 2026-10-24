@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod.block;
 
 import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
 import com.simibubi.create.foundation.particle.AirParticleData;
+import com.zzy205.myfirstmod.particle.ExhaustParticleData;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
 import dev.ryanhcode.sable.api.physics.force.ForceGroup;
@@ -112,6 +113,41 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
     /** 喷口被挡时：射线可走距离短于它就完全不生成粒子（对应电扇气流被截断到 0） */
     public static final double MIN_PARTICLE_TRAVEL = 0.2D;
 
+    // ── 排气粒子（自研 ccpe:exhaust：扫掠碰撞 + 撞墙向四周扩散，见 client/particle/ExhaustParticle） ──
+
+    /**
+     * {@code true} = 用自研排气粒子（扫掠碰撞 + 撞墙向四周扩散，见 §3.6）；
+     * {@code false} = <b>现行</b> {@code create:air} 插值粒子（只在起点→终点之间插值、永不碰撞）。
+     * <p>
+     * <b>已实测回退</b>：自研版的撞墙扩散观感不好（用户进游戏验证后判定不如旧版），默认关闭。
+     * 代码与注册都保留着，想再试直接把这里改回 {@code true} 即可，不用重写。
+     * <p>
+     * 旧的环绕常量（{@link #PARTICLE_DRAG} / {@link #PARTICLE_SPEED} / {@code PARTICLE_TRAVEL_*}）
+     * 只在 {@code false} 时生效；新粒子的旋钮见下面 {@code EXHAUST_*}。
+     */
+    public static final boolean USE_EXHAUST_PARTICLE = false;
+
+    /** 出生尺寸（块，即四边形边长），寿命内会膨胀到约 1.37 倍 */
+    public static final float EXHAUST_SCALE = 2.0F;
+
+    /** 基准寿命（tick），实际探测时再加 0~9 的随机 */
+    public static final int EXHAUST_LIFETIME = 22;
+
+    /** 出生速度（块/tick，沿排气方向）；之后按水平 0.935 / 垂直 0.965 阻尼衰减 */
+    public static final double EXHAUST_SPEED = 0.9D;
+
+    /** 出生速度的随机倍率区间（让排气有快慢差，不像整齐的一束） */
+    public static final double EXHAUST_SPEED_RANDOM_MIN = 0.85D;
+    public static final double EXHAUST_SPEED_RANDOM_MAX = 1.15D;
+
+    /** 横向散开（垂直于喷口轴的初速度上限，块/tick） */
+    public static final double EXHAUST_SPREAD = 0.05D;
+
+    /** 颜色：冷白偏蓝的气流（沿用 create:air 的观感） */
+    public static final float EXHAUST_RED = 0.86F;
+    public static final float EXHAUST_GREEN = 0.90F;
+    public static final float EXHAUST_BLUE = 0.96F;
+
     /**
      * 其它物理体是否也挡粒子。
      * <ul>
@@ -198,7 +234,8 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
         }
 
         // 密度随转速线性变化；不足一颗就不生成
-        final int count = (int) Math.round(MAX_PARTICLES_PER_TICK * Math.min(Math.abs(speed) / 256.0F, 1.0F));
+        final float throttle = Math.min(Math.abs(speed) / 256.0F, 1.0F);
+        final int count = (int) Math.round(MAX_PARTICLES_PER_TICK * throttle);
 
         if (count <= 0) {
             return;
@@ -259,17 +296,61 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
             final Vec3 start = mouth.add(spread);
             final Vec3 flow = flowDir.scale(travel);
 
-            // 生成本 tick 的位移轨迹（起点 → 起点+位移），然后整条轨迹投到世界系。
-            // 必须投：AirParticleMixin 的 tick 每 tick 把"起点/终点"插值出的点再用当前姿态投出一次
-            // （Sable 的 plot → world 修正）。若这里传 plot 局部系坐标，整条轨迹就被钉在
-            // 机体坐标系里 ⇒ 车身一动，粒子跟着动，看着像喷管的子物体。
+            // 投到世界系。必须投：AirParticleMixin 的 tick 每 tick 把"起点/终点"插值出的点
+            // 再用当前姿态投出一次（Sable 的 plot → world 修正）。若这里传 plot 局部系坐标，
+            // 整条轨迹就被钉在机体坐标系里 ⇒ 车身一动粒子跟着动，像喷管的子物体。
             final Vec3 startWorld = this.projectToWorld(level, own, start);
             final Vec3 flowWorld = this.projectToWorld(level, own, start.add(flow)).subtract(startWorld);
 
-            level.addParticle(new AirParticleData(PARTICLE_DRAG, PARTICLE_SPEED),
-                    startWorld.x, startWorld.y, startWorld.z,
-                    flowWorld.x, flowWorld.y, flowWorld.z);
+            if (USE_EXHAUST_PARTICLE) {
+                this.spawnExhaust(level, random, own, startWorld, flowWorld, throttle);
+            } else {
+                level.addParticle(new AirParticleData(PARTICLE_DRAG, PARTICLE_SPEED),
+                        startWorld.x, startWorld.y, startWorld.z,
+                        flowWorld.x, flowWorld.y, flowWorld.z);
+            }
         }
+    }
+
+    /**
+     * 生成一颗排气粒子（{@code ccpe:exhaust}）。
+     * <p>
+     * 速度模型：轴向 = {@link #EXHAUST_SPEED} × 随机倍率 × 油门（转速 / 256），横向再加一点随机散开，
+     * 之后由粒子自己每 tick 积分、阻尼衰减、并在撞到方块时"沿表面铺开 + 随机溅射"。
+     * 粒子本身<b>不做</b>“起点→终点插值”，所以喷出去之后与喷管彻底解耦。
+     *
+     * @param startWorld 世界系的出生点（已由 {@link #projectToWorld} 投出）
+     * @param flowWorld  世界系的排气位移方向（长度无关，内部会归一化）
+     * @param throttle   油门 0~1（转速 / 256），影响初速度
+     */
+    private void spawnExhaust(final Level level, final RandomSource random, final @Nullable SubLevel own,
+                              final Vec3 startWorld, final Vec3 flowWorld, final float throttle) {
+        if (flowWorld.lengthSqr() < 1.0E-8D) {
+            return;
+        }
+
+        final Vec3 direction = flowWorld.normalize();
+
+        // 垂直于轴的平面上的两个基向量，用来撒横向散开
+        final Vec3 seedVec = Math.abs(direction.y) > 0.9D ? new Vec3(1.0D, 0.0D, 0.0D) : new Vec3(0.0D, 1.0D, 0.0D);
+        final Vec3 sideX = direction.cross(seedVec).normalize();
+        final Vec3 sideY = sideX.cross(direction).normalize();
+        final double angle = random.nextDouble() * Math.PI * 2.0D;
+        final double lateralAmount = EXHAUST_SPREAD * (0.4D + random.nextDouble());
+        final Vec3 lateral = sideX.scale(Math.cos(angle)).add(sideY.scale(Math.sin(angle))).scale(lateralAmount);
+
+        final double speedRandom = EXHAUST_SPEED_RANDOM_MIN
+                + random.nextDouble() * (EXHAUST_SPEED_RANDOM_MAX - EXHAUST_SPEED_RANDOM_MIN);
+        final double speed = EXHAUST_SPEED * speedRandom * (0.65D + 0.35D * throttle);
+        final Vec3 velocity = direction.scale(speed).add(lateral);
+
+        final float scale = EXHAUST_SCALE * (0.70F + random.nextFloat() * 0.60F);
+        final int lifetime = EXHAUST_LIFETIME + random.nextInt(10);
+
+        level.addParticle(new ExhaustParticleData(scale, lifetime, EXHAUST_RED, EXHAUST_GREEN, EXHAUST_BLUE,
+                        own == null ? ExhaustParticleData.NO_OWNER : own.getUniqueId()),
+                startWorld.x, startWorld.y, startWorld.z,
+                velocity.x, velocity.y, velocity.z);
     }
 
     /**

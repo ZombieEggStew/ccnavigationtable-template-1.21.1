@@ -31,6 +31,8 @@ import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
 import com.zzy205.myfirstmod.client.MonitorSlabGridOverlay;
 import com.zzy205.myfirstmod.client.MonitorUseInterceptor;
 import com.zzy205.myfirstmod.client.MonitorHoverInterceptor;
+import com.zzy205.myfirstmod.client.particle.ExhaustParticle;
+import com.zzy205.myfirstmod.particle.MyModParticles;
 import com.zzy205.myfirstmod.client.MonitorBackgrounds;
 import com.zzy205.myfirstmod.client.MonitorOutlineRenderer;
 import com.zzy205.myfirstmod.client.ControlDeskPlacementOverlay;
@@ -62,6 +64,7 @@ import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
@@ -234,6 +237,16 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.monitor_slab_entity.get(),
                 MonitorSlabRenderer::new);
+    }
+
+    /**
+     * 粒子 provider 注册：{@code ccpe:exhaust}（喷管排气粒子）。
+     * 用 {@code registerSpriteSet} —— 精灵图列表见 {@code assets/ccpe/particles/exhaust.json}
+     * （沿用 create:air 的那 8 张 {@code minecraft:generic_0..7}）。
+     */
+    @SubscribeEvent
+    static void registerParticles(RegisterParticleProvidersEvent event) {
+        event.registerSpriteSet(MyModParticles.EXHAUST.get(), ExhaustParticle.Provider::new);
     }
 
     @SubscribeEvent

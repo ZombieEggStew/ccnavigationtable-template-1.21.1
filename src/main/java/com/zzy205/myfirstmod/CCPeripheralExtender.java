@@ -19,6 +19,7 @@ import com.zzy205.myfirstmod.compat.cc.ShortRangeLinkerRegistry;
 import com.zzy205.myfirstmod.item.MyModCreativeModeTabs;
 import com.zzy205.myfirstmod.item.MyModItems;
 import com.zzy205.myfirstmod.network.ModPackets;
+import com.zzy205.myfirstmod.particle.MyModParticles;
 import com.zzy205.myfirstmod.screen.MyModMenus;
 import dev.ryanhcode.sable.platform.SableEventPlatform;
 import net.neoforged.bus.api.IEventBus;
@@ -62,6 +63,7 @@ public class CCPeripheralExtender {
 
         MyModBlocks.register(modEventBus);
         MyModBlockEntities.register(modEventBus);
+        MyModParticles.register(modEventBus);
         MyModMenus.register(modEventBus);
 
         // 触发 Registrate 条目构建（red_position_light 等）；实际入册由 Registrate 在 RegisterEvent 时完成

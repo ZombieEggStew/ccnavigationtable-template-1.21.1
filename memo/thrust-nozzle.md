@@ -129,7 +129,9 @@ group.applyAndRecordPointForce(centerOf(worldPosition), impulse)             // 
 |---|---|---|
 | v1 | `create:air`，从喷口截面随机撒点 + 自定速度/寿命 | 可用（现行基础） |
 | v2 | 完全复刻 `create:air_flow` + 把喷管加进 `create:fan_transparent` 标签，每 tick 追加 N 颗 | **观感不好，已回退**（标签还会让电扇的实体推力/批量加工穿过喷管生效） |
-| v3 | 在 v1 上加**遮挡射线** | 现行 |
+| v3 | 在 v1 上加**遮挡射线** | 现行基础 |
+| v4 | 遮挡射线改到**世界系**（主世界方块才挡得住，§3.4） | 现行 |
+| v5 | **自研粒子 `ccpe:exhaust`** + 扫掠碰撞 + 撞墙散射（§3.6） | 已回退（`USE_EXHAUST_PARTICLE = false`） |
 
 ### 3.3 当前参数（用户在 v1 基础上调过）
 
@@ -196,9 +198,60 @@ group.applyAndRecordPointForce(centerOf(worldPosition), impulse)             // 
 mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题。真要绝对干净就得自研粒子类型
 （新 ParticleType + provider + 精灵图），当前不做。
 
+### 3.6 v5：自研排气粒子 `ccpe:exhaust`（扫掠碰撞 + 撞墙向四周扩散）—— **已回退（观感不如 v4）**
+
+> 现状：`USE_EXHAUST_PARTICLE = false`，默认走 v4 的 `create:air` 路径。
+> v5 的代码与注册全部保留，想再试把开关改回 `true` 即可。以下留作再次尝试时的记录。
+
+**为什么自研**：`create:air` 是「起点→终点插值」的纯视觉粒子（`hasPhysics = false`，永不碰撞），
+而且 `AirParticleMixin` 每 tick 重投影，做不出「撞到方块停下并散开」的效果。
+参考 `references/create-propulsion-simulated-main`（thruster 排气）：它的烟粒子就是自研粒子类型，
+自带 `move()` 里的扫掠碰撞 + 撞墙散射。
+
+**文件**
+
+| 文件 | 内容 |
+|---|---|
+| `particle/ExhaustParticleData.java` | `record(scale, lifetime, r, g, b, ownerId)` + MapCodec/StreamCodec；`ccpe:exhaust` 的参数 |
+| `particle/MyModParticles.java` | `DeferredRegister<ParticleType<?>>` 注册 `ccpe:exhaust`（NeoForge 原生 `ParticleType`，不用 Create 的 `ICustomParticleData`） |
+| `client/particle/ExhaustParticle.java` | 客户端粒子：速度积分 + 淡入淡出 + 膨胀 + 阻尼/浮力 + 撞墙散射 |
+| `client/particle/ExhaustCollision.java` | 球-箱**扫掠**碰撞（slab），主世界逐方块 + 其它物理体反投局部系两段式 |
+| `assets/ccpe/particles/exhaust.json` | 精灵图列表 = `minecraft:generic_0..7`（与 `create:air` 同图） |
+| `CCPeripheralExtender` / `CCPeripheralExtenderClient` | 各加一行注册（类型 / `registerSpriteSet` provider） |
+
+**参数**（全部在 `ThrustNozzleBlockEntity` 顶部，可直接调）
+
+| 常量 | 现值 | 说明 |
+|---|---|---|
+| `USE_EXHAUST_PARTICLE` | true | false = 回退旧的 `create:air` 路径（旧常量仍在） |
+| `EXHAUST_SCALE` | 2.0 | 出生尺寸（块），寿命内膨胀到约 1.37 倍 |
+| `EXHAUST_LIFETIME` | 22 | 基准寿命 tick，实际 +0~9 随机 |
+| `EXHAUST_SPEED` | 0.9 | 出生速度 块/tick，乘 (0.65 + 0.35×油门) |
+| `EXHAUST_SPREAD` | 0.05 | 横向散开初速度上限 |
+| `EXHAUST_RED/GREEN/BLUE` | 0.86/0.90/0.96 | 冷白偏蓝 |
+
+粒子内部常量（`ExhaustParticle`）：`ALPHA_MAX 0.46`、寿命 18% 处淡入完成 / 62% 起淡出、
+水平阻尼 0.935 / 垂直 0.965、浮力 0.0008+0.0009×life、正弦摆动 0.0018、
+碰撞半径 = `quadSize × 0.2`（夹到 0.08~0.35，视觉尺寸与碰撞半径分开）。
+
+**撞墙公式**（`ExhaustParticle#scatter`，照搬参考实现 `ThrusterParticle#collide`）：
+法向只留 10%，切向按入射角保留 `sqrt(1-inc²)`，再加法线垂面上随机方位的 `speed×inc` 散射，整体 ×0.9。
+
+**关键坑**
+
+- 粒子必须忽略**喷管自己所在的物理体**（`ownerId` 写进粒子数据，碰撞时跳过），否则粒子一出生就被
+  自己方块的膨胀包围盒判成碰撞，直接糊在喷口上。
+- 粒子碰撞全用世界坐标（喷管侧已 `projectToWorld`），所以不会像 `create:air` 那样被车身拖着走。
+- 成本：每颗粒子每 tick 一次扫掠（半径 0.08~0.35、位移约 0.5 格 ⇒ 约 27 个方块），
+  同屏 ~60 颗时约 1.6k 次 `getBlockState`/tick，可接受。
+
+**残留边界**：纯客户端计算，各客户端看到的撞墙点/散射方向各自独立（与原版粒子一样不同步）；
+要让所有人完全一致就得改成服务端 `sendParticles` 广播（参考实现是这么做的），当前不做。
+
 ## 4. 已知边界 / 未做
 
 - **推力不做遮挡判定**：喷口被方块堵死时物理推力照样输出（要加的话应在每个游戏 tick 算一次遮挡并缓存给 substep 复用）。
+- 排气粒子是纯客户端计算：各客户端看到的撞墙点/散射方向各自独立（原版粒子行为，未做服务端广播）。
 - 没有合成配方（`data/ccpe/recipe/thrust_nozzle.json`），材料待用户定。
 - 没有原版实体推挤（旧 `create:nozzle` 会推物品/生物）。
 - 蓝图/装配兼容未专门验证：`canSurvive` 会在部署瞬间复核风扇，异常时照 `MyBearingPlateBlockEntity` 做条件豁免。
