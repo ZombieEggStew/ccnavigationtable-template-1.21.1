@@ -128,8 +128,8 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
      */
     public static final boolean USE_EXHAUST_PARTICLE = true;
 
-    /** 出生尺寸（块，即四边形边长），寿命内会膨胀到约 1.37 倍 */
-    public static final float EXHAUST_SCALE = 2.0F;
+    /** 出生尺寸（块，即四边形边长），寿命内会膨胀到约 1.37 倍。2.0 太大（实测反馈），已降到 0.6 */
+    public static final float EXHAUST_SCALE = 0.6F;
 
     /** 基准寿命（tick），实际探测时再加 0~9 的随机 */
     public static final int EXHAUST_LIFETIME = 22;
@@ -318,7 +318,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
      * <p>
      * 速度模型：轴向 = {@link #EXHAUST_SPEED} × 随机倍率 × 油门（转速 / 256），横向再加一点随机散开，
      * 之后由粒子自己每 tick 积分、阻尼衰减、并在撞到方块时"沿表面铺开 + 随机溅射"。
-     * 粒子本身<b>不做</b>“起点→终点插值”，所以喷出去之后与喷管彻底解耦。
+     * 粒子本身<b>不做</b>“起点→终点插值”，所以喷出去之后与喷管彻底解耦；
+     * 也<b>不受重力</b>（{@code ExhaustParticle} 里 {@code gravity = 0}、没有任何向下加速度，
+     * 只有微小的向上浮力 + 撞墙反弹，见该类常量）。
      *
      * @param startWorld 世界系的出生点（已由 {@link #projectToWorld} 投出）
      * @param flowWorld  世界系的排气位移方向（长度无关，内部会归一化）

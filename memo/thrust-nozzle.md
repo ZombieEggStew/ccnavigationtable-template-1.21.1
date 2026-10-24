@@ -224,7 +224,7 @@ mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题�
 | 常量 | 现值 | 说明 |
 |---|---|---|
 | `USE_EXHAUST_PARTICLE` | true | false = 回退旧的 `create:air` 路径（旧常量仍在） |
-| `EXHAUST_SCALE` | 2.0 | 出生尺寸（块），寿命内膨胀到约 1.37 倍 |
+| `EXHAUST_SCALE` | **0.6** | 出生尺寸（块），寿命内膨胀到约 1.37 倍（2.0 实测太大，已降） |
 | `EXHAUST_LIFETIME` | 22 | 基准寿命 tick，实际 +0~9 随机 |
 | `EXHAUST_SPEED` | 0.9 | 出生速度 块/tick，乘 (0.65 + 0.35×油门) |
 | `EXHAUST_SPREAD` | 0.05 | 横向散开初速度上限 |
@@ -234,8 +234,20 @@ mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题�
 水平阻尼 0.935 / 垂直 0.965、浮力 0.0008+0.0009×life、正弦摆动 0.0018、
 碰撞半径 = `quadSize × 0.2`（夹到 0.08~0.35，视觉尺寸与碰撞半径分开）。
 
-**撞墙公式**（`ExhaustParticle#scatter`，照搬参考实现 `ThrusterParticle#collide`）：
-法向只留 10%，切向按入射角保留 `sqrt(1-inc²)`，再加法线垂面上随机方位的 `speed×inc` 散射，整体 ×0.9。
+**撞墙公式**（`ExhaustParticle#scatter`）：法向**反弹** + 切向滑移 + 随机溅射：
+
+```
+impact  = -v·n                       // 法向入射速度（正数）
+rebound = n × impact × BOUNCE        // 0.45 ⇒ 明显弹开（不是贴墙滑）
+tangent = (v - n(v·n)) × TANGENT_KEEP  // 0.90 ⇒ 沿表面继续滑
+spread  = 垂面上随机方位 × impact × SPREAD_KEEP  // 0.80 ⇒ 四散
+v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  // 0.85
+```
+
+- 第一版照搬参考实现的「法向只留 10%」，实测表现为「扩散但继续下坠、没有反弹」——因为法向几乎被吃掉，
+  粒子只能贴着表面滑。改成反弹式后正面砸地面/墙面会明显弹开。
+- 结果的法向分量恒正（只有 rebound 带法向分量），粒子撞完一定离开表面，不会陷进去。
+- **无重力**：`gravity = 0`、tick 里没有任何向下加速度，只有微小向上浮力；撞后不下坠靠的就是上面的反弹。
 
 **致命 bug（第一版回退的原因，已修）**
 
