@@ -145,18 +145,56 @@ group.applyAndRecordPointForce(centerOf(worldPosition), impulse)             // 
 
 排气方向 = 机体受力的反向 = `+FACING · sign(rpm)`（随 `REVERSE_SIGN` 自动一致）。
 
-### 3.4 遮挡（v3）
+### 3.4 遮挡（v4：射线改到世界系后主世界方块才挡得住）
 
 - 每 tick 沿排气方向打**一条**射线（`ClipContext.Block.COLLIDER` + `Fluid.NONE`，
   语义 = 电扇的 `getFlowLimit`：只挡实体碰撞形状、不挡水/空气），
   每颗粒子位移 = `min(随机位移, clear)`；`clear < MIN_PARTICLE_TRAVEL` ⇒ 不出粒子。
 - 成本：每喷管每 tick 1 条射线（客户端），不是每颗粒子一条。
-- 跨物理体：Sable 的 `Level.clip` 补丁会连带检测其它物理体与主世界；命中其它物理体时
-  `BlockHitResult.getLocation()` 是**那个物理体**的局部系 ⇒ 先 `logicalPose().transformPosition` 投到世界、
-  再 `own.logicalPose().transformPositionInverse` 投回本体（照 `TrailingWheelMountBlockEntity#computeMaxExtensionToTerrain`）。
+- **射线必须打在世界系**（v4 修正）。Sable 的 `mixin/clip_overwrite/BlockGetterMixin.java:48-134`：
+  一旦 `from` 落在某个 plot 里，就把 `from` 投到世界系，然后 ①对**主世界**跑一次 `originalClip`
+  （这一支返回的 `getLocation()` 是**世界系**），②再逐个物理体把射线反投回各自局部系
+  （这一支返回的是**那个物理体**的局部系）。所以在 plot 系里发射线时：主世界命中会被当成
+  局部系坐标与起点相减 ⇒ 几十上百格的距离 ⇒ **遮挡被静默跳过**。这就是「物理体挡得住、
+  静态方块挡不住」的根因；另外 `to` 只要跑出 plot 区块就不再被投出，整条射线都会变形。
+  ⇒ 现在起点与方向都先 `projectToWorld`，命中点也统一换算到世界系量距离
+  （刚体变换保长度，`travel` 参数不用改）。
+- 命中点坐标系判别：`getContaining(level, hit.getLocation())` 查得到 ⇒ 是该物理体的局部系（要投出来）；
+  查不到 ⇒ 主世界命中，本身就是世界系。万一判断失误导致距离 ≥ 射线长度，按「没挡住」处理（不会误挡）。
 - 开关语义：`true` = 别的物理体和普通方块一样挡；`false` = 只有自身物理体/主世界的方块挡
   （**这才是原版 `encased_fan` 的真实行为**：`getFlowLimit` 只查自己那一层的 `getBlockState`，
   看不到别的物理体）。
+- **`encased_fan` 自己的「静态方块挡不住」是同一个根因**：它的 `AirCurrent.getFlowLimit()` 在 Create 里、
+  Sable 没给它打补丁 ⇒ 要修只能自己 mixin 进 Create（本项目至今零 mixin，暂不做）。
+
+### 3.5 坑：粒子跟着喷嘴跑（像喷嘴的子物体）— 根因与修法
+
+**现象**：车身/喷管一移动，已射出的粒子整条轨迹跟着平移旋转，像被挂在喷管上。
+
+**根因（源码确认）**：
+
+- 物理体内的方块实体 `getLevel()` 就是真正的 `ClientLevel`，`worldPosition` 是 **plot 区块坐标**
+  （`EmbeddedPlotLevelAccessor` 只被 `SableSpawnCommands` 用来生成结构，方块实体不走它 ⇒
+  `addParticle` 时坐标不会自动加 plot center 偏移）。
+- `create:air` 的 `AirParticle` 被 Sable 写了
+  `references/sable-main/.../compatibility/create/particles/AirParticleMixin.java:55-94`：
+  `@Inject <init> TAIL` 把 `(x,y,z)` 与 `(x+dx, y+dy, z+dz)` 记成 origin/target；
+  `@Overwrite tick()` 每 tick 用 `Mth.lerp(progress, origin, target)` 算出 desired 点，再
+  `Sable.HELPER.projectOutOfSubLevel(level, desired)` **按当前姿态投一次**。
+  这是给「物理体里的电扇」写的修正：电扇传的是 plot 坐标 ⇒ 投成世界坐标。
+  **但如果传的就是 plot 坐标，等价于把整条轨迹定义在机体局部系** ⇒ 车身一动粒子就跟着动。
+- `projectOutOfSubLevel`（`ActiveSableCompanion.java:171-205`）= `getContaining(level, pos)`
+  查到所在 plot 才 `pose.transformPosition`，查不到就原样返回。
+
+**修法**（`tickClient`）：生成轨迹后先把起点与「起点+位移」两点都用
+`Sable.HELPER.projectOutOfSubLevel` 投到世界系，再 `addParticle`；位移 = 两个世界点的差。
+这样粒子的 origin/target 都是世界坐标，绝大多数情况已经不在 plot 区块里 ⇒ mixin 里的
+`projectOutOfSubLevel` 退化为恒等变换，粒子在世界里独立飞。
+射线遮挡（`clearDistance`）仍在 plot 系里打，保持不变。
+
+**残留边界**：物理体的世界位置恰好落在自己/别的 plot 区块内时（刚装配、姿态接近单位阵时），
+mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题。真要绝对干净就得自研粒子类型
+（新 ParticleType + provider + 精灵图），当前不做。
 
 ## 4. 已知边界 / 未做
 
@@ -181,6 +219,6 @@ group.applyAndRecordPointForce(centerOf(worldPosition), impulse)             // 
 | `.../foundation/particle/{AirParticle,AirParticleData}.java` | `create:air` 的参数与寿命公式 |
 | `references/sable-main/neoforge/.../compatibility/create/nozzle/{NozzleHoveringMixin,NozzleHoveringHelper,NozzleBEFixesMixin}` | 原版喷嘴的力公式（magnitude=5、软缩放、气压、13 射线） |
 | `.../compatibility/create/fans_provide_force/EncasedFanBlockEntityMixin.java` | `isActive()` 被喷管挡死 ⇒ 风扇推力归零 |
-| `.../compatibility/create/particles/{AirFlowParticleMixin,AirParticleMixin}.java` | 子次元粒子处理（bounds 放行、姿态重投影） |
+| `.../compatibility/create/particles/{AirFlowParticleMixin,AirParticleMixin}.java` | 子次元粒子处理（bounds 放行、姿态重投影）；`AirParticleMixin#tick` 是「粒子跟着机体跑」的根因（见 §3.5） |
 | `api/sable-common-1.21.1-2.0.3-sources/.../api/{block/BlockEntitySubLevelActor,physics/force/{ForceTotal,QueuedForceGroup,ForceGroups}}.java`、`sublevel/ServerSubLevel.java` | `sable$physicsTick` / 力组 / `applyQueuedForces` |
 | `src/main/java/.../block/{MyBearingPlateBlockEntity,TrailingWheelMountBlockEntity}.java`、`compat/cc/FlightDataRecorder.java` | 项目内已验证的"施力 + 力组遥测 + 子次元射线"写法 |

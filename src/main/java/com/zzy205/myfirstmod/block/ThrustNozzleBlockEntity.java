@@ -225,10 +225,13 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
         final Vec3 flowDir = axis.scale(flowSign);
         final Vec3 mouth = center.add(axis.scale(0.55D));
 
+        // 本方块所在物理体：粒子坐标必须用它的姿态从 plot 局部系投到世界系（见下方 projectToWorld）
+        final SubLevel own = Sable.HELPER.getContaining(this);
+
         // 与 create:encased_fan 一致：气流遇方块即止（自身物理体 + 其它物理体都算）。
         // 电扇那边是 AirCurrent.getFlowLimit() 把 maxDistance 截到第一个挡路方块的碰撞形状深度；
         // 这里等价地沿排气方向打一条碰撞射线，把粒子位移截断在命中点。
-        final double clear = this.clearDistance(mouth, flowDir, PARTICLE_TRAVEL_MAX + 0.1D);
+        final double clear = this.clearDistance(level, own, mouth, flowDir, PARTICLE_TRAVEL_MAX + 0.1D);
 
         if (clear < MIN_PARTICLE_TRAVEL) {
             return; // 喷口被挡死 → 不生成粒子
@@ -256,14 +259,38 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
             final Vec3 start = mouth.add(spread);
             final Vec3 flow = flowDir.scale(travel);
 
+            // 生成本 tick 的位移轨迹（起点 → 起点+位移），然后整条轨迹投到世界系。
+            // 必须投：AirParticleMixin 的 tick 每 tick 把"起点/终点"插值出的点再用当前姿态投出一次
+            // （Sable 的 plot → world 修正）。若这里传 plot 局部系坐标，整条轨迹就被钉在
+            // 机体坐标系里 ⇒ 车身一动，粒子跟着动，看着像喷管的子物体。
+            final Vec3 startWorld = this.projectToWorld(level, own, start);
+            final Vec3 flowWorld = this.projectToWorld(level, own, start.add(flow)).subtract(startWorld);
+
             level.addParticle(new AirParticleData(PARTICLE_DRAG, PARTICLE_SPEED),
-                    start.x, start.y, start.z,
-                    flow.x, flow.y, flow.z);
+                    startWorld.x, startWorld.y, startWorld.z,
+                    flowWorld.x, flowWorld.y, flowWorld.z);
         }
     }
 
     /**
-     * 沿排气方向测"最远能走多远"——遇到方块（含其它物理体的方块）就停在它的碰撞形状上。
+     * 把 plot 局部系的一个点投到世界系（Sable 的 plot → world 修正），与
+     * {@code AirParticleMixin} 内部用的是同一个入口（{@link Sable#HELPER}.projectOutOfSubLevel），
+     * 因此姿态/插值口径与粒子 tick 完全一致。
+     * <p>
+     * 为什么要投：{@code create:air} 粒子的起点与位移是<b>一次性写死</b>的，
+     * 而 {@code AirParticleMixin#tick} 每 tick 会把"起点→终点"插值出的点再用<b>当前</b>姿态投出一次。
+     * 若这里传 plot 局部系坐标，插值出来的点会随车身姿态一起变 ⇒ 轨迹钉在机体上，
+     * 视觉上就像粒子是喷管的子物体。先投到世界系后，绝大多数情况下该点已不在 plot 区块里，
+     * {@code projectOutOfSubLevel} 变成恒等变换，粒子便在世界上独立飞行。
+     * <p>
+     * 没有所在物理体（{@code own == null}）时原样返回。
+     */
+    private Vec3 projectToWorld(final Level level, final @Nullable SubLevel own, final Vec3 local) {
+        return own == null ? local : Sable.HELPER.projectOutOfSubLevel(level, local);
+    }
+
+    /**
+     * 沿排气方向测"最远能走多远"——遇到方块（自身物理体 / 其它物理体 / 主世界）就停在它的碰撞形状上。
      * <p>
      * 语义对齐 {@code create:encased_fan}：{@code AirCurrent.getFlowLimit()}
      * （{@code AirCurrent.java:229-257}）用 {@code state.getCollisionShape()} 找出第一处挡路
@@ -271,20 +298,29 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
      * {@link ClipContext.Block#COLLIDER} + {@link ClipContext.Fluid#NONE} 复现同一语义
      * （只挡实体碰撞形状，不挡水/空气）。
      * <p>
-     * 坐标系：射线在本物理体的 plot 局部系里发出；Sable 的 {@code Level.clip} 补丁会连带检测
-     * 其它物理体与主世界，命中其它物理体时 {@link BlockHitResult#getLocation()} 位于<b>那个</b>
-     * 物理体的局部系，需先投到世界再投回本物理体局部系（同
-     * {@code TrailingWheelMountBlockEntity#computeMaxExtensionToTerrain} 的做法）。
+     * <b>射线必须在世界系里打</b>（旧版在 plot 局部系里打，主世界的方块挡不住）：
+     * Sable 的 {@code BlockGetterMixin#clip}（{@code mixin/clip_overwrite/BlockGetterMixin.java:48-134}）
+     * 一旦发现 {@code from} 落在某个 plot 里，就会把 {@code from} <b>投到世界系</b>，再对主世界做
+     * 一次 {@code originalClip}（命中返回的 {@link BlockHitResult#getLocation()} 是世界系），
+     * 然后才逐个物理体把射线反投回各自的局部系（这一支返回的 location 是<b>那个物理体</b>的局部系）。
+     * 也就是说：在 plot 系里发射线时，主世界命中的 location 是世界系，和 plot 系的起点相减
+     * 得到几十上百格的距离 ⇒ 遮挡被静默跳过（正是"物理体挡得住、静态方块挡不住"的原因）。
+     * 而且 {@code to} 只要跑出 plot 区块就不会被投出，射线直接变形。
+     * <p>
+     * 所以这里先把起点与方向都投到世界系再发射线，命中点也统一换算到世界系量距离
+     * （刚体变换保长度 ⇒ 与 plot 系的长度等价，粒子的 travel 参数不用改）。
      */
-    private double clearDistance(final Vec3 start, final Vec3 flowDir, final double wanted) {
-        final Level level = this.level;
+    private double clearDistance(final Level level, final @Nullable SubLevel own,
+                                 final Vec3 start, final Vec3 flowDir, final double wanted) {
+        final Vec3 startWorld = this.projectToWorld(level, own, start);
+        final Vec3 worldFlow = this.projectToWorld(level, own, start.add(flowDir)).subtract(startWorld);
 
-        if (level == null) {
+        if (worldFlow.lengthSqr() < 1.0E-8D) {
             return 0.0D;
         }
 
-        final Vec3 end = start.add(flowDir.scale(wanted));
-        final ClipContext clip = new ClipContext(start, end,
+        final Vec3 endWorld = startWorld.add(worldFlow.normalize().scale(wanted));
+        final ClipContext clip = new ClipContext(startWorld, endWorld,
                 ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, CollisionContext.empty());
         final BlockHitResult hit = level.clip(clip);
 
@@ -292,26 +328,27 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
             return wanted;
         }
 
-        final SubLevel hitSubLevel = Sable.HELPER.getContaining(level, hit.getLocation());
+        // 命中点坐标系判别：
+        // - 主世界命中 ⇒ clip 补丁返回的就是世界系坐标，查 plot 一般查不到（null）；
+        // - 物理体命中 ⇒ 返回的是那个物理体的 plot 局部系，反查正好能查到它。
+        final SubLevel hitBody = Sable.HELPER.getContaining(level, hit.getLocation());
 
-        if (hitSubLevel != null && !PARTICLES_BLOCKED_BY_OTHER_BODIES
-                && hitSubLevel != Sable.HELPER.getContaining(this)) {
+        if (hitBody != null && !PARTICLES_BLOCKED_BY_OTHER_BODIES && hitBody != own) {
             return wanted; // 忽略"别的物理体"造成的遮挡
         }
 
-        final Vec3 hitLocal;
-
-        if (hitSubLevel == null) {
-            // 命中自身 plot / 主世界：坐标本来就是本体的局部系
-            hitLocal = hit.getLocation();
-        } else {
-            final Vec3 world = hitSubLevel.logicalPose().transformPosition(hit.getLocation());
-            final SubLevel own = Sable.HELPER.getContaining(this);
-            hitLocal = own == null ? world : own.logicalPose().transformPositionInverse(world);
-        }
+        final Vec3 worldHit = hitBody == null
+                ? hit.getLocation()
+                : this.projectToWorld(level, hitBody, hit.getLocation());
 
         // 留 0.03 格余量，避免粒子正好卡在方块表面
-        return Math.max(0.0D, hitLocal.subtract(start).length() - 0.03D);
+        final double distance = worldHit.distanceTo(startWorld) - 0.03D;
+
+        if (distance >= wanted) {
+            return wanted; // 远于射线本身 ⇒ 坐标系判断不可信，当作没挡住
+        }
+
+        return Math.max(0.0D, distance);
     }
 
     /** 背后的气流源（电扇）；缺失 / 朝向不匹配 → null */
