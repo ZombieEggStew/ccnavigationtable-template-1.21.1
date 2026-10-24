@@ -85,7 +85,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
      * 原版电扇自身只有 {@code AllConfigs.client().fanParticleDensity}（默认 0.5/tick）的密度；
      * 嫌密/稀就改这一个数（同屏粒子数 ≈ 本值 × 寿命，见下面 {@link #PARTICLE_SPEED}）。
      */
-    public static final int MAX_PARTICLES_PER_TICK = 6;
+    public static final int MAX_PARTICLES_PER_TICK = 10;
 
     /**
      * {@link AirParticleData} 的参数。源码事实
