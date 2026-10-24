@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
+import com.simibubi.create.foundation.particle.AirParticleData;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
 import dev.ryanhcode.sable.api.physics.force.ForceGroup;
 import dev.ryanhcode.sable.api.physics.force.QueuedForceGroup;
@@ -13,9 +14,11 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.Vec3i;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3d;
 
@@ -55,19 +58,53 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
     public static final double THRUST_PER_RPM = 800.0D / 256.0D;
 
     /**
-     * 符号约定（<b>已进游戏实测校定</b>：初版按牛顿第三定律实现，实测方向相反，已翻转）。
+     * 符号约定。<b>已进游戏实测校定：false 为正确值</b>（用户实测确认，不要擅自改回 true）。
      * <p>
-     * 当前生效的规则（{@code true}）：
+     * 当前生效的规则（{@code false}）：
      * <ul>
-     * <li><b>正转速 ⇒ 机体沿 +FACING（喷口朝向那一侧）受力</b>；负转速 ⇒ 沿 -FACING；</li>
-     * <li>喷口 {@code facing=down}（装在车底、喷口朝下）时：<b>正转速 = 把车往下压 / 贴地</b>，
-     *     负转速 = 向上推（上升、刹车）；</li>
-     * <li>车身倒挂（roll≈180°）时喷口朝世界"上"，同一个正转速就变成"吸向头顶的赛道"，
-     *     倒挂吸附改用<b>正转速</b>（旧 {@code create:nozzle} 用负转速）。</li>
+     * <li><b>正转速 ⇒ 机体沿 -FACING 受力</b>（即牛顿第三定律：气流从喷口喷出，机体被反推）；
+     *     负转速 ⇒ 沿 +FACING；</li>
+     * <li>喷口 {@code facing=down}（装在车底、喷口朝下）时：正转速 = 向上推（上升、刹车），
+     *     负转速 = 向下吸（贴地 / 倒挂吸附）——与旧 {@code create:nozzle} 的"正推反吸"手感一致；</li>
+     * <li>喷管随车身翻转，所以倒挂时同一个"负转速 = 吸向头顶赛道"的语义不变。</li>
      * </ul>
-     * 改成 {@code false} 即可整体反向（回到"正转速 = 沿 -FACING"）。
+     * 改成 {@code true} 即整体反向。
      */
-    public static final boolean REVERSE_SIGN = true;
+    public static final boolean REVERSE_SIGN = false;
+
+    // ── 粒子特效（create:air 气流粒子，电扇同族，密度更高） ──
+
+    /**
+     * 满转速（256 RPM）时每 tick 生成的粒子数，按 {@code |转速| / 256} 线性缩放。
+     * 原版电扇自身只有 {@code AllConfigs.client().fanParticleDensity}（默认 0.5/tick）的密度；
+     * 嫌密/稀就改这一个数（同屏粒子数 ≈ 本值 × 寿命，见下面 {@link #PARTICLE_SPEED}）。
+     */
+    public static final int MAX_PARTICLES_PER_TICK = 6;
+
+    /**
+     * {@link AirParticleData} 的参数。源码事实
+     * （{@code com.simibubi.create.foundation.particle.AirParticle}，27-56 与 62-86 行）：
+     * <ul>
+     * <li>粒子是<b>位置插值</b>而不是速度积分：从起点到起点+位移插值，按 {@code lifetime} 走完；</li>
+     * <li><b>lifetime = (位移长度 / speed)</b>，整数 tick，<b>硬上限 60</b>
+     *     ⇒ {@code speed} 就是"块/tick 的平均飞行速度"，是唯一的"快慢"旋钮；</li>
+     * <li>{@code progress = (age/lifetime)^drag} ⇒ {@code drag < 1} 出膛快、尾段减速（像气流扩散），
+     *     {@code drag = 1} 匀速，{@code drag > 1} 尾段加速（不像气流）；</li>
+     * <li>位移长度决定"拖尾多长"：寿命 = 长度/speed，想既快又长尾就得同时加大长度
+     *     （副作用：同屏粒子数 = 密度 × 寿命，会变多）。</li>
+     * </ul>
+     */
+    public static final float PARTICLE_DRAG = 0.7F;
+
+    /** 平均飞行速度，单位 <b>块/tick</b>（1 块/tick = 20 块/秒）。原版 create:backtank 用 0.05 */
+    public static final float PARTICLE_SPEED = 0.30F;
+
+    /** 位移长度（格）：越大概率尾巴越长；寿命 = 位移长度 / {@link #PARTICLE_SPEED} ⇒ 现在约 8~15 tick */
+    public static final double PARTICLE_TRAVEL_MIN = 2.5D;
+    public static final double PARTICLE_TRAVEL_MAX = 4.5D;
+
+    /** 纯视觉：排气方向与"机体受力反方向"不符时翻这里（不影响物理） */
+    public static final boolean INVERT_PARTICLE_FLOW = false;
 
     /** Sable 力组注册表 key（{@code sable:force_groups}）。不直接引用 {@code ForceGroups}：其静态字段
      *  类型引用 veil 的 {@code RegistryObject}，veil 不在编译 classpath（同 {@code FlightDataRecorder}）。 */
@@ -109,21 +146,105 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
         group.applyAndRecordPointForce(JOMLConversion.atCenterOf(this.worldPosition), impulse);
     }
 
-    /** 背后电扇的转速（RPM，带符号）；没有合法气流源 / 未转 → 0 */
-    private float getFanSpeed() {
+    // ── 客户端粒子：沿喷口轴向喷出 create:air 气流 ──
+
+    /**
+     * 客户端每 tick 的粒子生成（由 {@link ThrustNozzleBlock#getTicker} 的客户端 ticker 驱动）。
+     * <p>
+     * 用 {@code create:air}（{@link AirParticleData}）而不是电扇自己用的 {@code create:air_flow}：
+     * <ul>
+     * <li>{@code create:air_flow}（{@code AirFlowParticle}）的方向/速度/bounds 全部由风扇 {@code AirCurrent}
+     *     决定；喷管把气流挡在风扇前方，{@code AirCurrent.getFlowLimit()} 会把 {@code maxDistance}
+     *     从 24 截到 ~1.03 格 ⇒ 速度掉到 ~0.06 格/tick，粒子几乎糊在喷口上
+     *     （{@code AirFlowParticle.java:61-78}、{@code AirCurrent.java:229-257}）。
+     *     要救只能把喷管加进 {@code create:fan_transparent} 标签，但那会让电扇的实体推力/批量加工
+     *     也穿过喷管生效——实测观感并不好，已回退。</li>
+     * <li>{@code create:air} 是同族的半透明气流粒子，位移由"起点 + 目标偏移"自行插值，
+     *     而且 Sable 专门为它写了 {@code AirParticleMixin}（按子次元姿态重投影），
+     *     所以能在运动的物理体上正常显示。</li>
+     * </ul>
+     */
+    public void tickClient() {
         final Level level = this.level;
+
+        if (level == null || !level.isClientSide) {
+            return;
+        }
+
+        final float speed = this.getFanSpeed();
+
+        if (speed == 0.0F) {
+            return;
+        }
+
+        // 密度随转速线性变化；不足一颗就不生成
+        final int count = (int) Math.round(MAX_PARTICLES_PER_TICK * Math.min(Math.abs(speed) / 256.0F, 1.0F));
+
+        if (count <= 0) {
+            return;
+        }
+
+        final Direction facing = this.getBlockState().getValue(ThrustNozzleBlock.FACING);
+        final Vec3i normal = facing.getNormal();
+        final Vec3 axis = new Vec3(normal.getX(), normal.getY(), normal.getZ());
+
+        // 排气方向 = 机体受力方向的反向：
+        // 受力 = -FACING · (REVERSE_SIGN ? -1 : 1) · 转速 ⇒ 排气 = +FACING · 同一个符号
+        double flowSign = (REVERSE_SIGN ? -1.0D : 1.0D) * (speed > 0.0F ? 1.0D : -1.0D);
+
+        if (INVERT_PARTICLE_FLOW) {
+            flowSign = -flowSign;
+        }
+
+        // 喷口截面上的两个基向量：在口面上随机撒点
+        final Vec3 seedVec = Math.abs(axis.y) > 0.5D ? new Vec3(1, 0, 0) : new Vec3(0, 1, 0);
+        final Vec3 v = axis.cross(seedVec).normalize();
+        final Vec3 u = v.cross(axis).normalize();
+
+        final Vec3 center = Vec3.atCenterOf(this.worldPosition);
+        final RandomSource random = level.random;
+
+        for (int i = 0; i < count; i++) {
+            final double radius = 0.28D * Math.sqrt(random.nextDouble());
+            final double theta = random.nextDouble() * Math.PI * 2.0D;
+            final Vec3 spread = u.scale(Math.cos(theta) * radius).add(v.scale(Math.sin(theta) * radius));
+
+            // 起点：方块中心沿喷口方向外移 0.55 格（喷口外一点）
+            final Vec3 start = center.add(axis.scale(0.55D)).add(spread);
+            // AirParticleData 的 dx/dy/dz 不是速度而是"目标相对起点的位移"；
+            // 寿命 = 位移长度 / PARTICLE_SPEED（上限 60 tick）
+            final double travel = PARTICLE_TRAVEL_MIN
+                    + random.nextDouble() * (PARTICLE_TRAVEL_MAX - PARTICLE_TRAVEL_MIN);
+            final Vec3 flow = axis.scale(flowSign * travel);
+
+            level.addParticle(new AirParticleData(PARTICLE_DRAG, PARTICLE_SPEED),
+                    start.x, start.y, start.z,
+                    flow.x, flow.y, flow.z);
+        }
+    }
+
+    /** 背后的气流源（电扇）；缺失 / 朝向不匹配 → null */
+    private @Nullable IAirCurrentSource fanSource() {
+        final Level level = this.level;
+
         if (level == null) {
-            return 0.0F;
+            return null;
         }
 
         final Direction facing = this.getBlockState().getValue(ThrustNozzleBlock.FACING);
         final BlockEntity behind = level.getBlockEntity(this.worldPosition.relative(facing.getOpposite()));
 
-        if (!(behind instanceof IAirCurrentSource source) || source.getAirflowOriginSide() != facing) {
-            return 0.0F;
+        if (!(behind instanceof final IAirCurrentSource source) || source.getAirflowOriginSide() != facing) {
+            return null;
         }
 
-        return source.getSpeed();
+        return source;
+    }
+
+    /** 背后电扇的转速（RPM，带符号）；没有合法气流源 / 未转 → 0 */
+    private float getFanSpeed() {
+        final IAirCurrentSource source = this.fanSource();
+        return source == null ? 0.0F : source.getSpeed();
     }
 
     /** 取 {@code sable:propulsion} 力组在本物理体上的队列 */

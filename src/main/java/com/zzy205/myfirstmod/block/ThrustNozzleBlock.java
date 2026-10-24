@@ -12,6 +12,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.DirectionalBlock;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
@@ -190,5 +192,22 @@ public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock {
     @Override
     public @NotNull BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
         return new ThrustNozzleBlockEntity(pos, state);
+    }
+
+    // ── 客户端 ticker：只用来喷气流粒子（服务端物理走 Sable 的 sable$physicsTick） ──
+
+    private static final BlockEntityTicker<ThrustNozzleBlockEntity> CLIENT_TICKER =
+            (level, pos, state, be) -> be.tickClient();
+
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state,
+            @NotNull BlockEntityType<T> type) {
+        if (!level.isClientSide || type != MyModBlockEntities.thrust_nozzle_entity.get()) {
+            return null;
+        }
+
+        @SuppressWarnings("unchecked")
+        final BlockEntityTicker<T> ticker = (BlockEntityTicker<T>) (BlockEntityTicker<?>) CLIENT_TICKER;
+        return ticker;
     }
 }
