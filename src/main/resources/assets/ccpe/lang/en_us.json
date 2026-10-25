@@ -315,6 +315,8 @@
   "ccpe.configuration.exhaustScale.tooltip": "Spawn size. Default: 0.3",
   "ccpe.configuration.exhaustSpeed": "Exhaust Particle Speed (blocks/tick)",
   "ccpe.configuration.exhaustSpeed.tooltip": "Spawn speed, multiplied by (0.65 + 0.35 x throttle). Default: 2.0",
+  "ccpe.configuration.exhaustGravity": "Exhaust Gravity (blocks/tick²)",
+  "ccpe.configuration.exhaustGravity.tooltip": "Slight gravity on the exhaust plume, 0 = weightless. Terminal fall speed scales with age (fastest right after leaving the nozzle). Default: 0.0",
   "ccpe.configuration.exhaustMaxDistance": "Exhaust Emission Distance (blocks)",
   "ccpe.configuration.exhaustMaxDistance.tooltip": "Stop emitting beyond this distance, 0 = unlimited. Default: 64",
   "ccpe.configuration.engineSteamPuffVolume.tooltip": "Volume of the piston 'puff' sound on steam power chambers (0.0-2.0, 0 = disable this sound logic). Default: 0.1 (Create STEAM sound, once per piston cycle; rate tied to RPM).",

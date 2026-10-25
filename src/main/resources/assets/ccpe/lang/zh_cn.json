@@ -317,6 +317,8 @@
   "ccpe.configuration.exhaustScale.tooltip": "出生尺寸。默认: 0.3",
   "ccpe.configuration.exhaustSpeed": "排气粒子速度 (格/tick)",
   "ccpe.configuration.exhaustSpeed.tooltip": "出生速度，实际再乘 (0.65 + 0.35×油门)。默认: 2.0",
+  "ccpe.configuration.exhaustGravity": "排气重力 (格/tick²)",
+  "ccpe.configuration.exhaustGravity.tooltip": "给排气加一点重力，0 = 完全失重。终端下沉速度随寿命衰减（刚出膛时下坠最快）。默认: 0.0",
   "ccpe.configuration.exhaustMaxDistance": "排气发射距离 (格)",
   "ccpe.configuration.exhaustMaxDistance.tooltip": "超出就不生成，0 = 不限（原版 32 格限制已用 9 参数 API 绕过）。默认: 64",
   "ccpe.configuration.engineSteamPuffVolume.tooltip": "蒸汽动力室活塞'噗嗤'音效音量（0.0-2.0，0 = 关闭该音效逻辑节省性能）。默认：0.1（Create STEAM 声，每活塞周期触发一次，频率随转速）。",

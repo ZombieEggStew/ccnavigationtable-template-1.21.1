@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.client.particle;
 
 import com.zzy205.myfirstmod.CCPeripheralExtender;
+import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.block.ThrustNozzleBlockEntity;
 import com.zzy205.myfirstmod.particle.ExhaustParticleData;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -217,6 +218,17 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
     private final Vec3 spawnCenter;
     /** 上一次"有效碰撞（会随机改方向）"发生时的 age，用于 {@link #COLLISION_COOLDOWN} */
     private int lastImpactAge = -100;
+    /**
+     * 本颗粒子的向下加速度（格/tick²），来自配置 {@code ccpe-client.toml} 的 {@code exhaustGravity}，0 = 失重。
+     * <p>
+     * 构造时读一次并缓存（与 {@code ContrailParticle} 缓存 alpha/tau 的做法一致），
+     * 之后每 tick 只是 {@code yd -= sinkAccel} 一次浮点减法，性能开销可忽略；
+     * <b>不动扫掠碰撞</b>（本来就是每颗每 tick 一次）。
+     * <p>
+     * 命名不叫 {@code gravity} 是为了不遮蔽父类 {@link net.minecraft.client.particle.Particle#gravity}
+     * （那是原版 {@code Particle#tick} 用的字段，我们整个 tick 自己实现、不用它）。
+     */
+    private final double sinkAccel;
     /** 临时调试：本颗粒子是否被抽样跟踪，以及它的编号（只在 {@link #DEBUG_TRACE} 时有意义） */
     private final boolean debugTrace;
     private final int debugIndex;
@@ -260,9 +272,11 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
         }
 
         this.alpha = 0.0F;
-        // 无重力：gravity = 0，且 tick 里没有任何向下加速度（只有微小的向上浮力 BUOYANCY）。
-        // 烟团怎么飞完全由出生速度 + 阻尼 + 撞墙反弹决定。
+        // 原版 Particle#gravity 不用（我们整个 tick 自己实现），保持 0；
+        // 需要"轻微重力"时走下面的 sinkAccel（配置 exhaustGravity，默认 0 = 失重）。
         this.gravity = 0.0F;
+        // 配置读一次并缓存：每 tick 用到的量不该反复走 ConfigSpec 查询
+        this.sinkAccel = Math.max(0.0D, Config.EXHAUST_GRAVITY.get());
         this.friction = 1.0F;
         // 碰撞完全由下面的 move() 自己处理，别让原版 Particle#move 再算一遍
         this.hasPhysics = false;
@@ -294,7 +308,10 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
         final double swirl = Math.sin((this.age + this.swirlPhase) * 0.13D) * SWIRL;
         this.xd += swirl;
         this.zd -= swirl;
-        this.yd += BUOYANCY + life * BUOYANCY_GROWTH;
+        // 向上浮力（热气流）与向下重力（配置 exhaustGravity，默认 0）相抵；两者都只是速度的常数偏置。
+        // 叠加现有阻尼后终端下沉速度 = sinkAccel × f/(1−f)，f = VERTICAL_FRICTION ×(1 − SPEED_SLOW×life)
+        // ⇒ 年轻粒子下坠最快（f 大）、末期几乎挂住，观感上像"出膛后先坠、再渐渐沉降"。
+        this.yd += BUOYANCY + life * BUOYANCY_GROWTH - this.sinkAccel;
 
         this.move(this.xd, this.yd, this.zd);
 
