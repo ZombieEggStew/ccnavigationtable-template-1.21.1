@@ -1,14 +1,18 @@
 # 定向喷管（`ccpe:thrust_nozzle`）工作记录
 
-> 状态：**代码逻辑完成，已进游戏验证**（推力方向已实测校定；排气粒子已换成自研 `ccpe:exhaust`，见 §3.6）。缺合成配方；模型/贴图由用户完成。
-> 粒子当前形态：自研粒子（世界坐标、无重力、扫掠碰撞 + 撞墙反弹/滑行、撞地变大）；**撞地分裂已按用户要求关闭**，`USE_EXHAUST_PARTICLE=false` 可整体回退旧 `create:air`。
-> 粒子随寿命演变（v7，§3.6）：**越老越大 / 越老越慢 / 越老越透明**，三条曲线都由 `life = age/lifetime` 驱动。
-> 出力随气压缩放（§2.1.1）：`THRUST_PER_RPM = 1` ⇒ **1 RPM = 1 pN**，气压 1.0 时 256 RPM = 256 pN/管。
-> **远距离看不见粒子已解决**（§3.7）：根因是原版 32 格 `addParticle` 硬限制，改用 9 参数 `addAlwaysVisibleParticle(ignoreRange=true)`。
-> **高空尾迹（contrail）已实现**（v1，2026-08）：自研粒子 `ccpe:contrail`，只在冷空气里、按移动距离发射，
-> 无碰撞/无重力/原地随机飘逸。代码完成 + 编译通过，**待进游戏验证**，细节与测试清单见 §9。
-> 上游背景：悬浮车自动驾驶的推进方案见 `memo/flip-autopilot.md`（火箭推力功率不生效 ⇒ 放弃火箭，改自研定向喷管）。
-> 相关：`memo/my_sensor_system.md`、`memo/api-code-map.md`。
+> 状态（2026-08 定稿）：**推力 / 排气 / 高空尾迹 / 染料染色 / 配置化 / tooltip 全部完成，`gradlew classes` 通过**。
+> **交接速览见 §13**（文件清单、玩家可见行为、参数在哪、待办）。缺合成配方；模型/贴图由用户完成。
+>
+> 五个能力一句话版：
+> 1. **推力**（§2.1）：`THRUST_PER_RPM = 1` ⇒ 1 RPM = 1 pN，气压 1.0 时 256 RPM = 256 pN/管，且随气压缩放；
+> 2. **排气 `ccpe:exhaust`**（§3.6）：世界坐标、无重力、扫掠碰撞 + 撞墙反弹、越老越大/越慢/越淡；撞地分裂按用户要求关闭；
+> 3. **高空尾迹 `ccpe:contrail`**（§9）：按移动距离发射、峰值适宜度曲线（Y160 起 / 183~224 最浓 / 320 最稀）、
+>    匀速直线飘荡（速度 = 总飘荡距离 ÷ 寿命，§9.10）、无碰撞无重力、9 参数 `addAlwaysVisibleParticle` 远处可见；
+> 4. **染料染色**（§10）：手持染料右键喷口 ⇒ 只染**尾迹**粒子，护目镜 tooltip 显示当前染色；
+> 5. **配置 + tooltip**（§11、§12）：16 个性能参数进 `config/ccpe-client.toml`；物品 tooltip 走 Create `ItemDescription`。
+>
+> **待进游戏确认**（其余已由用户实测确认）：配置项生效 & 界面文案、物品 tooltip、以及"潜行空手清除染色"已移除。
+> 上游背景见 `memo/flip-autopilot.md`（火箭方案作废 ⇒ 自研喷管）；相关 `memo/my_sensor_system.md`、`memo/api-code-map.md`。
 
 ## 0. 需求与决策链（用户定稿）
 
@@ -19,6 +23,13 @@
 | 强度 | **1 RPM = 1 pN**（`THRUST_PER_RPM = 1`）⇒ 气压 1.0 时 256 RPM 单管 **256 pN**。用户第三次定稿，图公式简单；初版 800 pN 实测"高达 750 多"过猛，200 pN 偏软 |
 | 方块名 | `ccpe:thrust_nozzle` |
 | mixin | **不需要**（见 §1） |
+| 尾迹高度窗口 | **Y 160~320**，Y<160 完全无尾迹；实际做成**峰值曲线**（Y≈183~224 最浓，往上变稀），见 §9.8 |
+| 尾迹发射 | **按移动距离**发射（悬停不动 ⇒ 零发射），见 §9.3 |
+| 尾迹飘荡 | **匀速直线**：速度 = 总飘荡距离 ÷ 寿命，方向随机；云层以上 ×1、越低越散（模拟对流层湍流），见 §9.10 |
+| 湿度 | **不计算**，全部退化为高度/温度函数 |
+| 染色 | 手持**染料**右键喷口 ⇒ 只染**尾迹**粒子；护目镜显示当前色；**无清除入口**（潜行空手清除已删除），见 §10 |
+| 性能参数 | **16 项全部进配置** `ccpe-client.toml`，见 §11 |
+| 物品 tooltip | Create `ItemDescription`：装在风扇出风面增加出力 / 高空产生尾迹 / 染料改色，见 §12 |
 
 ## 1. 源码结论：为什么不需要 mixin
 
@@ -183,7 +194,12 @@ pressure = DimensionPhysicsData.getAirPressure(level,
 | v6 | 光照：`IGNORE_LIGHTMAP` 全亮渲染（§3.6 光照节） | 现行（修「黄黄的粒子」） |
 | v7 | 随寿命演变：越大 / 越慢 / 越透明三条单调曲线（§3.6） | 现行 |
 
-### 3.3 当前参数（用户在 v1 基础上调过）
+### 3.3 当前参数（⚠️ v1 的 `create:air` 回退路径，现在默认不走这条）
+
+> 现在 `USE_EXHAUST_PARTICLE = true`，实际用的是 §3.6 的自研 `ccpe:exhaust`；
+> 下表只有把 `USE_EXHAUST_PARTICLE` 改回 `false` 时才生效。
+> **排气粒子目前的旋钮**：密度/寿命/尺寸/初速/距离已进配置（§11.1 的 `exhaust*` 五项），
+> 撞墙与视觉细节在 `ExhaustParticle` 顶部。
 
 | 常量 | 现值 | 说明 |
 |---|---|---|
@@ -251,7 +267,7 @@ mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题�
 ### 3.6 v5：自研排气粒子 `ccpe:exhaust`（扫掠碰撞 + 撞墙向四周扩散）
 
 > 现状：`USE_EXHAUST_PARTICLE = true`（**现行**）。
-> 第一版曾因下方「致命 bug」导致撞墙毫无反应而被回退，修好后重新启用，待进游戏复核。
+> 第一版曾因下方「致命 bug」导致撞墙毫无反应而被回退，修好后重新启用 —— **已由用户实测确认**（撞墙反弹/滑行、撞地变大）。
 
 **为什么自研**：`create:air` 是「起点→终点插值」的纯视觉粒子（`hasPhysics = false`，永不碰撞），
 而且 `AirParticleMixin` 每 tick 重投影，做不出「撞到方块停下并散开」的效果。
@@ -459,17 +475,25 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 ## 5. 下一步
 
 1. 定合成配方材料（并补 `recipe/`）。
-2. 排气粒子已换成自研 `ccpe:exhaust`（§3.6）：待用户在游戏里确认撞墙滑行/撞地变大的最终手感，再微调
-   `EXHAUST_SCALE / EXHAUST_SPEED / BOUNCE / SPREAD_KEEP / ENERGY_KEEP / IMPACT_GROWTH`。
-   v7 新增的"随寿命越大/越慢/越透明"三条曲线的旋钮是 `ALPHA_MAX / ALPHA_FALLOFF / SIZE_START /
-   SIZE_GROWTH / SPEED_SLOW`（都在 `ExhaustParticle` 顶部，改完热重载即可看）。
+2. 排气粒子（`ccpe:exhaust`，§3.6）若要继续调手感：
+   密度/寿命/尺寸/初速/距离 = **配置项** `exhaustParticlesPerTick / exhaustLifetime / exhaustScale / exhaustSpeed / exhaustMaxDistance`（§11）；
+   撞墙与视觉细节（`BOUNCE / TANGENT_KEEP / SPREAD_KEEP / ENERGY_KEEP / IMPACT_GROWTH`、
+   `ALPHA_MAX / ALPHA_FALLOFF / SIZE_START / SIZE_GROWTH / SPEED_SLOW / COLLISION_COOLDOWN`）
+   仍在 `ExhaustParticle` 顶部（代码常量，改完热重载即看）。
    `PARTICLES_BLOCKED_BY_OTHER_BODIES` 仍决定其它物理体是否挡粒子（现 true）。
 3. 回到 `flip-autopilot.md`：用新喷管重做落地/倒挂调参（悬停油门 **43%**（气压 1.0），
    原来是按 14% 算的；控制律的增益/死区要重标定，且滚转单边差动只剩 6.4 rad/s² 的零余量，
    建议用双边反向差动）。
    **气压项（§2.1.1）让 14% 只在海平面成立**，高空油门要更大；嫌麻烦就让脚本用 `sensor` 的气压做前馈，
    或先把 `THRUST_SCALES_WITH_AIR_PRESSURE` 关掉再标控制律。
-4. ~~高空尾迹（contrail）~~：**已实现，待进游戏验证**（§9，方案见 §8）。测试清单见 §9.4。
+4. ~~高空尾迹（contrail）~~：**已实现并经用户多轮实测定稿**（§8 计划 → §9 实现 → §9.7~§9.10 四轮模型迭代）。
+   参数已全部配置化（§11），玩家直接改 `ccpe-client.toml` 即可调手感。
+5. 下次进游戏要确认的三件小事（其余都已确认）：
+   ① 配置界面能看到 16 项粒子配置且标题/说明正常、改完即时生效；
+   ② 物品 tooltip 按住 SHIFT 能展开 summary + 3 组说明；
+   ③ 空手/潜行空手右键喷口已经**完全没有反应**。
+6. 若要继续美化尾迹，可考虑（都还没做）：把 `minecraft:generic_0..7` 换成专用白云贴图；
+   或把尾迹做成带状 mesh 以实现"几分钟长"的真正尾迹（§8.6 提过，工作量大）。
 
 ## 6. 参考来源（均只读）
 
@@ -485,7 +509,7 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 | **`build/moddev/artifacts/neoforge-21.1.235-sources.jar`** | ⭐ **项目内就有完整 Minecraft 源码**（`ClientLevel.java`、`LevelRenderer.java` 等）。查原版行为优先用它，别靠记忆 —— §3.7 的 32 格限制与两个重载的差异都是从这里查实的 |
 | `wiki/docs/engine/temperature.zh.md`、`EngineCoreBlockEntity` 的 `T_AMB_*` 常量与 `ambientTemp()` | **高度→环境温度**模型（尾迹复用，见 §8） |
 
-## 7. 变更时间线（2026-08 排气重做，含踩过的坑）
+## 7. 变更时间线（2026-08，排气 → 尾迹 → 染色 → 配置 → tooltip，含踩过的坑）
 
 | # | 需求 / 现象 | 处理 | 结果 |
 |---|---|---|---|
@@ -502,7 +526,7 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 | 11 | 想让粒子随存在时间越大 / 越慢 / 越透明 | alpha 去掉恒定平台期改全寿命单调衰减；尺寸区间 0.42+0.95 → 0.35+1.15；阻尼追乘 `(1−SPEED_SLOW×life)`（§3.6） | 已改，待进游戏确认手感 |
 | 12 | 需要出力随所处气压变化（乘气压） | `airPressureAt()`：喷管中心投世界系 → `DimensionPhysicsData.getAirPressure`，乘进冲量（§2.1.1） | ✅ 用户实测有效果 |
 | 13 | 出力过大（气压 1.0、256 RPM 实测 750 多 pN） | `THRUST_PER_RPM` 800/256 → 200/256 → 再一次改成 **1.0（1 RPM = 1 pN，256 RPM = 256 pN）**，§2.2 每次全部重算 | 现行 256 pN/管 |
-| 14 | 想要"1 RPM 对应 1 pN"的简单公式 | `THRUST_PER_RPM = 1.0`；连带：悬停 43%、4 管升限 y≈273、落地 25.4 m/s² | 已改，待进游戏确认 |
+| 14 | 想要"1 RPM 对应 1 pN"的简单公式 | `THRUST_PER_RPM = 1.0`；连带：悬停 43%、4 管升限 y≈273、落地 25.4 m/s² | ✅ 已实测 |
 | 15 | 离喷管约 1 区块就不出粒子（出力正常，Create 电扇同样） | 原版 `addParticleInternal` 离相机 >32 格（1024）直接丢粒子；**第一次错用 7 参数 `addAlwaysVisibleParticle`（force=false）无效**，改 9 参数 `ignoreRange=true` + 自设 64 格上限（§3.7） | ✅ 用户实测解决 |
 | 16 | 想要"真实高空尾迹"预研 | 科普 + 需求定稿 + 实现计划（§8），未动代码 | 计划就绪 |
 | 17 | 开始实现尾迹 | 静态化 `ambientTempAt`、新粒子类型 `ccpe:contrail` + `ContrailParticle`、`tickContrail()` 按位移发射（§9） | 编译通过，待进游戏验证 |
@@ -511,14 +535,16 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 | 20 | 云层在 Y200、要求峰值曲线 + Y160 就要看清 | s 从单调爬升改为峰值曲线（上升段 × 高空变稀段）+ `TRAIL_Y_MIN=160` 阶跃硬门；节点与实测表见 §9.8 | 编译通过，待进游戏确认 |
 | 21 | 要粒子**随时间越来越散** | 扩散半径从常数改 `R0 + RATE·√age`（软边界 + 6 格封顶）；边界内朝外速度按 `(dist/半径)²` 衰减（§9.9） | 编译通过，待进游戏确认 |
 | 22 | 改成「初速 = 飘荡距离 ÷ 寿命」，且飘荡距离随高度变化（云层×1、越低越散） | 删除随机游走/抖动/浮点边界；`spawnContrail` 反算恒定速度，新增 `trailTurbulence()`（200→1.0，160→2.5）与 `TRAIL_DRIFT_DISTANCE=2.0`（§9.10） | 编译通过，待进游戏确认 |
-| 23 | 想手感染料给**尾迹**染色 + 护目镜显示 | `useItemOn`/`useWithoutItem` 染料交互、BE 存 `trailDye`（NBT + `getUpdateTag/handleUpdateTag/getUpdatePacket` 同步）、`IHaveGoggleInformation` tooltip，颜色走进 `ContrailParticleData`（§10） | 编译通过，待进游戏确认 |
-| 26 | 物品 tooltip 要说明用途与染色 | 照 `trailing_wheel_mount` 注册 `ItemDescription.Modifier`（FMLClientSetupEvent），7 条 lang（summary + 3 组 condition/behaviour），文案不带 `_` 避免高亮奇偶翻转（§12） | ✅ 编译通过 |
-| 25 | 去掉「潜行空手右键清除染色」 | 删 `ThrustNozzleBlock#useWithoutItem`、goggle 的清除提示行、lang 的 `trail_dye_hint` / `trail_dye_cleared`（§10） | ✅ 编译通过 |
+| 23 | 想手感染料给**尾迹**染色 + 护目镜显示 | `useItemOn`/`useWithoutItem` 染料交互、BE 存 `trailDye`（NBT + `getUpdateTag/handleUpdateTag/getUpdatePacket` 同步）、`IHaveGoggleInformation` tooltip，颜色走进 `ContrailParticleData`（§10） | ✅ 有效果，用户确认 |
 | 24 | 性能参数要能配置调 | 16 个性能参数搬进 `ccpe-client.toml`（`Config` CLIENT 段）；BE 的常量换成 `Config.XXX.get()` 访问器（现查现用，改完即时生效），粒子里每 tick 用到的 alpha/tau 在构造时缓存（§11） | 编译通过，待进游戏确认 |
+| 25 | 去掉「潜行空手右键清除染色」 | 删 `ThrustNozzleBlock#useWithoutItem`、goggle 的清除提示行、lang 的 `trail_dye_hint` / `trail_dye_cleared`（§10） | ✅ 编译通过 |
+| 26 | 物品 tooltip 要说明用途与染色 | 照 `trailing_wheel_mount` 注册 `ItemDescription.Modifier`（FMLClientSetupEvent），7 条 lang（summary + 3 组 condition/behaviour），文案不带 `_` 避免高亮奇偶翻转（§12） | 编译通过，待进游戏确认 |
 
 ## 8. 下一步：高空尾迹（contrail）实现计划
 
 > 状态：**已实现**（2026-08，代码见 §9；§8.7 的清单已全部落地，两处偏离见 §9.0）。
+> ⚠️ 本节 §8.5 的「原地随机飘逸（随机游走）」方案**已被 §9.10 取代**成「匀速直线：速度 = 总飘荡距离 ÷ 寿命」；
+> §8.4 的适宜度曲线也已被 §9.8 的**峰值曲线**取代。设计动机仍值得读，具体公式以上述两节和 §13 为准。
 > 前置条件已满足：粒子可见距离问题已修（§3.7，必须用 9 参数 `addAlwaysVisibleParticle`）。
 
 ### 8.1 需求定稿（用户拍板）
@@ -737,14 +763,19 @@ accum ≥ spacing 就吐一颗，单 tick 最多 MAX_CONTRAL_PER_TICK(3) 颗，�
   ```
 
   即出生 0.14 → 寿命末尾 ~0.07 → 淡出到 0（不硬切）。
-- **原地随机飘逸**：每 tick 抖动 `JITTER=0.0016` + 缓慢正弦 `SWIRL=0.0006`（φ=0.07/tick）+ 浮力，
+- ~~**原地随机飘逸**~~（⚠️ **已删除**，见 §9.10 的匀速直线模型；下面这几行仅作历史记录）：
+  每 tick 抖动 `JITTER=0.0016` + 缓慢正弦 `SWIRL=0.0006`（φ=0.07/tick）+ 浮力，
   再乘 `DRIFT_DAMP=0.985` 并**把速度钳到 `TRAIL_DRIFT`**⇒ 一生最多漂约 6 格。
 - **光照/渲染**：继承 `SimpleAnimatedParticle` 直接拿到 `PARTICLE_SHEET_TRANSLUCENT` 与全亮
   `getLightColor = 15728880`（天空 15 + 方块 15）—— 冰晶不该被暖色光源染黄。
   精灵图**出生时随机定死一张**（不调 `setSpriteFromAge`），避免 1000 颗同时跳帧。
 - **必须用 9 参数 `addAlwaysVisibleParticle(..., true, ...)`**（§3.7 的老坑），尾迹比尾焰更需要远处可见。
 
-### 9.5 常量总表（全在 `ThrustNozzleBlockEntity` 顶部，改完热重载即看）
+### 9.5 常量总表（⚠️ v1 历史记录）
+
+> **已被后来三次迭代覆盖**：适宜度曲线改成峰值（§9.8）、飘荡模型改成"总距离 ÷ 寿命"（§9.10）、
+> 且下列带 ★ 的项**已全部搬进配置文件**（§11）。**当前生效值请看 §13.4 与 `config/ccpe-client.toml`**，
+> 本表只用于理解 v1 的设计意图。
 
 | 常量 | 现值 | 作用 / 怎么调 |
 |---|---|---|
@@ -763,7 +794,7 @@ accum ≥ spacing 就吐一颗，单 tick 最多 MAX_CONTRAL_PER_TICK(3) 颗，�
 | `TRAIL_MAX_TICK_MOVE` | 4.0 格 | 超过当瞬移，丢弃 |
 | `TRAIL_RED/GREEN/BLUE` | **0.45/0.80/1.00** | 冷青色（用户要求"染色看清"；改回 0.92/0.94/0.97 即冰晶白） |
 
-### 9.6 进游戏验证清单（按顺序做，方便定位）
+### 9.6 进游戏验证清单（⚠️ v1 历史记录；最终验证清单见 §13.5）
 
 1. **低空对照**：地面（Y<160）开风扇 ⇒ 只有排气、**没有**尾迹 → 证明温度门控生效。
 2. **高空出现**：飞到 Y≈200 起飞巡航 ⇒ 出现**淡**尾迹；Y≈260+ ⇒ 明显、更耐久。
@@ -839,7 +870,7 @@ s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶�
 159 → **0**；160 → s0.58 / 间距 2.1 / 42 s；175 → 0.94 / 1.3 / 57 s；
 **183~224 → 满（1.2 / 60 s）**；240 → 0.94；260 → 0.73；280 → 0.47；300 → 0.25；320 → 0.15。
 **峰值带 = Y 183~224**，云层 Y≈200 正落在峰内。
-### 9.9 v4：粒子随时间**越来越散**（2026-08，用户定稿）
+### 9.9 v4：粒子随时间**越来越散**（⚠️ 已被 §9.10 取代，软边界模型已删除，仅作踩坑记录）
 
 紧接 §9.7（当时为了修「分布很散」给随机游走加了一个**固定** 2 格半径）。现在用户要的正好是反方向：
 「粒子随着时间越来越散」。两者不冲突 —— **常数边界**只能做到「要么整体散、要么整体不散」，
@@ -1065,6 +1096,128 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 
 ⇒ 本项目这 7 条文案**全部写成不带下划线的单行**文本，颜色稳定为 palette.primary。
 以后想加高亮：要么整条只用一对 `_`，**并且一次性检查所有行**，要么就别用。
+## 13. 现状总览（交接用，2026-08 定稿）
+
+> 这一节是给「下次接手的人（或未来的自己）」看的速查：不用读 §1~§12 的历史过程也能上手。
+
+### 13.1 功能一览
+
+| 能力 | 做法 | 状态 | 章节 |
+|---|---|---|---|
+| 定向推力 | 纯轴向恒定推力，点力打进 `sable:propulsion` 力组；1 RPM = 1 pN，乘气压 | ✅ 已实测校准 | §2.1 / §2.2 |
+| 排气粒子 `ccpe:exhaust` | 自研粒子：世界坐标、无重力、扫掠碰撞 + 撞墙反弹滑行 + 撞地变大、随寿命越大/越慢/越淡 | ✅ 已实测 | §3.6 |
+| 高空尾迹 `ccpe:contrail` | 自研粒子：按**移动距离**发射、峰值适宜度曲线、匀速直线飘荡（速度 = 总距离 ÷ 寿命）、无碰撞无重力 | ✅ 已实测（4 轮迭代） | §8 / §9 / §9.7~§9.10 |
+| 染料染色 | 手持染料右键喷口 ⇒ 只染**尾迹**；服务端权威 + BE 数据同步；护目镜 tooltip 显示当前色 | ✅ 已实测 | §10 |
+| 配置化 | 16 个性能参数进 `config/ccpe-client.toml` | ⏳ 待入游戏确认 | §11 |
+| 物品 tooltip | Create `ItemDescription`，Shift 展开 summary + 3 组说明 | ⏳ 待入游戏确认 | §12 |
+| mixin | **零 mixin**：Create 的 `NozzleBlockEntity` 对物理体无效、Sable 的力逻辑在 mixin 里 ⇒ 自研方块 + BE 成本最低 | ✅ | §1 |
+
+### 13.2 文件清单
+
+**Java（`src/main/java/com/zzy205/myfirstmod/`）**
+
+| 文件 | 职责 |
+|---|---|
+| `block/ThrustNozzleBlock.java` | `DirectionalBlock` + `EntityBlock`：`FACING`、`canSurvive`（贴风扇出风面）、六向选择框、客户端 ticker、**染料右键** |
+| `block/ThrustNozzleBlockEntity.java` | 主体：`sable$physicsTick` 施力、`tickClient`/`tickContrail`/`spawnExhaust`/`spawnContrail`、适宜度曲线、染色状态 + NBT/同步、goggle tooltip、全部配置访问器 |
+| `particle/MyModParticles.java` | 注册 `ccpe:exhaust` / `ccpe:contrail` |
+| `particle/ExhaustParticleData.java` | 排气粒子参数 record（scale/lifetime/rgb/ownerId/gen） |
+| `particle/ContrailParticleData.java` | 尾迹粒子参数 record（width/lifetime/rgb） |
+| `particle/ContrailBudget.java` | 尾迹存活计数（common 包、只有 int，供 `contrailMaxLive` 安全阀用） |
+| `client/particle/ExhaustParticle.java` | 排气粒子：碰撞 + 撞墙散射 + 撞地变大（+ 默认关闭的分裂） |
+| `client/particle/ExhaustCollision.java` | 球-箱扫掠碰撞（主世界逐方块 + 其它物理体反投） |
+| `client/particle/ContrailParticle.java` | 尾迹粒子：匀速直线、sqrt(t) 扩散、alpha ∝ 1/宽度、全亮渲染 |
+| `block/EngineCoreBlockEntity.java` | 提供 `public static float ambientTempAt(Level, float y)`（尾迹曲线复用引擎的高度→温度） |
+| `Config.java` | CLIENT 段新增 16 项粒子配置 |
+| `CCPeripheralExtenderClient.java` | 粒子 provider 注册、`ContrailParticle.onClientTick` 记账、物品 tooltip 注册 |
+| `block/MyModBlocks.java` / `block/MyModBlockEntities.java` | `ccpe:thrust_nozzle` 方块与 BE 注册 |
+
+**资源 / 数据**
+
+| 文件 | 内容 |
+|---|---|
+| `assets/ccpe/blockstates/thrust_nozzle.json`、`models/block|item/thrust_nozzle.json`、`textures/block/thrust_nozzle.png` | 模型（用户 Blockbench 制作）；blockstate 未旋转变体 = `facing=up` |
+| `assets/ccpe/particles/exhaust.json`、`particles/contrail.json` | 精灵图列表，都是 `minecraft:generic_0..7` |
+| `assets/ccpe/lang/{zh_cn,en_us}.json` | 方块名、物品 tooltip 7 条、goggle 4 条、配置 32 条 |
+| `data/ccpe/loot_table/blocks/thrust_nozzle.json` | 挖掘掉落 |
+| `data/ccpe/physics_block_properties/thrust_nozzle.json` | `sable:mass = 1.0`、`sable:volume = 0.5` |
+
+### 13.3 玩家可见行为
+
+| 操作 | 结果 |
+|---|---|
+| 贴在 `create:encased_fan` 出风面放置 | 生效；背后风扇被拆/转走 ⇒ 喷管掉落 |
+| 风扇正转 | 机体沿 **-FACING** 受力（喷口朝下 = 上升/刹车）；反转 ⇒ 下压/吸附 |
+| 高空飞行（Y ≥ 160） | 喷口后方拖出尾迹：Y 160 起出现，183~224 最浓最长，越接近 Y320 越稀 |
+| 悬停不动 | **不出尾迹**（按移动距离发射），旧粒子自然淡掉 |
+| 手持染料右键 | 尾迹染成该染料色（消耗 1 个，创造不消耗，同色不消耗）+ 音效 + 动作栏提示 |
+| 空手 / 潜行空手右键 | **无任何反应**（清除入口已按用户要求删除） |
+| 戴 Create 护目镜看喷管 | `定向喷管` / `尾迹染色 <染料名> #RRGGBB`（未染色显示 `默认（未染色）`） |
+| 物品栏按住 SHIFT | summary（装在 encased fan 出风面增加出力）+ 3 组：风扇/高空尾迹/染料染色 |
+| 改 `config/ccpe-client.toml` | 尾迹与排气的寿命、密度、上限、尺寸、颜色亮度等 16 项即时生效 |
+
+### 13.4 参数在哪儿（三层，按可改性排序）
+
+1. **配置文件**（`config/ccpe-client.toml`，16 项，详见 §11.1）：`contrailEnabled`、`contrailLifeMin/Max`、
+   `contrailSpacing`、`contrailMaxPerTick`、`contrailMaxLive`、`contrailMaxDistance`、`contrailWidth`、
+   `contrailWidthTau`、`contrailAlpha`、`contrailDriftDistance`、`exhaustParticlesPerTick`、`exhaustLifetime`、
+   `exhaustScale`、`exhaustSpeed`、`exhaustMaxDistance`。
+   BE 里通过 `Config.XXX.get()` 访问器**现查现用**（改完即时生效）。
+2. **代码常量 = 物理/曲线定义**（`ThrustNozzleBlockEntity` 顶部，见 §11.3）：`TRAIL_Y_MIN`(160 硬门)、
+   `TRAIL_T_START/FULL/FADE_START/FADE_END`、`TRAIL_S_CEILING`、`TRAIL_TURB_CLOUD_Y`、`TRAIL_TURB_LOW_GAIN`、
+   `CONTRAIL_OVERWORLD_ONLY`、`TRAIL_SPACING_S_FLOOR`、`TRAIL_DRIFT_DISTANCE_MIN/MAX`、`TRAIL_START_OFFSET`、
+   `TRAIL_MAX_TICK_MOVE`、`TRAIL_RED/GREEN/BLUE`、`TRAIL_DYE_BRIGHTNESS`、`NO_DYE`、`THRUST_PER_RPM`、
+   `REVERSE_SIGN`、`THRUST_SCALES_WITH_AIR_PRESSURE`、`EXHAUST_SPREAD`、`EXHAUST_SPEED_RANDOM_MIN/MAX`、
+   `PARTICLES_BLOCKED_BY_OTHER_BODIES`、`USE_EXHAUST_PARTICLE`。
+3. **粒子类内部视觉常量**：`ExhaustParticle`（`ALPHA_MAX`/`BOUNCE`/`TANGENT_KEEP`/`SPREAD_KEEP`/`ENERGY_KEEP`/
+   `IMPACT_GROWTH`/`COLLISION_COOLDOWN`/`SIZE_*`/`SPEED_SLOW`…）、`ContrailParticle`（`FADE_IN_TICKS`/`FADE_OUT_START`）。
+
+### 13.5 验证状态
+
+**已由用户进游戏实测确认**：推力方向与手感、气压项、排气粒子各形态、尾迹出现的高度与密度、
+尾迹 32 格外可见、尾迹**越来越散**的手感、染料染色有效果。
+
+**还没进游戏确认的三项**（都是 2026-08 最后一批改动）：
+1. 配置 16 项：界面标题/说明是否正常解析、改完是否即时生效；
+2. 物品 tooltip：Shift 展开是否正常、中文不是原始 key、`condition1..3` 连续；
+3. 潜行/空手右键喷口是否确实已无反应。
+
+### 13.6 已知边界 / 未做
+
+- **推力不做遮挡判定**：喷口被堵死时物理推力照样输出。
+- **尾迹/排气都是纯客户端计算**：各客户端看到的撞墙点、散射方向、染色粒子各自独立（原版粒子行为，未做服务端广播）。
+- **没有合成配方**（`data/ccpe/recipe/thrust_nozzle.json` 缺失）；材料待用户定。
+- **没有原版实体推挤**（旧 `create:nozzle` 会推物品/生物）。
+- **排气撞地分裂仍关闭**（`SPLIT_ON_IMPACT=false`），代码/TAG/队列都还在，改回 true 即恢复。
+- **蓝图/装配兼容未专门验证**：`canSurvive` 会在部署瞬间复核风扇。
+- **染色只有 16 种染料色**，不支持任意 RGB；且**没有清除入口**（想恢复默认只能拆掉重放）。
+- **不新增 CC 写入**：喷管不是外设，出力由风扇转速决定 ⇒ `flip-autopilot.md` 的写入预算不变。
+
+### 13.7 踩过的坑速查（重踩最费时间的都在这里）
+
+| 现象 | 根因 | 处置 | 章节 |
+|---|---|---|---|
+| 装了喷管后风扇本身不推了 | Sable 的 `isActive()` 要求风扇前方是空气，喷管占住了那一格 | 属预期：总推力 = 喷管这一路 | §1.4 |
+| 物理体被瞬间打飞 | 复用了力向量/作用点（`applyImpulseAtPoint` 就地改写入参） | 每次新建 `Vector3d` | §2.1 |
+| 粒子跟着车跑（像子物体） | 传了 plot 局部坐标，`AirParticleMixin` 每 tick 按当前姿态重投影 | 出生点/位移先 `projectToWorld` | §3.5 |
+| 物理体挡得住粒子、静态方块挡不住 | 射线在 plot 系里打，主世界命中的是**世界系**坐标 | 射线改到世界系、命中点统一换算 | §3.4 |
+| 离喷管 1 区块就没粒子 | 原版 `addParticleInternal` 离相机 >32 格直接丢弃 | 用 **9 参数** `addAlwaysVisibleParticle(ignoreRange=true)` | §3.7 |
+| 粒子穿透地面/墙面 | `getCollisionShape` 返回**方块局部** AABB，漏加 `pos` 偏移 | 加偏移（`ExhaustCollision#slab` 直接收偏移） | §3.6 |
+| 尾迹要等很久才出现 | 淡入写成「寿命的 5%」，寿命 18000 时 = 45 秒 | 淡入改**固定 tick** | §9.7 |
+| 粒子分布很散 | 随机游走**无界** + 低适宜度时间距被拉到 12 格 | 改匀速直线模型（距离 ÷ 寿命）+ 间距给下限 | §9.7 / §9.10 |
+| 尾迹长到某处不再延长 | 撞到 `contrailMaxLive` 存活上限 | 属预期；调配置或降寿命 | §9.7 / §11 |
+| 染色不同步 / tooltip 停在旧色 | `getUpdatePacket()` 默认返回 `null` | 三个同步方法都要 override | §10.5 |
+| 物品 tooltip 颜色错乱 | Create 用 `_` 分段且**每行翻转**高亮状态 | 文案不写 `_`，全部单行 | §12.4 |
+| 注册 tooltip 时崩（unbound value） | 在 mod 构造器里取 `DeferredHolder` | 移到 `FMLClientSetupEvent` | §12.1 |
+
+### 13.8 下一步（按优先级）
+
+1. 进游戏确认 §13.5 那三项。
+2. 定合成配方材料并补 `data/ccpe/recipe/`。
+3. 回到 `memo/flip-autopilot.md`：用新喷管重标落地/倒挂控制律（悬停油门 43% 只在海平面成立，§2.2；
+   滚转单边差动只剩 6.4 rad/s² 余量 ⇒ 建议双边反向差动）。
+4. 可选美化：尾迹换专用白云贴图；或改带状 mesh 做「几分钟长」的真正尾迹（工作量大，§8.6）。
+
 
 
 
