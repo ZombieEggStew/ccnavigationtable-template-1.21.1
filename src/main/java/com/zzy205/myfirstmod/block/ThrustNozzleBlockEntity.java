@@ -360,24 +360,43 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
     public static final float TRAIL_ALPHA0 = 0.6F;
 
     /**
-     * "原地随机飘逸"的速度上限（格/tick）：用户明确<b>不要风场平流</b>，所以尾迹整体平流为 0，
-     * 只做缓慢的随机游走。
+     * 单颗粒子的<b>总飘荡距离</b>基准（格）：粒子从出生到死亡，一共会离开出生点这么远。
      * <p>
-     * 0.2 格/tick 太大（= 4 格/秒，而且随机游走无界）：配合长寿命会把尾迹散成一团（用户实测"分布很散"），
-     * 现在降回 <b>0.05</b>，真正的"不散"由 {@link #TRAIL_MAX_DRIFT_RADIUS} 保证。
-     * 想要更活泼的蠕动可以抬回 0.1~0.2，半径约束会兜住，只是粒子会更"抖"。
+     * v5 模型（用户定稿）：粒子的速度不再直接给，而是<b>反算</b>出来 ——
+     * <pre>
+     * 速度(块/tick) = 总飘荡距离 / 寿命(tick)
+     * </pre>
+     * 例如"寿命 30 s（600 tick）、飘荡距离 2 格" ⇒ 速度 = 2/600 块/tick。
+     * 这样"这颗粒子会飘多远"是一个直接可读、可调的量，而且方向随机 ⇒ 同龄粒子向四面八方铺开，
+     * 尾迹自然越铺越宽（这就是"随时间越来越散"）。
+     * <p>
+     * 老模型（随机游走 + 抖动 + 边界钳位）已经删掉：它的位移量只能靠调参间接控制，
+     * 而且寿命一长就会失控（用户实测"分布很散"）。
      */
-    public static final double TRAIL_DRIFT = 0.05D;
+    public static final double TRAIL_DRIFT_DISTANCE = 4.0D;
+
+    /** 每颗粒子飘荡距离的随机倍率区间（让尾迹有厚有薄，不是一个厚度均匀的管） */
+    public static final double TRAIL_DRIFT_DISTANCE_MIN = 0.55D;
+    public static final double TRAIL_DRIFT_DISTANCE_MAX = 1.60D;
 
     /**
-     * 单颗粒子允许离开<b>出生点</b>的最大半径（格，0 = 不限；现 2.0）。
-     * <p>
-     * 这是"分布很散"的正面修法：随机游走是<b>无界</b>的，寿命 18000 tick、漂移 0.2 格/tick 时，
-     * 每颗粒子一生能游走出几十格，整条尾迹就散成一片稀薄的雾。
-     * 超半径后粒子只失去"朝外"的速度分量（仍可沿切向缓慢蠕动），所以既不会散开、
-     * 也不会像贴纸一样完全钉死。带宽 ≈ 本值 × 2 + 粒子尺寸。
+     * 飘荡距离随高度变化的<b>参考高度</b>（云层高度 Y，现 200，用户世界的云层就在这）：
+     * 云层及以上系数 = 1.0。
      */
-    public static final double TRAIL_MAX_DRIFT_RADIUS = 2.0D;
+    public static final double TRAIL_TURB_CLOUD_Y = 200.0D;
+
+    /**
+     * 云层<b>以下</b>（Y 200 → {@link #TRAIL_Y_MIN}=160）飘荡距离的放大倍数上限（现 2.5）。
+     * <p>
+     * 物理：对流层的湍流/垂直对流随高度下降而增强（云就是这样长起来的），所以越低空，
+     * 尾迹被搅得越散。线性映射：
+     * <pre>
+     * 系数(Y) = 1 + (本值 − 1) · (CLOUD_Y − Y) / (CLOUD_Y − TRAIL_Y_MIN)     // 200 → 1.0，160 → 本值
+     * </pre>
+     * 于是 Y≈160 处粒子能飘 2×2.5 = 5 格，Y≈200 以上只飘 2 格 —— 低空尾迹显得蓬松、云层以上紧实。
+     * 置 1.0 = 与高度无关。
+     */
+    public static final double TRAIL_TURB_LOW_GAIN = 2.5D;
 
     /**
      * 出生点沿<b>排气下游</b>偏移（格）：真实尾迹不在喷口出现，要先经过一段喷流混合段才开始结冰。
@@ -733,18 +752,26 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
                 .add(sideX.scale((random.nextDouble() - 0.5D) * 2.0D * lateral))
                 .add(sideY.scale((random.nextDouble() - 0.5D) * 2.0D * lateral));
 
-        // 原地随机飘逸：球面上均匀取一个方向 × TRAIL_DRIFT 以内的小速度（整体平流 = 0，不随风）
-        final double cosTheta = random.nextDouble() * 2.0D - 1.0D;
-        final double phi = random.nextDouble() * Math.PI * 2.0D;
-        final double ring = Math.sqrt(Math.max(0.0D, 1.0D - cosTheta * cosTheta));
-        final double drift = TRAIL_DRIFT * (0.3D + 0.7D * random.nextDouble());
-        final double vx = ring * Math.cos(phi) * drift;
-        final double vy = cosTheta * drift;
-        final double vz = ring * Math.sin(phi) * drift;
-
         // 寿命随适宜度线性增长（越冷越耐久），再叠 ±15% 随机，避免整条尾迹同生共死
         final int baseLife = Math.round(TRAIL_LIFE_MIN + (TRAIL_LIFE_MAX - TRAIL_LIFE_MIN) * s);
         final int lifetime = Math.max(8, (int) (baseLife * (0.85D + random.nextDouble() * 0.3D)));
+
+        // 飘荡：先定"一生总共飘多远"，再由速度 = 距离 / 寿命 反算出一个恒定速度，
+        // 方向在球面上均匀随机（不随风、无方向偏好）。
+        //   · 距离随机（MIN~MAX 倍）⇒ 有的粒子只飘 1 格、有的飘 3 格，尾迹才有厚薄
+        //   · 再乘高度湍流系数 ⇒ 云层以下越低越散（见 TRAIL_TURB_LOW_GAIN）
+        final double spread = TRAIL_DRIFT_DISTANCE_MIN
+                + random.nextDouble() * (TRAIL_DRIFT_DISTANCE_MAX - TRAIL_DRIFT_DISTANCE_MIN);
+        final double driftDistance = TRAIL_DRIFT_DISTANCE * spread * trailTurbulence(mouthWorld.y);
+        final double speed = driftDistance / lifetime; // 块/tick
+
+        final double cosTheta = random.nextDouble() * 2.0D - 1.0D;
+        final double phi = random.nextDouble() * Math.PI * 2.0D;
+        final double ring = Math.sqrt(Math.max(0.0D, 1.0D - cosTheta * cosTheta));
+        final double vx = ring * Math.cos(phi) * speed;
+        final double vy = cosTheta * speed;
+        final double vz = ring * Math.sin(phi) * speed;
+
         final float width = TRAIL_WIDTH0 * (0.75F + random.nextFloat() * 0.5F);
 
         // 9 参数 overload（ignoreRange = true）：7 参数那个的第二个布尔是 decreased 不是 force，
@@ -754,6 +781,29 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
                 true,
                 start.x, start.y, start.z,
                 vx, vy, vz);
+    }
+
+    /**
+     * 飘荡距离的<b>高度湍流系数</b>（≥1）：云层（{@link #TRAIL_TURB_CLOUD_Y}=200）及以上为 1.0，
+     * 往下线性放大到 {@link #TRAIL_Y_MIN}=160 处的 {@link #TRAIL_TURB_LOW_GAIN}。
+     * <p>
+     * 物理依据：对流层越往下湍流/垂直对流越强（云本身就是这么长出来的），
+     * 所以低空的尾迹更容易被搅散；再往上（云层以上）没有观测依据支持继续变化，就保持 1.0 ——
+     * 高空"变淡"那件事已经由 {@link #contrailSuitability} 的变稀段负责了，两件事不要混在一起。
+     */
+    public static double trailTurbulence(final double y) {
+        if (TRAIL_TURB_LOW_GAIN <= 1.0D || y >= TRAIL_TURB_CLOUD_Y) {
+            return 1.0D;
+        }
+
+        final double span = TRAIL_TURB_CLOUD_Y - TRAIL_Y_MIN;
+
+        if (span <= 0.0D) {
+            return 1.0D;
+        }
+
+        final double t = Mth.clamp((TRAIL_TURB_CLOUD_Y - y) / span, 0.0D, 1.0D);
+        return 1.0D + (TRAIL_TURB_LOW_GAIN - 1.0D) * t;
     }
 
     /**
