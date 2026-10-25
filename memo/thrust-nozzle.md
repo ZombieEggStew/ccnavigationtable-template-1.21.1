@@ -1,20 +1,23 @@
 # 定向喷管（`ccpe:thrust_nozzle`）工作记录
 
-> 状态（2026-08 末）：**推力 / 排气（含轻微重力）/ 高空尾迹 / 染料染色 / 配置化 / tooltip 全部完成，
+> 状态（2026-08 末）：**推力 / 排气（含轻微重力）/ 高空尾迹 / 染料染色 / 配置化 / tooltip / 扳手拆除 全部完成，
 > `gradlew classes` 通过；斜喷穿墙已修复并经用户多角度实测确认**。
-> **交接速览见 §13**（文件清单、玩家可见行为、参数在哪、待办）；**本轮（穿墙修复 + 重力）的完整记录见 §14**。
+> **交接速览见 §13**（文件清单、玩家可见行为、参数在哪、待办）；**穿墙修复 + 重力的完整记录见 §14**，
+> **扳手快速拆除见 §15**。
 > 缺合成配方；模型/贴图由用户完成。
 >
-> 五个能力一句话版：
+> 六个能力一句话版：
 > 1. **推力**（§2.1）：`THRUST_PER_RPM = 1` ⇒ 1 RPM = 1 pN，气压 1.0 时 256 RPM = 256 pN/管，且随气压缩放；
 > 2. **排气 `ccpe:exhaust`**（§3.6）：世界坐标、扫掠碰撞 + 撞墙反弹 + 沿面滑行、越老越大/越慢/越淡；
 >    **轻微重力**由配置 `exhaustGravity`（默认 0.02）控制，设 0 = 失重；撞地分裂按用户要求关闭；
 > 3. **高空尾迹 `ccpe:contrail`**（§9）：按移动距离发射、峰值适宜度曲线（Y160 起 / 183~224 最浓 / 320 最稀）、
 >    匀速直线飘荡（速度 = 总飘荡距离 ÷ 寿命，§9.10）、无碰撞无重力、9 参数 `addAlwaysVisibleParticle` 远处可见；
 > 4. **染料染色**（§10）：手持染料右键喷口 ⇒ 只染**尾迹**粒子，护目镜 tooltip 显示当前染色；
-> 5. **配置 + tooltip**（§11、§12）：17 个参数进 `config/ccpe-client.toml`（改完即时生效）；物品 tooltip 走 Create `ItemDescription`。
+> 5. **配置 + tooltip**（§11、§12）：17 个参数进 `config/ccpe-client.toml`（改完即时生效）；物品 tooltip 走 Create `ItemDescription`；
+> 6. **扳手拆除**（§15）：`IWrenchable` ⇒ `create:wrench` **潜行右键快速拆除**（掉落直接进背包）、普通右键不旋转。
 >
-> **仍待进游戏确认**（其余已由用户实测确认）：配置**界面**的标题/说明文案、物品 tooltip 展开、"潜行空手清除染色"已移除。
+> **仍待进游戏确认**（其余已由用户实测确认）：配置**界面**的标题/说明文案、物品 tooltip 展开、
+> "潜行空手清除染色"已移除、**扳手潜行右键拆除 / 普通右键不旋转**（§15.3）。
 > 上游背景见 `memo/flip-autopilot.md`（火箭方案作废 ⇒ 自研喷管）；相关 `memo/my_sensor_system.md`、`memo/api-code-map.md`。
 
 ## 0. 需求与决策链（用户定稿）
@@ -656,6 +659,7 @@ protected void setLocationFromBoundingbox() {
 | 26 | 物品 tooltip 要说明用途与染色 | 照 `trailing_wheel_mount` 注册 `ItemDescription.Modifier`（FMLClientSetupEvent），7 条 lang（summary + 3 组 condition/behaviour），文案不带 `_` 避免高亮奇偶翻转（§12） | 编译通过，待进游戏确认 |
 | 27 | **斜喷时粒子穿墙、漏到平面下方**（90° 正常，越平越糟） | 埋点两轮都修错方向（先以为只是 `slab` 缺"起点已重叠"分支），最后靠"pos 与上 tick 的 mv 逐 tick 对不上、差值 = quadSize/2"定位到真因：`move` 里调用 `setLocationFromBoundingbox()`，而它把 y 当包围盒**底边** ⇒ 每 tick 静默下坠 `quadSize/2` 且不被扫掠覆盖。改成直接写 `x/y/z`；同时保留 `slab` 的嵌入分支 + MTV 推出作为加固（§3.8） | 编译通过，待进游戏确认 |
 | 28 | 想要排气"轻微受一点重力" | 新增配置 `exhaustGravity`，`ExhaustParticle` 构造时缓存进 `sinkAccel`、每 tick 一次减法；附取值表与性能结论（§3.6.1）。用户逐档实测后**默认值定为 0.02** | ✅ 用户确认效果符合预期 |
+| 29 | 想要「扳手潜行右键快速拆除」 | `ThrustNozzleBlock` 加 `IWrenchable`：潜行 = 默认 `onSneakWrenched`（掉落直接进背包），普通右键显式返回 PASS（不旋转，朝向由风扇出风面唯一决定）（§15） | 编译通过，待进游戏确认 |
 
 ## 8. 下一步：高空尾迹（contrail）实现计划
 
@@ -1260,6 +1264,7 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | 染料染色 | 手持染料右键喷口 ⇒ 只染**尾迹**；服务端权威 + BE 数据同步；护目镜 tooltip 显示当前色 | ✅ 已实测 | §10 |
 | 配置化 | 17 个参数进 `config/ccpe-client.toml`（`ConfigValue#get()` 本身带缓存，现查不贵，见 §11.2.1） | ✅ 改 toml 即时生效已实测；界面文案待看 | §11 |
 | 物品 tooltip | Create `ItemDescription`，Shift 展开 summary + 3 组说明 | ⏳ 待入游戏确认 | §12 |
+| 扳手拆除 | `IWrenchable`：**潜行右键 = 快速拆除**（掉落直接进背包），普通右键**不旋转** | ⏳ 待入游戏确认 | §15 |
 | mixin | **零 mixin**：Create 的 `NozzleBlockEntity` 对物理体无效、Sable 的力逻辑在 mixin 里 ⇒ 自研方块 + BE 成本最低 | ✅ | §1 |
 
 ### 13.2 文件清单
@@ -1268,7 +1273,7 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 
 | 文件 | 职责 |
 |---|---|
-| `block/ThrustNozzleBlock.java` | `DirectionalBlock` + `EntityBlock`：`FACING`、`canSurvive`（贴风扇出风面）、六向选择框、客户端 ticker、**染料右键** |
+| `block/ThrustNozzleBlock.java` | `DirectionalBlock` + `EntityBlock` + `IWrenchable`：`FACING`、`canSurvive`（贴风扇出风面）、六向选择框、客户端 ticker、**染料右键**、**扳手潜行拆除/不旋转** |
 | `block/ThrustNozzleBlockEntity.java` | 主体：`sable$physicsTick` 施力、`tickClient`/`tickContrail`/`spawnExhaust`/`spawnContrail`、适宜度曲线、染色状态 + NBT/同步、goggle tooltip、全部配置访问器 |
 | `particle/MyModParticles.java` | 注册 `ccpe:exhaust` / `ccpe:contrail` |
 | `particle/ExhaustParticleData.java` | 排气粒子参数 record（scale/lifetime/rgb/ownerId/gen） |
@@ -1302,6 +1307,8 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | 悬停不动 | **不出尾迹**（按移动距离发射），旧粒子自然淡掉 |
 | 手持染料右键 | 尾迹染成该染料色（消耗 1 个，创造不消耗，同色不消耗）+ 音效 + 动作栏提示 |
 | 空手 / 潜行空手右键 | **无任何反应**（清除入口已按用户要求删除） |
+| **潜行右键扳手** | **快速拆除**：喷管直接进背包（不必捡），播 `WRENCH_REMOVE` 音效；物理体/普通世界都有效 |
+| **普通右键扳手** | **不旋转**，什么都不发生（朝向只由背后电扇的出风面决定） |
 | 戴 Create 护目镜看喷管 | `定向喷管` / `尾迹染色 <染料名> #RRGGBB`（未染色显示 `默认（未染色）`） |
 | 物品栏按住 SHIFT | summary（装在 encased fan 出风面增加出力）+ 3 组：风扇/高空尾迹/染料染色 |
 | 改 `config/ccpe-client.toml` | 尾迹与排气的寿命、密度、上限、尺寸、初速、**重力**等 17 项即时生效（粒子类参数只对之后新生成的粒子生效） |
@@ -1332,16 +1339,20 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 **排气轻微重力手感**（用户逐档试 0.002 / 0.005 / 0.02 后定稿 `exhaustGravity = 0.02`）、
 **改 `ccpe-client.toml` 即时生效**（`exhaustGravity` 改完当次游戏内即看到变化）。
 
-**还没进游戏确认的三项**：
+**还没进游戏确认的四项**：
 1. 配置**界面**（Mods → … → Config）里 17 项的标题/说明文案是否正常；
 2. 物品 tooltip：Shift 展开是否正常、中文不是原始 key、`condition1..3` 连续；
-3. 潜行/空手右键喷口是否确实已无反应。
+3. 潜行/空手右键喷口是否确实已无反应；
+4. **扳手**：潜行右键能拆掉并且喷管直接进背包；普通右键不旋转（§15）。
 
 ### 13.6 已知边界 / 未做
 
 - **推力不做遮挡判定**：喷口被堵死时物理推力照样输出。
 - **尾迹/排气都是纯客户端计算**：各客户端看到的撞墙点、散射方向、染色粒子各自独立（原版粒子行为，未做服务端广播）。
 - **没有合成配方**（`data/ccpe/recipe/thrust_nozzle.json` 缺失）；材料待用户定。
+  > 注（2026-08 末补：写 §15 时发现）`src/main/resources/data/ccpe/recipe/thrust_nozzle.json` **文件已存在但未纳入 git**
+  > （`git status` 里是 `??`），内容 = 3×`create:andesite_alloy` + 1×`minecraft:copper_ingot` 的 shapeless 外观的
+  > shaped 配方（`pattern: " # " / " X " / "###"`）。若那是想用的配方，本条待办可关掉并 `git add`。
 - **没有原版实体推挤**（旧 `create:nozzle` 会推物品/生物）。
 - **排气撞地分裂仍关闭**（`SPLIT_ON_IMPACT=false`），代码/TAG/队列都还在，改回 true 即恢复。
 - **蓝图/装配兼容未专门验证**：`canSurvive` 会在部署瞬间复核风扇。
@@ -1449,6 +1460,64 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
   **代码与判读说明都保留在 §3.8 的"调试埋点"小节**，再遇到粒子位置异常可直接打开。
 - 重力让撞地更频繁 ⇒ `IMPACT_GROWTH` 触发更多、粒子整体偏大；若后续觉得太大，调 `IMPACT_GROWTH`（现 2.0）。
 - 排气粒子仍是纯客户端计算，撞墙点/散射方向各客户端独立（未做服务端广播）。
+
+## 15. 扳手快速拆除（2026-08 新增）
+
+> 需求：给喷管加「`create:wrench` 潜行右键快速拆除」。**只改了 1 个文件**
+> （`block/ThrustNozzleBlock.java`），无资源/数据/配置改动，`gradlew classes` 通过。
+
+### 15.1 做法（就三行有效代码）
+
+```java
+public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock, IWrenchable {
+    @Override
+    public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+        return InteractionResult.PASS;   // 普通右键不旋转
+    }
+}
+```
+
+- **潜行右键**走 `IWrenchable#onSneakWrenched` **默认实现**（不覆写）。Create 的
+  `WrenchItem#useOn`（`api/create-.../equipment/wrench/WrenchItem.java:45-63`）判定链：
+  `player == null || !player.mayBuild()` ⇒ 交回原版；`block instanceof IWrenchable` 且
+  `player.isShiftKeyDown()` ⇒ `onSneakWrenched`；否则 `onWrenched`。
+- 默认 `onSneakWrenched`（`IWrenchable.java:48-73`）依次做：
+  1. 非 `ServerLevel` ⇒ 直接返回 `SUCCESS`（客户端只吃这次交互，不做任何事）；
+  2. post `BlockEvent.BreakEvent`（**能被领地/保护插件拦下**，且会走原版「能否破坏」判定链）；
+  3. 非创造模式：`Block.getDrops(state, serverLevel, pos, be, player, tool)` 每个掉落
+     `player.getInventory().placeItemBackInInventory(...)` ⇒ **直接进背包，不用满地捡**，这就是"快速"；
+  4. `state.spawnAfterBreak(...)` + `world.destroyBlock(pos, false)` + `AllSoundEvents.WRENCH_REMOVE` 音效。
+- **掉落表已存在**（`data/ccpe/loot_table/blocks/thrust_nozzle.json`），所以 `getDrops` 返回 1 个喷管，行为正确。
+- **物理体里也有效**：喷管所在 plot 的 `getLevel()` 就是真正的 `ServerLevel`（memo §3.5），
+  所以 `level instanceof ServerLevel` 成立。而且掉落走 `placeItemBackInInventory`（不生成物品实体），
+  绕开了"在 plot 里掉物品"的坐标问题。
+- **和染料右键不冲突**：手持扳手时 `WrenchItem` 直接 override 了 `Item#useOn`，根本不会走到方块的
+  `useItemOn`；染料判定只在 `stack.getItem() instanceof DyeItem` 时生效。
+
+### 15.2 为什么普通右键显式返回 PASS（不旋转）
+
+`IWrenchable#getRotatedBlockState` 认的是 `DirectionalKineticBlock.FACING`，它和本方块用的
+`DirectionalBlock.FACING` 是**同一个 `BlockStateProperties.FACING` 实例**（`DirectionalKineticBlock.java:16`），
+所以默认旋转其实是"能转"的 —— 但喷管的 `FACING` 语义是「背后那格必须是朝向为 `FACING` 的电扇」
+（`canSurvive`），转 90° 后几乎必然不合法 ⇒ 默认实现会先旋转、`canSurvive` 失败再返回 `PASS`
+（`IWrenchable.java:31-34`），等于"什么都没发生"。
+
+即便如此仍显式返回 `PASS`，原因有两个：
+
+1. **保证手感一致**：若某天玩家凑出"侧边也有个朝向合适的电扇"的几何，默认实现会真的把喷管转过去，
+   变成一个意料之外的朝向；
+2. **不动方块状态就不需要额外校验**：`onWrenched` 默认实现会走 `KineticBlockEntity.switchToBlockState`
+   （会改 state + 触发同步），对本方块没有意义。
+
+### 15.3 进游戏验证清单
+
+1. 手持 `create:wrench` **潜行右键**喷管 ⇒ 喷管消失、`WRENCH_REMOVE` 音效、**物品直接出现在背包**（地面无掉落物）。
+2. 同上，但**背包满**时 ⇒ 掉落到地面（`placeItemBackInInventory` 满了会自然掉落，原版行为）。
+3. **普通右键**（不潜行）扳手 ⇒ **没有反应**（不旋转、不出音效、不掉落）。
+4. 装在**物理体（Sable 子次元）**里的喷管 ⇒ 潜行右键扳手同样能拆、同样进背包。
+5. 创造模式潜行右键 ⇒ 直接消失、**不进背包**（默认实现只在非创造时发掉落，与 Create 其余方块一致）。
+6. 拆掉后立刻看背后电扇 ⇒ 出力归零 / 恢复风扇自身推力（§1.4 的 `blocked` 判定解除）。
+
 
 
 

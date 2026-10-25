@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
+import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -8,10 +9,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
@@ -44,11 +47,14 @@ import java.util.Map;
  *     {@code getAirflowOriginSide() == FACING}（即贴在电扇出风面上）；风扇没了就掉落；</li>
  * <li>不是动能方块，不消耗应力，只读风扇转速。</li>
  * </ul>
+ * 交互：染料右键 = 染尾迹（{@link #useItemOn}）；扳手（{@link IWrenchable}）<b>潜行右键 = 快速拆除</b>、
+ * 普通右键不旋转（{@link #onWrenched}）。
+ * <p>
  * 与 {@code create:nozzle} 的本质区别：原版喷嘴靠射线打到表面产生力（6.4 格射线、依赖距离与
  * 是否命中），本方块是<b>纯轴向恒定推力</b>，任意高度 / 任意距离出力相同，见
  * {@link ThrustNozzleBlockEntity#sable$physicsTick}。
  */
-public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock {
+public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock, IWrenchable {
 
     public static final MapCodec<ThrustNozzleBlock> CODEC = simpleCodec(ThrustNozzleBlock::new);
 
@@ -209,6 +215,30 @@ public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock {
         player.displayClientMessage(
                 Component.translatable("tooltip.ccpe.thrust_nozzle.trail_dyed", dyeName), true);
         return ItemInteractionResult.SUCCESS;
+    }
+
+    // ── 扳手（create:wrench）──
+    //
+    // 潜行右键 = 快速拆除，直接用 IWrenchable#onSneakWrenched 默认实现（Create 的 WrenchItem 在
+    //   player.isShiftKeyDown() 时调它）：post BlockEvent.BreakEvent（保护插件可拦）→ 非创造模式把
+    //   Block#getDrops 直接 placeItemBackInInventory 塞回背包（不用满地捡，这就是"快速"的意义）
+    //   → destroyBlock(pos, false) → WRENCH_REMOVE 音效。
+    //   喷管所在的 plot 也是真的 ServerLevel（memo §3.5），所以装在物理体里同样生效。
+    //   掉落表：data/ccpe/loot_table/blocks/thrust_nozzle.json。
+    //   以后若要在拆前做清理（通知风扇、清尾迹染色），覆写 onSneakWrenched 并用
+    //   IWrenchable.super.onSneakWrenched(...) 收尾即可。
+
+    /**
+     * 普通右键扳手<b>不旋转</b>：喷管朝向只由「背后那格的电扇出风面」唯一决定（{@link #canSurvive}），
+     * 转 90° 后几乎必然不是合法朝向。Create 默认实现会先旋转再 {@code canSurvive} 校验、不合法时返回
+     * {@link InteractionResult#PASS}，多数情况下等价于"什么都没发生"；这里显式返回 {@code PASS}，
+     * 是为了保证手感一致（万一某个角度恰好合法，也不会把喷管转到一个意想不到的朝向）。
+     * <p>
+     * 想调整朝向仍然只能拆掉重放（memo §13.3）。
+     */
+    @Override
+    public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+        return InteractionResult.PASS;
     }
 
     @Override

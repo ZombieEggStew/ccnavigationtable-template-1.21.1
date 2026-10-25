@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:andesite_alloy"
+    },
+    "X": {
+      "item": "minecraft:copper_ingot"
+    }
+  },
+  "pattern": [
+    " # ",
+    " X ",
+    "###"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:thrust_nozzle"
+  }
+}
