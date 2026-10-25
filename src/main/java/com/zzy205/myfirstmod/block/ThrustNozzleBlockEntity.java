@@ -613,9 +613,6 @@ public class ThrustNozzleBlockEntity extends BlockEntity
                 .append(Component.translatable("tooltip.ccpe.thrust_nozzle.trail_dye").withStyle(ChatFormatting.GRAY))
                 .append(this.trailDyeLabel()));
 
-        tooltip.add(Component.literal("      ")
-                .append(Component.translatable("tooltip.ccpe.thrust_nozzle.trail_dye_hint").withStyle(ChatFormatting.DARK_GRAY)));
-
         return true;
     }
 

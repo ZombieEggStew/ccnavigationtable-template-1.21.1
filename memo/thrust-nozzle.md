@@ -512,6 +512,7 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 | 21 | 要粒子**随时间越来越散** | 扩散半径从常数改 `R0 + RATE·√age`（软边界 + 6 格封顶）；边界内朝外速度按 `(dist/半径)²` 衰减（§9.9） | 编译通过，待进游戏确认 |
 | 22 | 改成「初速 = 飘荡距离 ÷ 寿命」，且飘荡距离随高度变化（云层×1、越低越散） | 删除随机游走/抖动/浮点边界；`spawnContrail` 反算恒定速度，新增 `trailTurbulence()`（200→1.0，160→2.5）与 `TRAIL_DRIFT_DISTANCE=2.0`（§9.10） | 编译通过，待进游戏确认 |
 | 23 | 想手感染料给**尾迹**染色 + 护目镜显示 | `useItemOn`/`useWithoutItem` 染料交互、BE 存 `trailDye`（NBT + `getUpdateTag/handleUpdateTag/getUpdatePacket` 同步）、`IHaveGoggleInformation` tooltip，颜色走进 `ContrailParticleData`（§10） | 编译通过，待进游戏确认 |
+| 25 | 去掉「潜行空手右键清除染色」 | 删 `ThrustNozzleBlock#useWithoutItem`、goggle 的清除提示行、lang 的 `trail_dye_hint` / `trail_dye_cleared`（§10） | ✅ 编译通过 |
 | 24 | 性能参数要能配置调 | 16 个性能参数搬进 `ccpe-client.toml`（`Config` CLIENT 段）；BE 的常量换成 `Config.XXX.get()` 访问器（现查现用，改完即时生效），粒子里每 tick 用到的 alpha/tau 在构造时缓存（§11） | 编译通过，待进游戏确认 |
 
 ## 8. 下一步：高空尾迹（contrail）实现计划
@@ -911,9 +912,9 @@ s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶�
 
 | 文件 | 改动 |
 |---|---|
-| `block/ThrustNozzleBlock.java` | `useItemOn`（`DyeItem` → 染色）+ `useWithoutItem`（潜行空手 → 清除）；`SoundEvents.DYE_USE` + 动作栏消息 |
+| `block/ThrustNozzleBlock.java` | `useItemOn`（`DyeItem` → 染色）；`SoundEvents.DYE_USE` + 动作栏消息。~~`useWithoutItem`（潜行空手清除）~~ 已删除 |
 | `block/ThrustNozzleBlockEntity.java` | 实现 Create `IHaveGoggleInformation`；`trailDye` 字段 + `setTrailDye/trailRgb/dyeChannel`；NBT + `getUpdateTag/handleUpdateTag/getUpdatePacket`；`addToGoggleTooltip`；`spawnContrail` 改用染色出的 rgb |
-| `lang/en_us.json` / `zh_cn.json` | `tooltip.ccpe.thrust_nozzle.{header,trail_dye,trail_dye_default,trail_dye_hint,trail_dyed,trail_dye_cleared}` |
+| `lang/en_us.json` / `zh_cn.json` | `tooltip.ccpe.thrust_nozzle.{header,trail_dye,trail_dye_default,trail_dyed}`（`trail_dye_hint` / `trail_dye_cleared` 已随清除功能删除） |
 
 ### 10.2 数据流（服务端权威 → 客户端喷粒子）
 
@@ -936,7 +937,7 @@ s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶�
 |---|---|
 | 手持染料右键 | 染成该染料色；消耗 1 个（创造模式不消耗）；播 `item.dye.use` + 动作栏「尾迹已染色：X」 |
 | 同色重复右键 | 返回 SUCCESS 但**不消耗染料**（`setTrailDye` 返回 false） |
-| 潜行 + 空手右键 | 清除染色（回到默认色）+ 动作栏提示 |
+| 潜行 + 空手右键 | ~~清除染色~~ **已按用户要求删除**（无清除入口；只能用另一种染料覆盖，想恢复默认色需拆掉重放喷管） |
 | 手持非染料右键 | `PASS_TO_DEFAULT_BLOCK_INTERACTION`（不干预别的交互） |
 
 ### 10.4 goggle tooltip
@@ -944,8 +945,7 @@ s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶�
 ```
     定向喷管
      尾迹染色 红色 #B02E26
-      手持染料右键染色 · 潜行空手右键清除
-```
+ ```
 
 - 染料名取 `DyeItem.byColor(color).getDescriptionId()`（走原版 `item.minecraft.*_dye` 的语言文件，不额外加 16 条 lang）。
 - 颜色**按染料色上色**：深色染料（黑 `0x1D1D21`、棕、灰）在深色 tooltip 背景上几乎看不见 ⇒
@@ -966,7 +966,7 @@ s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶�
 2. 戴 Create 护目镜看喷管 ⇒ tooltip 出现「尾迹染色 红色 #B02E26」。
 3. **重进世界 / 走远让区块卸载再回来** ⇒ 颜色还在（NBT + 区块加载同步）。
 4. 双人/双客户端 ⇒ 另一侧看到的颜色一致（`sendBlockUpdated` 同步）。
-5. 潜行空手右键 ⇒ 清除，恢复默认白色，tooltip 显示「默认（未染色）」。
+5. ~~潜行空手右键清除~~ —— 该入口已按用户要求删除；现在只保留染料右键染色（想恢复默认色只能拆掉重放喷管）。
 6. 同色连续右键 ⇒ 染料数量不变。
 7. 手持黑染料 ⇒ tooltip 文字仍看得清（`readableRgb` 提亮），尾迹本身是深灰黑。
 ## 11. 性能参数改为配置文件可调（2026-08，用户要求）

@@ -8,7 +8,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeItem;
@@ -210,36 +209,6 @@ public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock {
         player.displayClientMessage(
                 Component.translatable("tooltip.ccpe.thrust_nozzle.trail_dyed", dyeName), true);
         return ItemInteractionResult.SUCCESS;
-    }
-
-    /**
-     * 潜行 + 空手右键 ⇒ 清除染色（恢复默认颜色）。
-     * <p>
-     * 之所以要求潜行：空手右键本身没有别的用途，但潜行能避免和未来可能加的交互撞车。
-     */
-    @Override
-    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
-            Player player, BlockHitResult hitResult) {
-        if (!player.isShiftKeyDown()) {
-            return InteractionResult.PASS;
-        }
-
-        if (!(level.getBlockEntity(pos) instanceof final ThrustNozzleBlockEntity nozzle)) {
-            return InteractionResult.PASS;
-        }
-
-        if (level.isClientSide) {
-            return InteractionResult.SUCCESS;
-        }
-
-        if (!nozzle.setTrailDye(ThrustNozzleBlockEntity.NO_DYE)) {
-            return InteractionResult.SUCCESS; // 本来就没染色
-        }
-
-        level.playSound(null, pos, SoundEvents.DYE_USE, SoundSource.BLOCKS, 1.0F, 0.8F);
-        player.displayClientMessage(
-                Component.translatable("tooltip.ccpe.thrust_nozzle.trail_dye_cleared"), true);
-        return InteractionResult.SUCCESS;
     }
 
     @Override
