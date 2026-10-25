@@ -18,6 +18,7 @@
 >
 > 第 7 个能力（2026-08 末新增）：**进气粒子 `ccpe:intake`**（§16）——负转速 = 吸力时，
 > 空气从喷口前方被**吸进口面**（加速收拢 + 缩小淡出）；此前负转速下**一颗粒子都没有**。
+> v2（§16.9）：**漏斗长度随转速缩放**（满 256 RPM = 8.0 格，128 RPM 减半）。
 >
 > **仍待进游戏确认**（其余已由用户实测确认）：配置**界面**的标题/说明文案、物品 tooltip 展开、
 > "潜行空手清除染色"已移除、**扳手潜行右键拆除 / 普通右键不旋转**（§15.3）、**进气粒子观感**（§16.7）。
@@ -79,7 +80,7 @@
 |---|---|
 | `src/main/java/com/zzy205/myfirstmod/block/ThrustNozzleBlock.java` | `DirectionalBlock` + `EntityBlock`；`FACING` = 点击面；`canSurvive` / `neighborChanged` 照抄 `create:nozzle`；六向选择框/碰撞盒；**仅客户端** `BlockEntityTicker` |
 | `src/main/java/com/zzy205/myfirstmod/block/ThrustNozzleBlockEntity.java` | `BlockEntity implements BlockEntitySubLevelActor`；`sable$physicsTick` 施加轴向点力；`tickClient` 喷粒子 |
-| `block/MyModBlocks.java` | 注册 `ccpe:thrust_nozzle`（`registerBlocks` 自动带 BlockItem + 创造栏），音效 `SoundType.COPPER` |
+| `block/MyModBlocks.java` | 注册 `ccpe:thrust_nozzle`（`registerBlocks` 自动带 BlockItem），音效 `SoundType.COPPER`。⚠️ **创造栏不是自动的**：本模组的标签页用显式 `output.accept(...)` 列表，必须手动在 `item/MyModCreativeModeTabs.java` 加一行（§17） |
 | `block/MyModBlockEntities.java` | 注册 `thrust_nozzle` BE |
 | `assets/ccpe/blockstates/thrust_nozzle.json` / `models/item/` / `models/block/`（用户 Blockbench 模型）/ `textures/block/thrust_nozzle.png` | 资源；blockstate 未旋转变体 = `facing=up` |
 | `data/ccpe/loot_table/blocks/thrust_nozzle.json` | 挖掘掉落 |
@@ -663,7 +664,9 @@ protected void setLocationFromBoundingbox() {
 | 27 | **斜喷时粒子穿墙、漏到平面下方**（90° 正常，越平越糟） | 埋点两轮都修错方向（先以为只是 `slab` 缺"起点已重叠"分支），最后靠"pos 与上 tick 的 mv 逐 tick 对不上、差值 = quadSize/2"定位到真因：`move` 里调用 `setLocationFromBoundingbox()`，而它把 y 当包围盒**底边** ⇒ 每 tick 静默下坠 `quadSize/2` 且不被扫掠覆盖。改成直接写 `x/y/z`；同时保留 `slab` 的嵌入分支 + MTV 推出作为加固（§3.8） | 编译通过，待进游戏确认 |
 | 28 | 想要排气"轻微受一点重力" | 新增配置 `exhaustGravity`，`ExhaustParticle` 构造时缓存进 `sinkAccel`、每 tick 一次减法；附取值表与性能结论（§3.6.1）。用户逐档实测后**默认值定为 0.02** | ✅ 用户确认效果符合预期 |
 | 29 | 想要「扳手潜行右键快速拆除」 | `ThrustNozzleBlock` 加 `IWrenchable`：潜行 = 默认 `onSneakWrenched`（掉落直接进背包），普通右键显式返回 PASS（不旋转，朝向由风扇出风面唯一决定）（§15） | 编译通过，待进游戏确认 |
-| 30 | **想要"产生吸力时也有粒子特效"** | 查实根因：负转速时排气方向翻到 `-FACING`，遮挡射线一出膛就撞到**喷管自己的碰撞箱**（`clear ≈ 0.08 < 0.2`）⇒ **一颗粒子都没有**。新建 `ccpe:intake` 进气粒子：前方锥形区域出生、`t²` 加速收拢到口面中心、缩小淡出；负转速时也**不出尾迹**；6 个参数进配置（§16） | 编译通过，待进游戏确认 |
+| 30 | **想要"产生吸力时也有粒子特效"** | 查实根因：负转速时排气方向翻到 `-FACING`，遮挡射线一出膛就撞到**喷管自己的碰撞箱**（`clear ≈ 0.08 < 0.2`）⇒ **一颗粒子都没有**。新建 `ccpe:intake` 进气粒子：前方锥形区域出生、`t²` 加速收拢到口面中心、缩小淡出；负转速时也**不出尾迹**；6 个参数进配置（§16） | ✅ 用户实测确认观感符合预期 |
+| 31 | 想要**进气漏斗长度随转速变化**（256 RPM = 8.0 格） | 配置键 `intakeReach` → **`intakeFunnelLength`**（默认 8.0 = 满转速时的长度），`reach = max(1.0, 本值 × 转速/256)`；`INTAKE_MAX_CONE_RADIUS` 1.6 → 2.5（否则 8 格的漏斗看着像细吸管）（§16.9） | 编译通过，待进游戏确认 |
+| 32 | **喷管没进创造物品栏**（一直漏做） | 本模组标签页是**显式 `output.accept(...)` 列表**，`registerBlocks` 只给 BlockItem、不给创造栏 ⇒ 在 `MyModCreativeModeTabs.displayItems` 末尾（"其他"分区、`trailing_wheel_mount` 之后）加一行（§17） | 编译通过，待进游戏确认 |
 
 ## 8. 下一步：高空尾迹（contrail）实现计划
 
@@ -1265,7 +1268,7 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | 定向推力 | 纯轴向恒定推力，点力打进 `sable:propulsion` 力组；1 RPM = 1 pN，乘气压 | ✅ 已实测校准 | §2.1 / §2.2 |
 | 排气粒子 `ccpe:exhaust` | 自研粒子：世界坐标、扫掠碰撞（含"起点已嵌入"推出）+ 撞墙反弹滑行 + 撞地变大、随寿命越大/越慢/越淡、**可选轻微重力** | ✅ 已实测（含多角度不穿墙） | §3.6 / §3.6.1 / §3.8 |
 | 高空尾迹 `ccpe:contrail` | 自研粒子：按**移动距离**发射、峰值适宜度曲线、匀速直线飘荡（速度 = 总距离 ÷ 寿命）、无碰撞无重力 | ✅ 已实测（4 轮迭代） | §8 / §9 / §9.7~§9.10 |
-| 进气粒子 `ccpe:intake` | 自研粒子：负转速（吸力）时在喷口前方锥形区域出生，`t²` 加速收拢到口面中心 + 缩小淡出；无碰撞；此时不出尾迹 | ⏳ 待进游戏确认 | §16 |
+| 进气粒子 `ccpe:intake` | 自研粒子：负转速（吸力）时在喷口前方锥形区域出生，`t²` 加速收拢到口面中心 + 缩小淡出；无碰撞；**漏斗长度随转速缩放**（256 RPM = 8 格）；此时不出尾迹 | ✅ v1 已实测；v2 长度缩放待确认 | §16 / §16.9 |
 | 染料染色 | 手持染料右键喷口 ⇒ 只染**尾迹**；服务端权威 + BE 数据同步；护目镜 tooltip 显示当前色 | ✅ 已实测 | §10 |
 | 配置化 | 17 个参数进 `config/ccpe-client.toml`（`ConfigValue#get()` 本身带缓存，现查不贵，见 §11.2.1） | ✅ 改 toml 即时生效已实测；界面文案待看 | §11 |
 | 物品 tooltip | Create `ItemDescription`，Shift 展开 summary + 3 组说明 | ⏳ 待入游戏确认 | §12 |
@@ -1293,6 +1296,7 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | `Config.java` | CLIENT 段新增 17 项粒子配置 |
 | `CCPeripheralExtenderClient.java` | 粒子 provider 注册、`ContrailParticle.onClientTick` 记账、物品 tooltip 注册 |
 | `block/MyModBlocks.java` / `block/MyModBlockEntities.java` | `ccpe:thrust_nozzle` 方块与 BE 注册 |
+| `item/MyModCreativeModeTabs.java` | 把 `thrust_nozzle` 加进本模组创造物品栏（**显式列表，不写就不出现**，§17） |
 
 **资源 / 数据**
 
@@ -1329,7 +1333,7 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
    `contrailSpacing`、`contrailMaxPerTick`、`contrailMaxLive`、`contrailMaxDistance`、`contrailWidth`、
    `contrailWidthTau`、`contrailAlpha`、`contrailDriftDistance`、`exhaustParticlesPerTick`、`exhaustLifetime`、
    `exhaustScale`、`exhaustSpeed`、`exhaustGravity`、`exhaustMaxDistance`、`intakeEnabled`、
-   `intakeParticlesPerTick`、`intakeReach`、`intakeSpeed`、`intakeScale`、`intakeMaxDistance`。
+   `intakeParticlesPerTick`、`intakeFunnelLength`、`intakeSpeed`、`intakeScale`、`intakeMaxDistance`。
    BE 里通过 `Config.XXX.get()` 访问器**现查现用**（改完即时生效）。
 2. **代码常量 = 物理/曲线定义**（`ThrustNozzleBlockEntity` 顶部，见 §11.3）：`TRAIL_Y_MIN`(160 硬门)、
    `TRAIL_T_START/FULL/FADE_START/FADE_END`、`TRAIL_S_CEILING`、`TRAIL_TURB_CLOUD_Y`、`TRAIL_TURB_LOW_GAIN`、
@@ -1581,8 +1585,9 @@ tickContrail(...); ...spawnExhaust(...); // 正转速：原样
 **发射（`tickIntake`）**
 
 ```
-锥形区域：沿 +FACING 方向、距离 ∈ [min(0.7, 0.5·Dmax), Dmax]，Dmax = min(intakeReach, clear)
-           截面半径 = min(1.6, 0.45 × 距离) × sqrt(random)   // 越远越宽 ⇒ 漏斗形
+锥形区域：沿 +FACING 方向、距离 ∈ [min(0.7, 0.5·Dmax), Dmax]
+           Dmax = min(reach, clear)，reach = max(1.0, intakeFunnelLength × 油门)   // §16.9：随转速缩放
+           截面半径 = min(2.5, 0.45 × 距离) × sqrt(random)   // 越远越宽 ⇒ 漏斗形
 寿命     = clamp(距离 / (intakeSpeed × (0.6 + 0.4×油门)), 6, 40)
 位移     = 口面中心 − 出生点      // 走 vx/vy/vz 传（同 Create AirParticleData 的约定）
 ```
@@ -1592,7 +1597,7 @@ tickContrail(...); ...spawnExhaust(...); // 正转速：原样
   "没有可吸的空气"。语义与排气一致：只挡实体碰撞形状。
 - **世界系**：口面与轴先 `projectToWorld` 投到世界系，正交基也在世界系里建，所以粒子不会被机体拖着走（§3.5 的老坑）。
 - **必须用 9 参数** `addAlwaysVisibleParticle(..., ignoreRange = true)`（§3.7 的老坑，别用 7 参数那个）。
-- 密度/速度都随**油门**（`|转速|/256`）缩放：转速越高，吸得越密、越快。
+- 密度/速度都随**油门**（`转速/256`）缩放：转速越高，吸得越密、越快；**漏斗长度也随油门缩放**（§16.9）。
 
 **粒子（`client.particle.IntakeParticle`）**：`SimpleAnimatedParticle` 子类，<b>不积分速度</b>，
 直接按参数插值（所以不会像排气那样有"每 tick 悄悄挪一点"的隐患，见 §14 的教训）：
@@ -1614,16 +1619,16 @@ alpha    = 0.55 × 淡入(固定 2 tick) × (1−t)^0.7     // 到口面时归�
 | 配置键 | 默认 | 作用 |
 |---|---|---|
 | `intakeEnabled` | true | 进气粒子总开关（关 = 负转速完全没有粒子） |
-| `intakeParticlesPerTick` | 8 | **性能主旋钮**：满 256 RPM 时每 tick 颗数，按 `|转速|/256` 缩放 |
-| `intakeReach` | 3.0 格 | 进气锥长度：粒子最远在这个距离出生 |
+| `intakeParticlesPerTick` | 8 | **性能主旋钮**：满 256 RPM 时每 tick 颗数，按 `转速/256` 缩放 |
+| `intakeFunnelLength` | **8.0 格** | 进气漏斗长度，**满 256 RPM 时的值**，实际按 `转速/256` 线性缩放（下限 1.0 格，`INTAKE_MIN_REACH`） |
 | `intakeSpeed` | 0.5 格/tick | 进气速度：**寿命 = 距离 ÷ 本值**，调大 = 吸得更快更短命 |
 | `intakeScale` | 0.28 格 | 出生尺寸（寿命内缩到 0.3 倍） |
 | `intakeMaxDistance` | 64 格 | 发射距离上限（0 = 不限） |
 
 代码常量（曲线定义，留在 `ThrustNozzleBlockEntity` 顶部）：`INTAKE_CONE_RATIO 0.45`、
-`INTAKE_MAX_CONE_RADIUS 1.6`、`INTAKE_MIN_DISTANCE 0.7`、`INTAKE_MIN/MAX_LIFETIME 6/40`、
-`INTAKE_RED/GREEN/BLUE`。粒子内视觉常量：`ALPHA_MAX 0.55`、`SIZE_START 1.0` / `SIZE_END 0.30`、
-`SIZE_FALLOFF 0.6`、`ACCEL 2.0`、`FADE_IN_TICKS 2`。
+`INTAKE_MAX_CONE_RADIUS 2.5`、`INTAKE_MIN_DISTANCE 0.7`、`INTAKE_MIN_REACH 1.0`（漏斗长度缩放下限）、
+`INTAKE_MIN/MAX_LIFETIME 6/40`、`INTAKE_RED/GREEN/BLUE`。粒子内视觉常量：`ALPHA_MAX 0.55`、
+`SIZE_START 1.0` / `SIZE_END 0.30`、`SIZE_FALLOFF 0.6`、`ACCEL 2.0`、`FADE_IN_TICKS 2`。
 
 ### 16.5 本轮改动的文件
 
@@ -1653,10 +1658,12 @@ alpha    = 0.55 × 淡入(固定 2 tick) × (1−t)^0.7     // 到口面时归�
 4. 用方块/墙把喷口**前方**堵死 ⇒ 进气粒子消失（射线挡住 = 没有可吸的空气）。
 5. 在车底/阴影/岩浆旁看 ⇒ 粒子是冷白，不该被光照染黄（全亮渲染）。
 6. 远离 40~60 格回望 ⇒ 进气粒子仍可见（9 参数 API 绕过 32 格限制）。
-7. 调 `config/ccpe-client.toml` 的 `intakeReach` / `intakeSpeed` / `intakeParticlesPerTick` ⇒ 即时生效
+7. 调 `config/ccpe-client.toml` 的 `intakeFunnelLength` / `intakeSpeed` / `intakeParticlesPerTick` ⇒ 即时生效
    （新生成的粒子立刻按新值走）。
+8. **漏斗长度随转速**（§16.9）：满 256 RPM ⇒ 吸得最远（约 8 格）；把风扇降到 ~128 RPM ⇒ 长度减半（约 4 格）、
+   粒子也更稀；极低速 ⇒ 至少还有 1 格的短吸气。
 
-**待用户回报的三个手感问题**：①进气锥要不要更长/更宽（`intakeReach` / `INTAKE_CONE_RATIO`）；
+**待用户回报的三个手感问题**：①漏斗长度/宽度是否合适（`intakeFunnelLength` / `INTAKE_CONE_RATIO`）；
 ②收拢速度（`intakeSpeed`）与粒子大小（`intakeScale`）是否合适；③要不要给进气粒子**单独换个颜色**
 （现在与排气同为冷白，靠运动区分）。
 
@@ -1668,6 +1675,71 @@ alpha    = 0.55 × 淡入(固定 2 tick) × (1−t)^0.7     // 到口面时归�
 - 不做螺旋/涡旋（现在只是直线收拢 + 锥形分布）。想加涡旋得让粒子知道口面位置（现在只传位移向量），
   即多传一个 `offset` 字段或改用"起点 + 轴 + 距离"的表达。
 - 染色（§10）**不影响**进气粒子，也不影响排气 —— 只染尾迹。
+
+### 16.9 v2：漏斗长度随转速缩放（2026-08 末，用户要求）
+
+> 需求原话：「funnel length 与转速有关，256 转速设为 8.0」。用户已确认 v1 观感符合预期，本轮只动长度。
+
+```
+reach = max(INTAKE_MIN_REACH(1.0), intakeFunnelLength × min(转速/256, 1))
+```
+
+- **配置键改了名**：`intakeReach` → **`intakeFunnelLength`**，语义从"固定的漏斗长度"变成
+  "**满转速（256 RPM）时**的漏斗长度"，默认 **3.0 → 8.0**。
+  ⚠️ 改名不只是为了对齐用户用词：老玩家的 `ccpe-client.toml` 里已经写死了 `intakeReach = 3.0`，
+  只改默认值对他们**不生效**（NeoForge 不会覆盖已存在的键）；换个键名才能让 8.0 立刻生效
+  （旧的 `intakeReach` 行留在文件里也无害，属于未知键）。
+- **下限 1.0 格**（`INTAKE_MIN_REACH`）：纯比例缩放在低速时会缩到几乎为零（8 RPM ⇒ 0.25 格），
+  粒子贴着口面冒出来；给个下限让"低速但仍在吸"也有个形态。不想要下限就设成 0。
+- **顺带抬了锥的宽度上限**：`INTAKE_MAX_CONE_RADIUS` 1.6 → **2.5**。八格长的漏斗如果照旧只有 1.6 格半径，
+  半角只有 11°，观感像一根细吸管；抬到 2.5 后约 17°。这个上限只在**距离 > 5.5 格**时才起作用
+  （`0.45 × 距离`），所以短漏斗的观感不变。嫌太胖就调回去。
+- **一个顺带的好性质**：粒子数 = 密度 × 寿命，而寿命 = 距离 ÷ 速度 —— 长度与寿命同比缩放，
+  所以「每单位长度的粒子密度」与转速无关，漏斗变长**不会变稀**（无需同步调 `intakeParticlesPerTick`）。
+- 实测口径（`intakeFunnelLength = 8.0`、`intakeSpeed = 0.5`、`intakeParticlesPerTick = 8`）：
+
+| 转速 | 油门 | 漏斗长度 | 进气速度 | 寿命（最远粒子） | 单管同屏（约） |
+|---|---|---|---|---|---|
+| 256 | 1.00 | **8.0 格** | 0.50 格/tick | 16 tick | 128 颗 |
+| 192 | 0.75 | 6.0 | 0.45 | 13 | 78 |
+| 128 | 0.50 | 4.0 | 0.40 | 10 | 40 |
+| 64 | 0.25 | 2.0 | 0.35 | 6（夹取） | 12 |
+| 20 | 0.08 | 1.0（下限；不设下限则只有 0.63 格） | 0.32 | 6（夹取） | 6 |
+| 8 | 0.03 | — | — | — | **0**（`round(8×0.03) = 0`，密度先归零） |
+
+注意最后一行的口径：密度 `round(intakeParticlesPerTick × 油门)` 会先归零，所以极低速（< 16 RPM）是
+**完全没有粒子**，漏斗长度下限只对 16~32 RPM 这段有意义（那里每 tick 才有 1 颗）。
+
+## 17. 创造物品栏（2026-08 末补，一直漏做的一步）
+
+**为什么之前没出现**：本模组的创造标签页是**显式列表**，不是"自动收集本模组所有物品"：
+
+```java
+// item/MyModCreativeModeTabs.java
+MY_MOD_TAB.register("my_mod_tab", () -> CreativeModeTab.builder()
+        .displayItems((parameters, output) -> {
+            output.accept(MyModBlocks.static_port);
+            ...                       // ← 每个物品都要手动 accept 一行
+        })
+```
+
+而 `MyModBlocks.registerBlocks(name, block)` 只做两件事：`BLOCKS.register(...)` + `MyModItems.registerBlockItems(...)`
+（= 注册 BlockItem）。**它不碰创造标签页** ⇒ 漏写一行就等于"物品存在、能用 `/give` 拿到、但物品栏里看不到"。
+（§2 早期写成"自动带创造栏"，是错的，已改。）
+
+**修法**：一行。
+
+```java
+output.accept(MyModBlocks.thrust_nozzle); // 定向喷管
+```
+
+位置：**"其他"分区末尾**（`trailing_wheel_mount` 之后）。放在"其他"而不是"模块化发动机"，是因为
+它不属于 `engine_core` 那套冷却/燃烧模块的组合，而是像从动轮悬架一样"装在机体上的物理部件"。
+想挪到别处只要把这一行剪到对应分区即可（标签页按 accept 顺序、按分区注释排布）。
+
+> 顺带提醒：`RegistrateBlocks` 那套（航行灯）默认会自动挂到某个标签页，本模组为了避开
+> "`AbstractRegistrate` 往搜索标签重复 accept 导致服务器启动崩溃"的坑，把 `defaultCreativeTab` 置成了 `null`
+> ⇒ **航行灯也是手动 accept 的**（`MyModCreativeModeTabs.java:32-34`）。新加方块一律记得补上这一行。
 
 
 

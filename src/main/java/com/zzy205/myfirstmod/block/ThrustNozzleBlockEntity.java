@@ -289,9 +289,17 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         return Config.INTAKE_PARTICLES_PER_TICK.get();
     }
 
-    /** 进气锥长度（格）：粒子最远在这个距离出生，配置 {@code intakeReach} */
-    private static double intakeReach() {
-        return Config.INTAKE_REACH.get();
+    /**
+     * 进气<b>漏斗长度</b>（格）：<b>满转速 256 RPM 时</b>的取值（配置 {@code intakeFunnelLength}，默认 8.0）。
+     * <p>
+     * 实际长度按<b>转速线性缩放</b>（{@code × |转速|/256}，见 {@code tickIntake}）：
+     * 转速越高，吸力越强、能"够到"的空气越远，漏斗就越长；转速降一半漏斗长度也降一半。
+     * <p>
+     * 一个顺带的好性质：寿命同样是「距离 ÷ 速度」，所以「每单位长度的粒子密度」与转速无关
+     * （粒子数 = 密度 × 寿命，两者都随转速线性变）——长漏斗不会因为变长而变稀。
+     */
+    private static double intakeFunnelLength() {
+        return Config.INTAKE_FUNNEL_LENGTH.get();
     }
 
     /** 进气速度（块/tick），配置 {@code intakeSpeed}：寿命 = 出生距离 ÷ 本值 */
@@ -312,11 +320,22 @@ public class ThrustNozzleBlockEntity extends BlockEntity
     /** 进气锥半角的正切：横截面半径 = 出生距离 × 本值（越远越宽）。0 = 一根细线，调大 = 张开成漏斗 */
     public static final double INTAKE_CONE_RATIO = 0.45D;
 
-    /** 进气锥横截面半径上限（格）：别让远处的粒子撒得比车还宽 */
-    public static final double INTAKE_MAX_CONE_RADIUS = 1.6D;
+    /**
+     * 进气漏斗横截面半径上限（格）：别让远处的粒子撒得比车还宽。
+     * <p>
+     * 漏斗长度已经随转速放大到 8 格（满转速），这个上限原来 1.6 会让长漏斗变成"细吸管"
+     * （8 格处半角只有 11°），所以抬到 2.5（8 格处半角约 17°）。嫌太胖就调小。
+     */
+    public static final double INTAKE_MAX_CONE_RADIUS = 2.5D;
 
     /** 最近出生距离（格）：太贴近口面会像"贴脸冒出来"，留一点空间 */
     public static final double INTAKE_MIN_DISTANCE = 0.7D;
+
+    /**
+     * 漏斗长度的下限（格）：漏斗长度按 {@code × 转速/256} 缩放，转速极低时会缩到几乎为零
+     * （8 RPM ⇒ 0.25 格），粒子就贴在口面上冒出来。给个 1.0 的下限，让"低速但仍在吸"也有个形态。
+     */
+    public static final double INTAKE_MIN_REACH = 1.0D;
 
     /** 寿命夹取（tick）：太短看不清、太长会变成"慢悠悠漂过来" */
     public static final int INTAKE_MIN_LIFETIME = 6;
@@ -1125,7 +1144,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         }
 
         final Vec3 dir = axisWorld.normalize();
-        final double reach = intakeReach();
+        // 漏斗长度随转速线性缩放：配置值就是「满转速 256 RPM 时」的长度（默认 8.0 格）
+        // ⇒ 128 RPM 吸 4 格、64 RPM 吸 2 格；转速越高吸得越远，观感上"吸力更强"。
+        final double reach = Math.max(INTAKE_MIN_REACH, intakeFunnelLength() * throttle);
 
         // 前方被挡死就没有可吸的空气。射线在世界系里打（own = null ⇒ projectToWorld 退化为恒等），
         // 与排气用同一套语义：只挡实体碰撞形状，不挡水/空气（见 clearDistance）。

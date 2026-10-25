@@ -193,10 +193,11 @@ public class Config {
             .comment("进气粒子在满转速（256 RPM）时每 tick 生成的颗数，按 |转速|/256 线性缩放。<b>性能主旋钮</b>。默认: 8")
             .defineInRange("intakeParticlesPerTick", 8, 0, 128);
 
-    public static final ModConfigSpec.DoubleValue INTAKE_REACH = CLIENT_BUILDER
-            .comment("进气锥长度（格）：粒子最远在喷口前方这么远的位置出生，然后加速被吸进口面。"
-                    + "越大越像\"长吸气柱\"。默认: 3.0")
-            .defineInRange("intakeReach", 3.0, 0.4, 16.0);
+    public static final ModConfigSpec.DoubleValue INTAKE_FUNNEL_LENGTH = CLIENT_BUILDER
+            .comment("进气漏斗长度（格）：<b>满转速 256 RPM 时</b>粒子最远在喷口前方这么远的位置出生，"
+                    + "然后加速被吸进口面。实际按 |转速|/256 线性缩放（128 RPM ⇒ 一半，64 RPM ⇒ 四分之一）。"
+                    + "越大越像\"长吸气柱\"。默认: 8.0")
+            .defineInRange("intakeFunnelLength", 8.0, 0.4, 32.0);
 
     public static final ModConfigSpec.DoubleValue INTAKE_SPEED = CLIENT_BUILDER
             .comment("进气速度（格/tick，1 = 20 格/秒）：寿命 = 出生距离 ÷ 本值，所以调大 = 吸得更快、粒子更短命；"
