@@ -9,6 +9,7 @@ import dev.ryanhcode.sable.api.physics.force.ForceGroup;
 import dev.ryanhcode.sable.api.physics.force.QueuedForceGroup;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.companion.math.JOMLConversion;
+import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
@@ -46,11 +47,14 @@ import org.joml.Vector3d;
  * </ul>
  * 本实现的取舍（用户定稿：纯轴向恒定推力，完全不管表面）：
  * <ul>
- * <li><b>不做射线</b>：不需要命中任何表面，任意高度/距离出力相同（原版喷嘴 6.4 格外归零）；</li>
- * <li><b>不乘气压项</b>：出力与海拔无关（Sable 原版喷嘴乘 {@code DimensionPhysicsData.getAirPressure}）；</li>
+ * <li><b>不做射线</b>：不需要命中任何表面，任意<b>距离</b>出力相同（原版喷嘴 6.4 格外归零）；
+ *     高度仍然有关——通过下面那一项的气压；</li>
+ * <li><b>乘气压项</b>（{@link #THRUST_SCALES_WITH_AIR_PRESSURE}，与 Sable 原版喷嘴一致）：
+ *     出力 × {@code DimensionPhysicsData.getAirPressure(level, 喷管世界坐标)}，
+ *     即海平面 1.0、越高越稀薄、地底最高 1.5、接近建筑限高平滑降到 0；</li>
  * <li><b>转速线性</b>：不做 Sable 的 {@code >128 RPM 软缩放}，保持 memo §6.5 已验证的"推力∝转速"手感；</li>
- * <li><b>力的大小</b>：{@link #THRUST_PER_RPM} × 转速，256 RPM 时单喷管 800 pN = 原版喷嘴实测
- *     319.46 pN 的 2.5 倍。</li>
+ * <li><b>力的大小</b>：{@link #THRUST_PER_RPM} × 转速 × 气压，而 {@code THRUST_PER_RPM = 1} ⇒
+ *     <b>1 RPM = 1 pN</b>，气压 1.0 时 <b>256 RPM = 256 pN/喷管</b>（用户定稿，便于记）。</li>
  * </ul>
  * 力以点力的形式打进 Sable 的 {@code sable:propulsion} 力组：由 Sable 在物理步末统一施加
  * （{@code ServerSubLevel#applyQueuedForces}），并会被 {@code compat/cc/FlightDataRecorder} 的
@@ -59,10 +63,16 @@ import org.joml.Vector3d;
 public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntitySubLevelActor {
 
     /**
-     * 每 RPM 的轴向推力（pN/RPM）。256 RPM → 800 pN/喷管。
-     * 标定依据：原版 {@code create:nozzle} 实测 319.46 pN（256 RPM、离地 1 格、4 扇），×2.5 ≈ 800。
+     * 每 RPM 的轴向推力（pN/RPM）。<b>取 1.0 ⇒ 1 RPM = 1 pN</b>，
+     * 于是气压 1.0 时 <b>256 RPM（满速）= 256 pN/喷管</b>，出力数值直接等于转速、不用换算。
+     * <p>
+     * 用户定稿（第三次标定，为了公式简单可记）：初版 800 pN 实测"高达 750 多"、手感过猛；
+     * 第二次试 200 pN 又偏软；最终取 1 : 1。
+     * <p>
+     * 口径：这是<b>气压 = 1.0（海平面附近）</b>的值。实际出力还要乘气压，
+     * 所以 memo §2.2 的出力表在高空会按比例打折（见 {@link #THRUST_SCALES_WITH_AIR_PRESSURE}）。
      */
-    public static final double THRUST_PER_RPM = 800.0D / 256.0D;
+    public static final double THRUST_PER_RPM = 1.0D;
 
     /**
      * 符号约定。<b>已进游戏实测校定：false 为正确值</b>（用户实测确认，不要擅自改回 true）。
@@ -78,6 +88,32 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
      * 改成 {@code true} 即整体反向。
      */
     public static final boolean REVERSE_SIGN = false;
+
+    // ── 气压 ──
+
+    /**
+     * 出力是否随所处气压缩放（<b>现行 true</b>）：{@code 冲量 = 推力 · 转速 · 气压 · timeStep}。
+     * <p>
+     * 取数与 Sable 原版喷嘴完全一致（{@code NozzleHoveringHelper#getFanMagnitudeCalculation}）：
+     * {@code DimensionPhysicsData.getAirPressure(level, 喷管方块中心的世界坐标)}。
+     * 该值的语义（{@code DimensionPhysics#createDefault}，无 datapack 覆盖时）：
+     * <ul>
+     * <li>海平面 = <b>1.0</b>（{@link #THRUST_PER_RPM} 的标定基准就在这里）；</li>
+     * <li>向上按 {@code e^(-0.004·Δy)} 指数稀薄：y+100 ⇒ ×0.67，y+200 ⇒ ×0.45；</li>
+     * <li>地底最高夹到 <b>1.5</b>（约 y ≤ 海平面−101 起就饱和）；</li>
+     * <li>接近建筑限高最后 40 格平滑降到 <b>0</b>（主世界约 y 280 → 320）。</li>
+     * </ul>
+     * 因此本喷管现在有"实用升限"：飞太高会明显掉推力（也正是原版喷嘴的手感）。
+     * 置 {@code false} 即退回"出力与海拔无关"的旧行为。
+     */
+    public static final boolean THRUST_SCALES_WITH_AIR_PRESSURE = true;
+
+    /**
+     * 气压项的指数，只在 {@link #THRUST_SCALES_WITH_AIR_PRESSURE} 为 true 时生效：
+     * {@code 气压^本值}。1.0 = 纯线性乘（对齐原版喷嘴）；2.0 = 气压低时掉得更狠（高空更难受利）；
+     * 0.5 = 高层依然有力。没有特殊需求就保持 1.0。
+     */
+    public static final double AIR_PRESSURE_EXPONENT = 1.0D;
 
     // ── 粒子特效（create:air 气流粒子，电扇同族，密度更高） ──
 
@@ -193,14 +229,47 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
 
         final Direction facing = this.getBlockState().getValue(ThrustNozzleBlock.FACING);
         final Vec3i normal = facing.getNormal();
-        // 冲量 = 推力 × substep 时长；rpm 带符号，所以 magnitude 也带符号
-        final double magnitude = (REVERSE_SIGN ? -1.0D : 1.0D) * THRUST_PER_RPM * speed * timeStep;
+        // 冲量 = 推力 × 气压 × substep 时长；rpm 带符号，所以 magnitude 也带符号
+        final double pressure = this.airPressureAt(subLevel);
+        final double magnitude = (REVERSE_SIGN ? -1.0D : 1.0D) * THRUST_PER_RPM * speed * pressure * timeStep;
 
         // 力向量与作用点都必须每次新建：QueuedForceGroup.applyImpulseAtPoint 会就地改写传入的
         // position（减去质心求力臂），且 recordPointForce 保留引用（FlightDataRecorder 遥测会读），
         // 复用临时向量会污染已记录的点力。
         final Vector3d impulse = new Vector3d(-normal.getX(), -normal.getY(), -normal.getZ()).mul(magnitude);
         group.applyAndRecordPointForce(JOMLConversion.atCenterOf(this.worldPosition), impulse);
+    }
+
+    /**
+     * 本喷管所在位置的气压（无量纲，海平面 = 1.0）。
+     * <p>
+     * 取数口径与 Sable 原版喷嘴一致（{@code NozzleHoveringHelper.java:173}）：
+     * 把<b>喷管方块中心</b>从 plot 局部系投到<b>世界系</b>，再喂给
+     * {@link DimensionPhysicsData#getAirPressure} —— 气压是 y 的函数，用 plot 坐标会取错高度。
+     * <p>
+     * 任何异常（维度数据缺失/解析失败）或非有限值都退回 1.0（＝气压不影响出力），
+     * 不能让气压这一项把推力搞成 NaN 或负值：NaN 冲量进物理步会直接把物理体打飞。
+     */
+    private double airPressureAt(final ServerSubLevel subLevel) {
+        if (!THRUST_SCALES_WITH_AIR_PRESSURE) {
+            return 1.0D;
+        }
+
+        try {
+            // 世界坐标：logicalPose 把 plot 局部系（worldPosition 就是 plot 坐标）投到世界系。
+            // atCenterOf 每次新建向量，所以不会污染 worldPosition。
+            final Vector3d worldCenter = subLevel.logicalPose()
+                    .transformPosition(JOMLConversion.atCenterOf(this.worldPosition), new Vector3d());
+            final double pressure = DimensionPhysicsData.getAirPressure(subLevel.getLevel(), worldCenter);
+
+            if (!Double.isFinite(pressure) || pressure < 0.0D) {
+                return 1.0D;
+            }
+
+            return AIR_PRESSURE_EXPONENT == 1.0D ? pressure : Math.pow(pressure, AIR_PRESSURE_EXPONENT);
+        } catch (final RuntimeException e) {
+            return 1.0D;
+        }
     }
 
     // ── 客户端粒子：沿喷口轴向喷出 create:air 气流 ──

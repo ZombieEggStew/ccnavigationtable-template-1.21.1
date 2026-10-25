@@ -1,6 +1,11 @@
 # 悬浮车「U 型弯倒挂 → 侧空翻 → 平稳落地」自动驾驶 — 工作记录与实测数据
 
 > 状态：**数据采集阶段完成，控制器未实现**。本文是迄今为止的全部工作记录、实测常量与结论。
+> ⚠️ 推力基准已变：本文的实测常量（319.46 pN/扇、悬停 ~14% 油门等）来自**旧 `create:nozzle`**。
+> 现在用的是自研 `ccpe:thrust_nozzle`，`THRUST_PER_RPM = 1` ⇒ **1 RPM = 1 pN**，
+> 气压 1.0 时 256 RPM = **256 pN/管**；4 管悬停 ≈ **43% 油门**、4 管满载升限约 **y≈273**、
+> 滚转单边差动只剩 6.4 rad/s²（建议双边反向差动）。
+> 详见 `memo/thrust-nozzle.md` §2.1.1 与 §2.2 —— 控制律标定前先读那份。
 > 相关：传感器 API 见 `memo/my_sensor_system.md` / `memo/my_aero_sensor.md`；传感器源码见 `compat/cc/SensorSystemAPI.java`。
 > 踩坑速查见本文第 3 节（也可考虑后续摘到 `memo/ATTENTION.md`）。
 

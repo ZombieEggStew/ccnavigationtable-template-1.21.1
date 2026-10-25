@@ -208,8 +208,9 @@ public class MyModBlocks {
      * 定向喷管（thrust_nozzle）：贴在 {@code create:encased_fan} 出风面上的推力方块。
      * <p>
      * 结构与 {@code create:nozzle} 相同（6 向、背后必须是气流源、不消耗应力），但出力模型换成
-     * <b>纯轴向恒定推力</b>：256 RPM 单喷管 800 pN = 原版喷嘴实测（319.46 pN）的 2.5 倍，
-     * 任意高度/距离恒定。力由 {@link ThrustNozzleBlockEntity} 打进 Sable 的 {@code sable:propulsion}
+     * <b>纯轴向推力</b>：气压 1.0 时 <b>1 RPM = 1 pN</b>（256 RPM ⇒ 256 pN/管），乘
+     * {@code DimensionPhysicsData.getAirPressure} 随高度变化（海平面 1.0、高的地方变弱），
+     * 与距离无关。力由 {@link ThrustNozzleBlockEntity} 打进 Sable 的 {@code sable:propulsion}
      * 力组；装上它以后电扇自身的螺旋桨推力会被 Sable 自动关掉（前方非空气），总出力可预测。
      * 音效/硬度对齐 cooling_air_duct（金属件）。
      */

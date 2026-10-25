@@ -11,8 +11,8 @@
 | 议题 | 结论 |
 |---|---|
 | 动力来源 | 仍装在 `create:encased_fan` 出风面，**力由风扇转速决定**（不新增 CC 写入，Lua 脚本一行不改） |
-| 力的模型 | **纯轴向恒定推力**：不做射线、不看表面、不乘气压 ⇒ 任意高度/距离出力相同 |
-| 强度 | 256 RPM 单管 **800 pN** = 旧 `create:nozzle` 实测（319.46 pN）的 **2.5 倍** |
+| 力的模型 | **纯轴向推力**：不做射线、不看表面 ⇒ 任意**距离**出力相同；**乘气压**（§2.1.1）⇒ 高度有影响 |
+| 强度 | **1 RPM = 1 pN**（`THRUST_PER_RPM = 1`）⇒ 气压 1.0 时 256 RPM 单管 **256 pN**。用户第三次定稿，图公式简单；初版 800 pN 实测"高达 750 多"过猛，200 pN 偏软 |
 | 方块名 | `ccpe:thrust_nozzle` |
 | mixin | **不需要**（见 §1） |
 
@@ -65,18 +65,40 @@
 ### 2.1 力模型（`sable$physicsTick`）
 
 ```
-magnitude = (REVERSE_SIGN ? -1 : 1) · THRUST_PER_RPM · fanRpm · timeStep     // pN·s（含符号）
+pressure  = DimensionPhysicsData.getAirPressure(level, worldCenterOf(nozzle))  // 海平面 1.0
+magnitude = (REVERSE_SIGN ? -1 : 1) · THRUST_PER_RPM · fanRpm · pressure · timeStep   // pN·s（含符号）
 impulse   = -facingNormal · magnitude                                        // plot/机体局部系
 group.applyAndRecordPointForce(centerOf(worldPosition), impulse)             // sable:propulsion 力组
 ```
 
-- `THRUST_PER_RPM = 800/256 = 3.125 pN/RPM`；**线性**（没有 Sable 的 >128 RPM 软缩放），
+- `THRUST_PER_RPM = 1.0 pN/RPM` ⇒ **出力数值 = 转速数值**（256 RPM ⇒ 256 pN），无需换算；
+  **线性**（没有 Sable 的 >128 RPM 软缩放），
   保持 memo §6.5 已验证的"推力 ∝ 转速"手感。
 - `REVERSE_SIGN = false` 是**进游戏实测校定的正确值**：正转速 ⇒ 机体沿 **-FACING** 受力。
   喷口 `facing=down`（装车底）时：**正转速 = 上升/刹车，负转速 = 下压/贴地**，与旧喷嘴"正推反吸"一致；
   喷管随车身翻转，倒挂时"负转速 = 吸向头顶赛道"的语义不变。
 - **力向量与作用点必须每次新建**：`QueuedForceGroup.applyImpulseAtPoint` 会**就地改写传入的 position**
   （减去质心求力臂），`recordPointForce` 又保留引用（`FlightDataRecorder` 遥测会读）；复用临时向量会污染数据。
+
+#### 2.1.1 气压项（取数口径与 Sable 原版喷嘴逐位一致）
+
+```
+pressure = DimensionPhysicsData.getAirPressure(level,
+             parentSubLevel.logicalPose().transformPosition(atCenterOf(fbe.getBlockPos())))
+```
+
+即 `NozzleHoveringHelper.java:173` 的写法，本项目搬进 `ThrustNozzleBlockEntity#airPressureAt(ServerSubLevel)`。
+
+- 必须用**世界坐标**：气压是 y 的函数，而 BE 的 `worldPosition` 是 plot 坐标（§3.5），
+  所以先 `logicalPose().transformPosition(...)` 投到世界系再取。漏这一步会取到 plot 里的 y，
+  气压会在装配/移动瞬间乱跳。
+- 开关 `THRUST_SCALES_WITH_AIR_PRESSURE`（现 true）、指数 `AIR_PRESSURE_EXPONENT`（现 1.0 = 纯线性乘）。
+- 异常/非有限值一律退回 1.0：NaN 冲量进物理步会把物理体直接打飞。
+- 曲线形状（`DimensionPhysics#createDefault`，无 datapack 覆盖时）：海平面 1.0、向上 `e^(−0.004·Δy)`
+  指数稀薄、地底夹到 1.5、接近建筑限高最后 40 格平滑掉到 0。
+
+#### 2.1.2 力组与施力
+
 - 力组解析：**不能 `import ForceGroups`**（其静态字段类型是 veil 的 `RegistryObject`，veil 不在编译
   classpath，`FlightDataRecorder.java:320-323` 已踩过）；改用
   `ResourceKey.createRegistryKey(rl("sable","force_groups"))` + `registry.get(rl("sable","propulsion"))`。
@@ -86,16 +108,36 @@ group.applyAndRecordPointForce(centerOf(worldPosition), impulse)             // 
 
 | 转速 | 单管 | 4 管 | ÷重量 |
 |---|---|---|---|
-| 256（100%） | 800 pN | 3200 pN | 7.2× |
-| 192（75%） | 600 | 2400 | 5.4× |
-| 128（50%） | 400 | 1600 | 3.6× |
-| 102（40%） | 320 | 1280 | 2.9× |
+| 256（100%） | 256 pN | 1024 pN | 2.31× |
+| 192（75%） | 192 | 768 | 1.73× |
+| 128（50%） | 128 | 512 | 1.16× |
+| 102（40%） | 102 | 408 | 0.92× |
 
-- 4 管悬停 ≈ **14% 油门**（旧喷嘴约 45%）；2 管约 28%。
-- 左右差动（各 2 管、r=2 m、I≈160 kg·m²）：τ≈3200 N·m ⇒ **α_roll ≈ 20 rad/s²**（翻滚预算只需 6.4）。
-- 落地：3200/40.25 ≈ **79 m/s²**，吃掉 10 m/s 只需 0.13 s / 0.65 m ⇒ `flip-autopilot.md` §6.4 里
-  "喷嘴只在 h≤6 有效"的预算作废（现在恒定，FLARE 段可以提前介入）。
-- 嫌太猛就改 `THRUST_PER_RPM` 一行（1.5~2.0 ⇒ 384~512 pN/管）。
+- 悬停油门（气压 1.0）：**4 管 ≈ 43%**（442.8/1024，≈111 RPM）、3 管 ≈ 58%、2 管 ≈ 87%。
+- **单管永远飞不起来**：1.5 气压（地底）也只有 384 pN < 442.8 pN。至少 2 管，实务上 4 管。
+
+**气压随高度（§2.1.1，主世界海平面 y=63，估算值）**
+
+| y | 气压 | 单管 256 RPM | 4 管 | 说明 |
+|---|---|---|---|---|
+| ≤ −38 | 1.50 | 384 pN | 1536 | 地底饱和（夹到 1.5） |
+| 63 | 1.00 | 256 | 1024 | 海平面 = 标定基准 |
+| 163 | 0.67 | 172 | 686 | 悬停需 ≈65% 油门 |
+| 213 | 0.55 | 141 | 564 | 悬停需 ≈79% 油门 |
+| 263 | 0.45 | 115 | 461 | 悬停需 ≈96% 油门 |
+| 273 | ≈0.432 | 111 | 443 | **4 管满载的升限（刚好 = 重量）** |
+| 280 | 0.42 | 108 | 430 | 限高衰减段起点 |
+| 320 | 0 | 0 | 0 | 建筑限高 |
+
+- ⇒ **实用升限**（估算，4 管满载）：**y ≈ 273**（800 pN 版 ≈305、200 pN 版 ≈210）。
+- ⇒ 悬停油门变成高度的函数：**43% 只在海平面成立**，y≈163 时 ≈65%、y≈213 时 ≈79%、y≈263 时 ≈96%，
+  y≳273 直接失去悬停能力。`flip-autopilot.md` 里按 14% 标定的控制律增益/死区**必须按高度重标**，
+  或者让脚本读 `sensor` 的气压做前馈（`SensorSystemAPI` 已暴露气压，见 `memo/my_sensor_system.md`）。
+- 左右差动（各 2 管、r=2 m、I≈160 kg·m²）：**单边满速** ⇒ τ = 2×256×2 = 1024 N·m ⇒ α_roll ≈ **6.4 rad/s²
+  —— 刚好压在 `flip-autopilot.md` 的翻滚预算 6.4 线上**（余量为 0，姿态机动的偏差修正会很紧）；
+  想留余量就**双边反向差动**（一侧 +256、另一侧 −256）：τ = (512+512)×2 = 2048 N·m ⇒ α_roll ≈ **12.8 rad/s²**。
+- 落地：（4 管 1024 pN）/40.25 ≈ **25.4 m/s²**，吃掉 10 m/s 需 **0.39 s / 2.0 m**
+  （800 pN 版 0.13 s / 0.65 m）⇒ FLARE 段的刹车距离预算按 2.0 m 排。
 
 ### 2.3 选择框 / 碰撞箱（六向）
 
@@ -325,6 +367,10 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 ## 4. 已知边界 / 未做
 
 - **推力不做遮挡判定**：喷口被方块堵死时物理推力照样输出（要加的话应在每个游戏 tick 算一次遮挡并缓存给 substep 复用）。
+- **气压只影响推力，不影响粒子**：高空排气粒子看起来和地面一样浓（想同步就在 `spawnExhaust` 里把
+  `MAX_PARTICLES_PER_TICK` 乘气压，未做）。
+- 气压每 substep 求一次（`HashMap` 查维度数据 + 一次贝塞尔求值 + 一次 `Vector3d` 分配，常数级），
+  多管时按管数线性增长，实测量级可忽略。
 - 排气粒子是纯客户端计算：各客户端看到的撞墙点/散射方向各自独立（原版粒子行为，未做服务端广播）。
 - 粒子碰撞是**每颗粒子每 tick 一次扫掠**（半径 0.08~0.35、位移约 0.5~2 格 ⇒ 约 8~27 个方块）：
   单管 10 颗/tick × 寿命 ~16 tick ⇒ 同屏约 160 颗，实测未造成明显掉帧；多管并联时按管数线性增长。
@@ -345,7 +391,11 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
    v7 新增的"随寿命越大/越慢/越透明"三条曲线的旋钮是 `ALPHA_MAX / ALPHA_FALLOFF / SIZE_START /
    SIZE_GROWTH / SPEED_SLOW`（都在 `ExhaustParticle` 顶部，改完热重载即可看）。
    `PARTICLES_BLOCKED_BY_OTHER_BODIES` 仍决定其它物理体是否挡粒子（现 true）。
-3. 回到 `flip-autopilot.md`：用新喷管重做落地/倒挂调参（悬停油门从 ~45% 降到 ~14%，控制律的增益/死区要重标定）。
+3. 回到 `flip-autopilot.md`：用新喷管重做落地/倒挂调参（悬停油门 **43%**（气压 1.0），
+   原来是按 14% 算的；控制律的增益/死区要重标定，且滚转单边差动只剩 6.4 rad/s² 的零余量，
+   建议用双边反向差动）。
+   **气压项（§2.1.1）让 14% 只在海平面成立**，高空油门要更大；嫌麻烦就让脚本用 `sensor` 的气压做前馈，
+   或先把 `THRUST_SCALES_WITH_AIR_PRESSURE` 关掉再标控制律。
 
 ## 6. 参考来源（均只读）
 
@@ -374,3 +424,6 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 | 9 | 撞墙后仍「四面八方乱飞」 | 每 tick 重新随机 ⇒ 随机游走；加 `COLLISION_COOLDOWN` + `SPREAD_KEEP` 降到 0.35 | ✅ |
 | 10 | 大量粒子穿到墙后面 | 「忽略整个物理体」把车体结构也放行了；改出生点保护 0.75 格 | ✅ |
 | 11 | 想让粒子随存在时间越大 / 越慢 / 越透明 | alpha 去掉恒定平台期改全寿命单调衰减；尺寸区间 0.42+0.95 → 0.35+1.15；阻尼追乘 `(1−SPEED_SLOW×life)`（§3.6） | 已改，待进游戏确认手感 |
+| 12 | 需要出力随所处气压变化（乘气压） | `airPressureAt()`：喷管中心投世界系 → `DimensionPhysicsData.getAirPressure`，乘进冲量（§2.1.1） | ✅ 用户实测有效果 |
+| 13 | 出力过大（气压 1.0、256 RPM 实测 750 多 pN） | `THRUST_PER_RPM` 800/256 → 200/256 → 再一次改成 **1.0（1 RPM = 1 pN，256 RPM = 256 pN）**，§2.2 每次全部重算 | 现行 256 pN/管 |
+| 14 | 想要"1 RPM 对应 1 pN"的简单公式 | `THRUST_PER_RPM = 1.0`；连带：悬停 43%、4 管升限 y≈273、落地 25.4 m/s² | 已改，待进游戏确认 |
