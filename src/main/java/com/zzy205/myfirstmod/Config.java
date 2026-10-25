@@ -174,8 +174,9 @@ public class Config {
 
     public static final ModConfigSpec.DoubleValue EXHAUST_GRAVITY = CLIENT_BUILDER
             .comment("排气粒子的轻微重力（格/tick²，0 = 不受重力）。实际终端下沉速度 = 重力 × f/(1−f)，"
-                    + "f = 0.965×(1−0.28×寿命进度)，所以下坠是前重后轻的。默认: 0.0（保持无重力的手感）")
-            .defineInRange("exhaustGravity", 0.0, 0.0, 0.1);
+                    + "f = 0.965×(1−0.28×寿命进度)，所以下坠是前重后轻的（出生后最快、末期几乎挂住）。"
+                    + "默认: 0.02（用户进游戏实测定稿）")
+            .defineInRange("exhaustGravity", 0.02, 0.0, 0.1);
 
     public static final ModConfigSpec.DoubleValue EXHAUST_MAX_DISTANCE = CLIENT_BUILDER
             .comment("排气粒子发射距离上限（格，0 = 不限）。原版 addParticle 有 32 格硬限制，本模组用 9 参数 "

@@ -273,9 +273,12 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
 
         this.alpha = 0.0F;
         // 原版 Particle#gravity 不用（我们整个 tick 自己实现），保持 0；
-        // 需要"轻微重力"时走下面的 sinkAccel（配置 exhaustGravity，默认 0 = 失重）。
+        // 需要重力时走下面的 sinkAccel（配置 exhaustGravity，默认 0.02；设 0 = 失重）。
         this.gravity = 0.0F;
-        // 配置读一次并缓存：每 tick 用到的量不该反复走 ConfigSpec 查询
+        // 构造时读一次存进字段。注意 NeoForge 的 ConfigValue#get() 内部本来就带缓存
+        // （cachedValue 字段，配置重载时才 clearCache），所以"现查"与"自己缓存"的差别只有一次字段读，
+        // 这里缓存只是为了写法更直观（也避免每 tick 一次字段读取）。
+
         this.sinkAccel = Math.max(0.0D, Config.EXHAUST_GRAVITY.get());
         this.friction = 1.0F;
         // 碰撞完全由下面的 move() 自己处理，别让原版 Particle#move 再算一遍

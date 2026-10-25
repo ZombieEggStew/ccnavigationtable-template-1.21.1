@@ -393,7 +393,9 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 this.yd += BUOYANCY + life * BUOYANCY_GROWTH - this.sinkAccel;
 ```
 
-- **默认 0.0 = 完全失重**，即用户此前实测通过的手感，行为零变化。
+- **默认 0.02（用户进游戏 0.002/0.005/0.02 逐档实测后定稿）**；设 0.0 = 完全失重（即加重力之前的手感）。
+  0.02 出生后净下沉 ≈ 0.55 格/tick ≈ 11 格/秒，中期 ≈ 1.95、末期 ≈ 1.0 格/秒 —— 数值上不算"轻微"，
+  但阻尼把轴向初速很快吃光，观感是"出膛后先沉、然后挂住"，用户认可的就是这个形态。
 - 字段名**不能叫 `gravity`**：会遮蔽父类 `Particle#gravity`（原版 `Particle#tick` 用的字段；
   我们的 `tick` 整个自己实现、不用它，但遮蔽会让后来人看错）。
 - **性能**：每颗每 tick 一次浮点减法。同屏 ~1000 颗 ⇒ 每 tick 1000 次加法，微秒级；
@@ -409,8 +411,11 @@ this.yd += BUOYANCY + life * BUOYANCY_GROWTH - this.sinkAccel;
 | `exhaustGravity` | 出生后净下沉 | 中期（life 0.5） | 末期（life 0.9） | 观感 |
 |---|---|---|---|---|
 | 0.002 | 0.033 格/tick ≈ 0.7 格/秒 | 0.006 | 0.004 | 只是"不再往上飘" |
-| **0.005（推荐起点）** | 0.116 ≈ 2.3 格/秒 | 0.021 | 0.010 | 轻微下坠 |
+| 0.005 | 0.116 ≈ 2.3 格/秒 | 0.021 | 0.010 | 轻微下坠 |
 | 0.010 | 0.254 ≈ 5 格/秒 | 0.046 | 0.023 | 明显"沉"，像重烟 |
+| **0.02（现行默认）** | 0.551 ≈ 11 格/秒 | 0.098 | 0.052 | 出膛即沉、后段挂住（用户定稿） |
+
+上限 0.1（配置范围 0.0~0.1）；再大就基本等于"喷完就掉"。
 
 下坠是**前重后轻**的（阻尼让年轻粒子的终端速度被放大 27 倍、末期只有 2.6 倍），
 所以看起来是"出膛后先坠、再渐渐挂住"—— 恰好是真实尾焰的形态。
@@ -649,7 +654,7 @@ protected void setLocationFromBoundingbox() {
 | 25 | 去掉「潜行空手右键清除染色」 | 删 `ThrustNozzleBlock#useWithoutItem`、goggle 的清除提示行、lang 的 `trail_dye_hint` / `trail_dye_cleared`（§10） | ✅ 编译通过 |
 | 26 | 物品 tooltip 要说明用途与染色 | 照 `trailing_wheel_mount` 注册 `ItemDescription.Modifier`（FMLClientSetupEvent），7 条 lang（summary + 3 组 condition/behaviour），文案不带 `_` 避免高亮奇偶翻转（§12） | 编译通过，待进游戏确认 |
 | 27 | **斜喷时粒子穿墙、漏到平面下方**（90° 正常，越平越糟） | 埋点两轮都修错方向（先以为只是 `slab` 缺"起点已重叠"分支），最后靠"pos 与上 tick 的 mv 逐 tick 对不上、差值 = quadSize/2"定位到真因：`move` 里调用 `setLocationFromBoundingbox()`，而它把 y 当包围盒**底边** ⇒ 每 tick 静默下坠 `quadSize/2` 且不被扫掠覆盖。改成直接写 `x/y/z`；同时保留 `slab` 的嵌入分支 + MTV 推出作为加固（§3.8） | 编译通过，待进游戏确认 |
-| 28 | 想要排气"轻微受一点重力" | 新增配置 `exhaustGravity`（默认 0 = 失重，行为零变化），`ExhaustParticle` 构造时缓存进 `sinkAccel`、每 tick 一次减法；附取值表与性能结论（§3.6.1） | 编译通过，待进游戏确认 |
+| 28 | 想要排气"轻微受一点重力" | 新增配置 `exhaustGravity`，`ExhaustParticle` 构造时缓存进 `sinkAccel`、每 tick 一次减法；附取值表与性能结论（§3.6.1）。用户逐档实测后**默认值定为 0.02** | ✅ 用户确认效果符合预期 |
 
 ## 8. 下一步：高空尾迹（contrail）实现计划
 
@@ -1135,7 +1140,7 @@ s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶�
 | `exhaustLifetime` | 16 tick | 排气寿命（+0~9 随机） |
 | `exhaustScale` | 0.3 格 | 排气尺寸 |
 | `exhaustSpeed` | 2.0 格/tick | 排气初速 |
-| `exhaustGravity` | 0.0 格/tick² | **排气重力**（0 = 失重 = 旧手感）。终端下沉速度 = 重力 × f/(1−f)，f = 0.965×(1−0.28×寿命进度) ⇒ 下坠前重后轻；建议 0.003~0.005 起步（§3.6 重力节） |
+| `exhaustGravity` | 0.02 格/tick² | **排气重力**（0 = 失重 = 旧手感）。终端下沉速度 = 重力 × f/(1−f)，f = 0.965×(1−0.28×寿命进度) ⇒ 下坠前重后轻；建议 0.003~0.005 起步（§3.6 重力节） |
 | `exhaustMaxDistance` | 64 格 | 排气发射距离上限 |
 
 ### 11.2 实现方式（为什么是访问器而不是缓存字段）
@@ -1151,6 +1156,34 @@ s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶�
   代价可忽略（同屏 1000 颗 ≈ 每 tick 1000 次加法，微秒级）。字段名故意不叫 `gravity`，
   以免遮蔽父类 `Particle#gravity`（原版 `Particle#tick` 用的，我们整个 tick 自己实现、不用它）。
 - lang：每个配置项两条 key —— `ccpe.configuration.<路径>`（标题）+ `.tooltip`（说明），中英各 34 条。
+
+#### 11.2.1 「现查配置」到底贵不贵？（结论：**不用自己加缓存层**）
+
+NeoForge 的 `ModConfigSpec.ConfigValue#get()` **本身就是缓存的**
+（`ModConfigSpec.java:1219-1225`，源码在 `build/moddev/artifacts/neoforge-21.1.235-sources.jar`）：
+
+```java
+public T get() {
+    if (cachedValue == null) { cachedValue = getRaw(); }   // ← 命中缓存就是一次字段读
+    return cachedValue;
+}
+```
+
+`cachedValue` 只在**配置重载**时被 `clearCache()` 置空（1279-1281 行），所以：
+
+| 说法 | 实际 |
+|---|---|
+| "现查 = 每次都要遍历 spec / 读文件" | 否。就是一次字段读 + 一次 null 判断，纳秒级、无锁 |
+| "调用量大所以要缓存" | 量级：每颗粒子 4 次（初速/尺寸/寿命/重力）+ 每 tick 每管的尾迹参数十几次 ⇒ 满配 4 管约 **每 tick 200~500 次** `get()` ≈ 每帧几十纳秒到微秒，**比一次扫掠碰撞低 3~4 个数量级** |
+| "缓存能省性能" | 省不到东西；反而要自己维护"何时刷新"，重蹈"启动时缓存 ⇒ 改了没反应"的坑（§11.2 第一条） |
+
+所以现行策略是对的：**默认现查**（改配置立即生效），只有"每颗每 tick 都要用"的视觉参数
+（`contrailAlpha`/`contrailWidthTau`/`sinkAccel`）才在构造时读一次缓存 —— 那不是为了性能，
+而是为了让同一颗粒子一生的参数保持一致（否则一颗粒子在寿命中途被改配置会突变）。
+
+真要再省（现阶段没必要）：正确做法不是"缓存到字段"，而是在 `tickClient()` 顶部**每 tick 批量读一次**
+到局部变量再往下传 —— 既保持实时性又只读一次。当前调用点分散在 `spawnExhaust`/`spawnContrail` 里，
+为省这点开销不值得重排代码。
 
 ### 11.3 仍然是代码常量的（有意保留）
 
