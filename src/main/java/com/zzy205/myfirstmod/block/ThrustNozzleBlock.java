@@ -4,6 +4,16 @@ import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.DyeItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -160,6 +170,76 @@ public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock {
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         return defaultBlockState().setValue(FACING, context.getClickedFace());
+    }
+
+    // ── 尾迹染色：手持染料右键喷口（<b>只染尾迹粒子</b>，不染排气粒子；用户定稿） ──
+
+    /**
+     * 手持染料右键 ⇒ 把尾迹染成该染料色。
+     * <p>
+     * 分工：判定与消耗都在<b>服务端</b>（{@link ItemInteractionResult#SUCCESS} 只用来吃掉这次交互、
+     * 别让手上的染料再去做别的事），客户端只等 BE 数据包同步过来后用它喷粒子。
+     * 同一染料重复右键不消耗染料（{@link ThrustNozzleBlockEntity#setTrailDye} 返回 false）。
+     */
+    @Override
+    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
+            Player player, InteractionHand hand, BlockHitResult hitResult) {
+        if (!(stack.getItem() instanceof final DyeItem dyeItem)) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+
+        if (!(level.getBlockEntity(pos) instanceof final ThrustNozzleBlockEntity nozzle)) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+
+        if (level.isClientSide) {
+            return ItemInteractionResult.SUCCESS; // 服务端权威，客户端只负责手感
+        }
+
+        if (!nozzle.setTrailDye(dyeItem.getDyeColor().getId())) {
+            return ItemInteractionResult.SUCCESS; // 已经是这个颜色
+        }
+
+        final Component dyeName = stack.getHoverName();
+
+        if (!player.getAbilities().instabuild) {
+            stack.shrink(1);
+        }
+
+        level.playSound(null, pos, SoundEvents.DYE_USE, SoundSource.BLOCKS, 1.0F, 1.0F);
+        player.displayClientMessage(
+                Component.translatable("tooltip.ccpe.thrust_nozzle.trail_dyed", dyeName), true);
+        return ItemInteractionResult.SUCCESS;
+    }
+
+    /**
+     * 潜行 + 空手右键 ⇒ 清除染色（恢复默认颜色）。
+     * <p>
+     * 之所以要求潜行：空手右键本身没有别的用途，但潜行能避免和未来可能加的交互撞车。
+     */
+    @Override
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
+            Player player, BlockHitResult hitResult) {
+        if (!player.isShiftKeyDown()) {
+            return InteractionResult.PASS;
+        }
+
+        if (!(level.getBlockEntity(pos) instanceof final ThrustNozzleBlockEntity nozzle)) {
+            return InteractionResult.PASS;
+        }
+
+        if (level.isClientSide) {
+            return InteractionResult.SUCCESS;
+        }
+
+        if (!nozzle.setTrailDye(ThrustNozzleBlockEntity.NO_DYE)) {
+            return InteractionResult.SUCCESS; // 本来就没染色
+        }
+
+        level.playSound(null, pos, SoundEvents.DYE_USE, SoundSource.BLOCKS, 1.0F, 0.8F);
+        player.displayClientMessage(
+                Component.translatable("tooltip.ccpe.thrust_nozzle.trail_dye_cleared"), true);
+        return InteractionResult.SUCCESS;
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.block;
 
+import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
 import com.simibubi.create.foundation.particle.AirParticleData;
 import com.zzy205.myfirstmod.particle.ContrailBudget;
@@ -14,15 +15,24 @@ import dev.ryanhcode.sable.companion.math.JOMLConversion;
 import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Registry;
 import net.minecraft.core.Vec3i;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.TextColor;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.DyeItem;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -33,6 +43,9 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3d;
+
+import java.util.List;
+import java.util.Locale;
 
 /**
  * 定向喷管方块实体：把背后电扇的转速换算成<b>纯轴向恒定推力</b>，每个物理 substep 施加到所在物理体上。
@@ -64,7 +77,8 @@ import org.joml.Vector3d;
  * （{@code ServerSubLevel#applyQueuedForces}），并会被 {@code compat/cc/FlightDataRecorder} 的
  * 力组遥测列记录，方便进游戏标定。点力自带力臂，多个喷管的位置差自动产生力矩。
  */
-public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntitySubLevelActor {
+public class ThrustNozzleBlockEntity extends BlockEntity
+        implements BlockEntitySubLevelActor, IHaveGoggleInformation {
 
     /**
      * 每 RPM 的轴向推力（pN/RPM）。<b>取 1.0 ⇒ 1 RPM = 1 pN</b>，
@@ -435,6 +449,20 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
     public static final float TRAIL_GREEN = 1.00F;
     public static final float TRAIL_BLUE = 1.00F;
 
+    // ── 尾迹染色（玩家手持染料右键喷口，只染【尾迹】不染排气粒子，用户定稿） ──
+
+    /** 未染色的哨兵值（{@link DyeColor#getId()} 是 0~15，所以 -1 空着） */
+    public static final int NO_DYE = -1;
+
+    /**
+     * 染料颜色的亮度补偿系数：{@link DyeColor#getTextureDiffuseColor()} 是"皮革染色"用的偏暗色
+     * （红 = 0xB02E26、黑 = 0x1D1D21），直接喂给全亮的粒子会显得发闷，所以整体乘一个系数再钳到 1.0。
+     * 想要更接近染料本来的颜色就调到 1.0。
+     */
+    public static final float TRAIL_DYE_BRIGHTNESS = 1.15F;
+
+    private static final String TAG_TRAIL_DYE = "TrailDye";
+
     /** Sable 力组注册表 key（{@code sable:force_groups}）。不直接引用 {@code ForceGroups}：其静态字段
      *  类型引用 veil 的 {@code RegistryObject}，veil 不在编译 classpath（同 {@code FlightDataRecorder}）。 */
     private static final ResourceKey<Registry<ForceGroup>> FORCE_GROUP_REGISTRY =
@@ -452,6 +480,161 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
 
     /** 自上次发射以来累积的位移（格）：够了才吐一颗（见 {@link #TRAIL_SPACING}） */
     private double contrailAccum;
+
+    /**
+     * 尾迹染色用的 {@link DyeColor} id；{@link #NO_DYE} = 未染色（用 {@link #TRAIL_RED}/{@link #TRAIL_GREEN}/{@link #TRAIL_BLUE}）。
+     * <p>
+     * 服务端权威：右键染色后 {@code setChanged()} + {@code sendBlockUpdated} 推给客户端，
+     * 客户端 {@code tickContrail} 用 {@link #trailRgb()} 生成粒子 ⇒ 必须同步，否则各客户端颜色不一致。
+     */
+    private int trailDye = NO_DYE;
+
+    // ── 尾迹染色：状态 / 取色 / 持久化与同步 / goggle tooltip ──
+
+    /** 当前染料 id（{@link #NO_DYE} = 未染色） */
+    public int getTrailDye() {
+        return this.trailDye;
+    }
+
+    /**
+     * 设置尾迹染料（{@link DyeColor#getId()}，{@link #NO_DYE} = 清除染色）。
+     * <p>
+     * 服务端权威：改完立刻落盘 + 推一份 BE 数据给客户端（客户端 ticker 每 tick 用它取色喷粒子）。
+     *
+     * @return 是否真的改变了（未改变时不发包、不消耗染料）
+     */
+    public boolean setTrailDye(final int dyeId) {
+        final int clamped = dyeId < 0 ? NO_DYE : Math.min(dyeId, DyeColor.values().length - 1);
+
+        if (clamped == this.trailDye) {
+            return false;
+        }
+
+        this.trailDye = clamped;
+        this.setChanged();
+
+        if (this.level != null && !this.level.isClientSide) {
+            // 默认 getUpdatePacket() 返回 null 会导致客户端快照陈旧 ⇒ 颜色不同步（同 QuickFillFluidTank 的注释）
+            this.level.sendBlockUpdated(this.worldPosition, this.getBlockState(), this.getBlockState(), 2);
+        }
+
+        return true;
+    }
+
+    /**
+     * 当前尾迹颜色的打包 RGB（{@code 0xRRGGBB}）：未染色时返回默认常量色。
+     * 染色后取 {@link DyeColor#getTextureDiffuseColor()}（染料在皮革/烟花上的标准色）。
+     */
+    public int trailRgb() {
+        final int dye = this.trailDye;
+
+        if (dye >= 0 && dye < DyeColor.values().length) {
+            return DyeColor.byId(dye).getTextureDiffuseColor();
+        }
+
+        return (Math.round(TRAIL_RED * 255.0F) << 16)
+                | (Math.round(TRAIL_GREEN * 255.0F) << 8)
+                | Math.round(TRAIL_BLUE * 255.0F);
+    }
+
+    /** 取打包颜色的某个通道（0~1），乘上 {@link #TRAIL_DYE_BRIGHTNESS} 后钳位 */
+    private static float dyeChannel(final int rgb, final int shift) {
+        final float channel = ((rgb >> shift) & 0xFF) / 255.0F;
+        return Math.min(1.0F, channel * TRAIL_DYE_BRIGHTNESS);
+    }
+
+    @Override
+    protected void saveAdditional(final CompoundTag tag, final HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+
+        if (this.trailDye != NO_DYE) {
+            tag.putInt(TAG_TRAIL_DYE, this.trailDye);
+        }
+    }
+
+    @Override
+    protected void loadAdditional(final CompoundTag tag, final HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        this.trailDye = tag.contains(TAG_TRAIL_DYE) ? tag.getInt(TAG_TRAIL_DYE) : NO_DYE;
+    }
+
+    // 客户端同步（goggle tooltip 与尾迹粒子都在客户端读染色，必须推）
+
+    @Override
+    public CompoundTag getUpdateTag(final HolderLookup.Provider registries) {
+        final CompoundTag tag = super.getUpdateTag(registries);
+
+        if (this.trailDye != NO_DYE) {
+            tag.putInt(TAG_TRAIL_DYE, this.trailDye);
+        }
+
+        return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(final CompoundTag tag, final HolderLookup.Provider registries) {
+        super.handleUpdateTag(tag, registries);
+        this.trailDye = tag.contains(TAG_TRAIL_DYE) ? tag.getInt(TAG_TRAIL_DYE) : NO_DYE;
+    }
+
+    @Override
+    public ClientboundBlockEntityDataPacket getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
+    }
+
+    // ── Create goggle tooltip ──
+
+    @Override
+    public boolean addToGoggleTooltip(final List<Component> tooltip, final boolean isPlayerSneaking) {
+        tooltip.add(Component.literal("    ").append(Component.translatable("tooltip.ccpe.thrust_nozzle.header")
+                .withStyle(ChatFormatting.WHITE)));
+
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.thrust_nozzle.trail_dye").withStyle(ChatFormatting.GRAY))
+                .append(this.trailDyeLabel()));
+
+        tooltip.add(Component.literal("      ")
+                .append(Component.translatable("tooltip.ccpe.thrust_nozzle.trail_dye_hint").withStyle(ChatFormatting.DARK_GRAY)));
+
+        return true;
+    }
+
+    /** 染色名称：未染色显示"默认（未染色）"，否则是染料名 + {@code #RRGGBB}，并按该颜色上色 */
+    private Component trailDyeLabel() {
+        final int dye = this.trailDye;
+
+        if (dye < 0 || dye >= DyeColor.values().length) {
+            return Component.translatable("tooltip.ccpe.thrust_nozzle.trail_dye_default")
+                    .withStyle(ChatFormatting.DARK_GRAY);
+        }
+
+        final int rgb = this.trailRgb();
+        final DyeColor color = DyeColor.byId(dye);
+
+        return Component.translatable(DyeItem.byColor(color).getDescriptionId())
+                // 深色染料（黑/棕）在深色 tooltip 背景上看不清 ⇒ 文字用提亮后的同色
+                .withStyle(Style.EMPTY.withColor(TextColor.fromRgb(readableRgb(rgb))))
+                .append(Component.literal(String.format(Locale.ROOT, " #%06X", rgb))
+                        .withStyle(ChatFormatting.DARK_GRAY));
+    }
+
+    /** 把颜色提亮到"在深色 tooltip 背景上还看得清"的程度（保持色相，只抬亮度） */
+    private static int readableRgb(final int rgb) {
+        final int r = (rgb >> 16) & 0xFF;
+        final int g = (rgb >> 8) & 0xFF;
+        final int b = rgb & 0xFF;
+        final int max = Math.max(r, Math.max(g, b));
+
+        if (max >= 0x90) {
+            return rgb;
+        }
+
+        final double scale = 0x90 / (double) Math.max(1, max);
+        final int nr = (int) Math.min(255.0D, Math.round(r * scale));
+        final int ng = (int) Math.min(255.0D, Math.round(g * scale));
+        final int nb = (int) Math.min(255.0D, Math.round(b * scale));
+        return (nr << 16) | (ng << 8) | nb;
+    }
 
     public ThrustNozzleBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.thrust_nozzle_entity.get(), pos, state);
@@ -773,11 +956,14 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
         final double vz = ring * Math.sin(phi) * speed;
 
         final float width = TRAIL_WIDTH0 * (0.75F + random.nextFloat() * 0.5F);
+        // 染色：未染色时 trailRgb() 返回 TRAIL_RED/GREEN/BLUE 打包的默认色
+        final int rgb = this.trailRgb();
 
         // 9 参数 overload（ignoreRange = true）：7 参数那个的第二个布尔是 decreased 不是 force，
         // 照样被原版 32 格限制丢掉 —— 见 MAX_EXHAUST_DISTANCE 的注释与 memo §3.7。
         level.addAlwaysVisibleParticle(
-                new ContrailParticleData(width, lifetime, TRAIL_RED, TRAIL_GREEN, TRAIL_BLUE),
+                new ContrailParticleData(width, lifetime,
+                        dyeChannel(rgb, 16), dyeChannel(rgb, 8), dyeChannel(rgb, 0)),
                 true,
                 start.x, start.y, start.z,
                 vx, vy, vz);

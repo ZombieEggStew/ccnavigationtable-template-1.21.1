@@ -511,6 +511,7 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 | 20 | 云层在 Y200、要求峰值曲线 + Y160 就要看清 | s 从单调爬升改为峰值曲线（上升段 × 高空变稀段）+ `TRAIL_Y_MIN=160` 阶跃硬门；节点与实测表见 §9.8 | 编译通过，待进游戏确认 |
 | 21 | 要粒子**随时间越来越散** | 扩散半径从常数改 `R0 + RATE·√age`（软边界 + 6 格封顶）；边界内朝外速度按 `(dist/半径)²` 衰减（§9.9） | 编译通过，待进游戏确认 |
 | 22 | 改成「初速 = 飘荡距离 ÷ 寿命」，且飘荡距离随高度变化（云层×1、越低越散） | 删除随机游走/抖动/浮点边界；`spawnContrail` 反算恒定速度，新增 `trailTurbulence()`（200→1.0，160→2.5）与 `TRAIL_DRIFT_DISTANCE=2.0`（§9.10） | 编译通过，待进游戏确认 |
+| 23 | 想手感染料给**尾迹**染色 + 护目镜显示 | `useItemOn`/`useWithoutItem` 染料交互、BE 存 `trailDye`（NBT + `getUpdateTag/handleUpdateTag/getUpdatePacket` 同步）、`IHaveGoggleInformation` tooltip，颜色走进 `ContrailParticleData`（§10） | 编译通过，待进游戏确认 |
 
 ## 8. 下一步：高空尾迹（contrail）实现计划
 
@@ -900,6 +901,74 @@ s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶�
 - 短寿命粒子的速度天然更大（同样的距离摊到更少 tick）—— 这符合直觉，也让低适宜度处的尾迹"散得快"。
 - "越来越散"由两个独立效果叠加：①每颗的飘荡方向/距离随机（整体越铺越宽）；
   ②单颗尺寸 sqrt(t) 变大 + alpha 同步变淡（§9.4 的成对曲线，未改动）。
+## 10. 尾迹染色（手持染料右键 + Create goggle tooltip，2026-08）
+
+需求（用户定稿）：手持<b>染料</b>右键喷口 ⇒ 给<b>尾迹粒子</b>染色（**不是**排气/气流粒子）；
+戴 Create 护目镜看喷管时，tooltip 显示当前染色。
+
+### 10.1 文件
+
+| 文件 | 改动 |
+|---|---|
+| `block/ThrustNozzleBlock.java` | `useItemOn`（`DyeItem` → 染色）+ `useWithoutItem`（潜行空手 → 清除）；`SoundEvents.DYE_USE` + 动作栏消息 |
+| `block/ThrustNozzleBlockEntity.java` | 实现 Create `IHaveGoggleInformation`；`trailDye` 字段 + `setTrailDye/trailRgb/dyeChannel`；NBT + `getUpdateTag/handleUpdateTag/getUpdatePacket`；`addToGoggleTooltip`；`spawnContrail` 改用染色出的 rgb |
+| `lang/en_us.json` / `zh_cn.json` | `tooltip.ccpe.thrust_nozzle.{header,trail_dye,trail_dye_default,trail_dye_hint,trail_dyed,trail_dye_cleared}` |
+
+### 10.2 数据流（服务端权威 → 客户端喷粒子）
+
+```
+右键(服务端) → DyeItem#getDyeColor().getId() → BE.setTrailDye(id)
+           → setChanged() + level.sendBlockUpdated(pos, state, state, 2)
+           → 客户端收到 getUpdateTag 里的 TrailDye
+客户端 tickContrail → trailRgb() → ContrailParticleData(r,g,b) → ccpe:contrail
+```
+
+- **NBT key**：`TrailDye`（未染色时不写盘，读时缺省 = `NO_DYE = -1`）。
+- **颜色来源**：`DyeColor#getTextureDiffuseColor()`（染料在皮革/烟花上的标准色，偏暗），
+  乘 `TRAIL_DYE_BRIGHTNESS = 1.15` 再钳到 1.0 —— 全亮渲染的粒子上发闷的颜色会显脏。
+  未染色时用 `TRAIL_RED/GREEN/BLUE`（现 1.0/1.0/1.0 纯白）。
+- **只染尾迹**：排气粒子 `ccpe:exhaust` 仍读 `EXHAUST_RED/GREEN/BLUE` 常量，完全没接这个字段。
+
+### 10.3 交互细节
+
+| 操作 | 结果 |
+|---|---|
+| 手持染料右键 | 染成该染料色；消耗 1 个（创造模式不消耗）；播 `item.dye.use` + 动作栏「尾迹已染色：X」 |
+| 同色重复右键 | 返回 SUCCESS 但**不消耗染料**（`setTrailDye` 返回 false） |
+| 潜行 + 空手右键 | 清除染色（回到默认色）+ 动作栏提示 |
+| 手持非染料右键 | `PASS_TO_DEFAULT_BLOCK_INTERACTION`（不干预别的交互） |
+
+### 10.4 goggle tooltip
+
+```
+    定向喷管
+     尾迹染色 红色 #B02E26
+      手持染料右键染色 · 潜行空手右键清除
+```
+
+- 染料名取 `DyeItem.byColor(color).getDescriptionId()`（走原版 `item.minecraft.*_dye` 的语言文件，不额外加 16 条 lang）。
+- 颜色**按染料色上色**：深色染料（黑 `0x1D1D21`、棕、灰）在深色 tooltip 背景上几乎看不见 ⇒
+  `readableRgb()` 把最大通道抬到 ≥ `0x90`（只提亮度、保持色相）。
+
+### 10.5 踩过/注意的点
+
+1. **`getUpdatePacket()` 默认返回 `null`**，只写 `getUpdateTag` 不够 —— 客户端拿不到即时更新，
+   tooltip 与粒子颜色会停在旧值（同 `QuickFillFluidTankBlockEntity` 里的注释）。三个方法都要 override。
+2. **颜色必须走粒子数据**（`ContrailParticleData` 的 `r/g/b`），不能是静态常量：
+   粒子类型全局共享、`ParticleEngine` 按 `options.getType()` 找 provider，颜色只能随数据下发。
+3. 判定与消耗都在**服务端**；客户端只吃 `SUCCESS` 拿手感，避免两端各算一遍导致消耗不一致。
+4. **不做的**：不支持任意 RGB（只有 16 种染料色）、染色不影响推力/排气粒子、不改变 alpha 与尺寸曲线。
+
+### 10.6 进游戏验证清单
+
+1. 手持红染料右键喷管 ⇒ 尾迹变红、有染色音效、动作栏提示；**喷口那团排气仍是原色**（本次只管尾迹）。
+2. 戴 Create 护目镜看喷管 ⇒ tooltip 出现「尾迹染色 红色 #B02E26」。
+3. **重进世界 / 走远让区块卸载再回来** ⇒ 颜色还在（NBT + 区块加载同步）。
+4. 双人/双客户端 ⇒ 另一侧看到的颜色一致（`sendBlockUpdated` 同步）。
+5. 潜行空手右键 ⇒ 清除，恢复默认白色，tooltip 显示「默认（未染色）」。
+6. 同色连续右键 ⇒ 染料数量不变。
+7. 手持黑染料 ⇒ tooltip 文字仍看得清（`readableRgb` 提亮），尾迹本身是深灰黑。
+
 
 
 
