@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.client.particle;
 
+import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.block.ThrustNozzleBlockEntity;
 import com.zzy205.myfirstmod.particle.ContrailBudget;
 import com.zzy205.myfirstmod.particle.ContrailParticleData;
@@ -26,11 +27,12 @@ import org.jetbrains.annotations.Nullable;
  * </ul>
  * 形状与透明度<b>成对</b>演变（质量守恒，现实里"前段细亮、后段宽淡"就是这个）：
  * <pre>
- * 宽度 spread(t) = sqrt(1 + age / TRAIL_WIDTH_TAU)        // 湍流扩散的 sqrt(t) 律
+ * 宽度 spread(t) = sqrt(1 + age / widthTau)              // 湍流扩散的 sqrt(t) 律
  * quadSize       = baseWidth × spread(t)
- * alpha          = TRAIL_ALPHA0 / spread(t)              // 摊开多少倍就淡多少倍
+ * alpha          = alpha0 / spread(t)                    // 摊开多少倍就淡多少倍
  * </pre>
- * 两条曲线都读 {@code ThrustNozzleBlockEntity} 上的 {@code TRAIL_*} 常量，改那边即可热重载看效果。
+ * {@code widthTau} / {@code alpha0} 来自客户端配置（{@code contrailWidthTau} / {@code contrailAlpha}），
+ * 在<b>构造时读一次缓存进实例字段</b>：这个 tick 每颗粒子每 tick 都要跑，不能每 tick 去查配置。
  * <p>
  * 渲染：继承 {@link SimpleAnimatedParticle} 顺带拿到 {@code PARTICLE_SHEET_TRANSLUCENT} 与
  * 全亮 {@code getLightColor}（{@code 15728880} = 天空 15 + 方块 15）—— 高空本来就没光，
@@ -53,12 +55,20 @@ public class ContrailParticle extends SimpleAnimatedParticle {
     /** 基准宽度（格，quad 的<b>半</b>边长）；之后随 age 按 sqrt(t) 扩散变宽 */
     private final float baseWidth;
 
+    /** 出生不透明度上限（配置 {@code contrailAlpha}，构造时缓存） */
+    private final float alpha0;
+
+    /** 扩散时间常数（配置 {@code contrailWidthTau}，构造时缓存；越大散得越慢） */
+    private final int widthTau;
+
     protected ContrailParticle(final ClientLevel level, final double x, final double y, final double z,
                                final double xd, final double yd, final double zd,
                                final ContrailParticleData data, final SpriteSet sprites) {
         super(level, x, y, z, sprites, 0.0F);
 
         this.baseWidth = Math.max(0.02F, data.width());
+        this.alpha0 = Config.CONTRAIL_ALPHA.get().floatValue();
+        this.widthTau = Math.max(1, Config.CONTRAIL_WIDTH_TAU.get());
         ContrailBudget.onSpawn();
 
         // 恒定速度：喷管按「总飘荡距离 ÷ 寿命」算好，方向随机。之后永远不改（匀速直线）。
@@ -112,8 +122,7 @@ public class ContrailParticle extends SimpleAnimatedParticle {
         final float life = this.age / (float) this.lifetime;
 
         // 扩散：sqrt(t) 律（湍流扩散的标准形式）
-        final float spread = Mth.sqrt(1.0F
-                + this.age / (float) Math.max(1, ThrustNozzleBlockEntity.TRAIL_WIDTH_TAU));
+        final float spread = Mth.sqrt(1.0F + this.age / (float) this.widthTau);
 
         // 尺寸与透明度成对：摊开多少倍就淡多少倍，再叠上淡入/淡出
         this.quadSize = this.baseWidth * spread;
@@ -121,7 +130,7 @@ public class ContrailParticle extends SimpleAnimatedParticle {
         // 淡入按【tick】而不是寿命比例（长寿命时按比例会让尾迹"等半天才出现"）
         final float fadeIn = smoothstep(0.0F, 1.0F, this.age / (float) FADE_IN_TICKS);
 
-        this.alpha = ThrustNozzleBlockEntity.TRAIL_ALPHA0 / spread
+        this.alpha = this.alpha0 / spread
                 * fadeIn
                 * (1.0F - smoothstep(FADE_OUT_START, 1.0F, life));
 

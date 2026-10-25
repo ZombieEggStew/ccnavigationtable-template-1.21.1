@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.block;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
 import com.simibubi.create.foundation.particle.AirParticleData;
+import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.particle.ContrailBudget;
 import com.zzy205.myfirstmod.particle.ContrailParticleData;
 import com.zzy205.myfirstmod.particle.ExhaustParticleData;
@@ -140,7 +141,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * 原版电扇自身只有 {@code AllConfigs.client().fanParticleDensity}（默认 0.5/tick）的密度；
      * 嫌密/稀就改这一个数（同屏粒子数 ≈ 本值 × 寿命，见下面 {@link #PARTICLE_SPEED}）。
      */
-    public static final int MAX_PARTICLES_PER_TICK = 10;
+    private static int exhaustParticlesPerTick() {
+        return Config.EXHAUST_PARTICLES_PER_TICK.get();
+    }
 
     /**
      * {@link AirParticleData} 的参数。源码事实
@@ -183,13 +186,19 @@ public class ThrustNozzleBlockEntity extends BlockEntity
     public static final boolean USE_EXHAUST_PARTICLE = true;
 
     /** 出生尺寸（块，即四边形边长），寿命内会膨胀到约 1.37 倍。2.0 太大（实测反馈），已降到 0.6 */
-    public static final float EXHAUST_SCALE = 0.3F;
+    private static float exhaustScale() {
+        return Config.EXHAUST_SCALE.get().floatValue();
+    }
 
     /** 基准寿命（tick），实际探测时再加 0~9 的随机 */
-    public static final int EXHAUST_LIFETIME = 16;
+    private static int exhaustLifetime() {
+        return Config.EXHAUST_LIFETIME.get();
+    }
 
     /** 出生速度（块/tick，沿排气方向）；之后按水平 0.935 / 垂直 0.965 阻尼衰减 */
-    public static final double EXHAUST_SPEED = 2.0D;
+    private static double exhaustSpeed() {
+        return Config.EXHAUST_SPEED.get();
+    }
 
     /** 出生速度的随机倍率区间（让排气有快慢差，不像整齐的一束） */
     public static final double EXHAUST_SPEED_RANDOM_MIN = 0.85D;
@@ -245,7 +254,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * （{@code new ParticleType<>(true, ...)}），那样连裸 {@code addParticle} 都不会被丢；
      * 现在选在调用点显式传 {@code ignoreRange}，语义更局部。
      */
-    public static final double MAX_EXHAUST_DISTANCE = 64.0D;
+    private static double exhaustMaxDistance() {
+        return Config.EXHAUST_MAX_DISTANCE.get();
+    }
 
     // ── 高空尾迹（contrail）：只在足够冷的空气里出现，由"移动距离"而不是时间触发 ──
 
@@ -261,7 +272,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * <li>尺寸与透明度<b>必须成对</b>算（{@code alpha ∝ 1/宽度}），否则"散开"和"变淡"会互相打架。</li>
      * </ul>
      */
-    public static final boolean USE_CONTRAIL = true;
+    private static boolean useContrail() {
+        return Config.CONTRAIL_ENABLED.get();
+    }
 
     /**
      * 只在主世界出尾迹（<b>现行 true</b>，用户定稿）。
@@ -323,14 +336,16 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * 悬停不动的飞机不会在原地堆出一团云。按距离发射顺带解决性能问题（静止时零发射），
      * 也是用户定稿（悬停完全不出尾迹）。
      * <p>
-     * 温度不够冷时间距被放大：{@code 实际间距 = TRAIL_SPACING / max(s, TRAIL_SPACING_S_FLOOR)}。
+     * 温度不够冷时间距被放大：{@code 实际间距 = trailSpacing() / max(s, TRAIL_SPACING_S_FLOOR)}。
      */
-    public static final double TRAIL_SPACING = 1.2D;
+    private static double trailSpacing() {
+        return Config.CONTRAIL_SPACING.get();
+    }
 
     /**
      * 计算间距时给适宜度 s 的<b>下限</b>（现 0.35）。
      * <p>
-     * 原来的公式是 {@code TRAIL_SPACING / s}：Y≈200 处 s≈0.1 ⇒ <b>12 格才吐一颗</b>，
+     * 原来的公式是 {@code trailSpacing() / s}：Y≈200 处 s≈0.1 ⇒ <b>12 格才吐一颗</b>，
      * 视觉上就是"断断续续、分布很散"。但"不够冷"本来就该靠<b>寿命/透明度</b>体现，
      * 不该靠抽走粒子（粒子少了只会看起来断线，而不是变淡）。
      * 加下限后密度最多稀到 1/0.35 ≈ 2.9 倍（间距 ≤ 3.4 格），强度差异交给寿命。
@@ -345,33 +360,30 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * 所以"越冷越耐久"这条曲线形状不变，只是整体缩到 1 分钟量级。
      * <p>
      * 注意这是<b>性能主旋钮</b>：同屏粒子数 ≈ 发射密度 × 寿命。1200 tick、4 管满载、20 m/s 时约 4000 颗，
-     * 已经在 {@link #MAX_LIVE_CONTRAIL}=6000 的范围内，但再往上调寿命就会撞上限。
+     * 已经在 {@link #contrailMaxLive()}=6000 的范围内，但再往上调寿命就会撞上限。
      */
-    public static final int TRAIL_LIFE_MIN = 360;
-    public static final int TRAIL_LIFE_MAX = 1200;
+    private static int trailLifeMin() {
+        return Config.CONTRAIL_LIFE_MIN.get();
+    }
+
+    private static int trailLifeMax() {
+        return Config.CONTRAIL_LIFE_MAX.get();
+    }
 
     /**
      * 出生宽度（格，quad 的<b>半</b>边长；可见宽度约为 2 倍），之后按 sqrt(t) 扩散变宽。
      * <p>
      * 用户实测反馈「粒子需要放大一些」⇒ 0.6 → <b>1.0</b>（出生可见宽约 2 格、寿命末尾约 4 格）。
      */
-    public static final float TRAIL_WIDTH0 = 1.0F;
+    private static float trailWidth() {
+        return Config.CONTRAIL_WIDTH.get().floatValue();
+    }
 
-    /**
-     * 扩散的时间常数（tick）：{@code 宽度 = TRAIL_WIDTH0 · sqrt(1 + age/本值)}。
-     * <p>
-     * 经验规则：<b>TAU ≈ 寿命 / 4</b>（这样寿命中点约 1.58 倍宽、末尾约 2.24 倍宽）。
-     * 现寿命 360~1200 ⇒ 取 <b>300</b>。寿命改了记得一起改这里，否则要么几乎不扩散、
-     * 要么中段就摊得看不见。越大散得越慢。
-     */
-    public static final int TRAIL_WIDTH_TAU = 300;
+    // 扩散时间常数 TRAIL_WIDTH_TAU 与出生不透明度 TRAIL_ALPHA0 现在是配置项
+    // （contrailWidthTau / contrailAlpha），只在 client.particle.ContrailParticle 里用到，
+    // 那里在粒子构造时读一次缓存进实例字段（避免每颗每 tick 都查配置）。
 
-    /**
-     * 出生不透明度上限（仍比排气的 {@code ALPHA_MAX = 0.62} 淡）：
-     * 实际透明度 = {@code TRAIL_ALPHA0 / 扩散倍数} ⇒ 出生 0.28、寿命末尾约 0.14，再叠淡入淡出。
-     * 用户反馈尾迹太淡看不清 ⇒ 0.14 → <b>0.28</b>（配合染色与放大）。嫌浓就往下调。
-     */
-    public static final float TRAIL_ALPHA0 = 0.6F;
+
 
     /**
      * 单颗粒子的<b>总飘荡距离</b>基准（格）：粒子从出生到死亡，一共会离开出生点这么远。
@@ -387,7 +399,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * 老模型（随机游走 + 抖动 + 边界钳位）已经删掉：它的位移量只能靠调参间接控制，
      * 而且寿命一长就会失控（用户实测"分布很散"）。
      */
-    public static final double TRAIL_DRIFT_DISTANCE = 4.0D;
+    private static double trailDriftDistance() {
+        return Config.CONTRAIL_DRIFT_DISTANCE.get();
+    }
 
     /** 每颗粒子飘荡距离的随机倍率区间（让尾迹有厚有薄，不是一个厚度均匀的管） */
     public static final double TRAIL_DRIFT_DISTANCE_MIN = 0.55D;
@@ -420,11 +434,15 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      */
     public static final double TRAIL_START_OFFSET = 3.0D;
 
-    /** 尾迹发射距离上限（格，0 = 不限）：比排气的 {@link #MAX_EXHAUST_DISTANCE}=64 更大，尾迹本来就要远处可见 */
-    public static final double MAX_CONTRAL_DISTANCE = 96.0D;
+    /** 尾迹发射距离上限（格，0 = 不限）：比排气的 {@link #exhaustMaxDistance()}=64 更大，尾迹本来就要远处可见 */
+    private static double contrailMaxDistance() {
+        return Config.CONTRAIL_MAX_DISTANCE.get();
+    }
 
     /** 每 tick 最多补发几颗尾迹粒子（防止低帧率/瞬移时一帧吐一堆） */
-    public static final int MAX_CONTRAL_PER_TICK = 6;
+    private static int contrailMaxPerTick() {
+        return Config.CONTRAIL_MAX_PER_TICK.get();
+    }
 
     /**
      * 尾迹粒子的<b>存活总数上限</b>（安全阀，现 6000；0 = 不限）。
@@ -434,7 +452,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * 等旧粒子自然死亡腾出配额（表现为"尾迹长度到上限就不再延长"，而不是掉帧）。
      * 计数见 {@link com.zzy205.myfirstmod.particle.ContrailBudget}。
      */
-    public static final int MAX_LIVE_CONTRAIL = 6000;
+    private static int contrailMaxLive() {
+        return Config.CONTRAIL_MAX_LIVE.get();
+    }
 
     /** 单 tick 位移超过它就当作"瞬移"（装配/传送/客户端刚加载），本 tick 不发射，避免拖出一条长直的假尾迹 */
     public static final double TRAIL_MAX_TICK_MOVE = 4.0D;
@@ -478,7 +498,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
     /** 上一 tick 喷口的世界坐标；{@code null} = 还没锚定（刚加载/风扇刚启动），那一 tick 只记录不发射 */
     private @Nullable Vec3 contrailAnchorWorld;
 
-    /** 自上次发射以来累积的位移（格）：够了才吐一颗（见 {@link #TRAIL_SPACING}） */
+    /** 自上次发射以来累积的位移（格）：够了才吐一颗（见 {@link #trailSpacing()}） */
     private double contrailAccum;
 
     /**
@@ -757,7 +777,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
 
         // 密度随转速线性变化；不足一颗就不生成
         final float throttle = Math.min(Math.abs(speed) / 256.0F, 1.0F);
-        final int count = (int) Math.round(MAX_PARTICLES_PER_TICK * throttle);
+        final int count = (int) Math.round(exhaustParticlesPerTick() * throttle);
 
         if (count <= 0) {
             return;
@@ -768,8 +788,8 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         final Vec3 v = axis.cross(seedVec).normalize();
         final Vec3 u = v.cross(axis).normalize();
 
-        // 距离上限（见 MAX_EXHAUST_DISTANCE）：太远就整段不生成，省下每颗每 tick 的扫掠碰撞
-        if (!this.withinParticleDistance(level, own, mouth, MAX_EXHAUST_DISTANCE)) {
+        // 距离上限（见 exhaustMaxDistance()）：太远就整段不生成，省下每颗每 tick 的扫掠碰撞
+        if (!this.withinParticleDistance(level, own, mouth, exhaustMaxDistance())) {
             return;
         }
 
@@ -815,7 +835,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
             } else {
                 // 必须用 9 参数的 addAlwaysVisibleParticle(..., ignoreRange = true)：
                 // 7 参数那个重载的第二个布尔是 decreased 而不是 force（ClientLevel.java:733），
-                // 照样会被原版 32 格限制丢掉。见 MAX_EXHAUST_DISTANCE 的注释。
+                // 照样会被原版 32 格限制丢掉。见 exhaustMaxDistance() 的注释。
                 level.addAlwaysVisibleParticle(new AirParticleData(PARTICLE_DRAG, PARTICLE_SPEED), true,
                         startWorld.x, startWorld.y, startWorld.z,
                         flowWorld.x, flowWorld.y, flowWorld.z);
@@ -831,8 +851,8 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * <li>把喷口中心投到<b>世界系</b>，与上一 tick 的锚点相减得到本 tick 的真实位移
      *     （不用物理体速度 API：客户端 BE 只认世界坐标，且这样对"没装 Sable 速度"的情况也成立）；</li>
      * <li>用世界高度算<b>尾迹适宜度</b> s（{@link #contrailSuitability}）：s=0 直接不出，
-     *     s 同时决定"发射多稀"（间距 ÷s）与"活多久"（{@link #TRAIL_LIFE_MIN}~{@link #TRAIL_LIFE_MAX}）；</li>
-     * <li>累积位移够了就吐一颗，单 tick 最多 {@link #MAX_CONTRAL_PER_TICK} 颗。</li>
+     *     s 同时决定"发射多稀"（间距 ÷s）与"活多久"（{@link #trailLifeMin()}~{@link #trailLifeMax()}）；</li>
+     * <li>累积位移够了就吐一颗，单 tick 最多 {@link #contrailMaxPerTick()} 颗。</li>
      * </ol>
      * 与排气粒子<b>完全独立</b>：不查遮挡射线（尾迹在 3 格外才生成，且用户要的是"高空一条云带"），
      * 也不做扫掠碰撞（那是冰晶而不是烟，见 {@code ContrailParticle}）。
@@ -847,7 +867,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      */
     private void tickContrail(final Level level, final @Nullable SubLevel own,
                               final Vec3 mouth, final Vec3 flowDir) {
-        if (!USE_CONTRAIL) {
+        if (!useContrail()) {
             return;
         }
 
@@ -887,24 +907,24 @@ public class ThrustNozzleBlockEntity extends BlockEntity
             return;
         }
 
-        if (!this.withinParticleDistance(level, own, mouth, MAX_CONTRAL_DISTANCE)) {
+        if (!this.withinParticleDistance(level, own, mouth, contrailMaxDistance())) {
             return; // 太远只累积不发射；下面的钳位保证不会攒出一大串
         }
 
         // 存活上限（安全阀）：粒子数 = 密度 × 寿命，长寿命必须有个总数兜底，否则半透明 quad 会堆爆
-        if (MAX_LIVE_CONTRAIL > 0 && ContrailBudget.live() >= MAX_LIVE_CONTRAIL) {
+        if (contrailMaxLive() > 0 && ContrailBudget.live() >= contrailMaxLive()) {
             return;
         }
 
         // 温度不够冷 ⇒ 间距被放大（尾迹更稀），但有下限：s 太小只是"该淡、该短命"，
         // 不能靠抽走粒子来表达，否则中低空看起来就是"断断续续、分布很散"
         final double spacing = Math.max(0.01D,
-                TRAIL_SPACING / Math.max(s, Math.max(TRAIL_SPACING_S_FLOOR, 1.0E-4F)));
+                trailSpacing() / Math.max(s, Math.max(TRAIL_SPACING_S_FLOOR, 1.0E-4F)));
         final Vec3 dir = flowWorld.normalize();
         final RandomSource random = level.random;
         int emitted = 0;
 
-        while (this.contrailAccum >= spacing && emitted < MAX_CONTRAL_PER_TICK) {
+        while (this.contrailAccum >= spacing && emitted < contrailMaxPerTick()) {
             this.contrailAccum -= spacing;
             emitted++;
             this.spawnContrail(level, random, mouthWorld, dir, s);
@@ -929,14 +949,14 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         final Vec3 seedVec = Math.abs(dir.y) > 0.9D ? new Vec3(1.0D, 0.0D, 0.0D) : new Vec3(0.0D, 1.0D, 0.0D);
         final Vec3 sideX = dir.cross(seedVec).normalize();
         final Vec3 sideY = sideX.cross(dir).normalize();
-        final double lateral = TRAIL_WIDTH0 * 0.35D;
+        final double lateral = trailWidth() * 0.35D;
         final Vec3 start = mouthWorld
                 .add(dir.scale(TRAIL_START_OFFSET))
                 .add(sideX.scale((random.nextDouble() - 0.5D) * 2.0D * lateral))
                 .add(sideY.scale((random.nextDouble() - 0.5D) * 2.0D * lateral));
 
         // 寿命随适宜度线性增长（越冷越耐久），再叠 ±15% 随机，避免整条尾迹同生共死
-        final int baseLife = Math.round(TRAIL_LIFE_MIN + (TRAIL_LIFE_MAX - TRAIL_LIFE_MIN) * s);
+        final int baseLife = Math.round(trailLifeMin() + (trailLifeMax() - trailLifeMin()) * s);
         final int lifetime = Math.max(8, (int) (baseLife * (0.85D + random.nextDouble() * 0.3D)));
 
         // 飘荡：先定"一生总共飘多远"，再由速度 = 距离 / 寿命 反算出一个恒定速度，
@@ -945,7 +965,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         //   · 再乘高度湍流系数 ⇒ 云层以下越低越散（见 TRAIL_TURB_LOW_GAIN）
         final double spread = TRAIL_DRIFT_DISTANCE_MIN
                 + random.nextDouble() * (TRAIL_DRIFT_DISTANCE_MAX - TRAIL_DRIFT_DISTANCE_MIN);
-        final double driftDistance = TRAIL_DRIFT_DISTANCE * spread * trailTurbulence(mouthWorld.y);
+        final double driftDistance = trailDriftDistance() * spread * trailTurbulence(mouthWorld.y);
         final double speed = driftDistance / lifetime; // 块/tick
 
         final double cosTheta = random.nextDouble() * 2.0D - 1.0D;
@@ -955,12 +975,12 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         final double vy = cosTheta * speed;
         final double vz = ring * Math.sin(phi) * speed;
 
-        final float width = TRAIL_WIDTH0 * (0.75F + random.nextFloat() * 0.5F);
+        final float width = trailWidth() * (0.75F + random.nextFloat() * 0.5F);
         // 染色：未染色时 trailRgb() 返回 TRAIL_RED/GREEN/BLUE 打包的默认色
         final int rgb = this.trailRgb();
 
         // 9 参数 overload（ignoreRange = true）：7 参数那个的第二个布尔是 decreased 不是 force，
-        // 照样被原版 32 格限制丢掉 —— 见 MAX_EXHAUST_DISTANCE 的注释与 memo §3.7。
+        // 照样被原版 32 格限制丢掉 —— 见 exhaustMaxDistance() 的注释与 memo §3.7。
         level.addAlwaysVisibleParticle(
                 new ContrailParticleData(width, lifetime,
                         dyeChannel(rgb, 16), dyeChannel(rgb, 8), dyeChannel(rgb, 0)),
@@ -1038,7 +1058,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
     /**
      * 生成一颗排气粒子（{@code ccpe:exhaust}）。
      * <p>
-     * 速度模型：轴向 = {@link #EXHAUST_SPEED} × 随机倍率 × 油门（转速 / 256），横向再加一点随机散开，
+     * 速度模型：轴向 = {@link #exhaustSpeed()} × 随机倍率 × 油门（转速 / 256），横向再加一点随机散开，
      * 之后由粒子自己每 tick 积分、阻尼衰减、并在撞到方块时"沿表面铺开 + 随机溅射"。
      * 粒子本身<b>不做</b>“起点→终点插值”，所以喷出去之后与喷管彻底解耦；
      * 也<b>不受重力</b>（{@code ExhaustParticle} 里 {@code gravity = 0}、没有任何向下加速度，
@@ -1066,11 +1086,11 @@ public class ThrustNozzleBlockEntity extends BlockEntity
 
         final double speedRandom = EXHAUST_SPEED_RANDOM_MIN
                 + random.nextDouble() * (EXHAUST_SPEED_RANDOM_MAX - EXHAUST_SPEED_RANDOM_MIN);
-        final double speed = EXHAUST_SPEED * speedRandom * (0.65D + 0.35D * throttle);
+        final double speed = exhaustSpeed() * speedRandom * (0.65D + 0.35D * throttle);
         final Vec3 velocity = direction.scale(speed).add(lateral);
 
-        final float scale = EXHAUST_SCALE * (0.70F + random.nextFloat() * 0.60F);
-        final int lifetime = EXHAUST_LIFETIME + random.nextInt(10);
+        final float scale = exhaustScale() * (0.70F + random.nextFloat() * 0.60F);
+        final int lifetime = exhaustLifetime() + random.nextInt(10);
 
         // 最后一个 0 = 分裂代数：喷管直喷的是第 0 代，撞地分裂出来的子粒子是第 1 代（见 ExhaustParticle）
         //
@@ -1094,7 +1114,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
 
     /**
      * 喷口是否在"值得生成粒子"的距离内（{@code maxDistance} 由调用方给：排气用
-     * {@link #MAX_EXHAUST_DISTANCE}=64，尾迹用 {@link #MAX_CONTRAL_DISTANCE}=96；0 = 不限）。
+     * {@link #exhaustMaxDistance()}=64，尾迹用 {@link #contrailMaxDistance()}=96；0 = 不限）。
      * <p>
      * 用最近玩家的世界坐标算，而不是相机的：相机位置属于纯客户端类（{@code Minecraft}），
      * 这里刻意不引用，保持 {@code tickClient()} 只依赖 {@code Level}。

@@ -512,6 +512,7 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 | 21 | 要粒子**随时间越来越散** | 扩散半径从常数改 `R0 + RATE·√age`（软边界 + 6 格封顶）；边界内朝外速度按 `(dist/半径)²` 衰减（§9.9） | 编译通过，待进游戏确认 |
 | 22 | 改成「初速 = 飘荡距离 ÷ 寿命」，且飘荡距离随高度变化（云层×1、越低越散） | 删除随机游走/抖动/浮点边界；`spawnContrail` 反算恒定速度，新增 `trailTurbulence()`（200→1.0，160→2.5）与 `TRAIL_DRIFT_DISTANCE=2.0`（§9.10） | 编译通过，待进游戏确认 |
 | 23 | 想手感染料给**尾迹**染色 + 护目镜显示 | `useItemOn`/`useWithoutItem` 染料交互、BE 存 `trailDye`（NBT + `getUpdateTag/handleUpdateTag/getUpdatePacket` 同步）、`IHaveGoggleInformation` tooltip，颜色走进 `ContrailParticleData`（§10） | 编译通过，待进游戏确认 |
+| 24 | 性能参数要能配置调 | 16 个性能参数搬进 `ccpe-client.toml`（`Config` CLIENT 段）；BE 的常量换成 `Config.XXX.get()` 访问器（现查现用，改完即时生效），粒子里每 tick 用到的 alpha/tau 在构造时缓存（§11） | 编译通过，待进游戏确认 |
 
 ## 8. 下一步：高空尾迹（contrail）实现计划
 
@@ -968,6 +969,55 @@ s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶�
 5. 潜行空手右键 ⇒ 清除，恢复默认白色，tooltip 显示「默认（未染色）」。
 6. 同色连续右键 ⇒ 染料数量不变。
 7. 手持黑染料 ⇒ tooltip 文字仍看得清（`readableRgb` 提亮），尾迹本身是深灰黑。
+## 11. 性能参数改为配置文件可调（2026-08，用户要求）
+
+需求：把「粒子留存时间、每 tick 数量」这类**性能相关大参数**从代码里的 `public static final` 常量改成配置项。
+落地位置：`Config.java` 的 **CLIENT** 段（`ccpe-client.toml`）—— 这些粒子只在客户端生成/推进。
+
+### 11.1 新增配置项（16 项，默认值 = 用户当前实测值）
+
+| 配置键 | 默认 | 作用 |
+|---|---|---|
+| `contrailEnabled` | true | 尾迹总开关 |
+| `contrailLifeMin` / `contrailLifeMax` | 360 / 1200 | **留存量主旋钮**：寿命 18~60 s（越冷越接近上限） |
+| `contrailSpacing` | 1.2 格 | **密度主旋钮**：每飞这么远吐一颗 |
+| `contrailMaxPerTick` | 6 | 单 tick 补发上限（防瞬移/低帧率吐一长串） |
+| `contrailMaxLive` | 6000 | **硬安全阀**：存活粒子总数上限（0 = 不限） |
+| `contrailMaxDistance` | 96 格 | 发射距离上限 |
+| `contrailWidth` | 1.0 格 | 出生宽度（填充率开销） |
+| `contrailWidthTau` | 300 tick | 扩散时间常数（经验值 ≈ 寿命/4） |
+| `contrailAlpha` | 0.6 | 出生不透明度上限 |
+| `contrailDriftDistance` | 4.0 格 | 单颗一生飘荡距离（速度 = 距离 ÷ 寿命） |
+| `exhaustParticlesPerTick` | 10 | **排气密度主旋钮**（满 256 RPM 时） |
+| `exhaustLifetime` | 16 tick | 排气寿命（+0~9 随机） |
+| `exhaustScale` | 0.3 格 | 排气尺寸 |
+| `exhaustSpeed` | 2.0 格/tick | 排气初速 |
+| `exhaustMaxDistance` | 64 格 | 排气发射距离上限 |
+
+### 11.2 实现方式（为什么是访问器而不是缓存字段）
+
+- `ThrustNozzleBlockEntity` 里原有 14 个常量 → 换成 `private static xxx()` **访问器**，函数体是
+  `Config.XXX.get()`。调用点全部改成 `xxx()`（编译器逐个校验，漏一个都编不过）。
+  **每次使用都现查配置** ⇒ 改完配置立刻生效，不需要重启；不存在"启动时缓存导致改了没反应"的老坑。
+- `ContrailParticle` 用的 `contrailAlpha` / `contrailWidthTau` 是**每颗粒子每 tick** 都要读的两个值：
+  在**构造时读一次**缓存进实例字段（`alpha0` / `widthTau`），避免 6000 颗 × 每 tick 查配置。
+  副作用：改这两个值只影响**之后新生成**的粒子，老粒子保持旧值 —— 对视觉类参数是合理行为。
+- lang：每个配置项两条 key —— `ccpe.configuration.<路径>`（标题）+ `.tooltip`（说明），中英各 32 条。
+
+### 11.3 仍然是代码常量的（有意保留）
+
+这些不是性能旋钮，而是**物理/曲线定义**，改动属于改设计而非调性能，所以留在代码里（要的话可以再往配置搬）：
+`TRAIL_Y_MIN`(160 硬门)、`TRAIL_T_START/FULL/FADE_*`（峰值曲线节点）、`TRAIL_S_CEILING`、`TRAIL_TURB_CLOUD_Y` /
+`TRAIL_TURB_LOW_GAIN`、`CONTRAIL_OVERWORLD_ONLY`、`TRAIL_SPACING_S_FLOOR`、`TRAIL_DRIFT_DISTANCE_MIN/MAX`、
+`TRAIL_START_OFFSET`、`TRAIL_MAX_TICK_MOVE`、`TRAIL_RED/GREEN/BLUE` 与 `TRAIL_DYE_BRIGHTNESS`、
+`EXHAUST_SPREAD/SPEED_RANDOM_*/RED/GREEN/BLUE`、`PARTICLES_BLOCKED_BY_OTHER_BODIES`。
+
+### 11.4 验证
+
+- `gradlew classes` 通过；`zh_cn.json` / `en_us.json` 均为合法 JSON（各 289 键，粒子配置 32 条）。
+- 进游戏看：Mods → CC Peripheral Extender → Config → 客户端分类，应能看到「尾迹 / 排气」两段共 16 项。
+  也可以直接改 `config/ccpe-client.toml`，改完存档/重进即时生效（大部分项下一次发射就生效）。
+
 
 
 
