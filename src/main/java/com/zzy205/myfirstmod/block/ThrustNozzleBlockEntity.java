@@ -19,6 +19,7 @@ import net.minecraft.core.Vec3i;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -199,6 +200,36 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
     /** 纯视觉：排气方向与"机体受力反方向"不符时翻这里（不影响物理） */
     public static final boolean INVERT_PARTICLE_FLOW = false;
 
+    /**
+     * 粒子生成的额外距离上限（格，0 = 不限）。
+     * <p>
+     * <b>为什么需要它</b>：原版 {@code LevelRenderer#addParticleInternal} 里有一条硬判定 ——
+     * 出生点离<b>相机</b>超过 1024（= 32 格，{@code distanceToSqr > 1024.0}）就<b>直接不创建粒子</b>
+     * （{@code neoforge-21.1.235-sources.jar} / {@code LevelRenderer.java:2714-2717}），
+     * 只有 {@code force = true} 能绕过。
+     * <p>
+     * 这就是"离喷管约 1 区块就不再出粒子"的根因：不是我们没生成，是<b>原版把粒子丢了</b>。
+     * 证据：① Sable 的 {@code mixin/particle/LevelRendererMixin} 正是 {@code @Redirect} 了
+     * {@code addParticleInternal} 里那个 {@code Vec3.distanceToSqr}，把它换成考虑子次元的版本；
+     * ② Create 自己的电扇也这样 —— {@code AirCurrent.java:69} 与 {@code AirFlowParticle.java:149}
+     * 用的都是裸 {@code addParticle}，所以 {@code create:encased_fan} 有一模一样的现象。
+     * <p>
+     * 修法：改用<b>9 参数</b>的 {@code addAlwaysVisibleParticle(data, ignoreRange = true, ...)}
+     * 绕过原版 32 格限制，再由本常量给一个更远、但仍有上限的可见距离
+     * （避免在看不见的远处白喷：每颗粒子每 tick 都要做一次扫掠碰撞）。
+     * <p>
+     * <b>踩过的坑</b>：7 参数的 {@code addAlwaysVisibleParticle(data, x, y, z, vx, vy, vz)}
+     * <b>不绕过</b>限制 —— {@code ClientLevel.java:733-737} 里它传的是
+     * {@code addParticle(data, false, true, ...)}，第二个布尔是 {@code decreased}（粒子设置调低时减量），
+     * 不是 {@code force}。只有 {@code ClientLevel.java:739-754} 的 9 参数版传
+     * {@code data.getType().getOverrideLimiter() || ignoreRange}。
+     * <p>
+     * 等价路线：把 {@code ParticleType} 注册成 {@code overrideLimiter = true}
+     * （{@code new ParticleType<>(true, ...)}），那样连裸 {@code addParticle} 都不会被丢；
+     * 现在选在调用点显式传 {@code ignoreRange}，语义更局部。
+     */
+    public static final double MAX_EXHAUST_DISTANCE = 64.0D;
+
     /** Sable 力组注册表 key（{@code sable:force_groups}）。不直接引用 {@code ForceGroups}：其静态字段
      *  类型引用 veil 的 {@code RegistryObject}，veil 不在编译 classpath（同 {@code FlightDataRecorder}）。 */
     private static final ResourceKey<Registry<ForceGroup>> FORCE_GROUP_REGISTRY =
@@ -335,6 +366,11 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
         // 本方块所在物理体：粒子坐标必须用它的姿态从 plot 局部系投到世界系（见下方 projectToWorld）
         final SubLevel own = Sable.HELPER.getContaining(this);
 
+        // 距离上限（见 MAX_EXHAUST_DISTANCE）：太远就整段不生成，省下每颗每 tick 的扫掠碰撞
+        if (!this.withinParticleDistance(level, own, mouth)) {
+            return;
+        }
+
         // 与 create:encased_fan 一致：气流遇方块即止（自身物理体 + 其它物理体都算）。
         // 电扇那边是 AirCurrent.getFlowLimit() 把 maxDistance 截到第一个挡路方块的碰撞形状深度；
         // 这里等价地沿排气方向打一条碰撞射线，把粒子位移截断在命中点。
@@ -375,7 +411,10 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
             if (USE_EXHAUST_PARTICLE) {
                 this.spawnExhaust(level, random, own, startWorld, flowWorld, throttle);
             } else {
-                level.addParticle(new AirParticleData(PARTICLE_DRAG, PARTICLE_SPEED),
+                // 必须用 9 参数的 addAlwaysVisibleParticle(..., ignoreRange = true)：
+                // 7 参数那个重载的第二个布尔是 decreased 而不是 force（ClientLevel.java:733），
+                // 照样会被原版 32 格限制丢掉。见 MAX_EXHAUST_DISTANCE 的注释。
+                level.addAlwaysVisibleParticle(new AirParticleData(PARTICLE_DRAG, PARTICLE_SPEED), true,
                         startWorld.x, startWorld.y, startWorld.z,
                         flowWorld.x, flowWorld.y, flowWorld.z);
             }
@@ -420,10 +459,44 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
         final int lifetime = EXHAUST_LIFETIME + random.nextInt(10);
 
         // 最后一个 0 = 分裂代数：喷管直喷的是第 0 代，撞地分裂出来的子粒子是第 1 代（见 ExhaustParticle）
-        level.addParticle(new ExhaustParticleData(scale, lifetime, EXHAUST_RED, EXHAUST_GREEN, EXHAUST_BLUE,
+        //
+        // 必须用【9 参数】的 addAlwaysVisibleParticle(..., ignoreRange = true)，原因（MC 源码）：
+        //   LevelRenderer#addParticleInternal:
+        //       if (force) ...createParticle()
+        //       else if (camera.getPosition().distanceToSqr(x, y, z) > 1024.0) return null;   // 32 格硬墙
+        //   ClientLevel#addAlwaysVisibleParticle(7 参):  -> addParticle(data, false, true, ...)  // force = false！
+        //   ClientLevel#addAlwaysVisibleParticle(9 参):  -> addParticle(data, overrideLimiter || ignoreRange, true, ...)
+        // 也就是说 7 参数那个重载的第二个布尔其实是 decreased（粒子设置降到最低时减量），不是 force，
+        // 用了它照样会在 32 格外被静默丢弃。Create 的 AirCurrent/AirFlowParticle 用的是裸 addParticle，
+        // 所以 create:encased_fan 有一模一样的问题；Create 里想远处可见的粒子都用 9 参数版
+        // （例：Create-mc1.21.1-dev/.../LitBlazeBurnerBlock.java:94）。
+        level.addAlwaysVisibleParticle(new ExhaustParticleData(scale, lifetime,
+                        EXHAUST_RED, EXHAUST_GREEN, EXHAUST_BLUE,
                         own == null ? ExhaustParticleData.NO_OWNER : own.getUniqueId(), 0),
+                true,
                 startWorld.x, startWorld.y, startWorld.z,
                 velocity.x, velocity.y, velocity.z);
+    }
+
+    /**
+     * 喷口是否在"值得生成粒子"的距离内（见 {@link #MAX_EXHAUST_DISTANCE}，0 = 不限）。
+     * <p>
+     * 用最近玩家的世界坐标算，而不是相机的：相机位置属于纯客户端类（{@code Minecraft}），
+     * 这里刻意不引用，保持 {@code tickClient()} 只依赖 {@code Level}。
+     */
+    private boolean withinParticleDistance(final Level level, final @Nullable SubLevel own, final Vec3 mouth) {
+        if (MAX_EXHAUST_DISTANCE <= 0.0D) {
+            return true;
+        }
+
+        final Vec3 mouthWorld = this.projectToWorld(level, own, mouth);
+        double nearest = Double.MAX_VALUE;
+
+        for (final Player player : level.players()) {
+            nearest = Math.min(nearest, player.position().distanceTo(mouthWorld));
+        }
+
+        return nearest <= MAX_EXHAUST_DISTANCE || nearest == Double.MAX_VALUE;
     }
 
     /**

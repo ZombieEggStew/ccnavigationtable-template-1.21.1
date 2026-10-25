@@ -364,6 +364,69 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 **残留边界**：纯客户端计算，各客户端看到的撞墙点/散射方向各自独立（与原版粒子一样不同步）；
 要让所有人完全一致就得改成服务端 `sendParticles` 广播（参考实现是这么做的），当前不做。
 
+### 3.7 远距离看不见粒子（根因：原版 32 格硬限制，`addParticle` vs `addAlwaysVisibleParticle`）
+
+**现象**：离喷管约 1 区块就"完全不发射粒子"，出力完全正常；**`create:encased_fan` 有同样现象**；一直存在。
+
+**排查中已排除的（均有实测数据）**
+
+| 假设 | 结论 / 证据 |
+|---|---|
+| 客户端 BE ticker 停摆 | 否。36 格外的日志仍每秒打印 |
+| 客户端转速没同步 | 否。`speed=256` |
+| 遮挡射线把粒子截断 | 否。`clear=10.1`（打空） |
+| 投影退化到 plot 坐标 | 否。`mouthWorld=(-126.07, 93.89, 0.37)` 始终是世界坐标 |
+| 粒子根本没生成 | 否。自研粒子存活计数在 20~33 格处仍有 285~311 颗 |
+| 图形 mod 作怪 | 否。Sodium 0.8.12 不碰粒子；Iris 着色器关闭（`enableShaders=false`）；Sodium Extra 只有按类型开关 |
+
+**根因**（MC 源码，项目内就有：`build/moddev/artifacts/neoforge-21.1.235-sources.jar`）：
+
+```java
+// LevelRenderer.java:2714-2717
+if (force) { return particleEngine.createParticle(...); }
+else if (camera.getPosition().distanceToSqr(x, y, z) > 1024.0) { return null; }   // ← 32 格硬墙
+```
+
+`level.addParticle(...)` 传 `force = false`，正中这条判定。
+
+**⚠️ 关键坑：两个 `addAlwaysVisibleParticle` 重载里只有一个能绕过**
+
+```java
+// ClientLevel.java:733-737   7 参数 —— 不绕过！
+addAlwaysVisibleParticle(data, x,y,z, vx,vy,vz)
+    -> levelRenderer.addParticle(data, false, true, ...)      // 第二个布尔是 decreased，不是 force
+// ClientLevel.java:739-754   9 参数 —— 能绕过
+addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
+    -> levelRenderer.addParticle(data, data.getType().getOverrideLimiter() || ignoreRange, true, ...)
+```
+
+第一版就是错用了 7 参数重载，现象毫无变化（和 `encased_fan` 一模一样），白测一轮。
+
+**证据链**
+
+1. Sable `mixin/particle/LevelRendererMixin` 专门 `@Redirect` 了 `addParticleInternal` 里的
+   `Vec3.distanceToSqr`，换成 `distanceSquaredWithSubLevels` —— 反证这个距离判定真实存在且会丢粒子。
+2. Create 电扇同理：`AirCurrent.java:69`（`world.addParticle(new AirFlowParticleData(...))`）、
+   `AirFlowParticle.java:149` 都是裸 `addParticle` ⇒ **`encased_fan` 一模一样**。
+3. Create 里"远距离也要可见"的粒子全用 `addAlwaysVisibleParticle`：
+   `BasinBlockEntity.java:684,710,730`、`ChuteBlockEntity.java:334`、`FluidFX.java:73,92`、
+   `SpoutBlockEntity.java:243,257`；`LitBlazeBurnerBlock.java:94` 甚至用 9 参数重载传 `ignoreRange = true`。
+
+**修法（现行）**
+
+- `spawnExhaust` 与旧 `create:air` 回退路径都改成
+  `level.addAlwaysVisibleParticle(data, true /* ignoreRange */, x, y, z, vx, vy, vz)`（**9 参数**）。
+- 再加 `MAX_EXHAUST_DISTANCE = 64.0` 自己限一个可见上限（0 = 不限）：绕开原版限制后不能无脑全图喷，
+  否则看不见的远处每颗粒子每 tick 还在做扫掠碰撞。
+- 等价路线（备选）：把 `ParticleType` 注册成 `overrideLimiter = true`
+  （`new ParticleType<>(true, ...)`，见 `MyModParticles`），那样连裸 `addParticle` 都不会被丢。
+  现在选在调用点显式传 `ignoreRange`，语义更局部。
+- 副作用：`force = true` 同时也跳过 `ParticleStatus.MINIMAL` 判断 ⇒ 玩家把粒子设置调到最低时
+  排气仍会显示（对载具尾焰来说通常是想要的）。
+
+**遗留**：`create:encased_fan` 的远处粒子仍然没有（那是 Create 代码，本项目不改）；
+需要远处可见的排气只能看喷管这条链路。
+
 ## 4. 已知边界 / 未做
 
 - **推力不做遮挡判定**：喷口被方块堵死时物理推力照样输出（要加的话应在每个游戏 tick 算一次遮挡并缓存给 substep 复用）。
@@ -371,6 +434,10 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
   `MAX_PARTICLES_PER_TICK` 乘气压，未做）。
 - 气压每 substep 求一次（`HashMap` 查维度数据 + 一次贝塞尔求值 + 一次 `Vector3d` 分配，常数级），
   多管时按管数线性增长，实测量级可忽略。
+- **粒子可见距离 = `MAX_EXHAUST_DISTANCE = 64 格**（§3.7）。原版对 `addParticle` 的硬限制是 32 格，
+  已用 9 参数 `addAlwaysVisibleParticle(..., ignoreRange = true)` 绕过；但超过 64 格我们主动不生成（省扫掠碰撞）。
+  远处的可见度还受"粒子本身很小很淡"影响（`EXHAUST_SCALE=0.3` ⇒ 出生仅 0.1 格），
+  真嫌远处看不见就得放大 `EXHAUST_SCALE`/`ALPHA_MAX`，而不是再改生成逻辑。
 - 排气粒子是纯客户端计算：各客户端看到的撞墙点/散射方向各自独立（原版粒子行为，未做服务端广播）。
 - 粒子碰撞是**每颗粒子每 tick 一次扫掠**（半径 0.08~0.35、位移约 0.5~2 格 ⇒ 约 8~27 个方块）：
   单管 10 颗/tick × 寿命 ~16 tick ⇒ 同屏约 160 颗，实测未造成明显掉帧；多管并联时按管数线性增长。
@@ -427,3 +494,4 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 | 12 | 需要出力随所处气压变化（乘气压） | `airPressureAt()`：喷管中心投世界系 → `DimensionPhysicsData.getAirPressure`，乘进冲量（§2.1.1） | ✅ 用户实测有效果 |
 | 13 | 出力过大（气压 1.0、256 RPM 实测 750 多 pN） | `THRUST_PER_RPM` 800/256 → 200/256 → 再一次改成 **1.0（1 RPM = 1 pN，256 RPM = 256 pN）**，§2.2 每次全部重算 | 现行 256 pN/管 |
 | 14 | 想要"1 RPM 对应 1 pN"的简单公式 | `THRUST_PER_RPM = 1.0`；连带：悬停 43%、4 管升限 y≈273、落地 25.4 m/s² | 已改，待进游戏确认 |
+| 15 | 离喷管约 1 区块就不出粒子（出力正常，Create 电扇同样） | 原版 `addParticleInternal` 离相机 >32 格（1024）直接丢粒子；**第一次错用 7 参数 `addAlwaysVisibleParticle`（force=false）无效**，改 9 参数 `ignoreRange=true` + 自设 64 格上限（§3.7） | 已改，待进游戏确认 |
