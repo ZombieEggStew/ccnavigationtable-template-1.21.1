@@ -3,6 +3,9 @@
 > 状态：**代码逻辑完成，已进游戏验证**（推力方向已实测校定；排气粒子已换成自研 `ccpe:exhaust`，见 §3.6）。缺合成配方；模型/贴图由用户完成。
 > 粒子当前形态：自研粒子（世界坐标、无重力、扫掠碰撞 + 撞墙反弹/滑行、撞地变大）；**撞地分裂已按用户要求关闭**，`USE_EXHAUST_PARTICLE=false` 可整体回退旧 `create:air`。
 > 粒子随寿命演变（v7，§3.6）：**越老越大 / 越老越慢 / 越老越透明**，三条曲线都由 `life = age/lifetime` 驱动。
+> 出力随气压缩放（§2.1.1）：`THRUST_PER_RPM = 1` ⇒ **1 RPM = 1 pN**，气压 1.0 时 256 RPM = 256 pN/管。
+> **远距离看不见粒子已解决**（§3.7）：根因是原版 32 格 `addParticle` 硬限制，改用 9 参数 `addAlwaysVisibleParticle(ignoreRange=true)`。
+> **下一步：高空尾迹（contrail）**，方案见 §8（仅计划，未动代码）。
 > 上游背景：悬浮车自动驾驶的推进方案见 `memo/flip-autopilot.md`（火箭推力功率不生效 ⇒ 放弃火箭，改自研定向喷管）。
 > 相关：`memo/my_sensor_system.md`、`memo/api-code-map.md`。
 
@@ -427,6 +430,8 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 **遗留**：`create:encased_fan` 的远处粒子仍然没有（那是 Create 代码，本项目不改）；
 需要远处可见的排气只能看喷管这条链路。
 
+**✅ 用户实测确认解决**：改用 9 参数重载后，32 格外尾焰正常可见，64 格处按 `MAX_EXHAUST_DISTANCE` 淡出。
+
 ## 4. 已知边界 / 未做
 
 - **推力不做遮挡判定**：喷口被方块堵死时物理推力照样输出（要加的话应在每个游戏 tick 算一次遮挡并缓存给 substep 复用）。
@@ -463,6 +468,8 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
    建议用双边反向差动）。
    **气压项（§2.1.1）让 14% 只在海平面成立**，高空油门要更大；嫌麻烦就让脚本用 `sensor` 的气压做前馈，
    或先把 `THRUST_SCALES_WITH_AIR_PRESSURE` 关掉再标控制律。
+4. **高空尾迹（contrail）**：需求已定稿，实现方案见 §8。下一步做这个
+   （用户要求"开始做尾迹前先解决粒子可见距离"⇒ §3.7 已解决）。
 
 ## 6. 参考来源（均只读）
 
@@ -475,6 +482,8 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 | `.../compatibility/create/particles/{AirFlowParticleMixin,AirParticleMixin}.java` | 子次元粒子处理（bounds 放行、姿态重投影）；`AirParticleMixin#tick` 是「粒子跟着机体跑」的根因（见 §3.5） |
 | `api/sable-common-1.21.1-2.0.3-sources/.../api/{block/BlockEntitySubLevelActor,physics/force/{ForceTotal,QueuedForceGroup,ForceGroups}}.java`、`sublevel/ServerSubLevel.java` | `sable$physicsTick` / 力组 / `applyQueuedForces` |
 | `src/main/java/.../block/{MyBearingPlateBlockEntity,TrailingWheelMountBlockEntity}.java`、`compat/cc/FlightDataRecorder.java` | 项目内已验证的"施力 + 力组遥测 + 子次元射线"写法 |
+| **`build/moddev/artifacts/neoforge-21.1.235-sources.jar`** | ⭐ **项目内就有完整 Minecraft 源码**（`ClientLevel.java`、`LevelRenderer.java` 等）。查原版行为优先用它，别靠记忆 —— §3.7 的 32 格限制与两个重载的差异都是从这里查实的 |
+| `wiki/docs/engine/temperature.zh.md`、`EngineCoreBlockEntity` 的 `T_AMB_*` 常量与 `ambientTemp()` | **高度→环境温度**模型（尾迹复用，见 §8） |
 
 ## 7. 变更时间线（2026-08 排气重做，含踩过的坑）
 
@@ -494,4 +503,153 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 | 12 | 需要出力随所处气压变化（乘气压） | `airPressureAt()`：喷管中心投世界系 → `DimensionPhysicsData.getAirPressure`，乘进冲量（§2.1.1） | ✅ 用户实测有效果 |
 | 13 | 出力过大（气压 1.0、256 RPM 实测 750 多 pN） | `THRUST_PER_RPM` 800/256 → 200/256 → 再一次改成 **1.0（1 RPM = 1 pN，256 RPM = 256 pN）**，§2.2 每次全部重算 | 现行 256 pN/管 |
 | 14 | 想要"1 RPM 对应 1 pN"的简单公式 | `THRUST_PER_RPM = 1.0`；连带：悬停 43%、4 管升限 y≈273、落地 25.4 m/s² | 已改，待进游戏确认 |
-| 15 | 离喷管约 1 区块就不出粒子（出力正常，Create 电扇同样） | 原版 `addParticleInternal` 离相机 >32 格（1024）直接丢粒子；**第一次错用 7 参数 `addAlwaysVisibleParticle`（force=false）无效**，改 9 参数 `ignoreRange=true` + 自设 64 格上限（§3.7） | 已改，待进游戏确认 |
+| 15 | 离喷管约 1 区块就不出粒子（出力正常，Create 电扇同样） | 原版 `addParticleInternal` 离相机 >32 格（1024）直接丢粒子；**第一次错用 7 参数 `addAlwaysVisibleParticle`（force=false）无效**，改 9 参数 `ignoreRange=true` + 自设 64 格上限（§3.7） | ✅ 用户实测解决 |
+| 16 | 想要"真实高空尾迹"预研 | 科普 + 需求定稿 + 实现计划（§8），未动代码 | 计划就绪 |
+
+## 8. 下一步：高空尾迹（contrail）实现计划
+
+> 状态：**计划就绪，未动代码**。等用户点头后按 §8.7 的清单开工。
+> 前置条件已满足：粒子可见距离问题已修（§3.7，必须用 9 参数 `addAlwaysVisibleParticle`）。
+
+### 8.1 需求定稿（用户拍板）
+
+| 议题 | 结论 |
+|---|---|
+| 温度模型 | **复用项目已有的"高度→温度"**（`wiki/docs/engine/temperature.zh.md`、`EngineCoreBlockEntity.ambientTemp()`），不新写 |
+| 湿度 | **不计算**。所有与湿度相关的量都用**纯高度函数**代替 |
+| 尾迹高度窗口 | **Y = 160 ~ 320**；低空（Y < 160）**完全没有尾迹** |
+| 风的处理 | **不随风飘**。粒子出生后**原地随机飘逸**，不做风场平流 |
+| 性能 | 沿用本 memo 的粒子预算思路（§3.6），必要时按 §8.6 降级 |
+
+### 8.2 物理依据速查（科普版）
+
+真实尾迹 = **排气水汽在高空冷空气里结成的冰晶云**，不是烟。三条独立的物理量各自控制三件事：
+
+| 观感 | 由什么决定 | 现实表现 |
+|---|---|---|
+| **有没有** | 温度阈值（Schmidt-Appleman）：干燥空气需 T ≲ −40 °C，越湿阈值越高（最湿可到 ≈ −9 °C） | **阈值型**，不是"越高越多" |
+| **多长命** | 环境对冰的过饱和度：不饱和 ⇒ 几秒~2 分钟；过饱和 ⇒ 20 分钟~数小时 | **带状**（对流层顶最强），不是单调 |
+| **多浓多大** | 光学厚度：亮度 ∝ 冰晶浓度 × 截面积 / 尾迹宽度 | **前段细亮、后段宽淡**；这是质量守恒的必然结果，不是两个独立效果 |
+
+关键推论（本项目要遵守的三条设计规则）：
+
+1. **气压本身不参与判定**（只是高度的代理变量）。现有 `getAirPressure` 是 1.5 → 0 的单调曲线，**不能**直接拿来当"尾迹强度"。
+2. **"越高越好"是错的**：真实世界里高到平流层反而太干、没有尾迹。本项目按用户定稿只做 160 → 320 窗口，**不**额外加上边界。
+3. **尺寸与透明度必须成对算**：`alpha ∝ 1/宽度`，否则"散开"和"变淡"会互相打架。
+
+### 8.3 高度 → 环境温度（复用现有模型，不重写）
+
+`EngineCoreBlockEntity.T_AMB_*` 定义的分段线性曲线（主世界）：
+
+```
+Y <= 63        -> 20 C
+63 -> 200      -> 20 -> 0 C      (云层 / 结冰层)
+200 -> 320     -> 0 -> -40 C     (尾迹带在这里)
+Y >= 320       -> -40 C
+地狱 = 155 C 恒温；末地 = 0 C 恒温
+```
+
+落到尾迹窗口上：
+
+| Y | 160 | 200 | 240 | 260 | 280 | 300 | 320 |
+|---|---|---|---|---|---|---|---|
+| T (°C) | **+5.8** | 0 | −13.3 | −20.0 | −26.7 | −33.3 | **−40** |
+| 尾迹适宜度 s（8.4 曲线） | ≈0 | 0.10 | 0.70 | 0.96 | 1.00 | 1.00 | 1.00 |
+
+**改动**：把 `ambientTemp()` 的曲线抽成 `public static float ambientTempAt(Level level, double y)`，
+实例方法 `ambientTemp()` 改为委托（行为零变化），尾迹直接调静态版。
+（`SensorSystemAPI.getPressureForEngine(double y)` 已是现成的静态气压入口，需要气压时用它。）
+
+### 8.4 三个关系 → 三个（而不是一个）函数
+
+用户已定：不用湿度、纯高度函数。于是用**一个驱动量** s（尾迹适宜度，0~1）加三条不同形状的映射：
+
+```
+T(y)  = ambientTempAt(level, y)                 // 复用 8.3
+s     = smoothstep01((T_START - T) / (T_START - T_FULL))
+        T_START = +6 C   (~Y 160，低于此完全无尾迹)
+        T_FULL  = -24 C  (~Y 275，到这里拉满)
+
+(1) 生成：按"移动距离"发射，而不是按 tick
+    spacing = TRAIL_SPACING / max(s, 1e-4)      // s 越小尾迹越稀
+    累计位移 >= spacing 就吐一颗；悬停不动 => 不发射（不会在原地堆一坨）
+
+(2) 寿命：与 s 同向
+    life = TRAIL_LIFE_MIN + (TRAIL_LIFE_MAX - TRAIL_LIFE_MIN) * s
+
+(3) 尺寸 / 透明度：互相绑定（质量守恒）
+    width(t) = TRAIL_WIDTH0 * (1 + t/tau)^0.5   // 湍流扩散 sqrt(t) 律
+    alpha(t) = TRAIL_ALPHA0 * (width0 / width(t))  // 摊开 => 变淡，成对出现
+```
+
+**为什么"生成"按移动距离而不是 tick**：现实里尾迹浓度由"单位航程排了多少水汽"决定，悬停不动的飞机不会
+原地堆出云团。按距离发射还顺带解决性能问题：静止时零发射。
+
+### 8.5 "原地随机飘逸"（用户明确不要风）
+
+- 出生时给一个**很小的随机初速**（0.01~0.03 格/tick，方向随机），之后几乎不再加速；
+- 每 tick 叠加缓慢变化的抖动（可借用 `ExhaustParticle` 里 SWIRL 正弦摆动的思路，但更慢更弱）；
+- 极小的向上浮力，让尾迹整体略微升高、变松；
+- **不做风场平流**（虽然 `SableCompat.getWorldAirVelocity` 现成可用，但只有装了天气/风模组才有值；这里明确不用）。
+
+> 注意：不随风 ≠ 静止。完全静止会像"贴纸"，所以必须有随机游走；只是**整体平流 = 0**。
+
+### 8.6 必须遵守的工程约束（都是本 memo 踩过的坑）
+
+1. **必须用 9 参数 `addAlwaysVisibleParticle(data, true, x, y, z, vx, vy, vz)`** —— 见 §3.7；
+   7 参数那个 `force = false`，32 格就被原版丢掉。尾迹比尾焰更需要远处可见。
+2. **不能碰撞、不能受重力、不能撞地反弹**：尾迹是空气里的冰晶，`ExhaustCollision` 那套扫掠**完全不要复用**
+   ⇒ 新建粒子类型 `ccpe:contrail`，不要改造 `ExhaustParticle`。
+3. **粒子数 = 发射率 × 寿命**：按 8.8 默认值估算（`TRAIL_SPACING ≈ 1.2 格`、`LIFE_MAX ≈ 300 tick`）
+   ⇒ 20 m/s 时约 **250 颗/管**存活，4 管约 1000 颗。无碰撞扫掠，成本主要是半透明 quad 绘制，可接受；嫌重先降 `LIFE_MAX`。
+4. **距离上限单独一条**：`MAX_CONTAIL_DISTANCE`（建议 96，比尾焰的 64 大），超出就不发射。
+5. **出生点滞后**：真实尾迹不在喷口出现，要先飞过 50~100 m 的喷流混合段才开始结冰
+   ⇒ 本项目尺度上**沿排气反方向后退 `TRAIL_START_OFFSET ≈ 2~4 格`再出生**（观感差别很大）。
+6. **世界坐标**：出生点必须走 §3.5 的 `projectToWorld`，否则粒子会钉在机体上跟着跑。
+
+### 8.7 文件清单（待确认后实施）
+
+| 文件 | 改动 |
+|---|---|
+| `block/EngineCoreBlockEntity.java` | 抽出 `public static float ambientTempAt(Level, double y)`；实例 `ambientTemp()` 委托。**行为零变化** |
+| `particle/MyModParticles.java` | 注册 `ccpe:contrail`（可顺便设 `overrideLimiter = true`，见 §3.7 备选方案） |
+| `particle/ExhaustParticleData.java` | **复用**（`scale/lifetime/r/g/b/ownerId/gen` 字段够用），不新建 record |
+| `client/particle/ContrailParticle.java` | **新建**：无碰撞、sqrt(t) 膨胀、`alpha ∝ 1/宽度`、原地随机飘逸、缓慢消散 |
+| `CCPeripheralExtenderClient.java` | `registerSpriteSet` + provider 注册（与 `ccpe:exhaust` 并列） |
+| `resources/assets/ccpe/particles/contrail.json` | 精灵图列表（先用 `minecraft:generic_0..7`，之后可换专用白云贴图） |
+| `block/ThrustNozzleBlockEntity.java` | 新增 `tickContrail()`（在 `tickClient()` 里调用）；常量见 8.8 |
+| `memo/thrust-nozzle.md` | 实施后补 §9 实现细节与实测 |
+
+### 8.8 常量草案（全部放在 `ThrustNozzleBlockEntity` 顶部，与 `EXHAUST_*` 并列）
+
+| 常量 | 建议值 | 说明 |
+|---|---|---|
+| `USE_CONTRAIL` | true | 总开关 |
+| `TRAIL_T_START` | +6 °C | 低于此温度才开始有尾迹（≈ Y 160，对上用户窗口） |
+| `TRAIL_T_FULL` | −24 °C | 到这里拉满（≈ Y 275） |
+| `TRAIL_SPACING` | 1.2 格 | 每飞这么远吐一颗（悬停不出） |
+| `TRAIL_LIFE_MIN / MAX` | 60 / 300 tick | 3 s → 15 s |
+| `TRAIL_WIDTH0` | 0.6 格 | 出生宽度 |
+| `TRAIL_WIDTH_TAU` | 100 tick | sqrt(t) 扩散的时间常数（越大散得越慢） |
+| `TRAIL_ALPHA0` | 0.14 | 出生不透明度上限（比尾焰的 0.62 淡很多） |
+| `TRAIL_DRIFT` | 0.02 格/tick | 原地随机飘逸的速度上限 |
+| `TRAIL_START_OFFSET` | 3 格 | 出生点沿排气反方向后退 |
+| `MAX_CONTAIL_DISTANCE` | 96 格 | 超过就不发射 |
+| `TRAIL_RED/GREEN/BLUE` | 0.92/0.94/0.97 | 冰晶白（比尾焰更白更冷） |
+
+### 8.9 需要用户确认的 4 件事（开工前）
+
+1. **寿命 15 s 够不够**？再长就进入"粒子数 = 发射率 × 寿命"的爆炸区（30 s ⇒ 500 颗/管）。
+   真要几分钟的尾迹就得改成**带状 mesh** 方案（工作量 3~5 倍，本 memo 暂不选）。
+2. **悬停不动时完全不出尾迹**（按移动距离发射）—— 接受吗？
+3. **出生点滞后 3 格**（真实尾迹在喷流混合段之后才结冰）—— 要做，还是先做 0 偏移看效果？
+4. **末地（恒 0 °C）会蹭到约 10% 强度的淡尾迹**（`T = 0 °C` ⇒ `s ≈ 0.10`）。
+   要不要给末地/地狱加维度开关？（地狱 155 °C 天然为 0，不受影响）
+
+### 8.10 实施顺序（建议）
+
+1. 抽 `ambientTempAt` 静态方法 → 编译，确认引擎行为没变（这步是纯重构）。
+2. 注册 `ccpe:contrail` + `ContrailParticle`（先把参数写死成"明显能看见"的夸张值，确认链路通）。
+3. 接 `tickContrail()`：先做**按距离发射 + 适宜度曲线**，不做滞后偏移与随机飘逸。
+4. 加随机飘逸与 `sqrt(t)` 扩散 + `alpha ∝ 1/宽度`，进游戏调手感。
+5. 最后补 `TRAIL_START_OFFSET`、距离上限、以及 memo §9。
