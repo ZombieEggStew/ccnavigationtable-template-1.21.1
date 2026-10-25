@@ -16,8 +16,11 @@
 > 5. **配置 + tooltip**（§11、§12）：17 个参数进 `config/ccpe-client.toml`（改完即时生效）；物品 tooltip 走 Create `ItemDescription`；
 > 6. **扳手拆除**（§15）：`IWrenchable` ⇒ `create:wrench` **潜行右键快速拆除**（掉落直接进背包）、普通右键不旋转。
 >
+> 第 7 个能力（2026-08 末新增）：**进气粒子 `ccpe:intake`**（§16）——负转速 = 吸力时，
+> 空气从喷口前方被**吸进口面**（加速收拢 + 缩小淡出）；此前负转速下**一颗粒子都没有**。
+>
 > **仍待进游戏确认**（其余已由用户实测确认）：配置**界面**的标题/说明文案、物品 tooltip 展开、
-> "潜行空手清除染色"已移除、**扳手潜行右键拆除 / 普通右键不旋转**（§15.3）。
+> "潜行空手清除染色"已移除、**扳手潜行右键拆除 / 普通右键不旋转**（§15.3）、**进气粒子观感**（§16.7）。
 > 上游背景见 `memo/flip-autopilot.md`（火箭方案作废 ⇒ 自研喷管）；相关 `memo/my_sensor_system.md`、`memo/api-code-map.md`。
 
 ## 0. 需求与决策链（用户定稿）
@@ -660,6 +663,7 @@ protected void setLocationFromBoundingbox() {
 | 27 | **斜喷时粒子穿墙、漏到平面下方**（90° 正常，越平越糟） | 埋点两轮都修错方向（先以为只是 `slab` 缺"起点已重叠"分支），最后靠"pos 与上 tick 的 mv 逐 tick 对不上、差值 = quadSize/2"定位到真因：`move` 里调用 `setLocationFromBoundingbox()`，而它把 y 当包围盒**底边** ⇒ 每 tick 静默下坠 `quadSize/2` 且不被扫掠覆盖。改成直接写 `x/y/z`；同时保留 `slab` 的嵌入分支 + MTV 推出作为加固（§3.8） | 编译通过，待进游戏确认 |
 | 28 | 想要排气"轻微受一点重力" | 新增配置 `exhaustGravity`，`ExhaustParticle` 构造时缓存进 `sinkAccel`、每 tick 一次减法；附取值表与性能结论（§3.6.1）。用户逐档实测后**默认值定为 0.02** | ✅ 用户确认效果符合预期 |
 | 29 | 想要「扳手潜行右键快速拆除」 | `ThrustNozzleBlock` 加 `IWrenchable`：潜行 = 默认 `onSneakWrenched`（掉落直接进背包），普通右键显式返回 PASS（不旋转，朝向由风扇出风面唯一决定）（§15） | 编译通过，待进游戏确认 |
+| 30 | **想要"产生吸力时也有粒子特效"** | 查实根因：负转速时排气方向翻到 `-FACING`，遮挡射线一出膛就撞到**喷管自己的碰撞箱**（`clear ≈ 0.08 < 0.2`）⇒ **一颗粒子都没有**。新建 `ccpe:intake` 进气粒子：前方锥形区域出生、`t²` 加速收拢到口面中心、缩小淡出；负转速时也**不出尾迹**；6 个参数进配置（§16） | 编译通过，待进游戏确认 |
 
 ## 8. 下一步：高空尾迹（contrail）实现计划
 
@@ -1261,6 +1265,7 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | 定向推力 | 纯轴向恒定推力，点力打进 `sable:propulsion` 力组；1 RPM = 1 pN，乘气压 | ✅ 已实测校准 | §2.1 / §2.2 |
 | 排气粒子 `ccpe:exhaust` | 自研粒子：世界坐标、扫掠碰撞（含"起点已嵌入"推出）+ 撞墙反弹滑行 + 撞地变大、随寿命越大/越慢/越淡、**可选轻微重力** | ✅ 已实测（含多角度不穿墙） | §3.6 / §3.6.1 / §3.8 |
 | 高空尾迹 `ccpe:contrail` | 自研粒子：按**移动距离**发射、峰值适宜度曲线、匀速直线飘荡（速度 = 总距离 ÷ 寿命）、无碰撞无重力 | ✅ 已实测（4 轮迭代） | §8 / §9 / §9.7~§9.10 |
+| 进气粒子 `ccpe:intake` | 自研粒子：负转速（吸力）时在喷口前方锥形区域出生，`t²` 加速收拢到口面中心 + 缩小淡出；无碰撞；此时不出尾迹 | ⏳ 待进游戏确认 | §16 |
 | 染料染色 | 手持染料右键喷口 ⇒ 只染**尾迹**；服务端权威 + BE 数据同步；护目镜 tooltip 显示当前色 | ✅ 已实测 | §10 |
 | 配置化 | 17 个参数进 `config/ccpe-client.toml`（`ConfigValue#get()` 本身带缓存，现查不贵，见 §11.2.1） | ✅ 改 toml 即时生效已实测；界面文案待看 | §11 |
 | 物品 tooltip | Create `ItemDescription`，Shift 展开 summary + 3 组说明 | ⏳ 待入游戏确认 | §12 |
@@ -1274,14 +1279,16 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | 文件 | 职责 |
 |---|---|
 | `block/ThrustNozzleBlock.java` | `DirectionalBlock` + `EntityBlock` + `IWrenchable`：`FACING`、`canSurvive`（贴风扇出风面）、六向选择框、客户端 ticker、**染料右键**、**扳手潜行拆除/不旋转** |
-| `block/ThrustNozzleBlockEntity.java` | 主体：`sable$physicsTick` 施力、`tickClient`/`tickContrail`/`spawnExhaust`/`spawnContrail`、适宜度曲线、染色状态 + NBT/同步、goggle tooltip、全部配置访问器 |
-| `particle/MyModParticles.java` | 注册 `ccpe:exhaust` / `ccpe:contrail` |
+| `block/ThrustNozzleBlockEntity.java` | 主体：`sable$physicsTick` 施力、`tickClient`（**按转速符号分成排气/进气两路**）/`tickContrail`/`tickIntake`/`spawnExhaust`/`spawnContrail`、适宜度曲线、染色状态 + NBT/同步、goggle tooltip、全部配置访问器 |
+| `particle/MyModParticles.java` | 注册 `ccpe:exhaust` / `ccpe:contrail` / `ccpe:intake` |
 | `particle/ExhaustParticleData.java` | 排气粒子参数 record（scale/lifetime/rgb/ownerId/gen） |
 | `particle/ContrailParticleData.java` | 尾迹粒子参数 record（width/lifetime/rgb） |
+| `particle/IntakeParticleData.java` | 进气粒子参数 record（scale/lifetime/rgb）——位移走 vx/vy/vz，不占额外字段 |
 | `particle/ContrailBudget.java` | 尾迹存活计数（common 包、只有 int，供 `contrailMaxLive` 安全阀用） |
 | `client/particle/ExhaustParticle.java` | 排气粒子：碰撞 + 撞墙散射 + 撞地变大 + 重力 `sinkAccel`（+ 默认关闭的分裂）。⚠️ `move()` **不能**调 `setLocationFromBoundingbox()`（§3.8） |
 | `client/particle/ExhaustCollision.java` | 球-箱扫掠碰撞（主世界逐方块 + 其它物理体反投）；含**起点已嵌入**分支 + 推出深度 `Hit.push`（§3.8） |
 | `client/particle/ContrailParticle.java` | 尾迹粒子：匀速直线、sqrt(t) 扩散、alpha ∝ 1/宽度、全亮渲染 |
+| `client/particle/IntakeParticle.java` | 进气粒子：`t²` 参数插值收拢（不积分速度、不碰撞）、尺寸缩小、淡入淡出、全亮渲染 |
 | `block/EngineCoreBlockEntity.java` | 提供 `public static float ambientTempAt(Level, float y)`（尾迹曲线复用引擎的高度→温度） |
 | `Config.java` | CLIENT 段新增 17 项粒子配置 |
 | `CCPeripheralExtenderClient.java` | 粒子 provider 注册、`ContrailParticle.onClientTick` 记账、物品 tooltip 注册 |
@@ -1292,7 +1299,7 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | 文件 | 内容 |
 |---|---|
 | `assets/ccpe/blockstates/thrust_nozzle.json`、`models/block|item/thrust_nozzle.json`、`textures/block/thrust_nozzle.png` | 模型（用户 Blockbench 制作）；blockstate 未旋转变体 = `facing=up` |
-| `assets/ccpe/particles/exhaust.json`、`particles/contrail.json` | 精灵图列表，都是 `minecraft:generic_0..7` |
+| `assets/ccpe/particles/exhaust.json`、`particles/contrail.json`、`particles/intake.json` | 精灵图列表，都是 `minecraft:generic_0..7` |
 | `assets/ccpe/lang/{zh_cn,en_us}.json` | 方块名、物品 tooltip 7 条、goggle 4 条、配置 34 条 |
 | `data/ccpe/loot_table/blocks/thrust_nozzle.json` | 挖掘掉落 |
 | `data/ccpe/physics_block_properties/thrust_nozzle.json` | `sable:mass = 1.0`、`sable:volume = 0.5` |
@@ -1304,6 +1311,7 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | 贴在 `create:encased_fan` 出风面放置 | 生效；背后风扇被拆/转走 ⇒ 喷管掉落 |
 | 风扇正转 | 机体沿 **-FACING** 受力（喷口朝下 = 上升/刹车）；反转 ⇒ 下压/吸附 |
 | 高空飞行（Y ≥ 160） | 喷口后方拖出尾迹：Y 160 起出现，183~224 最浓最长，越接近 Y320 越稀 |
+| 风扇**反转（负转速）** | 机体被吸向喷口朝向；喷口前方出现**进气粒子**（向口面收拢、缩小消失）；此时**没有排气、也没有尾迹** |
 | 悬停不动 | **不出尾迹**（按移动距离发射），旧粒子自然淡掉 |
 | 手持染料右键 | 尾迹染成该染料色（消耗 1 个，创造不消耗，同色不消耗）+ 音效 + 动作栏提示 |
 | 空手 / 潜行空手右键 | **无任何反应**（清除入口已按用户要求删除） |
@@ -1317,19 +1325,23 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 
 ### 13.4 参数在哪儿（三层，按可改性排序）
 
-1. **配置文件**（`config/ccpe-client.toml`，17 项，详见 §11.1）：`contrailEnabled`、`contrailLifeMin/Max`、
+1. **配置文件**（`config/ccpe-client.toml`，**23 项**，详见 §11.1 与 §16.4）：`contrailEnabled`、`contrailLifeMin/Max`、
    `contrailSpacing`、`contrailMaxPerTick`、`contrailMaxLive`、`contrailMaxDistance`、`contrailWidth`、
    `contrailWidthTau`、`contrailAlpha`、`contrailDriftDistance`、`exhaustParticlesPerTick`、`exhaustLifetime`、
-   `exhaustScale`、`exhaustSpeed`、`exhaustGravity`、`exhaustMaxDistance`。
+   `exhaustScale`、`exhaustSpeed`、`exhaustGravity`、`exhaustMaxDistance`、`intakeEnabled`、
+   `intakeParticlesPerTick`、`intakeReach`、`intakeSpeed`、`intakeScale`、`intakeMaxDistance`。
    BE 里通过 `Config.XXX.get()` 访问器**现查现用**（改完即时生效）。
 2. **代码常量 = 物理/曲线定义**（`ThrustNozzleBlockEntity` 顶部，见 §11.3）：`TRAIL_Y_MIN`(160 硬门)、
    `TRAIL_T_START/FULL/FADE_START/FADE_END`、`TRAIL_S_CEILING`、`TRAIL_TURB_CLOUD_Y`、`TRAIL_TURB_LOW_GAIN`、
    `CONTRAIL_OVERWORLD_ONLY`、`TRAIL_SPACING_S_FLOOR`、`TRAIL_DRIFT_DISTANCE_MIN/MAX`、`TRAIL_START_OFFSET`、
    `TRAIL_MAX_TICK_MOVE`、`TRAIL_RED/GREEN/BLUE`、`TRAIL_DYE_BRIGHTNESS`、`NO_DYE`、`THRUST_PER_RPM`、
    `REVERSE_SIGN`、`THRUST_SCALES_WITH_AIR_PRESSURE`、`EXHAUST_SPREAD`、`EXHAUST_SPEED_RANDOM_MIN/MAX`、
-   `PARTICLES_BLOCKED_BY_OTHER_BODIES`、`USE_EXHAUST_PARTICLE`。
+   `PARTICLES_BLOCKED_BY_OTHER_BODIES`、`USE_EXHAUST_PARTICLE`、**`INTAKE_CONE_RATIO` /
+   `INTAKE_MAX_CONE_RADIUS` / `INTAKE_MIN_DISTANCE` / `INTAKE_MIN_LIFETIME` / `INTAKE_MAX_LIFETIME` /
+   `INTAKE_RED/GREEN/BLUE`**（§16.4）。
 3. **粒子类内部视觉常量**：`ExhaustParticle`（`ALPHA_MAX`/`BOUNCE`/`TANGENT_KEEP`/`SPREAD_KEEP`/`ENERGY_KEEP`/
-   `IMPACT_GROWTH`/`COLLISION_COOLDOWN`/`SIZE_*`/`SPEED_SLOW`…）、`ContrailParticle`（`FADE_IN_TICKS`/`FADE_OUT_START`）。
+   `IMPACT_GROWTH`/`COLLISION_COOLDOWN`/`SIZE_*`/`SPEED_SLOW`…）、`ContrailParticle`（`FADE_IN_TICKS`/`FADE_OUT_START`）、
+   `IntakeParticle`（`ALPHA_MAX`/`SIZE_START`/`SIZE_END`/`SIZE_FALLOFF`/`ACCEL`/`FADE_IN_TICKS`）。
 
 ### 13.5 验证状态
 
@@ -1517,6 +1529,145 @@ public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock, 
 4. 装在**物理体（Sable 子次元）**里的喷管 ⇒ 潜行右键扳手同样能拆、同样进背包。
 5. 创造模式潜行右键 ⇒ 直接消失、**不进背包**（默认实现只在非创造时发掉落，与 Create 其余方块一致）。
 6. 拆掉后立刻看背后电扇 ⇒ 出力归零 / 恢复风扇自身推力（§1.4 的 `blocked` 判定解除）。
+
+## 16. 进气粒子 `ccpe:intake`（吸力 = 负转速，2026-08 末新增）
+
+> 需求原话：「喷嘴在产生吸力的时候也有粒子特效」。**方案已由用户三选一定稿**（见 §16.1）。
+> 本轮改了 1 个新建粒子类型 + 1 个新建粒子类 + 1 个新建 record + BE 的一条分支，
+> `gradlew classes` 通过；**待进游戏确认观感**。
+
+### 16.1 用户定稿（开工前问过）
+
+| 议题 | 结论 |
+|---|---|
+| 吸力粒子的形态 | **A. 进气式**：粒子在喷口**前方**几格空中出现 → 向口面收拢 → 在口面消失（像吸尘器/涡扇进气） |
+| 实现路线 | **新建专用粒子 `ccpe:intake`**，不复用 `ExhaustParticle`（那条链路的每条曲线都是"往外炸"的） |
+| 负转速时的尾迹 | **不出**（尾迹是"排气水汽在高空结的冰晶"，吸力时没有排气；而且旧行为会在机身内部 3 格外出生） |
+
+### 16.2 根因：负转速下**一颗粒子都没有**（不是"不好看"）
+
+`tickClient` 里旧逻辑只有一条链路：
+
+```
+flowSign  = (REVERSE_SIGN ? -1 : 1) × sign(转速)      // 负转速 ⇒ -1
+flowDir   = FACING × flowSign                          // 负转速 ⇒ 指向喷管背后（电扇侧）
+mouth     = center + FACING × 0.55                     // 起点仍在【前方】0.55 格
+clear     = clearDistance(mouth → flowDir)             // 沿 -FACING 打射线
+```
+
+射线从 `mouth`（口面外 0.55 格）朝 `-FACING` 打，**第一步就打穿喷管自己**：本方块碰撞箱最远到方块边界的
+`15/16 = 0.9375`，与 `mouth` 只差 `0.1125` 格，减掉 `clearDistance` 里 `-0.03` 的余量后
+`clear ≈ 0.08 < MIN_PARTICLE_TRAVEL(0.2)` ⇒ **直接 return，零粒子**。
+
+所以「吸力时没有特效」是"缺一条链路"，不是参数问题。顺带结论：**旧的 `flowSign` 反向逻辑在负转速下
+从来没生效过**（它生成不了任何粒子），现在的排气链路只在正转速下有意义。
+
+### 16.3 实现
+
+**分支（`ThrustNozzleBlockEntity#tickClient`）**：把 `flowSign` 拆成两个概念 ——
+`thrustSign`（物理：`受力 = -FACING × thrustSign`，>0 = 喷出推、<0 = 吸向喷口）与 `flowSign`
+（`thrustSign` 再叠 `INVERT_PARTICLE_FLOW`，只影响排气视觉）。然后：
+
+```java
+if (thrustSign < 0) {                    // 吸力
+    contrailAnchorWorld = null;          // 尾迹锚点清空（用户定稿：吸力时不出尾迹）
+    contrailAccum = 0;
+    tickIntake(level, own, mouth, axis, throttle);
+    return;                              // 不出排气
+}
+tickContrail(...); ...spawnExhaust(...); // 正转速：原样
+```
+
+**发射（`tickIntake`）**
+
+```
+锥形区域：沿 +FACING 方向、距离 ∈ [min(0.7, 0.5·Dmax), Dmax]，Dmax = min(intakeReach, clear)
+           截面半径 = min(1.6, 0.45 × 距离) × sqrt(random)   // 越远越宽 ⇒ 漏斗形
+寿命     = clamp(距离 / (intakeSpeed × (0.6 + 0.4×油门)), 6, 40)
+位移     = 口面中心 − 出生点      // 走 vx/vy/vz 传（同 Create AirParticleData 的约定）
+```
+
+- **遮挡**：从口面沿 `+FACING` 打一条射线（`clearDistance(level, null, mouthWorld, dir, reach+0.1)`，
+  `own = null` ⇒ `projectToWorld` 退化为恒等）。前方被堵死（`clear < MIN_PARTICLE_TRAVEL`）就不生成 ——
+  "没有可吸的空气"。语义与排气一致：只挡实体碰撞形状。
+- **世界系**：口面与轴先 `projectToWorld` 投到世界系，正交基也在世界系里建，所以粒子不会被机体拖着走（§3.5 的老坑）。
+- **必须用 9 参数** `addAlwaysVisibleParticle(..., ignoreRange = true)`（§3.7 的老坑，别用 7 参数那个）。
+- 密度/速度都随**油门**（`|转速|/256`）缩放：转速越高，吸得越密、越快。
+
+**粒子（`client.particle.IntakeParticle`）**：`SimpleAnimatedParticle` 子类，<b>不积分速度</b>，
+直接按参数插值（所以不会像排气那样有"每 tick 悄悄挪一点"的隐患，见 §14 的教训）：
+
+```
+位置(t) = 出生点 + 位移 × t²                        // t = age/lifetime；t=1 时精确落在口面中心
+quadSize = baseScale × (1.0 → 0.30)                // 越靠近口面越小
+alpha    = 0.55 × 淡入(固定 2 tick) × (1−t)^0.7     // 到口面时归零，不留硬切白点
+```
+
+- 参数来自 `IntakeParticleData(scale, lifetime, r, g, b)`；`r/g/b` 与排气同一族冷白（0.86/0.90/0.96），
+  **方向靠运动表达，不靠颜色**。
+- `hasPhysics = false`、`gravity = 0`、`friction = 1`：不碰撞（空气被卷进来不该被车身弹开）。
+- `getLightColor` 直接返回 `0xF000F0`（全亮）：进气粒子常在车底/阴影里，吃 lightmap 会变成一团深灰。
+- 精灵图出生时随机定死一张（同 `ContrailParticle`），不逐帧播放。
+
+### 16.4 新增配置（6 项，`ccpe-client.toml`）
+
+| 配置键 | 默认 | 作用 |
+|---|---|---|
+| `intakeEnabled` | true | 进气粒子总开关（关 = 负转速完全没有粒子） |
+| `intakeParticlesPerTick` | 8 | **性能主旋钮**：满 256 RPM 时每 tick 颗数，按 `|转速|/256` 缩放 |
+| `intakeReach` | 3.0 格 | 进气锥长度：粒子最远在这个距离出生 |
+| `intakeSpeed` | 0.5 格/tick | 进气速度：**寿命 = 距离 ÷ 本值**，调大 = 吸得更快更短命 |
+| `intakeScale` | 0.28 格 | 出生尺寸（寿命内缩到 0.3 倍） |
+| `intakeMaxDistance` | 64 格 | 发射距离上限（0 = 不限） |
+
+代码常量（曲线定义，留在 `ThrustNozzleBlockEntity` 顶部）：`INTAKE_CONE_RATIO 0.45`、
+`INTAKE_MAX_CONE_RADIUS 1.6`、`INTAKE_MIN_DISTANCE 0.7`、`INTAKE_MIN/MAX_LIFETIME 6/40`、
+`INTAKE_RED/GREEN/BLUE`。粒子内视觉常量：`ALPHA_MAX 0.55`、`SIZE_START 1.0` / `SIZE_END 0.30`、
+`SIZE_FALLOFF 0.6`、`ACCEL 2.0`、`FADE_IN_TICKS 2`。
+
+### 16.5 本轮改动的文件
+
+| 文件 | 改动 |
+|---|---|
+| `particle/IntakeParticleData.java` | **新建** record `(scale, lifetime, r, g, b)` + CODEC/STREAM_CODEC |
+| `particle/MyModParticles.java` | 注册 `ccpe:intake`（`overrideLimiter = false`，靠调用点传 `ignoreRange`） |
+| `client/particle/IntakeParticle.java` | **新建**：`t²` 参数插值收拢 + 尺寸缩小 + 淡入淡出 + 全亮 |
+| `CCPeripheralExtenderClient.java` | `registerSpriteSet(MyModParticles.INTAKE, IntakeParticle.Provider::new)` |
+| `assets/ccpe/particles/intake.json` | 精灵图 `minecraft:generic_0..7` |
+| `block/ThrustNozzleBlockEntity.java` | `tickClient` 拆出 `thrustSign` 并按符号分支；新增 `tickIntake()` 与 6 个配置访问器 + 6 个常量 |
+| `Config.java` | CLIENT 段新增 6 项 `intake*` |
+| `assets/ccpe/lang/{zh_cn,en_us}.json` | 各 +12 条（6 项 × 标题/tooltip），两文件均 308 键 |
+
+### 16.6 性能
+
+- 同屏粒子数 ≈ `intakeParticlesPerTick × 油门 × 平均寿命`。默认值下大概 `8 × 10 ≈ 80 颗/管`
+  （排气约 160 颗/管），且**零碰撞扫掠**（不像排气每颗每 tick 要扫 8~27 个方块）⇒ 比排气链路更轻。
+- 每 tick 固定成本：每管 **1 条射线**（遮挡）+ 每颗一次 `addAlwaysVisibleParticle`。
+
+### 16.7 进游戏验证清单（待用户回报）
+
+1. 把风扇**反转**（负转速），机体应被吸向喷口朝向；同时喷口**前方**出现向内收拢的粒子，
+   靠近口面时**变小、变淡、消失**（不是从机身里冒出来）。
+2. 正转速 ⇒ 仍是原来的排气 + 尾迹，**没有任何变化**（进气链路不参与）。
+3. 高空（Y≥160）用负转速 ⇒ **没有尾迹**（用户定稿）；切回正转速 ⇒ 尾迹恢复。
+4. 用方块/墙把喷口**前方**堵死 ⇒ 进气粒子消失（射线挡住 = 没有可吸的空气）。
+5. 在车底/阴影/岩浆旁看 ⇒ 粒子是冷白，不该被光照染黄（全亮渲染）。
+6. 远离 40~60 格回望 ⇒ 进气粒子仍可见（9 参数 API 绕过 32 格限制）。
+7. 调 `config/ccpe-client.toml` 的 `intakeReach` / `intakeSpeed` / `intakeParticlesPerTick` ⇒ 即时生效
+   （新生成的粒子立刻按新值走）。
+
+**待用户回报的三个手感问题**：①进气锥要不要更长/更宽（`intakeReach` / `INTAKE_CONE_RATIO`）；
+②收拢速度（`intakeSpeed`）与粒子大小（`intakeScale`）是否合适；③要不要给进气粒子**单独换个颜色**
+（现在与排气同为冷白，靠运动区分）。
+
+### 16.8 遗留 / 未做
+
+- 进气粒子与排气一样是**纯客户端**计算（各客户端独立，未做服务端广播）。
+- **不碰撞**：粒子会直接穿过挡在侧面的方块（只挡"正前方射线"那一条）。要严格对齐"空气流动"
+  得给进气粒子加扫掠，但它本来就该被吸进管道里，加碰撞反而更容易露馅。
+- 不做螺旋/涡旋（现在只是直线收拢 + 锥形分布）。想加涡旋得让粒子知道口面位置（现在只传位移向量），
+  即多传一个 `offset` 字段或改用"起点 + 轴 + 距离"的表达。
+- 染色（§10）**不影响**进气粒子，也不影响排气 —— 只染尾迹。
 
 
 

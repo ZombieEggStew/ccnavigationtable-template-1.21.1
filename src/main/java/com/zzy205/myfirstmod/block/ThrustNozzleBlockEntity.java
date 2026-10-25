@@ -8,6 +8,7 @@ import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.particle.ContrailBudget;
 import com.zzy205.myfirstmod.particle.ContrailParticleData;
 import com.zzy205.myfirstmod.particle.ExhaustParticleData;
+import com.zzy205.myfirstmod.particle.IntakeParticleData;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
 import dev.ryanhcode.sable.api.physics.force.ForceGroup;
@@ -264,6 +265,70 @@ public class ThrustNozzleBlockEntity extends BlockEntity
     private static double exhaustMaxDistance() {
         return Config.EXHAUST_MAX_DISTANCE.get();
     }
+
+    // ── 进气粒子 ccpe:intake（负转速 = 吸力时，空气被吸进口面） ──
+
+    /**
+     * 进气粒子总开关（配置 {@code intakeEnabled}）。
+     * <p>
+     * <b>为什么要单独一条链路</b>：负转速时"排气方向"按 {@code flowSign} 翻到 {@code -FACING}
+     * （朝喷管背后、朝电扇那一侧），而排气粒子是从 {@code mouth}（喷口外 0.55 格）沿该方向打遮挡射线后
+     * 才生成的 —— 那条射线会立刻撞到<b>喷管自己的碰撞箱</b>（方块边界最远到 15/16，起点离它只有约
+     * 0.11 格），{@code clear ≈ 0.08 < MIN_PARTICLE_TRAVEL(0.2)} ⇒ 旧版负转速下<b>一颗粒子都不生成</b>。
+     * 所以吸力不是"参数没调好"，而是缺一条独立链路。
+     * <p>
+     * 现在的语义（用户定稿）：吸力 = 空气被<b>吸进口面</b>，粒子在喷口<b>前方</b>
+     * （{@code +FACING} 那一侧）几格远处出生，加速收拢到口面中心、同时缩小淡出（{@code IntakeParticle}）。
+     */
+    private static boolean useIntake() {
+        return Config.INTAKE_ENABLED.get();
+    }
+
+    /** 满转速时每 tick 的进气颗数（按 {@code |转速| / 256} 线性缩放），配置 {@code intakeParticlesPerTick} */
+    private static int intakeParticlesPerTick() {
+        return Config.INTAKE_PARTICLES_PER_TICK.get();
+    }
+
+    /** 进气锥长度（格）：粒子最远在这个距离出生，配置 {@code intakeReach} */
+    private static double intakeReach() {
+        return Config.INTAKE_REACH.get();
+    }
+
+    /** 进气速度（块/tick），配置 {@code intakeSpeed}：寿命 = 出生距离 ÷ 本值 */
+    private static double intakeSpeed() {
+        return Config.INTAKE_SPEED.get();
+    }
+
+    /** 进气粒子出生尺寸（格），配置 {@code intakeScale} */
+    private static float intakeScale() {
+        return Config.INTAKE_SCALE.get().floatValue();
+    }
+
+    /** 进气粒子发射距离上限（格，0 = 不限），配置 {@code intakeMaxDistance} */
+    private static double intakeMaxDistance() {
+        return Config.INTAKE_MAX_DISTANCE.get();
+    }
+
+    /** 进气锥半角的正切：横截面半径 = 出生距离 × 本值（越远越宽）。0 = 一根细线，调大 = 张开成漏斗 */
+    public static final double INTAKE_CONE_RATIO = 0.45D;
+
+    /** 进气锥横截面半径上限（格）：别让远处的粒子撒得比车还宽 */
+    public static final double INTAKE_MAX_CONE_RADIUS = 1.6D;
+
+    /** 最近出生距离（格）：太贴近口面会像"贴脸冒出来"，留一点空间 */
+    public static final double INTAKE_MIN_DISTANCE = 0.7D;
+
+    /** 寿命夹取（tick）：太短看不清、太长会变成"慢悠悠漂过来" */
+    public static final int INTAKE_MIN_LIFETIME = 6;
+    public static final int INTAKE_MAX_LIFETIME = 40;
+
+    /**
+     * 颜色：与排气同一族的冷白（现 0.86/0.90/0.96）。
+     * 方向靠<b>运动</b>表达（向内收 vs 向外喷），颜色刻意不区分，免得看着像两种不同的气体。
+     */
+    public static final float INTAKE_RED = 0.86F;
+    public static final float INTAKE_GREEN = 0.90F;
+    public static final float INTAKE_BLUE = 0.96F;
 
     // ── 高空尾迹（contrail）：只在足够冷的空气里出现，由"移动距离"而不是时间触发 ──
 
@@ -763,7 +828,8 @@ public class ThrustNozzleBlockEntity extends BlockEntity
 
         // 排气方向 = 机体受力方向的反向：
         // 受力 = -FACING · (REVERSE_SIGN ? -1 : 1) · 转速 ⇒ 排气 = +FACING · 同一个符号
-        double flowSign = (REVERSE_SIGN ? -1.0D : 1.0D) * (speed > 0.0F ? 1.0D : -1.0D);
+        final double thrustSign = (REVERSE_SIGN ? -1.0D : 1.0D) * (speed > 0.0F ? 1.0D : -1.0D);
+        double flowSign = thrustSign;
 
         if (INVERT_PARTICLE_FLOW) {
             flowSign = -flowSign;
@@ -776,11 +842,23 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         // 本方块所在物理体：粒子坐标必须用它的姿态从 plot 局部系投到世界系（见下方 projectToWorld）
         final SubLevel own = Sable.HELPER.getContaining(this);
 
+        final float throttle = Math.min(Math.abs(speed) / 256.0F, 1.0F);
+
+        // 吸力（负转速）：机体被拉向 +FACING ⇒ 空气被吸进口面，走一条独立的进气链路。
+        // 此时<b>不出排气、也不出尾迹</b>：
+        //   · 排气方向会翻到 -FACING（喷管背后），射线一出膛就撞到喷管自己的碰撞箱 ⇒ 以前完全不出粒子；
+        //   · 尾迹是"排气水汽在高空结的冰晶"，进气时没有排气，而且它会在机身内部 3 格外出生（用户定稿：不出）。
+        if (thrustSign < 0.0D) {
+            this.contrailAnchorWorld = null;
+            this.contrailAccum = 0.0D;
+            this.tickIntake(level, own, mouth, axis, throttle);
+            return;
+        }
+
         // 高空尾迹：与排气<b>互相独立</b>的一条链路（只在冷空气里有、按位移发射、不做碰撞），见 tickContrail
         this.tickContrail(level, own, mouth, flowDir);
 
         // 密度随转速线性变化；不足一颗就不生成
-        final float throttle = Math.min(Math.abs(speed) / 256.0F, 1.0F);
         final int count = (int) Math.round(exhaustParticlesPerTick() * throttle);
 
         if (count <= 0) {
@@ -1001,6 +1079,101 @@ public class ThrustNozzleBlockEntity extends BlockEntity
                 true,
                 start.x, start.y, start.z,
                 vx, vy, vz);
+    }
+
+    /**
+     * 吸力（负转速）时的进气粒子：在喷口<b>前方</b>（{@code +FACING} 那一侧）的锥形区域里撒粒子，
+     * 由 {@code ccpe:intake} 加速收拢到口面中心并缩小淡出（见 {@code client.particle.IntakeParticle}）。
+     * <p>
+     * 与排气链路的区别（所以没有复用 {@code spawnExhaust}）：
+     * <ul>
+     * <li>方向是<b>朝口面</b>的：粒子传的不是速度而是「出生点 → 口面」的位移（t² 走完，见粒子类注释）；</li>
+     * <li>寿命由「距离 ÷ 速度」反算 ⇒ 每颗粒子恰好在死亡那一刻抵达口面，不需要额外的吸附判定；</li>
+     * <li>不做扫掠碰撞（空气被卷进来不该被车身弹开），只用一条射线判断"前方有没有可吸的空气"。</li>
+     * </ul>
+     * 坐标：出生点与口面都在<b>世界系</b>算（先 {@link #projectToWorld} 把口面与轴投出来，
+     * 再用正交基撒点）—— 与排气同一条规矩，见 memo §3.5，否则粒子会钉在机体坐标系里跟着车跑。
+     * <p>
+     * 坑位提醒：必须用 <b>9 参数</b> {@code addAlwaysVisibleParticle(..., ignoreRange = true)}，
+     * 7 参数那个照样被原版 32 格限制丢掉（memo §3.7）。
+     *
+     * @param mouth    喷口面中心（plot 局部系，与排气链路同一个点）
+     * @param axis     喷口朝向的法向（plot 局部系）：进气从这一侧来
+     * @param throttle 油门 0~1（|转速| / 256）：决定发射密度与进气速度
+     */
+    private void tickIntake(final Level level, final @Nullable SubLevel own, final Vec3 mouth,
+                            final Vec3 axis, final float throttle) {
+        if (!useIntake()) {
+            return;
+        }
+
+        final int count = (int) Math.round(intakeParticlesPerTick() * throttle);
+
+        if (count <= 0) {
+            return;
+        }
+
+        if (!this.withinParticleDistance(level, own, mouth, intakeMaxDistance())) {
+            return; // 太远就不生成（同排气的距离上限，省下远处看不见的粒子）
+        }
+
+        final Vec3 mouthWorld = this.projectToWorld(level, own, mouth);
+        final Vec3 axisWorld = this.projectToWorld(level, own, mouth.add(axis)).subtract(mouthWorld);
+
+        if (axisWorld.lengthSqr() < 1.0E-8D) {
+            return;
+        }
+
+        final Vec3 dir = axisWorld.normalize();
+        final double reach = intakeReach();
+
+        // 前方被挡死就没有可吸的空气。射线在世界系里打（own = null ⇒ projectToWorld 退化为恒等），
+        // 与排气用同一套语义：只挡实体碰撞形状，不挡水/空气（见 clearDistance）。
+        final double clear = this.clearDistance(level, null, mouthWorld, dir, reach + 0.1D);
+
+        if (clear < MIN_PARTICLE_TRAVEL) {
+            return;
+        }
+
+        final double maxDistance = Math.min(reach, clear);
+        // 近端至少留一点空隙；reach 调得很小时按比例收，避免 min > max
+        final double minDistance = Math.min(INTAKE_MIN_DISTANCE, maxDistance * 0.5D);
+
+        // 口面正交基（世界系）：进气锥的横截面
+        final Vec3 seedVec = Math.abs(dir.y) > 0.9D ? new Vec3(1.0D, 0.0D, 0.0D) : new Vec3(0.0D, 1.0D, 0.0D);
+        final Vec3 u = dir.cross(seedVec).normalize();
+        final Vec3 v = u.cross(dir).normalize();
+
+        final RandomSource random = level.random;
+        // 速度随油门提高（吸力越大吸得越快）；寿命 = 距离 ÷ 速度
+        final double speed = Math.max(0.05D, intakeSpeed() * (0.6D + 0.4D * throttle));
+
+        for (int i = 0; i < count; i++) {
+            final double distance = minDistance + random.nextDouble() * (maxDistance - minDistance);
+
+            // 进气锥：越远截面越宽（空气从四面八方被收进来，靠近口面才收成一束）
+            final double coneRadius = Math.min(INTAKE_MAX_CONE_RADIUS, INTAKE_CONE_RATIO * distance);
+            final double radius = coneRadius * Math.sqrt(random.nextDouble());
+            final double theta = random.nextDouble() * Math.PI * 2.0D;
+
+            final Vec3 start = mouthWorld
+                    .add(dir.scale(distance))
+                    .add(u.scale(Math.cos(theta) * radius))
+                    .add(v.scale(Math.sin(theta) * radius));
+
+            // 位移 = 从出生点指向口面中心（粒子按 t² 走完，到寿那一刻正好落在口面）
+            final Vec3 toward = mouthWorld.subtract(start);
+
+            final int lifetime = Mth.clamp((int) Math.round(distance / speed),
+                    INTAKE_MIN_LIFETIME, INTAKE_MAX_LIFETIME);
+            final float scale = intakeScale() * (0.75F + random.nextFloat() * 0.5F);
+
+            level.addAlwaysVisibleParticle(
+                    new IntakeParticleData(scale, lifetime, INTAKE_RED, INTAKE_GREEN, INTAKE_BLUE),
+                    true,
+                    start.x, start.y, start.z,
+                    toward.x, toward.y, toward.z);
+        }
     }
 
     /**

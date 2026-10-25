@@ -33,6 +33,7 @@ import com.zzy205.myfirstmod.client.MonitorUseInterceptor;
 import com.zzy205.myfirstmod.client.MonitorHoverInterceptor;
 import com.zzy205.myfirstmod.client.particle.ContrailParticle;
 import com.zzy205.myfirstmod.client.particle.ExhaustParticle;
+import com.zzy205.myfirstmod.client.particle.IntakeParticle;
 import com.zzy205.myfirstmod.particle.MyModParticles;
 import com.zzy205.myfirstmod.client.MonitorBackgrounds;
 import com.zzy205.myfirstmod.client.MonitorOutlineRenderer;
@@ -256,16 +257,18 @@ public class CCPeripheralExtenderClient {
     /**
      * 粒子 provider 注册。
      * 用 {@code registerSpriteSet} —— 精灵图列表见 {@code assets/ccpe/particles/*.json}
-     * （两者都沿用 create:air 的那 8 张 {@code minecraft:generic_0..7}）：
+     * （三者都沿用 create:air 的那 8 张 {@code minecraft:generic_0..7}）：
      * <ul>
      * <li>{@code ccpe:exhaust} —— 喷管排气（扫掠碰撞 + 撞墙扩散）；</li>
-     * <li>{@code ccpe:contrail} —— 高空尾迹（无碰撞冰晶云）。</li>
+     * <li>{@code ccpe:contrail} —— 高空尾迹（无碰撞冰晶云）；</li>
+     * <li>{@code ccpe:intake} —— 吸力（负转速）时的进气粒子（向口面收拢并缩小消失）。</li>
      * </ul>
      */
     @SubscribeEvent
     static void registerParticles(RegisterParticleProvidersEvent event) {
         event.registerSpriteSet(MyModParticles.EXHAUST.get(), ExhaustParticle.Provider::new);
         event.registerSpriteSet(MyModParticles.CONTRAIL.get(), ContrailParticle.Provider::new);
+        event.registerSpriteSet(MyModParticles.INTAKE.get(), IntakeParticle.Provider::new);
     }
 
     @SubscribeEvent

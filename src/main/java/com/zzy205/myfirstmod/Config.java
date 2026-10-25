@@ -183,6 +183,34 @@ public class Config {
                     + "addAlwaysVisibleParticle 绕过，所以这里自己给上限。默认: 64")
             .defineInRange("exhaustMaxDistance", 64.0, 0.0, 512.0);
 
+    // ── 客户端：进气粒子（负转速 = 吸力时，空气被吸进口面） ──
+
+    public static final ModConfigSpec.BooleanValue INTAKE_ENABLED = CLIENT_BUILDER
+            .comment("吸力（负转速）时的进气粒子总开关。关闭 = 反转风扇时喷口完全没有粒子。默认: 开启")
+            .define("intakeEnabled", true);
+
+    public static final ModConfigSpec.IntValue INTAKE_PARTICLES_PER_TICK = CLIENT_BUILDER
+            .comment("进气粒子在满转速（256 RPM）时每 tick 生成的颗数，按 |转速|/256 线性缩放。<b>性能主旋钮</b>。默认: 8")
+            .defineInRange("intakeParticlesPerTick", 8, 0, 128);
+
+    public static final ModConfigSpec.DoubleValue INTAKE_REACH = CLIENT_BUILDER
+            .comment("进气锥长度（格）：粒子最远在喷口前方这么远的位置出生，然后加速被吸进口面。"
+                    + "越大越像\"长吸气柱\"。默认: 3.0")
+            .defineInRange("intakeReach", 3.0, 0.4, 16.0);
+
+    public static final ModConfigSpec.DoubleValue INTAKE_SPEED = CLIENT_BUILDER
+            .comment("进气速度（格/tick，1 = 20 格/秒）：寿命 = 出生距离 ÷ 本值，所以调大 = 吸得更快、粒子更短命；"
+                    + "实际再乘 (0.6 + 0.4×油门)。默认: 0.5")
+            .defineInRange("intakeSpeed", 0.5, 0.05, 8.0);
+
+    public static final ModConfigSpec.DoubleValue INTAKE_SCALE = CLIENT_BUILDER
+            .comment("进气粒子出生尺寸（格），寿命内缩小到 0.3 倍后消失。默认: 0.28")
+            .defineInRange("intakeScale", 0.28, 0.01, 8.0);
+
+    public static final ModConfigSpec.DoubleValue INTAKE_MAX_DISTANCE = CLIENT_BUILDER
+            .comment("进气粒子发射距离上限（格，0 = 不限）：离最近玩家超过它就不再发射。默认: 64")
+            .defineInRange("intakeMaxDistance", 64.0, 0.0, 512.0);
+
     static final ModConfigSpec SPEC = BUILDER.build();
     static final ModConfigSpec CLIENT_SPEC = CLIENT_BUILDER.build();
 }
