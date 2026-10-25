@@ -102,8 +102,10 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * <ul>
      * <li><b>正转速 ⇒ 机体沿 -FACING 受力</b>（即牛顿第三定律：气流从喷口喷出，机体被反推）；
      *     负转速 ⇒ 沿 +FACING；</li>
-     * <li>喷口 {@code facing=down}（装在车底、喷口朝下）时：正转速 = 向上推（上升、刹车），
-     *     负转速 = 向下吸（贴地 / 倒挂吸附）——与旧 {@code create:nozzle} 的"正推反吸"手感一致；</li>
+     * <li><b>⚠️ 2026-10 修正</b>：上面那条"正转速 = 沿 -FACING"只在水平朝向上成立。补上
+     *     {@link #axisStep} 之后，竖直朝向的统一结论是 <b>负转速 = 向上推、正转速 = 向下推</b>
+     *     （与朝上装还是朝下装无关）。旧注释里"facing=down 时正转速 = 上升"是漏了 step 的产物，
+     *     已作废；旧的 {@code startup.lua} 里 {@code bl/br = +256} 才向上的接法要改成四台统一取负；</li>
      * <li>喷管随车身翻转，所以倒挂时同一个"负转速 = 吸向头顶赛道"的语义不变。</li>
      * </ul>
      * 改成 {@code true} 即整体反向。
@@ -750,6 +752,35 @@ public class ThrustNozzleBlockEntity extends BlockEntity
 
     // ── Sable 物理：每 substep 沿喷口轴向施加恒定推力 ──
 
+    /**
+     * 朝向的<b>轴向符号</b>：{@code UP = +1}、{@code DOWN = -1}、四个水平方向恒为 {@code +1}
+     * （{@link Direction.AxisDirection#getStep()}）。
+     * <p>
+     * <b>为什么必须有它（2026-10 修的一个真 bug）</b>：电扇自身的推力路径
+     * （{@code references/sable-main/neoforge/.../fans_provide_force/EncasedFanBlockEntityMixin.java:44}）
+     * 是
+     * <pre>
+     * propSpeed = FACING.getAxisDirection().getStep() * convertToAngular(getSpeed()) * (10 / 3)
+     * getThrust() = 0.3 * propSpeed
+     * getScaledThrust() = -getThrust() * airflowScaling * pressure
+     * force = FACING.getNormal() * getScaledThrust() * timeStep
+     *       = -FACING.getNormal() * step * 转速 * (气压/气流修正)
+     * </pre>
+     * 本喷管原先只写了 {@code -FACING * 转速}，<b>漏掉 step</b>：
+     * <ul>
+     * <li>水平朝向 step = +1 ⇒ 与电扇完全一致（所以横向一直是"对的"）；</li>
+     * <li>{@code facing=DOWN} step = -1 ⇒ <b>推力整体反向</b>（用户实测：朝下的喷管方向是反的）；</li>
+     * <li>{@code facing=UP} step = +1 ⇒ 与水平一样，本来就对。</li>
+     * </ul>
+     * 补上之后，<b>竖直朝向（UP / DOWN）的喷管，负转速恒为向上、正转速恒为向下</b>，
+     * 与"朝上装还是朝下装"无关 —— 因为 {@code -normal * step} 对 UP 和 DOWN 都等于 {@code (0,-1,0)}。
+     * 这也意味着原先"前后两对喷管镜像取反"的接线（{@code fl/fr=-256}、{@code bl/br=+256} 才全向上）
+     * 要改成四台统一取负。
+     */
+    private int axisStep(final Direction facing) {
+        return facing.getAxisDirection().getStep();
+    }
+
     @Override
     public void sable$physicsTick(final ServerSubLevel subLevel, final RigidBodyHandle handle, final double timeStep) {
         final float speed = this.getFanSpeed();
@@ -764,9 +795,12 @@ public class ThrustNozzleBlockEntity extends BlockEntity
 
         final Direction facing = this.getBlockState().getValue(ThrustNozzleBlock.FACING);
         final Vec3i normal = facing.getNormal();
-        // 冲量 = 推力 × 气压 × substep 时长；rpm 带符号，所以 magnitude 也带符号
+        // 冲量 = 推力 × 气压 × substep 时长；rpm 带符号，所以 magnitude 也带符号。
+        // axisStep(facing) 是让"喷管的轴向语义"与电扇自身推力完全一致的关键一项（见 axisStep 的注释）：
+        // 少了它，facing=DOWN 的喷管推力会整体反向（step = -1），水平/UP 则看不出问题。
         final double pressure = this.airPressureAt(subLevel);
-        final double magnitude = (REVERSE_SIGN ? -1.0D : 1.0D) * THRUST_PER_RPM * speed * pressure * timeStep;
+        final double magnitude = (REVERSE_SIGN ? -1.0D : 1.0D) * this.axisStep(facing)
+                * THRUST_PER_RPM * speed * pressure * timeStep;
 
         // 力向量与作用点都必须每次新建：QueuedForceGroup.applyImpulseAtPoint 会就地改写传入的
         // position（减去质心求力臂），且 recordPointForce 保留引用（FlightDataRecorder 遥测会读），
@@ -846,8 +880,10 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         final Vec3 axis = new Vec3(normal.getX(), normal.getY(), normal.getZ());
 
         // 排气方向 = 机体受力方向的反向：
-        // 受力 = -FACING · (REVERSE_SIGN ? -1 : 1) · 转速 ⇒ 排气 = +FACING · 同一个符号
-        final double thrustSign = (REVERSE_SIGN ? -1.0D : 1.0D) * (speed > 0.0F ? 1.0D : -1.0D);
+        // 受力 = -FACING · (REVERSE_SIGN ? -1 : 1) · axisStep · 转速 ⇒ 排气 = +FACING · 同一个符号。
+        // axisStep 必须一起带上，否则竖直朝向喷管的粒子会与真实推力反向（力的方向改了，气流也得跟着改）。
+        final double thrustSign = (REVERSE_SIGN ? -1.0D : 1.0D) * this.axisStep(facing)
+                * (speed > 0.0F ? 1.0D : -1.0D);
         double flowSign = thrustSign;
 
         if (INVERT_PARTICLE_FLOW) {

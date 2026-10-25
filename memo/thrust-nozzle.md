@@ -102,6 +102,16 @@ group.applyAndRecordPointForce(centerOf(worldPosition), impulse)             // 
 - `REVERSE_SIGN = false` 是**进游戏实测校定的正确值**：正转速 ⇒ 机体沿 **-FACING** 受力。
   喷口 `facing=down`（装车底）时：**正转速 = 上升/刹车，负转速 = 下压/贴地**，与旧喷嘴"正推反吸"一致；
   喷管随车身翻转，倒挂时"负转速 = 吸向头顶赛道"的语义不变。
+  > **⚠️ 2026-10 重大修正（`axisStep`）**：上面"正转速 ⇒ -FACING"漏了一项 ——
+  > 电扇自身推力路径（`references/sable-main/neoforge/.../fans_provide_force/EncasedFanBlockEntityMixin.java:44`）里，
+  > `propSpeed = FACING.getAxisDirection().getStep() * angular * (10/3)`，而 `getStep()` 是
+  > **UP = +1、DOWN = −1、四个水平方向恒 +1**。喷管原来没有这一项，于是：
+  > 水平朝向看不出问题，**`facing=DOWN` 的喷管推力整体反向**（用户实测确认）。
+  >
+  > 补上 `axisStep` 后，`-normal * step` 对 UP 和 DOWN **都等于 (0,-1,0)**，所以竖直喷管的统一规则是
+  > **负转速 = 向上推、正转速 = 向下推，与朝上装还是朝下装无关**。
+  > 连带影响：`startup.lua:99-102` 原来的镜像接法 `fl/fr=-256, bl/br=+256` 必须改成四台统一 `-256`；
+  > `vtel.lua` 的 `LIFT_SIGN` 同步改为 `{fl=-1, fr=-1, bl=-1, br=-1}`。
 - **力向量与作用点必须每次新建**：`QueuedForceGroup.applyImpulseAtPoint` 会**就地改写传入的 position**
   （减去质心求力臂），`recordPointForce` 又保留引用（`FlightDataRecorder` 遥测会读）；复用临时向量会污染数据。
 
