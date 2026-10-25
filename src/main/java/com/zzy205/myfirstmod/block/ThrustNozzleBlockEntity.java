@@ -209,7 +209,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * <b>临时调试开关</b>（定位"喷口与平面成角度时粒子穿墙/漏到平面下方"）：每秒打一行喷口世界坐标、
      * 世界系排气方向、遮挡射线长度 {@code clear} 与本次颗粒数。定位完改回 {@code false}。
      */
-    public static final boolean DEBUG_EXHAUST_LOG = true;
+    public static final boolean DEBUG_EXHAUST_LOG = false;
 
     /** 横向散开（垂直于喷口轴的初速度上限，块/tick） */
     public static final double EXHAUST_SPREAD = 0.05D;

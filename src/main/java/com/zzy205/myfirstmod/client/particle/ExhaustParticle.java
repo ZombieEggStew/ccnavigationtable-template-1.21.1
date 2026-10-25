@@ -120,7 +120,7 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
     //   · 抽样跟踪：每 DEBUG_SAMPLE_EVERY 颗 0 代粒子里挑 1 颗，逐 tick 打位置/速度/半径/扫掠结果
     //   · 穿墙事件：粒子中心【从空气进入实心方块】时必打一行（起点在实心方块内的不算，避免喷管自身刷屏）
     //   · 读到结论后把 DEBUG_TRACE 改回 false（或整块删掉）即可，日志量有预算上限，不会爆日志
-    private static final boolean DEBUG_TRACE = true;
+    private static final boolean DEBUG_TRACE = false;
     private static final int DEBUG_SAMPLE_EVERY = 60;
     private static final int DEBUG_TRACE_LINE_BUDGET = 6000;
     private static final int DEBUG_ANOMALY_LINE_BUDGET = 120;
