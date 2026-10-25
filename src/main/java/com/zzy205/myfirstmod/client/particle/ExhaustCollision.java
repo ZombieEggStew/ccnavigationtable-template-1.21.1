@@ -36,9 +36,12 @@ public final class ExhaustCollision {
     /**
      * @param fraction 命中发生在位移的哪一段（0~1）
      * @param movement 实际可走到的位移（= 原位移 × fraction）
-     * @param normal   命中面法线（世界系）
+     * @param normal   命中面法线（世界系，已归一化）
+     * @param push     额外的**推出距离**（沿 {@code normal}，与 {@code normal} 同一坐标系）。
+     *                 普通扫掠命中为 0；只有「起点已经嵌在膨胀盒内」那种情况才 &gt; 0，
+     *                 见 {@link #slab} 的①分支与 {@code ExhaustParticle#move}
      */
-    public record Hit(double fraction, Vec3 movement, Vec3 normal) {
+    public record Hit(double fraction, Vec3 movement, Vec3 normal, double push) {
     }
 
     /**
@@ -98,7 +101,9 @@ public final class ExhaustCollision {
             }
 
             final Vec3 worldNormal = pose.transformNormal(localHit.normal()).normalize();
-            best = new Hit(localHit.fraction(), movement.scale(localHit.fraction()), worldNormal);
+            // 推出距离是在该物理体的 plot 局部系里量的，换回世界系要乘 bodyScale（刚体变换保长度也保比例）
+            best = new Hit(localHit.fraction(), movement.scale(localHit.fraction()), worldNormal,
+                    localHit.push() * bodyScale);
         }
 
         return best;
@@ -161,7 +166,10 @@ public final class ExhaustCollision {
                             continue;
                         }
 
-                        if (best == null || hit.fraction() < best.fraction()) {
+                        // fraction 打平时（多个方块同时"嵌入"）取推出距离最小的那个，避免一次被推很远
+                        if (best == null
+                                || hit.fraction() < best.fraction()
+                                || (hit.fraction() == best.fraction() && hit.push() < best.push())) {
                             best = hit;
                         }
                     }
@@ -180,27 +188,62 @@ public final class ExhaustCollision {
      */
     private static @Nullable Hit slab(final Vec3 start, final Vec3 movement, final AABB box, final double radius,
                                       final int ox, final int oy, final int oz) {
+        // 膨胀半径后的包围盒（球-箱扫掠的常见近似：把箱子三轴各膨胀 r，等价于"球 vs 箱"的立方体近似）
+        final double[] min = {
+                box.minX + ox - radius, box.minY + oy - radius, box.minZ + oz - radius};
+        final double[] max = {
+                box.maxX + ox + radius, box.maxY + oy + radius, box.maxZ + oz + radius};
+        final double[] origin = {start.x, start.y, start.z};
+        final double[] delta = {movement.x, movement.y, movement.z};
+
+        // ① 起点已经嵌在膨胀盒里 ⇒ 必须**推出**，不能返回 null。
+        //
+        //    这是"喷口与平面成角度时粒子穿墙/漏到平面下方"的根因：
+        //    起点在盒内时三轴 near 全是负数，而 entry 初值 0 只会被 near >= entry 更新
+        //    ⇒ normalAxis 保持 -1 ⇒ 走到下面的"没撞到"分支。于是粒子一旦进入半径为厚的壳层
+        //    就再也收不到任何碰撞响应，只有斜擦邻块侧面时才拿到 ±X/±Z 法线，而那种响应不会
+        //    消掉朝里的速度 ⇒ 一路沉进方块内部。
+        //
+        //    最容易把粒子放进壳层的是"撞墙就变大"（IMPACT_GROWTH=2 让半径翻倍，而接触点仍停在
+        //    旧半径的壳面上）；浅角度入射时法向速度只有几个百分点，也会让粒子贴着壳层滑不掉。
+        //
+        //    处理方式：返回 f=0 的接触（法线见 {@link #depenetrationNormal}：优先"从哪进来就从哪出去"），
+        //    并把推出深度交给调用方（{@link Hit#push}）真正把粒子挪出壳层。
+        boolean embedded = true;
+
+        for (int axis = 0; axis < 3; axis++) {
+            if (origin[axis] <= min[axis] || origin[axis] >= max[axis]) {
+                embedded = false;
+                break;
+            }
+        }
+
+        if (embedded) {
+            final Vec3 normal = depenetrationNormal(origin, min, max, delta);
+            final int axis = normal.x != 0.0D ? 0 : normal.y != 0.0D ? 1 : 2;
+            final double sign = axis == 0 ? normal.x : axis == 1 ? normal.y : normal.z;
+            final double depth = sign > 0.0D ? max[axis] - origin[axis] : origin[axis] - min[axis];
+
+            return new Hit(0.0D, Vec3.ZERO, normal, depth);
+        }
+
+        // ② 正常扫掠：取进入时间最晚的那个轴作为命中面（= 最先碰到的面）
         double entry = 0.0D;
         double exit = 1.0D;
         int normalAxis = -1;
         double normalSign = 0.0D;
 
         for (int axis = 0; axis < 3; axis++) {
-            final double min = (axis == 0 ? box.minX + ox : axis == 1 ? box.minY + oy : box.minZ + oz) - radius;
-            final double max = (axis == 0 ? box.maxX + ox : axis == 1 ? box.maxY + oy : box.maxZ + oz) + radius;
-            final double origin = axis == 0 ? start.x : axis == 1 ? start.y : start.z;
-            final double delta = axis == 0 ? movement.x : axis == 1 ? movement.y : movement.z;
-
-            if (Math.abs(delta) < 1.0E-12D) {
-                if (origin <= min || origin >= max) {
+            if (Math.abs(delta[axis]) < 1.0E-12D) {
+                if (origin[axis] <= min[axis] || origin[axis] >= max[axis]) {
                     return null; // 该轴上不移动且在板外 ⇒ 不相交
                 }
 
                 continue;
             }
 
-            double near = (min - origin) / delta;
-            double far = (max - origin) / delta;
+            double near = (min[axis] - origin[axis]) / delta[axis];
+            double far = (max[axis] - origin[axis]) / delta[axis];
 
             if (near > far) {
                 final double swap = near;
@@ -211,7 +254,7 @@ public final class ExhaustCollision {
             if (near >= entry) {
                 entry = near;
                 normalAxis = axis;
-                normalSign = delta > 0.0D ? -1.0D : 1.0D;
+                normalSign = delta[axis] > 0.0D ? -1.0D : 1.0D;
             }
 
             exit = Math.min(exit, far);
@@ -225,12 +268,65 @@ public final class ExhaustCollision {
             return null;
         }
 
-        final Vec3 normal = switch (normalAxis) {
-            case 0 -> new Vec3(normalSign, 0.0D, 0.0D);
-            case 1 -> new Vec3(0.0D, normalSign, 0.0D);
-            default -> new Vec3(0.0D, 0.0D, normalSign);
-        };
+        return new Hit(entry, movement.scale(entry), axisNormal(normalAxis, normalSign), 0.0D);
+    }
 
-        return new Hit(entry, movement.scale(entry), normal);
+    /**
+     * 选出"嵌进去之后该从哪一面推出来"。
+     * <p>
+     * <b>主判据只有一条：推出距离最小（最小平移向量，MTV）</b>——位移最小、最不可能穿到隔壁，
+     * 也保证"刚嵌进去一点点"的粒子沿最近的面被弹回表面。
+     * <p>
+     * ⚠️ <b>不能把"法线与运动方向相反"当主判据</b>（踩过）：粒子撞完是<b>向上</b>弹的，
+     * 那时"与运动相反的面"恰好是方块<b>底面</b>，推出深度约一整格 ⇒ 粒子被<b>往下推穿方块</b>，
+     * 于是每一个角度都漏、撞一次往下跳一格，比修之前更糟。
+     * <p>
+     * 所以运动方向只用来做 <b>tie-break</b>：深度几乎相等（粒子卡在方块正中，前后对称）时，
+     * 取"法线更偏向运动反侧"的那个面 —— 也就是它是从哪边进来的就往哪边出去，
+     * 避免对称时被随机地往<b>下</b>推。
+     */
+    private static Vec3 depenetrationNormal(final double[] origin, final double[] min, final double[] max,
+                                            final double[] delta) {
+        final double tieEpsilon = 1.0E-6D;
+        Vec3 best = null;
+        double bestDepth = Double.MAX_VALUE;
+        double bestAlong = Double.MAX_VALUE;
+
+        for (int axis = 0; axis < 3; axis++) {
+            for (int s = 0; s < 2; s++) {
+                final double sign = s == 0 ? 1.0D : -1.0D;
+                final double depth = sign > 0.0D ? max[axis] - origin[axis] : origin[axis] - min[axis];
+
+                if (depth <= 0.0D) {
+                    continue;
+                }
+
+                final Vec3 normal = axisNormal(axis, sign);
+                // 法线朝外 ⇒ 与运动点乘 < 0 表示"这一面在运动的反侧"（更可能是进来的那一面）
+                final double along = normal.x * delta[0] + normal.y * delta[1] + normal.z * delta[2];
+
+                if (best == null || depth < bestDepth - tieEpsilon) {
+                    best = normal;
+                    bestDepth = depth;
+                    bestAlong = along;
+                } else if (depth <= bestDepth + tieEpsilon && along < bestAlong) {
+                    // 深度打平：取更偏向"运动反侧"的面
+                    best = normal;
+                    bestDepth = Math.min(bestDepth, depth);
+                    bestAlong = along;
+                }
+            }
+        }
+
+        return best != null ? best : new Vec3(0.0D, 1.0D, 0.0D);
+    }
+
+    /** 轴对齐面法线（{@code sign} 指向盒外） */
+    private static Vec3 axisNormal(final int axis, final double sign) {
+        return switch (axis) {
+            case 0 -> new Vec3(sign, 0.0D, 0.0D);
+            case 1 -> new Vec3(0.0D, sign, 0.0D);
+            default -> new Vec3(0.0D, 0.0D, sign);
+        };
     }
 }

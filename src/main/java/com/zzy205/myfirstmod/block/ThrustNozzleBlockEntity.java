@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.block;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
 import com.simibubi.create.foundation.particle.AirParticleData;
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.particle.ContrailBudget;
 import com.zzy205.myfirstmod.particle.ContrailParticleData;
@@ -203,6 +204,12 @@ public class ThrustNozzleBlockEntity extends BlockEntity
     /** 出生速度的随机倍率区间（让排气有快慢差，不像整齐的一束） */
     public static final double EXHAUST_SPEED_RANDOM_MIN = 0.85D;
     public static final double EXHAUST_SPEED_RANDOM_MAX = 1.15D;
+
+    /**
+     * <b>临时调试开关</b>（定位"喷口与平面成角度时粒子穿墙/漏到平面下方"）：每秒打一行喷口世界坐标、
+     * 世界系排气方向、遮挡射线长度 {@code clear} 与本次颗粒数。定位完改回 {@code false}。
+     */
+    public static final boolean DEBUG_EXHAUST_LOG = true;
 
     /** 横向散开（垂直于喷口轴的初速度上限，块/tick） */
     public static final double EXHAUST_SPREAD = 0.05D;
@@ -794,6 +801,16 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         // 电扇那边是 AirCurrent.getFlowLimit() 把 maxDistance 截到第一个挡路方块的碰撞形状深度；
         // 这里等价地沿排气方向打一条碰撞射线，把粒子位移截断在命中点。
         final double clear = this.clearDistance(level, own, mouth, flowDir, PARTICLE_TRAVEL_MAX + 0.1D);
+
+        if (DEBUG_EXHAUST_LOG && level.getGameTime() % 20L == 0L) {
+            final Vec3 mouthWorld = this.projectToWorld(level, own, mouth);
+            final Vec3 flowWorld = this.projectToWorld(level, own, mouth.add(flowDir)).subtract(mouthWorld);
+            final Vec3 flowUnit = flowWorld.normalize();
+            CCPeripheralExtender.LOGGER.info(String.format(java.util.Locale.ROOT,
+                    "[EXHDBG-N] %s mouth=(%.3f,%.3f,%.3f) flow=(%.3f,%.3f,%.3f) clear=%.3f count=%d rpm=%.1f own=%s",
+                    this.worldPosition.toShortString(), mouthWorld.x, mouthWorld.y, mouthWorld.z,
+                    flowUnit.x, flowUnit.y, flowUnit.z, clear, count, speed, own == null ? "null" : "yes"));
+        }
 
         if (clear < MIN_PARTICLE_TRAVEL) {
             return; // 喷口被挡死 → 不生成粒子

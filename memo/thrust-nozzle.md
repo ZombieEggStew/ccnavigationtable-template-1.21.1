@@ -449,6 +449,84 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 
 **✅ 用户实测确认解决**：改用 9 参数重载后，32 格外尾焰正常可见，64 格处按 `MAX_EXHAUST_DISTANCE` 淡出。
 
+### 3.8 ⭐ 斜喷穿墙（粒子漏到平面下方）—— 根因：`Particle#setLocationFromBoundingbox` 把 y 当**包围盒底边**
+
+> 用户实测：喷口与平面**垂直（90°）时完全正常**（撞完沿面滑行）；**机体与平面成 30° 时全部粒子穿过去漏到下方**，
+> 且"越与平面平行问题越大"。漏下去的粒子**已经变大、变慢**（说明确实撞到过东西）。
+
+**根因（一行源码）**：`ExhaustParticle#move` 先用 `setBoundingBox(new AABB(nx±half, ny±half, nz±half))`
+建了一个**以 ny 为中心**的对称盒，随后调用 `setLocationFromBoundingbox()`。而 1.21.1 的实现
+（`Particle.java:223-228`，源码在 `build/moddev/artifacts/neoforge-21.1.235-sources.jar`）是：
+
+```java
+protected void setLocationFromBoundingbox() {
+    AABB aabb = this.getBoundingBox();
+    this.x = (aabb.minX + aabb.maxX) / 2.0;
+    this.y = aabb.minY;                    // ← 位置 y 被当成包围盒"底边"（见 Particle#setPos）
+    this.z = (aabb.minZ + aabb.maxZ) / 2.0;
+}
+```
+
+原版把粒子位置 `y` 当**脚底**（`setPos` 里 `minY = y, maxY = y + bbHeight`），本粒子却把 `y` 当**中心**
+（渲染 quad 与扫掠碰撞都用中心）。于是 **每 tick 位置被静默往下挪 `quadSize/2` 格，且这段下坠完全不在
+扫掠的 displacement 里** ⇒ 不受任何碰撞检测约束的额外下坠。
+
+这一条把四个现象全解释了：
+
+| 现象 | 解释 |
+|---|---|
+| 每 tick 下坠量越来越大 | `quadSize = baseScale × (SIZE_START + life×GROWTH) × impactGrowth` 单调涨，`half` 跟着涨（出生 0.05，末期 ~0.5） |
+| 90° 正常 | 垂直入射的反弹给粒子 ~0.3-0.45 格/tick 的上抛，压得住下沉 |
+| 越平越漏 | 浅角度反弹的法向分量只有 ~0.05-0.09 格/tick，压不住下沉 ⇒ 净位移朝下 |
+| 撞过变大的漏得更狠 | `IMPACT_GROWTH=2` 让 `quadSize`（⇒ 隐形下坠速度）**翻倍** |
+
+**证据**：抽样轨迹里 `pos` 和"上 tick 的 `mv`"逐 tick 对不上，差值正好 = `quadSize/2` 且随之增长
+（例 #2460：`82.13 -1.40 → 80.68`，应到 80.73，差 0.05；下一 tick 0.06 → 0.07 → 0.08，
+而 `quadSize` 每 tick 涨 0.017、`half` 涨 0.0085）。
+**修法**（`ExhaustParticle#move`）：不再调 `setLocationFromBoundingbox()`，直接
+`this.x = nx; this.y = ny; this.z = nz;`，包围盒围绕中心对称只用于视锥剔除。
+（`ContrailParticle` 走的是 `setPos`，与原版约定自洽，**没有**这个问题。）
+
+**证据（临时埋点，日志在 `run/logs/latest.log`，前缀 `[EXHDBG]` / `[EXHDBG-N]`）**
+
+- 120 条"从空气进入实心方块"事件**全部落在 30° 那 3 秒内，90° 一条都没有**。
+- 本 tick 扫掠结果：**MISS 76 条**；HIT 44 条的法线**全是 `(±1,0,0)`/`(0,0,±1)`，没有一条是 +Y**。
+- 已变大的粒子（`grow=2.0/4.0`）占 50/120。
+- 最典型一行：`t=16 (63.007) -> (62.913) grass_block 本tick=MISS qs=0.941 grow=2.0`
+  —— 粒子中心只比地面高 **0.007**，而它的碰撞半径是 `0.941×0.2=0.188`：**已经在自己的碰撞壳层里**。
+
+**根因**（`ExhaustCollision.slab`）：球-箱扫掠用的是"把箱子按半径 r 三轴各膨胀"的写法。当**起点已经落在
+膨胀盒内**时，三个轴的 `near` 全是负数，而 `entry` 初值 0 只会被 `near >= entry` 更新 ⇒ `normalAxis` 恒为 -1
+⇒ 方法返回 `null`（判成"没撞到"）。于是粒子一旦进入"半径厚"的壳层就**再也拿不到任何碰撞响应**；
+偶尔擦到邻块侧面时只拿到 `±X/±Z` 法线，而侧壁响应**不会消掉朝里的速度** ⇒ 一路沉进方块内部。
+
+**次要缺陷（同一个根因的帮凶，也一起修了）**：`ExhaustCollision.slab` 在**起点已经落在膨胀壳层内**时
+三轴的 `near` 全是负数，`entry`（初值 0）不会被 `near >= entry` 更新 ⇒ `normalAxis` 恒为 -1 ⇒ 返回 `null`，
+被当成"没撞到"。于是**只要粒子沉进"半径厚"的壳层，就再也拿不到任何碰撞响应**（只有斜擦邻块侧面时拿到
+`±X/±Z` 法线，而那不会消掉朝里的速度）。静默下坠 → 沉进壳层 → 碰撞彻底失效 → 穿过平面，
+这两步串成了完整的漏气链路。（`IMPACT_GROWTH` 让半径翻倍，会加深壳层、加速这条链路。）
+
+**修法**（`ExhaustCollision` + `ExhaustParticle`）
+
+- `slab()` 增加 **①嵌入分支**：三轴都严格在膨胀盒内时不再返回 `null`，而是返回 `f=0` 的接触 +
+  **推出深度**（`Hit.push`，普通命中为 0）。
+- `depenetrationNormal()` 选面规则：**主判据只有"推出距离最小"（最小平移向量 MTV）**；
+  运动方向只做 tie-break（深度打平时取"法线更偏向运动反侧"的面，防止卡在方块正中时被往下推）。
+  ⚠️ **不能**把"法线与运动方向相反"当主判据（踩过）：粒子撞完是向上弹的，那时"与运动相反的面"
+  恰好是方块**底面**，推出深度约一整格 ⇒ 粒子被**往下推穿方块**，所有角度都漏、比不修更糟。
+- `ExhaustParticle#move`：`movement = hit.movement() + n × (hit.push() + CONTACT_EPSILON)`，真正把粒子挪出壳层；
+  朝里的速度分量仍由 `scatter/slide` 每 tick 消掉（对外行为不变）。
+- 物理体那条路径的推出距离要乘 `bodyScale`（它是在 plot 局部系量的）。
+- 出生点保护（`SPAWN_GRACE_RADIUS`）不受影响：`scan` 里 `hit.fraction() < minFraction` 会把 f=0 的嵌入命中挡掉。
+
+**调试埋点（验证完要删/关）**
+
+- `ExhaustParticle.DEBUG_TRACE`：抽样（每 `DEBUG_SAMPLE_EVERY` 颗取 1）逐 tick 打
+  `pos/vel/quadSize/impactGrowth/本tick扫掠结果`；另在"粒子中心从空气进入实心方块"时必打一行 `!! 穿墙`。
+  ⚠️ 第一版漏了 `this.debugTrace &&` ⇒ 每颗都打，6000 行预算 0.7 秒烧光，等于没抽样。
+- `ThrustNozzleBlockEntity.DEBUG_EXHAUST_LOG`：每秒一行喷口世界坐标、世界系排气方向、`clear`、颗粒数。
+- 判读技巧：主世界方块的法线只可能是 ±X/±Y/±Z；**出现斜法线就说明这次命中来自被旋转的物理体**。
+
 ## 4. 已知边界 / 未做
 
 - **推力不做遮挡判定**：喷口被方块堵死时物理推力照样输出（要加的话应在每个游戏 tick 算一次遮挡并缓存给 substep 复用）。
@@ -539,6 +617,7 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 | 24 | 性能参数要能配置调 | 16 个性能参数搬进 `ccpe-client.toml`（`Config` CLIENT 段）；BE 的常量换成 `Config.XXX.get()` 访问器（现查现用，改完即时生效），粒子里每 tick 用到的 alpha/tau 在构造时缓存（§11） | 编译通过，待进游戏确认 |
 | 25 | 去掉「潜行空手右键清除染色」 | 删 `ThrustNozzleBlock#useWithoutItem`、goggle 的清除提示行、lang 的 `trail_dye_hint` / `trail_dye_cleared`（§10） | ✅ 编译通过 |
 | 26 | 物品 tooltip 要说明用途与染色 | 照 `trailing_wheel_mount` 注册 `ItemDescription.Modifier`（FMLClientSetupEvent），7 条 lang（summary + 3 组 condition/behaviour），文案不带 `_` 避免高亮奇偶翻转（§12） | 编译通过，待进游戏确认 |
+| 27 | **斜喷时粒子穿墙、漏到平面下方**（90° 正常，越平越糟） | 埋点两轮都修错方向（先以为只是 `slab` 缺"起点已重叠"分支），最后靠"pos 与上 tick 的 mv 逐 tick 对不上、差值 = quadSize/2"定位到真因：`move` 里调用 `setLocationFromBoundingbox()`，而它把 y 当包围盒**底边** ⇒ 每 tick 静默下坠 `quadSize/2` 且不被扫掠覆盖。改成直接写 `x/y/z`；同时保留 `slab` 的嵌入分支 + MTV 推出作为加固（§3.8） | 编译通过，待进游戏确认 |
 
 ## 8. 下一步：高空尾迹（contrail）实现计划
 

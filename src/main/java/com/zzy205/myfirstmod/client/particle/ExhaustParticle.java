@@ -1,8 +1,12 @@
 package com.zzy205.myfirstmod.client.particle;
 
+import com.zzy205.myfirstmod.CCPeripheralExtender;
 import com.zzy205.myfirstmod.block.ThrustNozzleBlockEntity;
 import com.zzy205.myfirstmod.particle.ExhaustParticleData;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.client.particle.ParticleProvider;
 import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.particle.SimpleAnimatedParticle;
@@ -14,6 +18,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -111,6 +116,18 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
      */
     private static final boolean DEBUG_TINT_BY_GEN = false;
 
+    // ── 临时调试：定位"喷口斜着喷时粒子穿过平面漏到下面"（用户实测：90° 正常，越小越糟） ──
+    //   · 抽样跟踪：每 DEBUG_SAMPLE_EVERY 颗 0 代粒子里挑 1 颗，逐 tick 打位置/速度/半径/扫掠结果
+    //   · 穿墙事件：粒子中心【从空气进入实心方块】时必打一行（起点在实心方块内的不算，避免喷管自身刷屏）
+    //   · 读到结论后把 DEBUG_TRACE 改回 false（或整块删掉）即可，日志量有预算上限，不会爆日志
+    private static final boolean DEBUG_TRACE = true;
+    private static final int DEBUG_SAMPLE_EVERY = 60;
+    private static final int DEBUG_TRACE_LINE_BUDGET = 6000;
+    private static final int DEBUG_ANOMALY_LINE_BUDGET = 120;
+    private static int debugSpawnCounter;
+    private static int debugTraceLineBudget = DEBUG_TRACE_LINE_BUDGET;
+    private static int debugAnomalyLineBudget = DEBUG_ANOMALY_LINE_BUDGET;
+
     // ── 撞墙反应（纯反弹 + 铺开，不涉及任何重力） ──
 
     /** 法向反弹系数：入射法向速度的 10% 反向弹回（0 = 完全不弹、贴着表面滑；1 = 完全弹性） */
@@ -118,7 +135,7 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
     /** 切向保留：入射切向速度的 90% 继续沿表面滑 */
     private static final double TANGENT_KEEP = 0.9D;
     /** 随机溅射：散射速度 = 入射法向速度 × 本系数（调大会变成"炸开"，调小则更贴面滑行） */
-    private static final double SPREAD_KEEP = 0.35D;
+    private static final double SPREAD_KEEP = 0.8D;
     /**
      * 散射的**扇形半角**（弧度）。π = 整圈随机（不限制方向，现行）；
      * 想只往切向前方扇出去就调小（例如 0.96 ≈ 55°）。
@@ -200,6 +217,9 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
     private final Vec3 spawnCenter;
     /** 上一次"有效碰撞（会随机改方向）"发生时的 age，用于 {@link #COLLISION_COOLDOWN} */
     private int lastImpactAge = -100;
+    /** 临时调试：本颗粒子是否被抽样跟踪，以及它的编号（只在 {@link #DEBUG_TRACE} 时有意义） */
+    private final boolean debugTrace;
+    private final int debugIndex;
 
     protected ExhaustParticle(final ClientLevel level, final double x, final double y, final double z,
                              final double xd, final double yd, final double zd,
@@ -211,6 +231,13 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
         this.gen = data.gen();
         this.spawnCenter = new Vec3(x, y, z);
         this.swirlPhase = this.random.nextDouble() * 40.0D;
+        this.debugIndex = debugSpawnCounter++;
+        this.debugTrace = DEBUG_TRACE && data.gen() == 0 && this.debugIndex % DEBUG_SAMPLE_EVERY == 0;
+
+        if (this.debugTrace) {
+            dbg("#%d SPAWN pos=(%.3f,%.3f,%.3f) vel=(%.3f,%.3f,%.3f) life=%d scale=%.3f",
+                    this.debugIndex, x, y, z, xd, yd, zd, data.lifetime(), data.scale());
+        }
 
         this.xd = xd;
         this.yd = yd;
@@ -293,17 +320,22 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
         Vec3 movement = new Vec3(dx, dy, dz);
         double impact = 0.0D;
         Vec3 hitNormal = null;
+        // 只为调试日志保留；逻辑与原来完全一致
+        ExhaustCollision.Hit hit = null;
 
         if (movement.lengthSqr() > 1.0E-8D) {
             final double radius = Mth.clamp(this.quadSize * COLLISION_RADIUS_FACTOR,
                     MIN_COLLISION_RADIUS, MAX_COLLISION_RADIUS);
-            final ExhaustCollision.Hit hit = ExhaustCollision.sweep(this.level,
+            hit = ExhaustCollision.sweep(this.level,
                     new Vec3(this.x, this.y, this.z), movement, radius,
                     this.spawnCenter, SPAWN_GRACE_RADIUS,
                     ThrustNozzleBlockEntity.PARTICLES_BLOCKED_BY_OTHER_BODIES);
 
             if (hit != null) {
-                movement = hit.movement().add(hit.normal().scale(CONTACT_EPSILON));
+                // push > 0 ⇒ 起点本来就嵌在碰撞壳层里（见 ExhaustCollision#slab 的①分支）：
+                // 除了沿法线抬一点点，还要把"嵌进去的深度"整体推出来，
+                // 否则粒子会一直留在壳层里、后续每 tick 都拿不到有效碰撞（这就是斜喷穿墙的根因）。
+                movement = hit.movement().add(hit.normal().scale(hit.push() + CONTACT_EPSILON));
 
                 if (this.age - this.lastImpactAge > COLLISION_COOLDOWN) {
                     impact = this.scatter(hit.normal());
@@ -321,11 +353,76 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
         final double ny = this.y + movement.y;
         final double nz = this.z + movement.z;
 
+        if (DEBUG_TRACE) {
+            this.debugSweep(nx, ny, nz, movement, hit);
+        }
+
+        // ⚠️⚠️ 这里**绝对不能**调用 {@code Particle#setLocationFromBoundingbox()}（踩过大坑）：
+        //     1.21.1 的实现在 Particle.java:223-228 是
+        //         this.x = (aabb.minX + aabb.maxX) / 2.0;
+        //         this.y = aabb.minY;                    // ← 原版把位置 y 当"包围盒底边"
+        //         this.z = (aabb.minZ + aabb.maxZ) / 2.0;
+        //     （见 Particle#setPos：minY = y、maxY = y + bbHeight）
+        //     而本粒子把 y 当**中心**用（渲染 quad 与扫掠碰撞都用中心）。所以先建一个
+        //     "以 ny 为中心"的对称盒再调它，等于每 tick 把 y 往下挪 quadSize/2 格，
+        //     而且这段下坠**完全不在扫掠的 displacement 里** ⇒ 静默穿墙。
+        //     实测后果：出生时每 tick 沉 0.05，撞一下变大后翻倍，寿命末期能到 0.5 格/tick。
+        //     90° 时靠反弹的上抛分量（~0.3-0.45/tick）压得住；角度越平法向分量越小（~0.05-0.09）
+        //     ⇒ 净位移朝下 ⇒ 粒子沉穿平面。**这就是"斜喷漏粒子"的真正根因。**
+        //     正确做法：直接写 x/y/z（核心位置），包围盒只用于剔除，围绕中心对称即可。
         this.setBoundingBox(new AABB(nx - half, ny - half, nz - half, nx + half, ny + half, nz + half));
-        this.setLocationFromBoundingbox();
+        this.x = nx;
+        this.y = ny;
+        this.z = nz;
 
         if (impact > 0.0D && hitNormal != null) {
             this.onImpact(impact, hitNormal);
+        }
+    }
+
+    // ── 临时调试（定位"斜喷穿地"，读完即可删除） ──
+
+    private static void dbg(final String fmt, final Object... args) {
+        CCPeripheralExtender.LOGGER.info("[EXHDBG] " + String.format(Locale.ROOT, fmt, args));
+    }
+
+    /** 该方块是否有实体碰撞形状（与扫掠碰撞的判据一致：只看 collision shape） */
+    private static boolean isSolidAt(final ClientLevel level, final BlockPos pos) {
+        final BlockState state = level.getBlockState(pos);
+        return !state.isAir() && !state.getCollisionShape(level, pos, CollisionContext.empty()).isEmpty();
+    }
+
+    /**
+     * 打一条本 tick 的扫掠轨迹；另外在"粒子中心从空气进入实心方块"时打一条<b>穿墙事件</b>。
+     * <p>
+     * 法线是不是轴对齐的很重要：主世界方块的碰撞面法线只可能是 ±X/±Y/±Z，
+     * 出现非轴对齐法线就说明这次命中来自某个<b>被旋转的物理体</b>（路径②）。
+     */
+    private void debugSweep(final double nx, final double ny, final double nz,
+                            final Vec3 movement, @Nullable final ExhaustCollision.Hit hit) {
+        // 注意：这里必须带 this.debugTrace —— 上一版漏了它，结果每颗粒子每 tick 都打，
+        // 6000 行预算 0.7 秒就烧光了（"抽样"等于没生效）。
+        if (this.debugTrace && debugTraceLineBudget > 0) {
+            debugTraceLineBudget--;
+            dbg("#%d t=%d pos=(%.2f,%.2f,%.2f) v=(%.2f,%.2f,%.2f) qs=%.3f grow=%.1f mv=(%.2f,%.2f,%.2f) -> %s",
+                    this.debugIndex, this.age, this.x, this.y, this.z,
+                    this.xd, this.yd, this.zd, this.quadSize, this.impactGrowth,
+                    movement.x, movement.y, movement.z,
+                    hit == null ? "MISS" : String.format(Locale.ROOT, "HIT f=%.3f n=(%.2f,%.2f,%.2f) push=%.3f",
+                            hit.fraction(), hit.normal().x, hit.normal().y, hit.normal().z, hit.push()));
+        }
+
+        if (debugAnomalyLineBudget > 0
+                && !isSolidAt(this.level, BlockPos.containing(this.x, this.y, this.z))
+                && isSolidAt(this.level, BlockPos.containing(nx, ny, nz))) {
+            debugAnomalyLineBudget--;
+            final BlockPos end = BlockPos.containing(nx, ny, nz);
+            dbg("!! 穿墙 #%d t=%d (%.3f,%.3f,%.3f) -> (%.3f,%.3f,%.3f) 终点方块=%s 本tick=%s v=(%.2f,%.2f,%.2f) qs=%.3f grow=%.1f",
+                    this.debugIndex, this.age, this.x, this.y, this.z, nx, ny, nz,
+                    this.level.getBlockState(end),
+                    hit == null ? "MISS" : String.format(Locale.ROOT, "HIT f=%.3f n=(%.2f,%.2f,%.2f) push=%.3f",
+                            hit.fraction(), hit.normal().x, hit.normal().y, hit.normal().z, hit.push()),
+                    this.xd, this.yd, this.zd, this.quadSize, this.impactGrowth);
         }
     }
 
