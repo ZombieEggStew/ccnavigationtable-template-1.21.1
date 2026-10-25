@@ -1084,13 +1084,26 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      *   Y ≥ 320            → 恒 −40°C
      */
     protected float ambientTemp() {
-        if (hasLevel()) {
+        return ambientTempAt(hasLevel() ? level : null, engineAltitude());
+    }
+
+    /**
+     * 上一条曲线的<b>静态版</b>：给定维度与高度，返回同一套分段线性曲线上的环境温度（°C）。
+     * <p>
+     * 抽出来的原因：别的系统也要用同一条"高度→温度"（定向喷管的高空尾迹，见
+     * {@code ThrustNozzleBlockEntity#contrailSuitability}），不能再各写一套、以后调曲线还要改两处。
+     * 实例方法 {@link #ambientTemp()} 现在只是"取维度 + 取自身高度"再委托到本方法，<b>行为零变化</b>。
+     *
+     * @param level 只用来判维度（地狱 155°C 恒温 / 末地 0°C 恒温）；{@code null} 时按主世界曲线算
+     * @param y     世界高度（Y）
+     */
+    public static float ambientTempAt(@Nullable Level level, float y) {
+        if (level != null) {
             if (level.dimension() == Level.NETHER)
                 return T_AMB_NETHER;
             if (level.dimension() == Level.END)
                 return T_AMB_END;
         }
-        float y = engineAltitude();
         if (y <= T_AMB_SEA_Y)
             return T_AMB_SEA;
         if (y >= T_AMB_TOP_Y)

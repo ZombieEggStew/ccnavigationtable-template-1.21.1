@@ -31,6 +31,7 @@ import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
 import com.zzy205.myfirstmod.client.MonitorSlabGridOverlay;
 import com.zzy205.myfirstmod.client.MonitorUseInterceptor;
 import com.zzy205.myfirstmod.client.MonitorHoverInterceptor;
+import com.zzy205.myfirstmod.client.particle.ContrailParticle;
 import com.zzy205.myfirstmod.client.particle.ExhaustParticle;
 import com.zzy205.myfirstmod.particle.MyModParticles;
 import com.zzy205.myfirstmod.client.MonitorBackgrounds;
@@ -88,6 +89,8 @@ public class CCPeripheralExtenderClient {
         // 排气粒子撞地分裂：子粒子先入队，这里每 tick 统一 flush
         // （不能在 ParticleEngine 遍历粒子列表期间 addParticle）
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> ExhaustParticle.flushPendingSplits());
+        // 尾迹粒子的存活计数记账：换维度/换世界时清零（旧粒子被丢弃时不走 remove()）
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> ContrailParticle.onClientTick());
 
         // 预加载 Monitor 模块模型（仿 control-panels PreLoadedModel 模式）
         MonitorPreloadedModels.init();
@@ -245,13 +248,18 @@ public class CCPeripheralExtenderClient {
     }
 
     /**
-     * 粒子 provider 注册：{@code ccpe:exhaust}（喷管排气粒子）。
-     * 用 {@code registerSpriteSet} —— 精灵图列表见 {@code assets/ccpe/particles/exhaust.json}
-     * （沿用 create:air 的那 8 张 {@code minecraft:generic_0..7}）。
+     * 粒子 provider 注册。
+     * 用 {@code registerSpriteSet} —— 精灵图列表见 {@code assets/ccpe/particles/*.json}
+     * （两者都沿用 create:air 的那 8 张 {@code minecraft:generic_0..7}）：
+     * <ul>
+     * <li>{@code ccpe:exhaust} —— 喷管排气（扫掠碰撞 + 撞墙扩散）；</li>
+     * <li>{@code ccpe:contrail} —— 高空尾迹（无碰撞冰晶云）。</li>
+     * </ul>
      */
     @SubscribeEvent
     static void registerParticles(RegisterParticleProvidersEvent event) {
         event.registerSpriteSet(MyModParticles.EXHAUST.get(), ExhaustParticle.Provider::new);
+        event.registerSpriteSet(MyModParticles.CONTRAIL.get(), ContrailParticle.Provider::new);
     }
 
     @SubscribeEvent

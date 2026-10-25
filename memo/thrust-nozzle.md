@@ -5,7 +5,8 @@
 > 粒子随寿命演变（v7，§3.6）：**越老越大 / 越老越慢 / 越老越透明**，三条曲线都由 `life = age/lifetime` 驱动。
 > 出力随气压缩放（§2.1.1）：`THRUST_PER_RPM = 1` ⇒ **1 RPM = 1 pN**，气压 1.0 时 256 RPM = 256 pN/管。
 > **远距离看不见粒子已解决**（§3.7）：根因是原版 32 格 `addParticle` 硬限制，改用 9 参数 `addAlwaysVisibleParticle(ignoreRange=true)`。
-> **下一步：高空尾迹（contrail）**，方案见 §8（仅计划，未动代码）。
+> **高空尾迹（contrail）已实现**（v1，2026-08）：自研粒子 `ccpe:contrail`，只在冷空气里、按移动距离发射，
+> 无碰撞/无重力/原地随机飘逸。代码完成 + 编译通过，**待进游戏验证**，细节与测试清单见 §9。
 > 上游背景：悬浮车自动驾驶的推进方案见 `memo/flip-autopilot.md`（火箭推力功率不生效 ⇒ 放弃火箭，改自研定向喷管）。
 > 相关：`memo/my_sensor_system.md`、`memo/api-code-map.md`。
 
@@ -468,8 +469,7 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
    建议用双边反向差动）。
    **气压项（§2.1.1）让 14% 只在海平面成立**，高空油门要更大；嫌麻烦就让脚本用 `sensor` 的气压做前馈，
    或先把 `THRUST_SCALES_WITH_AIR_PRESSURE` 关掉再标控制律。
-4. **高空尾迹（contrail）**：需求已定稿，实现方案见 §8。下一步做这个
-   （用户要求"开始做尾迹前先解决粒子可见距离"⇒ §3.7 已解决）。
+4. ~~高空尾迹（contrail）~~：**已实现，待进游戏验证**（§9，方案见 §8）。测试清单见 §9.4。
 
 ## 6. 参考来源（均只读）
 
@@ -505,10 +505,14 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 | 14 | 想要"1 RPM 对应 1 pN"的简单公式 | `THRUST_PER_RPM = 1.0`；连带：悬停 43%、4 管升限 y≈273、落地 25.4 m/s² | 已改，待进游戏确认 |
 | 15 | 离喷管约 1 区块就不出粒子（出力正常，Create 电扇同样） | 原版 `addParticleInternal` 离相机 >32 格（1024）直接丢粒子；**第一次错用 7 参数 `addAlwaysVisibleParticle`（force=false）无效**，改 9 参数 `ignoreRange=true` + 自设 64 格上限（§3.7） | ✅ 用户实测解决 |
 | 16 | 想要"真实高空尾迹"预研 | 科普 + 需求定稿 + 实现计划（§8），未动代码 | 计划就绪 |
+| 17 | 开始实现尾迹 | 静态化 `ambientTempAt`、新粒子类型 `ccpe:contrail` + `ContrailParticle`、`tickContrail()` 按位移发射（§9） | 编译通过，待进游戏验证 |
+| 18 | 尾迹看不清 / 太短 / 太小 | 染色 冰晶白 → 冷青 `0.45/0.80/1.00`；`ALPHA0` 0.14 → 0.28；寿命 60/300 → **180/600**；`WIDTH0` 0.6 → **1.0**；`WIDTH_TAU` 100 → 200（§9.5） | 编译通过，待进游戏确认 |
+| 19 | 用户把寿命调到 12000~18000 后：**分布很散** + **要等一段才显现** | 淡入改固定 6 tick（原为寿命的 5% ⇒ 45 s）；`TRAIL_MAX_DRIFT_RADIUS=2.0` 给随机游走加边界、`TRAIL_DRIFT` 0.2→0.05；`TRAIL_SPACING_S_FLOOR=0.35` 防止低 s 时间距拉到 12 格；新增 `MAX_LIVE_CONTRAIL=6000` 存活安全阀（`ContrailBudget`，§9.7） | 编译通过，待进游戏确认 |
+| 20 | 云层在 Y200、要求峰值曲线 + Y160 就要看清 | s 从单调爬升改为峰值曲线（上升段 × 高空变稀段）+ `TRAIL_Y_MIN=160` 阶跃硬门；节点与实测表见 §9.8 | 编译通过，待进游戏确认 |
 
 ## 8. 下一步：高空尾迹（contrail）实现计划
 
-> 状态：**计划就绪，未动代码**。等用户点头后按 §8.7 的清单开工。
+> 状态：**已实现**（2026-08，代码见 §9；§8.7 的清单已全部落地，两处偏离见 §9.0）。
 > 前置条件已满足：粒子可见距离问题已修（§3.7，必须用 9 参数 `addAlwaysVisibleParticle`）。
 
 ### 8.1 需求定稿（用户拍板）
@@ -653,3 +657,182 @@ s     = smoothstep01((T_START - T) / (T_START - T_FULL))
 3. 接 `tickContrail()`：先做**按距离发射 + 适宜度曲线**，不做滞后偏移与随机飘逸。
 4. 加随机飘逸与 `sqrt(t)` 扩散 + `alpha ∝ 1/宽度`，进游戏调手感。
 5. 最后补 `TRAIL_START_OFFSET`、距离上限、以及 memo §9。
+   —— **以上 5 步已一次性做完**，见 §9。
+
+## 9. 高空尾迹（contrail）实现记录（v1，2026-08）
+
+> 状态：**代码完成、`gradlew classes` 通过、未进游戏实测**。方案 = §8（用户 4 项定稿见 §9.1）。
+> 与 §8.7 计划的两处**必要偏离**见 §9.0。
+
+### 9.0 与 §8.7 计划的两处偏离
+
+1. **不复用 `ExhaustParticleData`，新建 `ContrailParticleData`**。
+   `ExhaustParticleData#getType()` 写死返回 `ccpe:exhaust`，而 `ParticleEngine`
+   是**按 `options.getType()` 找 provider** 的 ⇒ 拿它去生成尾迹只会生成排气粒子。
+   尾迹也不需要 `ownerId`/`gen`（不碰撞、不分裂），所以新 record 只有 `width/lifetime/rgb` 五个字段
+   （手写 `StreamCodec`，和排气那个同写法）。
+2. **温度曲线抽成静态方法**：`EngineCoreBlockEntity.ambientTempAt(Level level, float y)`（`public static`），
+   原实例方法 `ambientTemp()` 现在只是「取维度 + `engineAltitude()`」再委托 ⇒ **引擎行为零变化**。
+
+### 9.1 用户定稿（开工前问过，全部"推荐项"）
+
+| 议题 | 结论 |
+|---|---|
+| 寿命 | `TRAIL_LIFE_MAX = 300`（15 s），MIN 60 |
+| 悬停 | **完全不出尾迹**（按移动距离发射，悬停位移为 0 ⇒ 零发射） |
+| 出生点滞后 | **要**，`TRAIL_START_OFFSET = 3` 格 |
+| 维度 | `CONTRAIL_OVERWORLD_ONLY = true`：末地/地狱都不出尾迹 |
+
+### 9.2 文件
+
+| 文件 | 改动 |
+|---|---|
+| `block/EngineCoreBlockEntity.java` | 新增 `public static float ambientTempAt(Level, float y)`；`ambientTemp()` 委托 |
+| `particle/ContrailParticleData.java` | **新建** record `(width, lifetime, r, g, b)` + CODEC/STREAM_CODEC |
+| `particle/MyModParticles.java` | 注册 `ccpe:contrail`（同样 `overrideLimiter = false`，靠调用点传 `ignoreRange`） |
+| `client/particle/ContrailParticle.java` | **新建**：无碰撞、`sqrt(t)` 扩散、`alpha ∝ 1/宽度`、原地随机飘逸 |
+| `CCPeripheralExtenderClient.java` | `registerSpriteSet(MyModParticles.CONTRAIL, ContrailParticle.Provider::new)` |
+| `assets/ccpe/particles/contrail.json` | 精灵图 `minecraft:generic_0..7`（与排气同图，之后可换专用白云贴图） |
+| `block/ThrustNozzleBlockEntity.java` | `tickContrail()` / `spawnContrail()` / `contrailSuitability()` + 13 个 `TRAIL_*` 常量；`tickClient()` 重排（先把共用量算好，尾迹在排气门控**之前**调用） |
+
+### 9.3 发射逻辑（`tickClient` → `tickContrail`）
+
+```
+moved    = |喷口世界坐标 − 上一 tick 锚点|              // 客户端状态：contrailAnchorWorld / contrailAccum
+moved > TRAIL_MAX_TICK_MOVE(4)  ⇒ 判为瞬移，本 tick 不发射、累积清零
+accum   += moved
+s        = contrailSuitability(level, 喷口世界 Y)      // =0 ⇒ 直接返回（低空天然为 0）
+spacing  = TRAIL_SPACING / max(s, 1e-4)               // 越不冷 ⇒ 越稀（s=0.1 时 12 格才一颗）
+life     = LIFE_MIN + (LIFE_MAX−LIFE_MIN)·s  × 随机(0.85~1.15)
+accum ≥ spacing 就吐一颗，单 tick 最多 MAX_CONTRAL_PER_TICK(3) 颗，剩余累积封顶 1 个 spacing
+```
+
+- 适宜度曲线：`s = smoothstep01((TRAIL_T_START − T)/(TRAIL_T_START − TRAIL_T_FULL))`，
+  `+6°C ⇒ 0`、`−24°C ⇒ 1`。落点与 §8.3 的表格一致：Y160 ≈0 / Y200 0.10 / Y240 0.71 / Y260 0.96 / **Y275 起 1.0**。
+- **出生点** = 喷口世界坐标 **+ 排气下游 `TRAIL_START_OFFSET = 3` 格** + 垂直截面内 ±`TRAIL_WIDTH0×0.35` 格随机。
+  ⚠ §8.6.5 当时写的是「沿排气**反**方向后退」，与它自己那句「先飞过喷流混合段才开始结冰」是矛盾的：
+  实现取**下游**（远离喷口、落在尾焰之后）。想要反过来把常量改成负值即可（已在该常量注释里写明）。
+- **初速** = 球面随机方向 × `TRAIL_DRIFT × 0.3~1.0`（≤ 0.02 格/tick）⇒ **整体平流 = 0**，不随风（用户定稿）。
+- **距离上限** `MAX_CONTRAL_DISTANCE = 96`（独立于排气的 64）；`withinParticleDistance()` 已改成
+  「调用方传上限」的形式，两个链路各用各的常量。
+- **出生与排气解耦**：尾迹不查遮挡射线、不看油门大小（水汽量与推力无关），只要风扇在转且机体在动。
+
+### 9.4 粒子（`client/particle/ContrailParticle`）
+
+- **无碰撞**：`hasPhysics = false`，不复用 `ExhaustCollision`，直接 `setPos` 推进（不走 `Particle#move`，
+  那个会做 `collideBoundingBox` 与贴地判停）。
+- **无重力**：`gravity = 0`，只有 `BUOYANCY = 0.0002` 的向上浮力。
+- **两条成对曲线**（质量守恒，现实里"前段细亮、后段宽淡"的成因）：
+
+  ```
+  spread(t) = sqrt(1 + age / TRAIL_WIDTH_TAU(100))      // 寿命中点 1.58×、末尾 2.0×
+  quadSize  = baseWidth × spread(t)
+  alpha     = TRAIL_ALPHA0 / spread(t) × 淡入(0~5% 寿命) × 淡出(80%~100% 寿命)
+  ```
+
+  即出生 0.14 → 寿命末尾 ~0.07 → 淡出到 0（不硬切）。
+- **原地随机飘逸**：每 tick 抖动 `JITTER=0.0016` + 缓慢正弦 `SWIRL=0.0006`（φ=0.07/tick）+ 浮力，
+  再乘 `DRIFT_DAMP=0.985` 并**把速度钳到 `TRAIL_DRIFT`**⇒ 一生最多漂约 6 格。
+- **光照/渲染**：继承 `SimpleAnimatedParticle` 直接拿到 `PARTICLE_SHEET_TRANSLUCENT` 与全亮
+  `getLightColor = 15728880`（天空 15 + 方块 15）—— 冰晶不该被暖色光源染黄。
+  精灵图**出生时随机定死一张**（不调 `setSpriteFromAge`），避免 1000 颗同时跳帧。
+- **必须用 9 参数 `addAlwaysVisibleParticle(..., true, ...)`**（§3.7 的老坑），尾迹比尾焰更需要远处可见。
+
+### 9.5 常量总表（全在 `ThrustNozzleBlockEntity` 顶部，改完热重载即看）
+
+| 常量 | 现值 | 作用 / 怎么调 |
+|---|---|---|
+| `USE_CONTRAIL` | true | 总开关 |
+| `CONTRAIL_OVERWORLD_ONLY` | true | 只在主世界出尾迹 |
+| `TRAIL_T_START` / `TRAIL_T_FULL` | +6 / −24 °C | 温度窗口（≈ Y160 / Y275）；想更低空就有尾迹 ⇒ 把 START 调大 |
+| `TRAIL_SPACING` | 1.2 格 | 发射密度（越小越密） |
+| `TRAIL_LIFE_MIN` / `MAX` | **360 / 1200 tick（18~60 s，"1 分钟左右"）** | 越冷越耐久；用户反馈"太短"后从 60/300 翻倍。`MAX` 是**性能主旋钮**（粒子数 ≈ 密度 × 寿命） |
+| `TRAIL_WIDTH0` | **1.0 格** | 出生宽度（quad 半边，可见约 2 格）；用户反馈"要放大"后从 0.6 提到 1.0 |
+| `TRAIL_WIDTH_TAU` | **300 tick（经验：≈寿命/4）** | 扩散快慢（寿命翻倍后同步放大，末段仍是 2.0 倍宽） |
+| `TRAIL_ALPHA0` | **0.28** | 出生不透明度（配合染色从 0.14 抬起）；嫌浓就降 |
+| `TRAIL_DRIFT` | 0.02 格/tick | 原地飘逸上限（0 = 完全钉死） |
+| `TRAIL_START_OFFSET` | 3.0 格 | 出生点沿排气下游偏移（负值 = 反向） |
+| `MAX_CONTRAL_DISTANCE` | 96 格 | 超过就不发射 |
+| `MAX_CONTRAL_PER_TICK` | 3 | 单 tick 补发上限 |
+| `TRAIL_MAX_TICK_MOVE` | 4.0 格 | 超过当瞬移，丢弃 |
+| `TRAIL_RED/GREEN/BLUE` | **0.45/0.80/1.00** | 冷青色（用户要求"染色看清"；改回 0.92/0.94/0.97 即冰晶白） |
+
+### 9.6 进游戏验证清单（按顺序做，方便定位）
+
+1. **低空对照**：地面（Y<160）开风扇 ⇒ 只有排气、**没有**尾迹 → 证明温度门控生效。
+2. **高空出现**：飞到 Y≈200 起飞巡航 ⇒ 出现**淡**尾迹；Y≈260+ ⇒ 明显、更耐久。
+3. **悬停不出**：高空把机体稳住不动（风扇仍转）⇒ 不产生新粒子，旧粒子自己淡掉。
+4. **随高度变浓**：在 Y=200 / Y=240 / Y=280 各平飞一段，尾迹应依次变**密 + 变长命**。
+5. **不跟随机体**：飞过去之后回头看，尾迹应**留在原地**形成一条云带，而不是跟着车身平移/旋转（§3.5 的老坑）。
+6. **远处可见**：飞到 ~64~90 格（>32 格原版限制）回望 ⇒ 尾迹仍在（§3.7）。
+7. **出生点滞后**：尾迹应与喷口之间有约 3 格"空白喷流段"。
+8. **末地无尾迹**：去末地高空飞 ⇒ 无尾迹。
+9. 性能：寿命拉到 30 s 后，4 管满载约 **2000 颗**同屏（每颗还是 ~2~4 格的半透明 quad）；
+   若掉帧先降 `TRAIL_LIFE_MAX`（600 → 300 直接减半），其次降 `TRAIL_WIDTH0`。
+
+**待用户回报**：①尾迹整体是不是"太白/太淡/太粗"（调 `TRAIL_ALPHA0` / `TRAIL_WIDTH0`）；
+②出生点偏移方向是否符合预期（3 格在下游 vs 想要反向）；③高空尾迹的密度与长度手感（`TRAIL_SPACING` / `TRAIL_LIFE_MAX`）。
+
+### 9.7 v2 修正：寿命调高后的「分布很散」+「要等很久才显现」（2026-08）
+
+用户在游戏中把寿命调到 **12000~18000 tick（10~15 分钟）**、`TRAIL_DRIFT` 0.2、`WIDTH_TAU` 6000、
+`ALPHA0` 0.6（颜色临时改成纯红 1/0/0 便于观察），随后反馈两个症状。两条都有**结构性根因**，不是参数没调好：
+
+| 症状 | 根因 | 修法 |
+|---|---|---|
+| **要等一段才显现** | 淡入写成了「寿命的 5%」：寿命 300 时 15 tick（无感），寿命 18000 时 **900 tick = 45 秒** | 淡入改成**固定 tick**：`FADE_IN_TICKS = 6`（0.3 s），不再随寿命缩放 |
+| **分布很散** | ① 随机游走**无界**：`TRAIL_DRIFT = 0.2` 格/tick × 18000 tick，单颗粒子能游走几十格；② 间距 `TRAIL_SPACING / s` 在 Y≈200（s≈0.1）时变成 **12 格才一颗**，天然断线 | ① 新增 `TRAIL_MAX_DRIFT_RADIUS = 2.0`：超半径只删掉「朝外」的速度分量；`TRAIL_DRIFT` 降回 0.05。<br>② 新增 `TRAIL_SPACING_S_FLOOR = 0.35`：间距最多稀到 2.9 倍（≤3.4 格） |
+
+新增 **存活总数安全阀** `MAX_LIVE_CONTRAIL = 6000`：寿命每翻一倍，同屏粒子数就翻一倍
+（18000 tick 理论上是几万颗半透明 quad）。计数住在 common 包的 `particle/ContrailBudget`
+（只有 `int`，BE 可以安全读；不能直接读客户端粒子类），由 `ContrailParticle` 的构造 / `remove()` 维护，
+换维度时在客户端 `ClientTickEvent.Post` 里 `reset()`（旧世界的粒子被直接丢弃、不走 `remove()`，
+不重置的话计数会永久卡在上限）。
+
+**教训（写进 memo 免得重踩）**：
+
+- **寿命相关的曲线一律不要写成「寿命的比例」**，除非它本来就该随寿命缩放。淡入/淡出这类
+  「出生那一小段」必须用**固定 tick** —— 否则用户把寿命从 300 调到 18000，淡入被同步放大 60 倍。
+  （淡出保留比例是合理的：它是「末段」的语义。）
+- **随机游走必须配边界**。只要粒子会自己加速（抖动/浮力），寿命一长就会无界扩散；
+  「离出生点半径 + 只削法向分量」是最省事且观感稳定的写法（完全钳速度会像贴纸、完全不管会成云）。
+- **密度和强度要分开表达**：不冷的时候该做的是「更淡、更短命」，而不是「更少粒子」——
+  抽粒子只会让人看到断线，看不出「弱」。这也呼应 §8.2 那条「气压不参与判定」。
+
+**⚠️ 性能提醒**：15 分钟寿命 + 1.2 格间距 ⇒ 尾迹会拖出上千格，但同屏粒子被 `MAX_LIVE_CONTRAIL`
+压在 6000。真掉帧就按 6000 → 3000 → 1500 往下砍，或者把寿命降回 1200~2400（1~2 分钟）——
+**「尾迹看起来长」主要来自速度 × 寿命，但肉眼可见的只有镜头附近那几百格**，
+所以超过约 2400 tick 之后继续加寿命基本都是浪费。
+
+### 9.8 v3：适宜度改为**峰值曲线**（2026-08，用户定稿）
+
+原来的 s 是**单调爬升**（Y160 的 0 涨到 Y275 的 1 后封顶）。用户指出「我的世界云层在 200 左右」，
+要求改成**峰值曲线**，同时「Y≈160 就要看见清晰尾迹」。现实依据：尾迹判据要**冷 + 湿**，
+冷随高度单调、**湿是先增后减**（对流层顶最湿、平流层极干）⇒ 尾迹本来就有一个「最浓高度带」，越往上越稀。
+
+```
+s_rise = smoothstep01((T_START − T) / (T_START − T_FULL))               // 上升段
+s_fade = smoothstep01((T_FADE_START − T) / (T_FADE_START − T_FADE_END)) // 高空变稀段
+s      = s_rise × (1 − (1 − S_CEILING) · s_fade)                       // 峰值 1.0，世界顶 0.15
+s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶跃硬门
+```
+
+温度仍走 `EngineCoreBlockEntity.ambientTempAt`（以后改 `T_AMB_*` 时整条尾迹带自动平移，不用改两处）。
+`TRAIL_Y_MIN` 用**阶跃**而不是平滑过渡：因为「160 以下完全没有」和「160 就已经明显」
+在同一高度没法用一条平滑曲线同时满足 —— 这是刻意的取舍，不是漏改。
+
+| 节点 | 温度 | Y | 作用 |
+|---|---|---|---|
+| `TRAIL_T_START` | +10 °C | ≈132 | 上升段起点（被硬门挡在 160） |
+| `TRAIL_Y_MIN` | +5.8 °C | **160** | **硬门**：以下为 0；一过 160 直接 s≈0.58 |
+| `TRAIL_T_FULL` | +2.5 °C | ≈183 | 上升段拉满（云层下方就已经最浓） |
+| `TRAIL_T_FADE_START` | −8 °C | ≈224 | 峰带结束（云层 ~200 在峰内），开始变稀 |
+| `TRAIL_T_FADE_END` | −40 °C | 320 | 世界顶，只剩 `TRAIL_S_CEILING = 0.15` |
+
+实测口径（寿命 360/1200、间距 1.2、s floor 0.35）：
+159 → **0**；160 → s0.58 / 间距 2.1 / 42 s；175 → 0.94 / 1.3 / 57 s；
+**183~224 → 满（1.2 / 60 s）**；240 → 0.94；260 → 0.73；280 → 0.47；300 → 0.25；320 → 0.15。
+**峰值带 = Y 183~224**，云层 Y≈200 正落在峰内。
+
+
+

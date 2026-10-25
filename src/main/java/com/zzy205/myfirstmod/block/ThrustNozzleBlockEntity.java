@@ -2,6 +2,8 @@ package com.zzy205.myfirstmod.block;
 
 import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
 import com.simibubi.create.foundation.particle.AirParticleData;
+import com.zzy205.myfirstmod.particle.ContrailBudget;
+import com.zzy205.myfirstmod.particle.ContrailParticleData;
 import com.zzy205.myfirstmod.particle.ExhaustParticleData;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
@@ -18,6 +20,7 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.Vec3i;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
@@ -230,6 +233,189 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
      */
     public static final double MAX_EXHAUST_DISTANCE = 64.0D;
 
+    // ── 高空尾迹（contrail）：只在足够冷的空气里出现，由"移动距离"而不是时间触发 ──
+
+    /**
+     * 尾迹总开关（<b>现行 true</b>）。{@code false} = 完全不出尾迹，喷口只有排气。
+     * <p>
+     * 尾迹的现实依据（memo §8.2）：飞机尾迹是<b>排气水汽在高空冷空气里结成的冰晶云</b>，不是烟。
+     * 三个独立物理量各管一件事 —— 温度阈值决定<b>有没有</b>、环境过饱和决定<b>多长命</b>、
+     * 光学厚度决定<b>多浓多大</b>。本项目不用湿度，全部退化成"高度 → 环境温度"的纯函数
+     * （{@link #TRAIL_T_START} / {@link #TRAIL_T_FULL}），并遵守两条设计规则：
+     * <ul>
+     * <li>气压<b>不参与</b>判定（气压只是高度的代理变量，且现有曲线是 1.5→0 单调，不能当尾迹强度）；</li>
+     * <li>尺寸与透明度<b>必须成对</b>算（{@code alpha ∝ 1/宽度}），否则"散开"和"变淡"会互相打架。</li>
+     * </ul>
+     */
+    public static final boolean USE_CONTRAIL = true;
+
+    /**
+     * 只在主世界出尾迹（<b>现行 true</b>，用户定稿）。
+     * <p>
+     * 理由：地狱按 {@link EngineCoreBlockEntity#T_AMB_NETHER}=155°C 恒温，适宜度天然为 0，本来就没有；
+     * 末地恒 {@link EngineCoreBlockEntity#T_AMB_END}=0°C ⇒ 适宜度 ≈ 0.10，会蹭出一层淡淡的尾迹。
+     * 这个开关把末地也直接关掉，语义干净。置 {@code false} 则末地也会有 10% 强度的淡尾迹。
+     */
+    public static final boolean CONTRAIL_OVERWORLD_ONLY = true;
+
+    /**
+     * 尾迹<b>适宜度曲线</b>：从"单调爬升"改成<b>峰值曲线</b>（用户定稿）。
+     * <p>
+     * 现实依据：尾迹要冷（会结冰）+ 要有水汽（能持久）。冷这条随高度单调，但水汽随高度是<b>先增后减</b>
+     * —— 到了对流层顶以上（平流层）空气极干，反而很难有尾迹。所以"越高越浓"是错的，
+     * 正确的形状是：<b>某个高度带最浓，往上变稀、往下消失</b>。
+     * <p>
+     * 本曲线的三段（全部以环境温度 { 用温度而不是裸 Y，好处是以后改引擎的
+     * {@link EngineCoreBlockEntity#T_AMB_*} 曲线时，尾迹带会自动跟着平移 }）：
+     * <pre>
+     * 上升段  s_rise = smoothstep01((T_START − T) / (T_START − T_FULL))
+     * 变稀段  s_fade = smoothstep01((T_FADE_START − T) / (T_FADE_START − T_FADE_END))
+     * s = s_rise × (1 − (1 − S_CEILING) · s_fade)        // 峰值 = 1.0，世界顶 = S_CEILING
+     * </pre>
+     * 落点（主世界，Y ↔ 温度见 {@code T_AMB_*} 分段线性）：
+     * <table border="1">
+     * <tr><th>节点</th><th>温度</th><th>Y</th><th>作用</th></tr>
+     * <tr><td>{@code TRAIL_T_START}</td><td>+10 °C</td><td>≈132</td><td>上升段起点（实际被下面的 Y 硬门挡住）</td></tr>
+     * <tr><td>{@code TRAIL_Y_MIN}</td><td>+5.8 °C</td><td><b>160</b></td><td><b>硬门</b>：以下完全没有尾迹；一过 160 就有 s≈0.58（≈42 s 寿命）</td></tr>
+     * <tr><td>{@code TRAIL_T_FULL}</td><td>+2.5 °C</td><td>≈183</td><td>上升段拉满 ⇒ 从云层下方开始就是最浓</td></tr>
+     * <tr><td>{@code TRAIL_T_FADE_START}</td><td>−8 °C</td><td>≈224</td><td>峰带结束（云层 ~200 正好落在峰内），开始变稀</td></tr>
+     * <tr><td>{@code TRAIL_T_FADE_END}</td><td>−40 °C</td><td>320</td><td>世界顶，只剩 {@code S_CEILING}</td></tr>
+     * </table>
+     * 用户要求"Y160 左右就要看见大概清晰的尾迹"：靠 <b>上升段陡 + Y 硬门</b> 实现 ——
+     * 159 → 完全没有；160 → s=0.58（间距 2.1 格、寿命 42 s）；175 → s=0.94。
+     */
+    public static final float TRAIL_T_START = 10.0F;
+    /** 上升段拉满的温度（≈Y183）；见 {@link #TRAIL_T_START} 的表格 */
+    public static final float TRAIL_T_FULL = 2.5F;
+    /** 高空变稀段的起点温度（≈Y224，云层 ~200 之上一小段）：越往上越干 ⇒ 尾迹越淡 */
+    public static final float TRAIL_T_FADE_START = -8.0F;
+    /** 变稀段终点温度（= 世界顶 −40 °C） */
+    public static final float TRAIL_T_FADE_END = -40.0F;
+    /** 世界顶（Y≈320）残余强度：不归零，避免爬到限高时尾迹"突然消失" */
+    public static final float TRAIL_S_CEILING = 0.15F;
+
+    /**
+     * 尾迹的<b>高度硬门</b>（Y，现 160）：低于它完全不出尾迹（用户定稿：低空 Y&lt;160 没有尾迹）。
+     * <p>
+     * 硬门是"阶跃"而不是平滑过渡：因为用户要的是"160 左右就有清晰尾迹"，
+     * 而平滑曲线做不到"0 和明显"在同一高度同时成立 —— 所以让它 160 以下为 0、一过 160 立刻 s≈0.58。
+     */
+    public static final double TRAIL_Y_MIN = 160.0D;
+
+    /**
+     * 尾迹的<b>发射间距</b>（格）：机体每飞这么远吐一颗（在适宜度 s=1 时）。
+     * <p>
+     * <b>为什么按移动距离而不是按 tick 发射</b>：现实里尾迹浓度由"单位航程排了多少水汽"决定，
+     * 悬停不动的飞机不会在原地堆出一团云。按距离发射顺带解决性能问题（静止时零发射），
+     * 也是用户定稿（悬停完全不出尾迹）。
+     * <p>
+     * 温度不够冷时间距被放大：{@code 实际间距 = TRAIL_SPACING / max(s, TRAIL_SPACING_S_FLOOR)}。
+     */
+    public static final double TRAIL_SPACING = 1.2D;
+
+    /**
+     * 计算间距时给适宜度 s 的<b>下限</b>（现 0.35）。
+     * <p>
+     * 原来的公式是 {@code TRAIL_SPACING / s}：Y≈200 处 s≈0.1 ⇒ <b>12 格才吐一颗</b>，
+     * 视觉上就是"断断续续、分布很散"。但"不够冷"本来就该靠<b>寿命/透明度</b>体现，
+     * 不该靠抽走粒子（粒子少了只会看起来断线，而不是变淡）。
+     * 加下限后密度最多稀到 1/0.35 ≈ 2.9 倍（间距 ≤ 3.4 格），强度差异交给寿命。
+     */
+    public static final float TRAIL_SPACING_S_FLOOR = 0.35F;
+
+    /**
+     * 适宜度 s 决定尾迹寿命（tick）：s=0 用 MIN、s=1 用 MAX（<b>越冷越耐久</b>，对齐"过饱和"那条现实规律）。
+     * <p>
+     * 迭代：60/300（3~15 s）→ 180/600（9~30 s）→ 用户自己试到 12000/18000（10~15 分钟）
+     * → 现行 <b>360/1200（18~60 s，"1 分钟左右"）</b>。保留约 1:3.3 的 MIN/MAX 比例，
+     * 所以"越冷越耐久"这条曲线形状不变，只是整体缩到 1 分钟量级。
+     * <p>
+     * 注意这是<b>性能主旋钮</b>：同屏粒子数 ≈ 发射密度 × 寿命。1200 tick、4 管满载、20 m/s 时约 4000 颗，
+     * 已经在 {@link #MAX_LIVE_CONTRAIL}=6000 的范围内，但再往上调寿命就会撞上限。
+     */
+    public static final int TRAIL_LIFE_MIN = 360;
+    public static final int TRAIL_LIFE_MAX = 1200;
+
+    /**
+     * 出生宽度（格，quad 的<b>半</b>边长；可见宽度约为 2 倍），之后按 sqrt(t) 扩散变宽。
+     * <p>
+     * 用户实测反馈「粒子需要放大一些」⇒ 0.6 → <b>1.0</b>（出生可见宽约 2 格、寿命末尾约 4 格）。
+     */
+    public static final float TRAIL_WIDTH0 = 1.0F;
+
+    /**
+     * 扩散的时间常数（tick）：{@code 宽度 = TRAIL_WIDTH0 · sqrt(1 + age/本值)}。
+     * <p>
+     * 经验规则：<b>TAU ≈ 寿命 / 4</b>（这样寿命中点约 1.58 倍宽、末尾约 2.24 倍宽）。
+     * 现寿命 360~1200 ⇒ 取 <b>300</b>。寿命改了记得一起改这里，否则要么几乎不扩散、
+     * 要么中段就摊得看不见。越大散得越慢。
+     */
+    public static final int TRAIL_WIDTH_TAU = 300;
+
+    /**
+     * 出生不透明度上限（仍比排气的 {@code ALPHA_MAX = 0.62} 淡）：
+     * 实际透明度 = {@code TRAIL_ALPHA0 / 扩散倍数} ⇒ 出生 0.28、寿命末尾约 0.14，再叠淡入淡出。
+     * 用户反馈尾迹太淡看不清 ⇒ 0.14 → <b>0.28</b>（配合染色与放大）。嫌浓就往下调。
+     */
+    public static final float TRAIL_ALPHA0 = 0.6F;
+
+    /**
+     * "原地随机飘逸"的速度上限（格/tick）：用户明确<b>不要风场平流</b>，所以尾迹整体平流为 0，
+     * 只做缓慢的随机游走。
+     * <p>
+     * 0.2 格/tick 太大（= 4 格/秒，而且随机游走无界）：配合长寿命会把尾迹散成一团（用户实测"分布很散"），
+     * 现在降回 <b>0.05</b>，真正的"不散"由 {@link #TRAIL_MAX_DRIFT_RADIUS} 保证。
+     * 想要更活泼的蠕动可以抬回 0.1~0.2，半径约束会兜住，只是粒子会更"抖"。
+     */
+    public static final double TRAIL_DRIFT = 0.05D;
+
+    /**
+     * 单颗粒子允许离开<b>出生点</b>的最大半径（格，0 = 不限；现 2.0）。
+     * <p>
+     * 这是"分布很散"的正面修法：随机游走是<b>无界</b>的，寿命 18000 tick、漂移 0.2 格/tick 时，
+     * 每颗粒子一生能游走出几十格，整条尾迹就散成一片稀薄的雾。
+     * 超半径后粒子只失去"朝外"的速度分量（仍可沿切向缓慢蠕动），所以既不会散开、
+     * 也不会像贴纸一样完全钉死。带宽 ≈ 本值 × 2 + 粒子尺寸。
+     */
+    public static final double TRAIL_MAX_DRIFT_RADIUS = 2.0D;
+
+    /**
+     * 出生点沿<b>排气下游</b>偏移（格）：真实尾迹不在喷口出现，要先经过一段喷流混合段才开始结冰。
+     * <p>
+     * 正值 = 沿排气方向往下游偏移（远离喷口，尾迹与尾焰之间留出一段看不见的喷流）；
+     * 想要相反方向就把值改成负数。
+     */
+    public static final double TRAIL_START_OFFSET = 3.0D;
+
+    /** 尾迹发射距离上限（格，0 = 不限）：比排气的 {@link #MAX_EXHAUST_DISTANCE}=64 更大，尾迹本来就要远处可见 */
+    public static final double MAX_CONTRAL_DISTANCE = 96.0D;
+
+    /** 每 tick 最多补发几颗尾迹粒子（防止低帧率/瞬移时一帧吐一堆） */
+    public static final int MAX_CONTRAL_PER_TICK = 6;
+
+    /**
+     * 尾迹粒子的<b>存活总数上限</b>（安全阀，现 6000；0 = 不限）。
+     * <p>
+     * 同屏粒子数 ≈ 发射密度 × 寿命：寿命 600 tick 时 4 管满载约 2000 颗，寿命 18000 tick 时
+     * <b>理论上是几万颗</b> —— 半透明 quad 能把帧率直接打死。超上限就停止发射，
+     * 等旧粒子自然死亡腾出配额（表现为"尾迹长度到上限就不再延长"，而不是掉帧）。
+     * 计数见 {@link com.zzy205.myfirstmod.particle.ContrailBudget}。
+     */
+    public static final int MAX_LIVE_CONTRAIL = 6000;
+
+    /** 单 tick 位移超过它就当作"瞬移"（装配/传送/客户端刚加载），本 tick 不发射，避免拖出一条长直的假尾迹 */
+    public static final double TRAIL_MAX_TICK_MOVE = 4.0D;
+
+    /**
+     * 尾迹颜色。<b>现为明显的冷青色</b>（用户要求"染一下色，看得清晰一些"）：
+     * 原来的 0.92/0.94/0.97 是冰晶白，在高空蓝天背景上几乎与天空同色，很难判断有没有生成。
+     * <p>
+     * 想更接近真实（冰晶白）就改回 0.92/0.94/0.97；想更醒目还可以继续压 R（例如 0.30/0.85/1.00 变成饱和青）。
+     */
+    public static final float TRAIL_RED = 1.00F;
+    public static final float TRAIL_GREEN = 1.00F;
+    public static final float TRAIL_BLUE = 1.00F;
+
     /** Sable 力组注册表 key（{@code sable:force_groups}）。不直接引用 {@code ForceGroups}：其静态字段
      *  类型引用 veil 的 {@code RegistryObject}，veil 不在编译 classpath（同 {@code FlightDataRecorder}）。 */
     private static final ResourceKey<Registry<ForceGroup>> FORCE_GROUP_REGISTRY =
@@ -239,6 +425,14 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
 
     /** 运行时解析出的 {@code sable:propulsion} 力组（解析失败保持 null，下次再试） */
     private @Nullable ForceGroup cachedPropulsion;
+
+    // ── 高空尾迹的客户端状态（只在 tickClient 里读写，不参与同步） ──
+
+    /** 上一 tick 喷口的世界坐标；{@code null} = 还没锚定（刚加载/风扇刚启动），那一 tick 只记录不发射 */
+    private @Nullable Vec3 contrailAnchorWorld;
+
+    /** 自上次发射以来累积的位移（格）：够了才吐一颗（见 {@link #TRAIL_SPACING}） */
+    private double contrailAccum;
 
     public ThrustNozzleBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.thrust_nozzle_entity.get(), pos, state);
@@ -331,14 +525,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
         final float speed = this.getFanSpeed();
 
         if (speed == 0.0F) {
-            return;
-        }
-
-        // 密度随转速线性变化；不足一颗就不生成
-        final float throttle = Math.min(Math.abs(speed) / 256.0F, 1.0F);
-        final int count = (int) Math.round(MAX_PARTICLES_PER_TICK * throttle);
-
-        if (count <= 0) {
+            // 风扇停了：清掉尾迹锚点，下次启动不会因为"历史位移"补吐一串尾迹
+            this.contrailAnchorWorld = null;
+            this.contrailAccum = 0.0D;
             return;
         }
 
@@ -354,11 +543,6 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
             flowSign = -flowSign;
         }
 
-        // 喷口截面上的两个基向量：在口面上随机撒点
-        final Vec3 seedVec = Math.abs(axis.y) > 0.5D ? new Vec3(1, 0, 0) : new Vec3(0, 1, 0);
-        final Vec3 v = axis.cross(seedVec).normalize();
-        final Vec3 u = v.cross(axis).normalize();
-
         final Vec3 center = Vec3.atCenterOf(this.worldPosition);
         final Vec3 flowDir = axis.scale(flowSign);
         final Vec3 mouth = center.add(axis.scale(0.55D));
@@ -366,8 +550,24 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
         // 本方块所在物理体：粒子坐标必须用它的姿态从 plot 局部系投到世界系（见下方 projectToWorld）
         final SubLevel own = Sable.HELPER.getContaining(this);
 
+        // 高空尾迹：与排气<b>互相独立</b>的一条链路（只在冷空气里有、按位移发射、不做碰撞），见 tickContrail
+        this.tickContrail(level, own, mouth, flowDir);
+
+        // 密度随转速线性变化；不足一颗就不生成
+        final float throttle = Math.min(Math.abs(speed) / 256.0F, 1.0F);
+        final int count = (int) Math.round(MAX_PARTICLES_PER_TICK * throttle);
+
+        if (count <= 0) {
+            return;
+        }
+
+        // 喷口截面上的两个基向量：在口面上随机撒点
+        final Vec3 seedVec = Math.abs(axis.y) > 0.5D ? new Vec3(1, 0, 0) : new Vec3(0, 1, 0);
+        final Vec3 v = axis.cross(seedVec).normalize();
+        final Vec3 u = v.cross(axis).normalize();
+
         // 距离上限（见 MAX_EXHAUST_DISTANCE）：太远就整段不生成，省下每颗每 tick 的扫掠碰撞
-        if (!this.withinParticleDistance(level, own, mouth)) {
+        if (!this.withinParticleDistance(level, own, mouth, MAX_EXHAUST_DISTANCE)) {
             return;
         }
 
@@ -419,6 +619,184 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
                         flowWorld.x, flowWorld.y, flowWorld.z);
             }
         }
+    }
+
+    /**
+     * 高空尾迹（contrail）的客户端发射逻辑：<b>按移动距离发射</b>，不做碰撞。
+     * <p>
+     * 三步：
+     * <ol>
+     * <li>把喷口中心投到<b>世界系</b>，与上一 tick 的锚点相减得到本 tick 的真实位移
+     *     （不用物理体速度 API：客户端 BE 只认世界坐标，且这样对"没装 Sable 速度"的情况也成立）；</li>
+     * <li>用世界高度算<b>尾迹适宜度</b> s（{@link #contrailSuitability}）：s=0 直接不出，
+     *     s 同时决定"发射多稀"（间距 ÷s）与"活多久"（{@link #TRAIL_LIFE_MIN}~{@link #TRAIL_LIFE_MAX}）；</li>
+     * <li>累积位移够了就吐一颗，单 tick 最多 {@link #MAX_CONTRAL_PER_TICK} 颗。</li>
+     * </ol>
+     * 与排气粒子<b>完全独立</b>：不查遮挡射线（尾迹在 3 格外才生成，且用户要的是"高空一条云带"），
+     * 也不做扫掠碰撞（那是冰晶而不是烟，见 {@code ContrailParticle}）。
+     * <p>
+     * 坑位提醒（都是本 memo 踩过的）：
+     * <ul>
+     * <li>出生点必须走 {@link #projectToWorld}，否则粒子钉在机体坐标系里跟着车跑（§3.5）；</li>
+     * <li>必须用 <b>9 参数</b> {@code addAlwaysVisibleParticle(..., ignoreRange = true)}，
+     *     7 参数那个照样被原版 32 格限制丢掉（§3.7）；</li>
+     * <li>瞬移（装配/传送/刚加载）时单 tick 位移极大，必须丢弃，否则会拖出一条笔直的假尾迹。</li>
+     * </ul>
+     */
+    private void tickContrail(final Level level, final @Nullable SubLevel own,
+                              final Vec3 mouth, final Vec3 flowDir) {
+        if (!USE_CONTRAIL) {
+            return;
+        }
+
+        // 维度开关（用户定稿）：末地恒 0°C 会蹭出 10% 的淡尾迹，这里直接关掉
+        if (CONTRAIL_OVERWORLD_ONLY && level.dimension() != Level.OVERWORLD) {
+            this.contrailAnchorWorld = null;
+            this.contrailAccum = 0.0D;
+            return;
+        }
+
+        final Vec3 mouthWorld = this.projectToWorld(level, own, mouth);
+
+        // 排气方向也投到世界系：机体翻转/倾斜时它和 plot 系方向不同
+        final Vec3 flowWorld = this.projectToWorld(level, own, mouth.add(flowDir)).subtract(mouthWorld);
+
+        final Vec3 previous = this.contrailAnchorWorld;
+        this.contrailAnchorWorld = mouthWorld;
+
+        if (flowWorld.lengthSqr() < 1.0E-8D || previous == null) {
+            this.contrailAccum = 0.0D; // 第一 tick 只记录锚点
+            return;
+        }
+
+        final double moved = mouthWorld.distanceTo(previous);
+
+        if (moved > TRAIL_MAX_TICK_MOVE) {
+            this.contrailAccum = 0.0D; // 瞬移，别拖出假尾迹
+            return;
+        }
+
+        this.contrailAccum += moved;
+
+        final float s = contrailSuitability(level, mouthWorld.y);
+
+        if (s <= 0.0F) {
+            this.contrailAccum = 0.0D; // 不够冷 ⇒ 完全不出尾迹（也顺便把累积量清掉）
+            return;
+        }
+
+        if (!this.withinParticleDistance(level, own, mouth, MAX_CONTRAL_DISTANCE)) {
+            return; // 太远只累积不发射；下面的钳位保证不会攒出一大串
+        }
+
+        // 存活上限（安全阀）：粒子数 = 密度 × 寿命，长寿命必须有个总数兜底，否则半透明 quad 会堆爆
+        if (MAX_LIVE_CONTRAIL > 0 && ContrailBudget.live() >= MAX_LIVE_CONTRAIL) {
+            return;
+        }
+
+        // 温度不够冷 ⇒ 间距被放大（尾迹更稀），但有下限：s 太小只是"该淡、该短命"，
+        // 不能靠抽走粒子来表达，否则中低空看起来就是"断断续续、分布很散"
+        final double spacing = Math.max(0.01D,
+                TRAIL_SPACING / Math.max(s, Math.max(TRAIL_SPACING_S_FLOOR, 1.0E-4F)));
+        final Vec3 dir = flowWorld.normalize();
+        final RandomSource random = level.random;
+        int emitted = 0;
+
+        while (this.contrailAccum >= spacing && emitted < MAX_CONTRAL_PER_TICK) {
+            this.contrailAccum -= spacing;
+            emitted++;
+            this.spawnContrail(level, random, mouthWorld, dir, s);
+        }
+
+        if (this.contrailAccum > spacing) {
+            this.contrailAccum = spacing; // 累积量封顶一格
+        }
+    }
+
+    /**
+     * 生成一颗尾迹粒子（{@code ccpe:contrail}）。
+     *
+     * @param mouthWorld 喷口中心<b>世界坐标</b>（已投出）
+     * @param dir        排气方向的单位向量（世界系）
+     * @param s          尾迹适宜度 0~1：决定寿命
+     */
+    private void spawnContrail(final Level level, final RandomSource random,
+                               final Vec3 mouthWorld, final Vec3 dir, final float s) {
+        // 出生点：沿排气下游偏移 TRAIL_START_OFFSET 格（真实尾迹不在喷口出现，见该常量注释），
+        // 再在垂直于排气的截面内随机散开，让尾迹天生就有宽度而不是一根细线
+        final Vec3 seedVec = Math.abs(dir.y) > 0.9D ? new Vec3(1.0D, 0.0D, 0.0D) : new Vec3(0.0D, 1.0D, 0.0D);
+        final Vec3 sideX = dir.cross(seedVec).normalize();
+        final Vec3 sideY = sideX.cross(dir).normalize();
+        final double lateral = TRAIL_WIDTH0 * 0.35D;
+        final Vec3 start = mouthWorld
+                .add(dir.scale(TRAIL_START_OFFSET))
+                .add(sideX.scale((random.nextDouble() - 0.5D) * 2.0D * lateral))
+                .add(sideY.scale((random.nextDouble() - 0.5D) * 2.0D * lateral));
+
+        // 原地随机飘逸：球面上均匀取一个方向 × TRAIL_DRIFT 以内的小速度（整体平流 = 0，不随风）
+        final double cosTheta = random.nextDouble() * 2.0D - 1.0D;
+        final double phi = random.nextDouble() * Math.PI * 2.0D;
+        final double ring = Math.sqrt(Math.max(0.0D, 1.0D - cosTheta * cosTheta));
+        final double drift = TRAIL_DRIFT * (0.3D + 0.7D * random.nextDouble());
+        final double vx = ring * Math.cos(phi) * drift;
+        final double vy = cosTheta * drift;
+        final double vz = ring * Math.sin(phi) * drift;
+
+        // 寿命随适宜度线性增长（越冷越耐久），再叠 ±15% 随机，避免整条尾迹同生共死
+        final int baseLife = Math.round(TRAIL_LIFE_MIN + (TRAIL_LIFE_MAX - TRAIL_LIFE_MIN) * s);
+        final int lifetime = Math.max(8, (int) (baseLife * (0.85D + random.nextDouble() * 0.3D)));
+        final float width = TRAIL_WIDTH0 * (0.75F + random.nextFloat() * 0.5F);
+
+        // 9 参数 overload（ignoreRange = true）：7 参数那个的第二个布尔是 decreased 不是 force，
+        // 照样被原版 32 格限制丢掉 —— 见 MAX_EXHAUST_DISTANCE 的注释与 memo §3.7。
+        level.addAlwaysVisibleParticle(
+                new ContrailParticleData(width, lifetime, TRAIL_RED, TRAIL_GREEN, TRAIL_BLUE),
+                true,
+                start.x, start.y, start.z,
+                vx, vy, vz);
+    }
+
+    /**
+     * 尾迹适宜度 s（0~1，纯高度函数）：用户定稿"不计算湿度"，所以温度阈值就是唯一的判据。
+     * <p>
+     * <b>峰值曲线</b>（用户定稿，取代原来的单调爬升）：上升段 × 高空变稀段，
+     * 三段节点与落点见 {@link #TRAIL_T_START} 上方的表格，Y160 另有硬门 {@link #TRAIL_Y_MIN}。
+     * 温度 T 直接复用引擎那条"高度 → 环境温度"曲线（{@link EngineCoreBlockEntity#ambientTempAt}），
+     * 所以以后改 {@code T_AMB_*} 时整条尾迹带会跟着平移，不用同步改两处。
+     * <p>
+     * 现实对应：真实判据是 Schmidt-Appleman（冷 + 湿）。冷随高度单调，湿是<b>先增后减</b>
+     * （对流层顶最湿、平流层极干）⇒ 所以"越高越浓"是错的，尾迹本来就有一个最浓的高度带。
+     * <p>
+     * 注意<b>不要</b>用 {@code SensorSystemAPI.getPressureForEngine} 当强度：气压曲线是 1.5 → 0 单调，
+     * 越高越小，和"有没有尾迹"不是一回事。
+     */
+    public static float contrailSuitability(final Level level, final double y) {
+        // 硬门：Y < TRAIL_Y_MIN 完全不出（用户定稿的低空规则）
+        if (y < TRAIL_Y_MIN) {
+            return 0.0F;
+        }
+
+        final float temperature = EngineCoreBlockEntity.ambientTempAt(level, (float) y);
+
+        // 上升段：温度够冷才开始（s_rise 0 → 1）
+        final float riseSpan = TRAIL_T_START - TRAIL_T_FULL;
+        final float rise = riseSpan <= 0.0F
+                ? 1.0F
+                : smoothstep01((TRAIL_T_START - temperature) / riseSpan);
+
+        // 变稀段：越往上空气越干（s_fade 0 → 1），把峰值往下压到 S_CEILING
+        final float fadeSpan = TRAIL_T_FADE_START - TRAIL_T_FADE_END;
+        final float fade = fadeSpan <= 0.0F
+                ? 0.0F
+                : smoothstep01((TRAIL_T_FADE_START - temperature) / fadeSpan);
+
+        return rise * (1.0F - (1.0F - TRAIL_S_CEILING) * fade);
+    }
+
+    /** 0~1 的 smoothstep（超出范围自动钳位） */
+    private static float smoothstep01(final float value) {
+        final float t = Mth.clamp(value, 0.0F, 1.0F);
+        return t * t * (3.0F - 2.0F * t);
     }
 
     /**
@@ -479,13 +857,15 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
     }
 
     /**
-     * 喷口是否在"值得生成粒子"的距离内（见 {@link #MAX_EXHAUST_DISTANCE}，0 = 不限）。
+     * 喷口是否在"值得生成粒子"的距离内（{@code maxDistance} 由调用方给：排气用
+     * {@link #MAX_EXHAUST_DISTANCE}=64，尾迹用 {@link #MAX_CONTRAL_DISTANCE}=96；0 = 不限）。
      * <p>
      * 用最近玩家的世界坐标算，而不是相机的：相机位置属于纯客户端类（{@code Minecraft}），
      * 这里刻意不引用，保持 {@code tickClient()} 只依赖 {@code Level}。
      */
-    private boolean withinParticleDistance(final Level level, final @Nullable SubLevel own, final Vec3 mouth) {
-        if (MAX_EXHAUST_DISTANCE <= 0.0D) {
+    private boolean withinParticleDistance(final Level level, final @Nullable SubLevel own, final Vec3 mouth,
+                                         final double maxDistance) {
+        if (maxDistance <= 0.0D) {
             return true;
         }
 
@@ -496,7 +876,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
             nearest = Math.min(nearest, player.position().distanceTo(mouthWorld));
         }
 
-        return nearest <= MAX_EXHAUST_DISTANCE || nearest == Double.MAX_VALUE;
+        return nearest <= maxDistance || nearest == Double.MAX_VALUE;
     }
 
     /**
