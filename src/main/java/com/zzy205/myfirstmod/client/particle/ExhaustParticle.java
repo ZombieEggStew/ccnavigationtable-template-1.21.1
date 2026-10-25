@@ -41,19 +41,38 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
 
     // ── 视觉常量（对应参考实现的 ThrusterSmokeParticle，可按观感调） ──
 
-    /** 不透明度上限（参考实现 0.46） */
-    private static final float ALPHA_MAX = 0.46F;
-    /** 寿命前 10% 淡入、后 25% 淡出 */
-    private static final float FADE_IN_END = 0.1F;
-    private static final float FADE_OUT_START = 0.75F;
+    /**
+     * 不透明度上限：<b>出生时</b>最不透明的值，之后随寿命单调变透明、死亡时归零。
+     * <p>
+     * 比旧值（0.46）高，是因为再也没有"中间一大段恒定 0.46"的平台期了 —— 整条寿命都在衰减，
+     * 平均不透明度更低，上限得抬上来才不至于整片排气看不见。
+     */
+    private static final float ALPHA_MAX = 0.62F;
+    /** 寿命最前面这一小段做淡入（避免出生瞬间硬切出一颗实心方块） */
+    private static final float FADE_IN_END = 0.08F;
+    /**
+     * 透明度衰减曲线：{@code (1 - life)^ALPHA_FALLOFF}。
+     * 1 = 线性（越老越透明，最直观）；&gt;1 = 前半段偏浓、后段快速消失；&lt;1 = 一直偏淡。
+     */
+    private static final float ALPHA_FALLOFF = 1.0F;
 
-    /** 尺寸：出生 = baseScale × 0.42，死亡 = baseScale × (0.42 + 0.95) */
-    private static final float SIZE_START = 0.42F;
-    private static final float SIZE_GROWTH = 0.95F;
+    /**
+     * 尺寸曲线：出生 = {@code baseScale × SIZE_START}，死亡 = {@code baseScale × (SIZE_START + SIZE_GROWTH)}。
+     * 线性随寿命变大（0.35 → 1.50，约 4.3 倍）。
+     */
+    private static final float SIZE_START = 0.35F;
+    private static final float SIZE_GROWTH = 1.15F;
 
     /** 阻尼：水平 0.935（快减速、铺开），垂直 0.965（比水平略慢，像热气流） */
     private static final double HORIZONTAL_FRICTION = 0.935D;
     private static final double VERTICAL_FRICTION = 0.965D;
+    /**
+     * 随寿命追加的减速比例：每 tick 的阻尼再乘 {@code (1 − SPEED_SLOW × life)}。
+     * <p>
+     * 光靠固定阻尼时，年轻/年老粒子的每 tick 减速率一样，看上去只是"整体偏快"；
+     * 乘上这一项才是"越老越慢"。1.0 = 死亡时每 tick 额外损失 100%（几乎停住）。
+     */
+    private static final double SPEED_SLOW = 0.28D;
 
     /** 浮力：基础 + 随寿命增长的额外量（热气体上升） */
     private static final double BUOYANCY = 0.0008D;
@@ -120,9 +139,9 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
     /** 撞到东西就变大（烟团拍在地面上摊开） */
     private static final boolean GROW_ON_IMPACT = true;
     /** 每次有效碰撞把尺寸乘这个系数 */
-    private static final float IMPACT_GROWTH = 1.35F;
+    private static final float IMPACT_GROWTH = 2.0F;
     /** 撞地膨胀上限倍数（防止一路弹一路涨） */
-    private static final float MAX_IMPACT_GROWTH = 2.0F;
+    private static final float MAX_IMPACT_GROWTH = 4.0F;
 
     /**
      * 撞到东西就分裂出小粒子（尾焰拍地溅开）。
@@ -237,9 +256,12 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
 
         final float life = this.age / (float) this.lifetime;
 
+        // 透明度：短淡入之后随寿命 单调变透明（旧版是 10%~75% 恒定 0.46 再突然淡出，
+        // 中间那一大段完全看不出"存在越久越淡"）。
         this.alpha = ALPHA_MAX
                 * smoothstep(0.0F, FADE_IN_END, life)
-                * (1.0F - smoothstep(FADE_OUT_START, 1.0F, life));
+                * (float) Math.pow(1.0F - life, ALPHA_FALLOFF);
+        // 尺寸：随寿命 单调变大
         this.quadSize = this.baseScale * (SIZE_START + life * SIZE_GROWTH) * this.impactGrowth;
 
         final double swirl = Math.sin((this.age + this.swirlPhase) * 0.13D) * SWIRL;
@@ -249,9 +271,12 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
 
         this.move(this.xd, this.yd, this.zd);
 
-        this.xd *= HORIZONTAL_FRICTION;
-        this.yd *= VERTICAL_FRICTION;
-        this.zd *= HORIZONTAL_FRICTION;
+        // 速度：越老越慢 —— 固定阻尼之外，再按寿命追加减速（SPEED_SLOW）
+        final double ageSlow = 1.0D - SPEED_SLOW * life;
+
+        this.xd *= HORIZONTAL_FRICTION * ageSlow;
+        this.yd *= VERTICAL_FRICTION * ageSlow;
+        this.zd *= HORIZONTAL_FRICTION * ageSlow;
 
         this.setSpriteFromAge(this.sprites);
     }

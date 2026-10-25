@@ -2,6 +2,7 @@
 
 > 状态：**代码逻辑完成，已进游戏验证**（推力方向已实测校定；排气粒子已换成自研 `ccpe:exhaust`，见 §3.6）。缺合成配方；模型/贴图由用户完成。
 > 粒子当前形态：自研粒子（世界坐标、无重力、扫掠碰撞 + 撞墙反弹/滑行、撞地变大）；**撞地分裂已按用户要求关闭**，`USE_EXHAUST_PARTICLE=false` 可整体回退旧 `create:air`。
+> 粒子随寿命演变（v7，§3.6）：**越老越大 / 越老越慢 / 越老越透明**，三条曲线都由 `life = age/lifetime` 驱动。
 > 上游背景：悬浮车自动驾驶的推进方案见 `memo/flip-autopilot.md`（火箭推力功率不生效 ⇒ 放弃火箭，改自研定向喷管）。
 > 相关：`memo/my_sensor_system.md`、`memo/api-code-map.md`。
 
@@ -134,6 +135,7 @@ group.applyAndRecordPointForce(centerOf(worldPosition), impulse)             // 
 | v4 | 遮挡射线改到**世界系**（主世界方块才挡得住，§3.4） | 现行 |
 | v5 | **自研粒子 `ccpe:exhaust`** + 扫掠碰撞 + 撞墙反弹/滑行 + 撞地变大（§3.6） | **现行**（第一版碰撞坐标系写错⇒撞墙无反应；后又修：出生点保护、碰撞冷却；撞地分裂已关闭） |
 | v6 | 光照：`IGNORE_LIGHTMAP` 全亮渲染（§3.6 光照节） | 现行（修「黄黄的粒子」） |
+| v7 | 随寿命演变：越大 / 越慢 / 越透明三条单调曲线（§3.6） | 现行 |
 
 ### 3.3 当前参数（用户在 v1 基础上调过）
 
@@ -226,15 +228,34 @@ mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题�
 | 常量 | 现值 | 说明 |
 |---|---|---|
 | `USE_EXHAUST_PARTICLE` | true | false = 回退旧的 `create:air` 路径（旧常量仍在） |
-| `EXHAUST_SCALE` | **0.3** | 出生尺寸（块），寿命内膨胀到约 1.37 倍（2.0/0.6 都被嫌大，用户已调到 0.3） |
+| `EXHAUST_SCALE` | **0.3** | 基准尺寸（块）；实际出生 = 本值 × 0.35、死亡 = 本值 × 1.50（见下方"随寿命演变"，2.0/0.6 都被嫌大，用户已调到 0.3） |
 | `EXHAUST_LIFETIME` | **16** | 基准寿命 tick，实际 +0~9 随机 |
 | `EXHAUST_SPEED` | **2.0** | 出生速度 块/tick，乘 (0.65 + 0.35×油门) |
 | `EXHAUST_SPREAD` | 0.05 | 横向散开初速度上限 |
 | `EXHAUST_RED/GREEN/BLUE` | 0.86/0.90/0.96 | 冷白偏蓝 |
 
-粒子内部常量（`ExhaustParticle`）：`ALPHA_MAX 0.46`、寿命 18% 处淡入完成 / 62% 起淡出、
+粒子内部常量（`ExhaustParticle`）：`ALPHA_MAX 0.62`、`FADE_IN_END 0.08`、`ALPHA_FALLOFF 1.0`、
+`SIZE_START 0.35` / `SIZE_GROWTH 1.15`、`SPEED_SLOW 0.28`、
 水平阻尼 0.935 / 垂直 0.965、浮力 0.0008+0.0009×life、正弦摆动 0.0018、
 碰撞半径 = `quadSize × 0.2`（夹到 0.08~0.35，视觉尺寸与碰撞半径分开）。
+
+**随寿命演变（v7，用户要求"粒子随存在时间越来越大、越来越慢、越来越透明"）**
+
+`life = age / lifetime`（0 出生 → 1 死亡），三条曲线全部单调：
+
+| 观感 | 公式 | 旋钮 | 现值下的端点 |
+|---|---|---|---|
+| 越来越大 | `quadSize = baseScale × (SIZE_START + life × SIZE_GROWTH) × impactGrowth` | `SIZE_START` / `SIZE_GROWTH` | 0.35 → 1.50（约 4.3 倍） |
+| 越来越慢 | 每 tick 阻尼 = 固定阻尼 × `(1 − SPEED_SLOW × life)` | `SPEED_SLOW` | 0.28；寿命末期水平每 tick 实际 ×0.67、末期几乎停住 |
+| 越来越透明 | `alpha = ALPHA_MAX × smoothstep(0, FADE_IN_END, life) × (1 − life)^ALPHA_FALLOFF` | `ALPHA_MAX` / `ALPHA_FALLOFF` | 0 → 0.62 → 0，**全寿命单调变淡** |
+
+- 旧版 alpha 是「10% 淡入 → 10%~75% 恒定 0.46 → 后 25% 淡出」（memo 早期写的 18%/62% 是再早的一版），
+  中间那一大段完全不透明恒定 ⇒ 看不出"存在越久越淡"。现在改成出生后一路衰减到 0，
+  所以 `ALPHA_MAX` 从 0.46 抬到 **0.62** 补偿平均值变淡（嫌整片排气太淡就继续加 `ALPHA_MAX`，
+  嫌前段太浓就加 `ALPHA_FALLOFF`）。
+- `SPEED_SLOW` 的副作用：总射程变短（同样寿命下轨迹短约一半），尾段会在原地"停住并散开"。
+  嫌短就降到 0.15，嫌不够慢就加到 0.5。
+- 撞墙的 `impactGrowth` / 散射仍叠加在这三条曲线之上（撞地变大和"随寿命变大"是两回事，互不冲突）。
 
 **撞墙公式**（`ExhaustParticle#scatter`）：法向**反弹** + 切向滑移 + 随机溅射：
 
@@ -260,13 +281,8 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 | 常量 | 现值 | 作用 |
 |---|---|---|
 | `GROW_ON_IMPACT` | true | 撞到东西就变大 |
-| `IMPACT_GROWTH` / `MAX_IMPACT_GROWTH` | 1.35 / 2.0 | 每次有效碰撞尺寸 ×1.35，累计上限 2 倍 |
-| `SPLIT_ON_IMPACT` | **false** | 撞到东西就分裂出子粒子 —— **已关闭**（用户实测不要这个效果；代码/`gen`/队列全保留，改回 true 即恢复） |
-| `SPLIT_COUNT` | 2 | 每颗分裂出 2 个 |
-| `MAX_SPLIT_GEN` | 1 | 只允许一代（子粒子不再分裂，防无限增殖） |
-| `SPLIT_SCALE` / `SPLIT_LIFETIME_KEEP` / `SPLIT_SPEED_KEEP` | 0.65 / 0.7 / 0.9 | 子粒子更小、更短命、稍慢 |
-| `MIN_SPLIT_IMPACT` | 0.12 | 入射太轻（贴地滑行）不触发，避免每 tick 都涨/炸 |
-
+| `IMPACT_GROWTH` | 2.0 | 每次有效碰撞尺寸 ×2.0 |
+| `MAX_IMPACT_GROWTH` | 4.0 | 累计上限 4 倍 |
 - 分裂代数走 `ExhaustParticleData.gen`（喷管直喷 = 0）。
 - **子粒子只在切向偏转**：把父粒子方向投到命中面法线的垂面上得到基准切向，再绕法线随机角度
   旋转（`tangent`/`side` 正交基），**不加法向分量** ⇒ 子粒子全部贴着地面/墙面铺开，不会往表面里钻。
@@ -326,6 +342,8 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 1. 定合成配方材料（并补 `recipe/`）。
 2. 排气粒子已换成自研 `ccpe:exhaust`（§3.6）：待用户在游戏里确认撞墙滑行/撞地变大的最终手感，再微调
    `EXHAUST_SCALE / EXHAUST_SPEED / BOUNCE / SPREAD_KEEP / ENERGY_KEEP / IMPACT_GROWTH`。
+   v7 新增的"随寿命越大/越慢/越透明"三条曲线的旋钮是 `ALPHA_MAX / ALPHA_FALLOFF / SIZE_START /
+   SIZE_GROWTH / SPEED_SLOW`（都在 `ExhaustParticle` 顶部，改完热重载即可看）。
    `PARTICLES_BLOCKED_BY_OTHER_BODIES` 仍决定其它物理体是否挡粒子（现 true）。
 3. 回到 `flip-autopilot.md`：用新喷管重做落地/倒挂调参（悬停油门从 ~45% 降到 ~14%，控制律的增益/死区要重标定）。
 
@@ -355,3 +373,4 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 | 8 | 出现「黄黄的粒子」 | 暖色光图染色 ⇒ `IGNORE_LIGHTMAP` 全亮 | ✅ |
 | 9 | 撞墙后仍「四面八方乱飞」 | 每 tick 重新随机 ⇒ 随机游走；加 `COLLISION_COOLDOWN` + `SPREAD_KEEP` 降到 0.35 | ✅ |
 | 10 | 大量粒子穿到墙后面 | 「忽略整个物理体」把车体结构也放行了；改出生点保护 0.75 格 | ✅ |
+| 11 | 想让粒子随存在时间越大 / 越慢 / 越透明 | alpha 去掉恒定平台期改全寿命单调衰减；尺寸区间 0.42+0.95 → 0.35+1.15；阻尼追乘 `(1−SPEED_SLOW×life)`（§3.6） | 已改，待进游戏确认手感 |
