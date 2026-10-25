@@ -2,6 +2,17 @@
 
 > 各功能的实施总结与设计要点。踩坑与注意事项见 `memo/ATTENTION.md`。
 
+## 定向喷管排气粒子重做（2026-08 实施，`ccpe:exhaust`）
+
+- **从 `create:air` 换成自研粒子类型**：`create:air` 是「起点→终点插值」的纯视觉粒子（`hasPhysics=false`、永不碰撞），做不出「撞到方块停下并散开」；新粒子自带速度积分与扫掠碰撞。参考 `references/create-propulsion-simulated-main`（thruster 排气，同款自研路子）。
+- **粒子不再被车身拖着走**：`create:air` 会被 Sable 的 `AirParticleMixin` 每 tick 按当前姿态重投影，喷管传 plot 局部坐标 ⇒ 整条轨迹钉在机体坐标系里（用户原话「像喷管的子物体」）。改为**起点/位移两端都先 `projectOutOfSubLevel` 投到世界系**再 `addParticle`。
+- **遮挡射线改世界系**：`level.clip` 在 plot 系里发射线时，Sable 会把 `from` 投到世界再对主世界 raycast（命中点 location 是世界系），旧代码当成局部系与起点相减 ⇒ 距离几十格 ⇒ 主世界方块永远挡不住（「物理体挡得住、静态方块挡不住」）。现在起点/方向/命中点全部换算到世界系量距离。
+- **扫掠碰撞（`ExhaustCollision`）**：球-箱 slab 扫掠；主世界逐方块 + 其它物理体反投 plot 局部系两段式（照参考实现）。第一次实现漏了「`getCollisionShape` 返回方块局部坐标要加 pos 偏移」⇒ 碰撞代码每 tick 都在跑但永远撞不到东西（撞墙毫无反应）。
+- **撞墙反应**：法向反弹（`BOUNCE`）+ 切向保留（`TANGENT_KEEP`）+ 随机溅射（`SPREAD_KEEP`），撞后整体保速 `ENERGY_KEEP`；`COLLISION_COOLDOWN = 3` tick 内再贴面只滑不改向（否则每 tick 重新随机 = 随机游走 = 「像炸开、四面八方乱飞」）。撞地变大 `GROW_ON_IMPACT`（×1.35，上限 2 倍）保留；**撞地分裂已按用户要求关闭**（代码/`gen`/队列保留，改 `SPLIT_ON_IMPACT=true` 即恢复）。
+- **出生点保护取代「忽略整个物理体」**：早期按 `ownerId` 跳过喷管所在物理体，导致车体/舱壁自己的方块也挡不住粒子（大量粒子穿到墙后面）。现在只忽略离出生点 `SPAWN_GRACE_RADIUS = 0.75` 格以内的命中。
+- **无重力**：`gravity=0` 且 tick 里没有任何向下加速度（只有微小向上浮力），撞后不下坠靠反弹解决。`IGNORE_LIGHTMAP=true` 让粒子全亮渲染（暖色光图会把浅色烟团染黄，用户报过「黄黄的粒子」）。
+- 参数全部在 `ThrustNozzleBlockEntity` 顶部（`EXHAUST_SCALE/LIFETIME/SPEED/SPREAD/RGB`）与 `ExhaustParticle` 顶部（视觉/碰撞/撞墙常量）；`USE_EXHAUST_PARTICLE=false` 可整体回退到旧 `create:air` 路径。
+- 详见 `memo/thrust-nozzle.md` §3.4–§3.6（遮挡世界系、粒子跟随机体、自研粒子全记录）。
 ## 引擎 P7 奖励驱动重构（2026-08 实施）
 
 - **油耗 = 杆值 × 经济系数 × 过冷惩罚**；自动富油只降温不进油耗（m_eff = 杆×autoRichness 只进 heatFactor 与 eco 窗口）。高空不拉稀 = ×1.0 无惩罚（原 ×1.25 效率税移除）。

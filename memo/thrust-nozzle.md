@@ -1,6 +1,7 @@
 # 定向喷管（`ccpe:thrust_nozzle`）工作记录
 
-> 状态：**代码逻辑完成，已进游戏验证（推力方向已实测校定）**。缺合成配方；模型/贴图由用户完成。
+> 状态：**代码逻辑完成，已进游戏验证**（推力方向已实测校定；排气粒子已换成自研 `ccpe:exhaust`，见 §3.6）。缺合成配方；模型/贴图由用户完成。
+> 粒子当前形态：自研粒子（世界坐标、无重力、扫掠碰撞 + 撞墙反弹/滑行、撞地变大）；**撞地分裂已按用户要求关闭**，`USE_EXHAUST_PARTICLE=false` 可整体回退旧 `create:air`。
 > 上游背景：悬浮车自动驾驶的推进方案见 `memo/flip-autopilot.md`（火箭推力功率不生效 ⇒ 放弃火箭，改自研定向喷管）。
 > 相关：`memo/my_sensor_system.md`、`memo/api-code-map.md`。
 
@@ -131,13 +132,14 @@ group.applyAndRecordPointForce(centerOf(worldPosition), impulse)             // 
 | v2 | 完全复刻 `create:air_flow` + 把喷管加进 `create:fan_transparent` 标签，每 tick 追加 N 颗 | **观感不好，已回退**（标签还会让电扇的实体推力/批量加工穿过喷管生效） |
 | v3 | 在 v1 上加**遮挡射线** | 现行基础 |
 | v4 | 遮挡射线改到**世界系**（主世界方块才挡得住，§3.4） | 现行 |
-| v5 | **自研粒子 `ccpe:exhaust`** + 扫掠碰撞 + 撞墙散射（§3.6） | 现行（第一版碰撞坐标系写错、撞墙无反应，已修） |
+| v5 | **自研粒子 `ccpe:exhaust`** + 扫掠碰撞 + 撞墙反弹/滑行 + 撞地变大（§3.6） | **现行**（第一版碰撞坐标系写错⇒撞墙无反应；后又修：出生点保护、碰撞冷却；撞地分裂已关闭） |
+| v6 | 光照：`IGNORE_LIGHTMAP` 全亮渲染（§3.6 光照节） | 现行（修「黄黄的粒子」） |
 
 ### 3.3 当前参数（用户在 v1 基础上调过）
 
 | 常量 | 现值 | 说明 |
 |---|---|---|
-| `MAX_PARTICLES_PER_TICK` | 6 | 满转速每 tick 颗粒数，按 `|rpm|/256` 缩放 |
+| `MAX_PARTICLES_PER_TICK` | **10** | 满转速每 tick 颗粒数，按 `|rpm|/256` 缩放（同屏 ≈ 本值 × 寿命） |
 | `PARTICLE_SPEED` | **1.0** | 平均速度（块/tick = 20 块/秒） |
 | `PARTICLE_DRAG` | 0.7 | <1 = 出膛快、尾段减速 |
 | `PARTICLE_TRAVEL_MIN/MAX` | **6.0 / 10.0** | 位移长度 ⇒ 寿命 = 长度/speed ≈ **6~10 tick** |
@@ -224,9 +226,9 @@ mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题�
 | 常量 | 现值 | 说明 |
 |---|---|---|
 | `USE_EXHAUST_PARTICLE` | true | false = 回退旧的 `create:air` 路径（旧常量仍在） |
-| `EXHAUST_SCALE` | **0.6** | 出生尺寸（块），寿命内膨胀到约 1.37 倍（2.0 实测太大，已降） |
-| `EXHAUST_LIFETIME` | 22 | 基准寿命 tick，实际 +0~9 随机 |
-| `EXHAUST_SPEED` | 0.9 | 出生速度 块/tick，乘 (0.65 + 0.35×油门) |
+| `EXHAUST_SCALE` | **0.3** | 出生尺寸（块），寿命内膨胀到约 1.37 倍（2.0/0.6 都被嫌大，用户已调到 0.3） |
+| `EXHAUST_LIFETIME` | **16** | 基准寿命 tick，实际 +0~9 随机 |
+| `EXHAUST_SPEED` | **2.0** | 出生速度 块/tick，乘 (0.65 + 0.35×油门) |
 | `EXHAUST_SPREAD` | 0.05 | 横向散开初速度上限 |
 | `EXHAUST_RED/GREEN/BLUE` | 0.86/0.90/0.96 | 冷白偏蓝 |
 
@@ -246,8 +248,34 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 
 - 第一版照搬参考实现的「法向只留 10%」，实测表现为「扩散但继续下坠、没有反弹」——因为法向几乎被吃掉，
   粒子只能贴着表面滑。改成反弹式后正面砸地面/墙面会明显弹开。
+- **「撞完像炸开、四面八方乱飞」的真正原因**：粒子贴面时几乎每 tick 都会再次命中，若每次都重新随机一次方向，
+  就成了随机游走＝均匀四散。现在有 `COLLISION_COOLDOWN = 3` tick：一次有效碰撞后的冷却期内再贴面只调
+  `slide()`（消掉朝表面里的分量、不再换方向）⇒ 稳定沿面滑行。`SPREAD_KEEP` 也从 0.8 降到 0.35。
+- `SPREAD_ANGLE = π` = 不限制散射方向（用户明确不需要限制切向）；改成 0.96 可只往切向前方扇。
 - 结果的法向分量恒正（只有 rebound 带法向分量），粒子撞完一定离开表面，不会陷进去。
 - **无重力**：`gravity = 0`、tick 里没有任何向下加速度，只有微小向上浮力；撞后不下坠靠的就是上面的反弹。
+
+**撞地变大 / 分裂**（`ExhaustParticle#onImpact`，两个独立开关；分裂已按用户要求关闭，只剩变大）
+
+| 常量 | 现值 | 作用 |
+|---|---|---|
+| `GROW_ON_IMPACT` | true | 撞到东西就变大 |
+| `IMPACT_GROWTH` / `MAX_IMPACT_GROWTH` | 1.35 / 2.0 | 每次有效碰撞尺寸 ×1.35，累计上限 2 倍 |
+| `SPLIT_ON_IMPACT` | **false** | 撞到东西就分裂出子粒子 —— **已关闭**（用户实测不要这个效果；代码/`gen`/队列全保留，改回 true 即恢复） |
+| `SPLIT_COUNT` | 2 | 每颗分裂出 2 个 |
+| `MAX_SPLIT_GEN` | 1 | 只允许一代（子粒子不再分裂，防无限增殖） |
+| `SPLIT_SCALE` / `SPLIT_LIFETIME_KEEP` / `SPLIT_SPEED_KEEP` | 0.65 / 0.7 / 0.9 | 子粒子更小、更短命、稍慢 |
+| `MIN_SPLIT_IMPACT` | 0.12 | 入射太轻（贴地滑行）不触发，避免每 tick 都涨/炸 |
+
+- 分裂代数走 `ExhaustParticleData.gen`（喷管直喷 = 0）。
+- **子粒子只在切向偏转**：把父粒子方向投到命中面法线的垂面上得到基准切向，再绕法线随机角度
+  旋转（`tangent`/`side` 正交基），**不加法向分量** ⇒ 子粒子全部贴着地面/墙面铺开，不会往表面里钻。
+  出生点沿法线抬起 0.02 格（避免埋进方块里），横向抖动也只在切向。
+- **子粒子不能当场 addParticle**：那是在 `ParticleEngine#tick` 遍历粒子列表时加元素（并发修改风险）。
+  现在先入 `PENDING_SPLITS` 队列，由客户端 `ClientTickEvent.Post` 调 `ExhaustParticle#flushPendingSplits()`
+  统一 flush（延迟 1 tick，肉眼无感）。队列上限 512。
+- 代价：同屏粒子数最多 ×3（1 → +2 子粒子），按 §3.6 的扫掠成本估算仍是亚毫秒级，
+  但会叠加在"寿命内粒子数"上；嫌重就把 `SPLIT_ON_IMPACT` 关掉只留变大。
 
 **致命 bug（第一版回退的原因，已修）**
 
@@ -260,11 +288,20 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 
 **关键坑**
 
-- 粒子必须忽略**喷管自己所在的物理体**（`ownerId` 写进粒子数据，碰撞时跳过），否则粒子一出生就被
-  自己方块的膨胀包围盒判成碰撞，直接糊在喷口上。
+- **出生点保护（现方案）**：只忽略离出生点 `SPAWN_GRACE_RADIUS = 0.75` 格以内的命中。
+  早期版本是「整个喷管所在物理体都不参与碰撞」（`ownerId` 直接跳过），结果**车体/舱壁自己的方块也挡不住**，
+  用户实测出现「大量粒子穿到墙后面（红线绿线都有）」。现在车身结构照常挡，只有喷口周围一小圈放行。
+  `ownerId` 字段仍保留在粒子数据里，但碰撞不再用它。
 - 粒子碰撞全用世界坐标（喷管侧已 `projectToWorld`），所以不会像 `create:air` 那样被车身拖着走。
 - 成本：每颗粒子每 tick 一次扫掠（半径 0.08~0.35、位移约 0.5 格 ⇒ 约 27 个方块），
   同屏 ~60 颗时约 1.6k 次 `getBlockState`/tick，可接受。
+
+**光照（"怎么出现黄黄的粒子"）**
+
+- 粒子默认吃 lightmap：站在火把/岩浆/熔炉这些**暖色光源**旁边，白光烟团会被光图染成黄/橙色。
+  这不是本想做的颜色，也不是贴图问题。
+- 修法：`ExhaustParticle#getLightColor` 在 `IGNORE_LIGHTMAP = true`（默认）时直接返回 `0xF000F0`
+  （天空 15 + 方块 15）全亮渲染，颜色只由 `EXHAUST_RED/GREEN/BLUE` 决定；想恢复受光照影响就置 false。
 
 **残留边界**：纯客户端计算，各客户端看到的撞墙点/散射方向各自独立（与原版粒子一样不同步）；
 要让所有人完全一致就得改成服务端 `sendParticles` 广播（参考实现是这么做的），当前不做。
@@ -273,6 +310,11 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 
 - **推力不做遮挡判定**：喷口被方块堵死时物理推力照样输出（要加的话应在每个游戏 tick 算一次遮挡并缓存给 substep 复用）。
 - 排气粒子是纯客户端计算：各客户端看到的撞墙点/散射方向各自独立（原版粒子行为，未做服务端广播）。
+- 粒子碰撞是**每颗粒子每 tick 一次扫掠**（半径 0.08~0.35、位移约 0.5~2 格 ⇒ 约 8~27 个方块）：
+  单管 10 颗/tick × 寿命 ~16 tick ⇒ 同屏约 160 颗，实测未造成明显掉帧；多管并联时按管数线性增长。
+  嫌重就先关撞地变大/缩短 `EXHAUST_LIFETIME`，或把扫掠改成「先长射线 clip，命中附近才逐方块扫」。
+- **撞地分裂已关闭**（`SPLIT_ON_IMPACT=false`）：代码、`gen` 字段、`PENDING_SPLITS` 队列与客户端 flush 全部保留，
+  改回 `true` 即恢复；届时同屏粒子数最多 ×(1+SPLIT_COUNT)。
 - 没有合成配方（`data/ccpe/recipe/thrust_nozzle.json`），材料待用户定。
 - 没有原版实体推挤（旧 `create:nozzle` 会推物品/生物）。
 - 蓝图/装配兼容未专门验证：`canSurvive` 会在部署瞬间复核风扇，异常时照 `MyBearingPlateBlockEntity` 做条件豁免。
@@ -282,7 +324,9 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 ## 5. 下一步
 
 1. 定合成配方材料（并补 `recipe/`）。
-2. 实测定夺 `PARTICLES_BLOCKED_BY_OTHER_BODIES` 用 true 还是 false。
+2. 排气粒子已换成自研 `ccpe:exhaust`（§3.6）：待用户在游戏里确认撞墙滑行/撞地变大的最终手感，再微调
+   `EXHAUST_SCALE / EXHAUST_SPEED / BOUNCE / SPREAD_KEEP / ENERGY_KEEP / IMPACT_GROWTH`。
+   `PARTICLES_BLOCKED_BY_OTHER_BODIES` 仍决定其它物理体是否挡粒子（现 true）。
 3. 回到 `flip-autopilot.md`：用新喷管重做落地/倒挂调参（悬停油门从 ~45% 降到 ~14%，控制律的增益/死区要重标定）。
 
 ## 6. 参考来源（均只读）
@@ -296,3 +340,18 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
 | `.../compatibility/create/particles/{AirFlowParticleMixin,AirParticleMixin}.java` | 子次元粒子处理（bounds 放行、姿态重投影）；`AirParticleMixin#tick` 是「粒子跟着机体跑」的根因（见 §3.5） |
 | `api/sable-common-1.21.1-2.0.3-sources/.../api/{block/BlockEntitySubLevelActor,physics/force/{ForceTotal,QueuedForceGroup,ForceGroups}}.java`、`sublevel/ServerSubLevel.java` | `sable$physicsTick` / 力组 / `applyQueuedForces` |
 | `src/main/java/.../block/{MyBearingPlateBlockEntity,TrailingWheelMountBlockEntity}.java`、`compat/cc/FlightDataRecorder.java` | 项目内已验证的"施力 + 力组遥测 + 子次元射线"写法 |
+
+## 7. 变更时间线（2026-08 排气重做，含踩过的坑）
+
+| # | 需求 / 现象 | 处理 | 结果 |
+|---|---|---|---|
+| 1 | 粒子跟着喷嘴跑，「像喷管的子物体」 | 起点/位移两端 `projectOutOfSubLevel` 投世界系（§3.5） | ✅ 已解决 |
+| 2 | 粒子被物理体挡住但挡不住世界方块 | `clearDistance` 射线改世界系（§3.4） | ✅ 已解决 |
+| 3 | 想复刻参考 mod 的「撞墙停下并向四周扩散」 | 自研粒子 `ccpe:exhaust` + `ExhaustCollision` 扫掠（§3.6） | ✅ 实现 |
+| 4 | 撞墙毫无反应 | `getCollisionShape` 返回方块局部坐标，漏加 `pos` 偏移 | ✅ 已修 |
+| 5 | 粒子太大 | `EXHAUST_SCALE` 2.0 → 0.3（用户调） | ✅ |
+| 6 | 撞墙后继续下坠、无反弹 | 法向改真反弹（`BOUNCE`），确认无重力 | ✅ |
+| 7 | 撞地后想变大 / 分裂 | `GROW_ON_IMPACT` / `SPLIT_ON_IMPACT`（§3.6） | 变大保留，**分裂已关闭** |
+| 8 | 出现「黄黄的粒子」 | 暖色光图染色 ⇒ `IGNORE_LIGHTMAP` 全亮 | ✅ |
+| 9 | 撞墙后仍「四面八方乱飞」 | 每 tick 重新随机 ⇒ 随机游走；加 `COLLISION_COOLDOWN` + `SPREAD_KEEP` 降到 0.35 | ✅ |
+| 10 | 大量粒子穿到墙后面 | 「忽略整个物理体」把车体结构也放行了；改出生点保护 0.75 格 | ✅ |

@@ -66,6 +66,7 @@ import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
 @Mod(value = CCPeripheralExtender.MOD_ID, dist = Dist.CLIENT)
@@ -83,6 +84,10 @@ public class CCPeripheralExtenderClient {
         ControlDeskGhostPreviewRenderer.register();
         SeatControlListener.register();
         NeoForge.EVENT_BUS.addListener(MonitorOutlineRenderer::onRenderHighlight);
+
+        // 排气粒子撞地分裂：子粒子先入队，这里每 tick 统一 flush
+        // （不能在 ParticleEngine 遍历粒子列表期间 addParticle）
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> ExhaustParticle.flushPendingSplits());
 
         // 预加载 Monitor 模块模型（仿 control-panels PreLoadedModel 模式）
         MonitorPreloadedModels.init();

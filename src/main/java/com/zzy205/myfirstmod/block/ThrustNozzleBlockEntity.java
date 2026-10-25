@@ -350,8 +350,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity implements BlockEntityS
         final float scale = EXHAUST_SCALE * (0.70F + random.nextFloat() * 0.60F);
         final int lifetime = EXHAUST_LIFETIME + random.nextInt(10);
 
+        // 最后一个 0 = 分裂代数：喷管直喷的是第 0 代，撞地分裂出来的子粒子是第 1 代（见 ExhaustParticle）
         level.addParticle(new ExhaustParticleData(scale, lifetime, EXHAUST_RED, EXHAUST_GREEN, EXHAUST_BLUE,
-                        own == null ? ExhaustParticleData.NO_OWNER : own.getUniqueId()),
+                        own == null ? ExhaustParticleData.NO_OWNER : own.getUniqueId(), 0),
                 startWorld.x, startWorld.y, startWorld.z,
                 velocity.x, velocity.y, velocity.z);
     }

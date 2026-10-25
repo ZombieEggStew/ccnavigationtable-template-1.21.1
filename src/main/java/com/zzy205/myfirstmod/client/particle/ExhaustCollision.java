@@ -14,19 +14,19 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.UUID;
-
 /**
- * 排气粒子的**扫掠碰撞**：球体（半径 = 粒子包围盒半径）沿本 tick 位移扫过，返回最早命中点。
+ * 排气粒子的**扫掠碰撞**：球体（半径见 ExhaustParticle）沿本 tick 位移扫过，返回最早命中点。
  * <p>
  * 与 {@code ThrustNozzleBlockEntity#clearDistance}（喷口那条一次性射线）分工不同：
  * 那条只管"喷口出膛时前方有没有东西"，这里管"粒子已经飞出去之后撞到什么"。
  * <p>
+ * **出生点保护（grace）**：距离出生点 {@code graceRadius} 以内的命中全部忽略。
+ * 早期版本是"整个喷管所在物理体都不算"，结果<b>车体/舱壁自己的方块也挡不住粒子</b>，
+ * 一堆粒子直接穿到墙后面（用户实测反馈）。现在只保护喷口周围一小圈，车身其它结构照常挡。
+ * <p>
  * 参考来源（只读）：
  * {@code references/create-propulsion-simulated-main/.../particles/{ParticleCollision,ParticleCollisionMath}.java}
- * —— 同样的"主世界逐方块扫掠 + 逐个物理体把射线反投回它自己的 plot 局部系扫掠"两段式；
- * 这里去掉了参考实现里"用 plot 包围盒裁剪扫描范围"那一步（我们的扫描范围只有几个方块，
- * 不需要裁剪），并改用 {@link BlockPos#betweenClosed} 直接遍历。
+ * —— 同样的"主世界逐方块扫掠 + 逐个物理体把射线反投回它自己的 plot 局部系扫掠"两段式。
  */
 public final class ExhaustCollision {
 
@@ -42,35 +42,40 @@ public final class ExhaustCollision {
     }
 
     /**
-     * @param radius              粒子碰撞半径（块）
-     * @param ignoreBodyId        要忽略的物理体（喷管自己所在的那个，否则一出生就撞自己），null/零 UUID = 不忽略
-     * @param collideOtherBodies  其它物理体是否参与碰撞
+     * @param radius             粒子碰撞半径（块）
+     * @param graceCenter        出生点（世界系）：离它 {@code graceRadius} 以内的命中一律忽略
+     * @param graceRadius        出生点保护半径（块）
+     * @param collideOtherBodies 其它物理体是否参与碰撞
      */
     public static @Nullable Hit sweep(final Level level, final Vec3 start, final Vec3 movement,
-                                      final double radius, @Nullable final UUID ignoreBodyId,
-                                      final boolean collideOtherBodies) {
+                                      final double radius, @Nullable final Vec3 graceCenter,
+                                      final double graceRadius, final boolean collideOtherBodies) {
         if (movement.lengthSqr() < 1.0E-8D) {
             return null;
         }
+
+        // 把"离出生点多远"换算成"位移走到哪一段"：出生点保护以内一律不算命中
+        final double moveLength = movement.length();
+        final double distanceFromSpawn = graceCenter == null ? Double.MAX_VALUE : start.distanceTo(graceCenter);
+        final double minFraction = graceCenter == null
+                ? 0.0D
+                : Mth.clamp((graceRadius - distanceFromSpawn) / moveLength, 0.0D, 1.0D);
 
         final Vec3 end = start.add(movement);
         final AABB swept = new AABB(start, end).inflate(radius);
 
         // ① 主世界（含本物理体自己的方块：它们在 level 里的 plot 区块坐标处，而这颗粒子已经是世界坐标，
         //    所以这里只会看到主世界）
-        Hit best = scan(level, start, movement, radius, swept);
+        Hit best = scan(level, start, movement, radius, swept, minFraction);
 
         if (!collideOtherBodies) {
             return best;
         }
 
-        // ② 其它物理体：把位移反投进它的 plot 局部系扫掠，命中法线再投回世界系
+        // ② 其它物理体（包括喷管所在的物理体本身，只是出生点附近被 grace 挡掉）：
+        //    把位移反投进它的 plot 局部系扫掠，命中法线再投回世界系
         for (final SubLevel body : Sable.HELPER.getAllIntersecting(level, new BoundingBox3d(swept))) {
             if (body.isRemoved()) {
-                continue;
-            }
-
-            if (ignoreBodyId != null && ignoreBodyId.equals(body.getUniqueId())) {
                 continue;
             }
 
@@ -86,7 +91,7 @@ public final class ExhaustCollision {
 
             final double localRadius = radius / bodyScale;
             final AABB localSwept = new AABB(localStart, localEnd).inflate(localRadius);
-            final Hit localHit = scan(level, localStart, localMove, localRadius, localSwept);
+            final Hit localHit = scan(level, localStart, localMove, localRadius, localSwept, minFraction);
 
             if (localHit == null || (best != null && best.fraction() <= localHit.fraction())) {
                 continue;
@@ -99,9 +104,17 @@ public final class ExhaustCollision {
         return best;
     }
 
-    /** 在给定坐标系（主世界 / 某个物理体的 plot 局部系）里逐方块做球-箱扫掠 */
+    /**
+     * 在给定坐标系（主世界 / 某个物理体的 plot 局部系）里逐方块做球-箱扫掠。
+     *
+     * @param minFraction 命中比例低于它的忽略（出生点保护）
+     */
     private static @Nullable Hit scan(final Level level, final Vec3 start, final Vec3 movement,
-                                      final double radius, final AABB region) {
+                                      final double radius, final AABB region, final double minFraction) {
+        if (minFraction >= 1.0D) {
+            return null;
+        }
+
         final int minY = Math.max(level.getMinBuildHeight(), Mth.floor(region.minY));
         final int maxY = Math.min(level.getMaxBuildHeight() - 1, Mth.floor(region.maxY));
 
@@ -140,12 +153,15 @@ public final class ExhaustCollision {
                     for (final AABB box : shape.toAabbs()) {
                         // 注意：getCollisionShape 返回的 AABB 是**方块局部坐标**（0~1），
                         // 必须加上方块坐标才是世界/plot 坐标（这里直接把偏移传给 slab，不新建 AABB）。
-                        // 漏了这一步 ⇒ 所有候选盒都堆在原点附近，粒子永远撞不到东西
-                        // —— v5 第一版的「撞墙没反应」就是这个。
+                        // 漏了这一步 ⇒ 所有候选盒都堆在原点附近，粒子永远撞不到东西。
                         final Hit hit = slab(start, movement, box, radius,
                                 pos.getX(), pos.getY(), pos.getZ());
 
-                        if (hit != null && (best == null || hit.fraction() < best.fraction())) {
+                        if (hit == null || hit.fraction() < minFraction) {
+                            continue;
+                        }
+
+                        if (best == null || hit.fraction() < best.fraction()) {
                             best = hit;
                         }
                     }

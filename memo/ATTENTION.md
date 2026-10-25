@@ -11,6 +11,16 @@
 - **单位约定**：枢轴常量存像素（1/16 块），PoseStack 里用 `/16f` 转块；`createPitchedCaseShape` 直接用像素算。
 - **万向锁**：不处理，模组介绍中提示玩家避免 pitch=±90° 相关表现。
 
+## 喷管 / 排气粒子（Sable 子次元）
+
+- **`create:air` 粒子会被 Sable 每 tick 重投影**：`AirParticleMixin` 把 `<init>` 里的起点/终点记下来，每 tick 用**当前姿态** `projectOutOfSubLevel` 一次。物理体内的方块实体坐标是 **plot 区块坐标**，若直接把这些坐标传进去，整条轨迹就定义在机体坐标系里 ⇒ 车身一动粒子跟着动（看起来「像喷管的子物体」）。必须在 `addParticle` 前把起点与「起点+位移」两端都投到世界系。
+- **`level.clip` 在 plot 系里发射线 = 主世界方块挡不住**：Sable 的 `BlockGetterMixin#clip` 会把 `from`（以及落在 plot 里的 `to`）投到世界系；主世界那一支返回的命中 location 是**世界系**，物理体那一支返回的是**那个物理体**的局部系。混着用会让距离变成几十格（静默失效）。要让静态方块参与遮挡，射线必须在世界系构造。
+- **`getCollisionShape(...).toAabbs()` 返回方块局部坐标（0~1）**，必须加 `pos` 偏移才是世界/plot 坐标。漏了不报错也不卡顿，表现只是「碰撞永远不触发」（踩过一次：撞墙毫无反应）。
+- **粒子不能在自己的 `tick()` 里 `level.addParticle`**：那是在 `ParticleEngine` 遍历粒子列表期间加元素。要生成子粒子就入队，用 `ClientTickEvent.Post` 统一 flush。
+- **撞墙散射不要每 tick 重新随机**：粒子贴面时几乎每 tick 都会再命中，每次重随机 = 随机游走 = 「炸开、四面八方乱飞」。用 `COLLISION_COOLDOWN`，冷却期内只消法向分量滑行。
+- **不要用「忽略整个物理体」避免喷口自撞**：喷管所在物理体往往就是车体本身，跳过它等于车体结构挡不住粒子（粒子穿到墙后面）。用出生点保护半径（0.75 格）。
+- **暖色光图会把浅色粒子染黄**：火把/岩浆附近的白光烟团会被 lightmap 染成黄橙色。需要固定颜色就覆写 `getLightColor` 返回 `0xF000F0`。
+- `StreamCodec.composite` 最多 6 个组件；字段更多要手写 `StreamCodec.of(encoder, decoder)`。
 ## Monitor / GridState
 
 - 测试 monitor 的 `getShape` 不要每帧动态重算（`VoxelShaper.forHorizontal` + 12 切片 `Shapes.or` 很贵，会造成视角对准时掉帧）；已改为按 (facing,pitch) 懒缓存，碰撞 `getCollisionShape` 只用底座。
