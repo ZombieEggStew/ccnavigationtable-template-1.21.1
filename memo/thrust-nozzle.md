@@ -1,17 +1,20 @@
 # 定向喷管（`ccpe:thrust_nozzle`）工作记录
 
-> 状态（2026-08 定稿）：**推力 / 排气 / 高空尾迹 / 染料染色 / 配置化 / tooltip 全部完成，`gradlew classes` 通过**。
-> **交接速览见 §13**（文件清单、玩家可见行为、参数在哪、待办）。缺合成配方；模型/贴图由用户完成。
+> 状态（2026-08 末）：**推力 / 排气（含轻微重力）/ 高空尾迹 / 染料染色 / 配置化 / tooltip 全部完成，
+> `gradlew classes` 通过；斜喷穿墙已修复并经用户多角度实测确认**。
+> **交接速览见 §13**（文件清单、玩家可见行为、参数在哪、待办）；**本轮（穿墙修复 + 重力）的完整记录见 §14**。
+> 缺合成配方；模型/贴图由用户完成。
 >
 > 五个能力一句话版：
 > 1. **推力**（§2.1）：`THRUST_PER_RPM = 1` ⇒ 1 RPM = 1 pN，气压 1.0 时 256 RPM = 256 pN/管，且随气压缩放；
-> 2. **排气 `ccpe:exhaust`**（§3.6）：世界坐标、无重力、扫掠碰撞 + 撞墙反弹、越老越大/越慢/越淡；撞地分裂按用户要求关闭；
+> 2. **排气 `ccpe:exhaust`**（§3.6）：世界坐标、扫掠碰撞 + 撞墙反弹 + 沿面滑行、越老越大/越慢/越淡；
+>    **轻微重力**由配置 `exhaustGravity`（默认 0.02）控制，设 0 = 失重；撞地分裂按用户要求关闭；
 > 3. **高空尾迹 `ccpe:contrail`**（§9）：按移动距离发射、峰值适宜度曲线（Y160 起 / 183~224 最浓 / 320 最稀）、
 >    匀速直线飘荡（速度 = 总飘荡距离 ÷ 寿命，§9.10）、无碰撞无重力、9 参数 `addAlwaysVisibleParticle` 远处可见；
 > 4. **染料染色**（§10）：手持染料右键喷口 ⇒ 只染**尾迹**粒子，护目镜 tooltip 显示当前染色；
-> 5. **配置 + tooltip**（§11、§12）：17 个性能参数进 `config/ccpe-client.toml`；物品 tooltip 走 Create `ItemDescription`。
+> 5. **配置 + tooltip**（§11、§12）：17 个参数进 `config/ccpe-client.toml`（改完即时生效）；物品 tooltip 走 Create `ItemDescription`。
 >
-> **待进游戏确认**（其余已由用户实测确认）：配置项生效 & 界面文案、物品 tooltip、以及"潜行空手清除染色"已移除。
+> **仍待进游戏确认**（其余已由用户实测确认）：配置**界面**的标题/说明文案、物品 tooltip 展开、"潜行空手清除染色"已移除。
 > 上游背景见 `memo/flip-autopilot.md`（火箭方案作废 ⇒ 自研喷管）；相关 `memo/my_sensor_system.md`、`memo/api-code-map.md`。
 
 ## 0. 需求与决策链（用户定稿）
@@ -336,7 +339,8 @@ v'      = normalize(rebound+tangent+spread) × max(0.02, |v| × ENERGY_KEEP)  //
   `slide()`（消掉朝表面里的分量、不再换方向）⇒ 稳定沿面滑行。`SPREAD_KEEP` 也从 0.8 降到 0.35。
 - `SPREAD_ANGLE = π` = 不限制散射方向（用户明确不需要限制切向）；改成 0.96 可只往切向前方扇。
 - 结果的法向分量恒正（只有 rebound 带法向分量），粒子撞完一定离开表面，不会陷进去。
-- **无重力**：`gravity = 0`、tick 里没有任何向下加速度，只有微小向上浮力；撞后不下坠靠的就是上面的反弹。
+- **重力**：原版 `Particle#gravity` 保持 0（tick 自己实现）；向下加速度走配置 `exhaustGravity`
+  （**默认 0.02**，设 0 = 失重），与向上浮力 `BUOYANCY` 在同一条里相抵，见 §3.6.1。
 
 **撞地变大 / 分裂**（`ExhaustParticle#onImpact`，两个独立开关；分裂已按用户要求关闭，只剩变大）
 
@@ -516,14 +520,14 @@ protected void setLocationFromBoundingbox() {
 | 越平越漏 | 浅角度反弹的法向分量只有 ~0.05-0.09 格/tick，压不住下沉 ⇒ 净位移朝下 |
 | 撞过变大的漏得更狠 | `IMPACT_GROWTH=2` 让 `quadSize`（⇒ 隐形下坠速度）**翻倍** |
 
-**证据**：抽样轨迹里 `pos` 和"上 tick 的 `mv`"逐 tick 对不上，差值正好 = `quadSize/2` 且随之增长
+**决定性证据**：抽样轨迹里 `pos` 和"上 tick 的 `mv`"逐 tick 对不上，差值正好 = `quadSize/2` 且随之增长
 （例 #2460：`82.13 -1.40 → 80.68`，应到 80.73，差 0.05；下一 tick 0.06 → 0.07 → 0.08，
 而 `quadSize` 每 tick 涨 0.017、`half` 涨 0.0085）。
 **修法**（`ExhaustParticle#move`）：不再调 `setLocationFromBoundingbox()`，直接
 `this.x = nx; this.y = ny; this.z = nz;`，包围盒围绕中心对称只用于视锥剔除。
 （`ContrailParticle` 走的是 `setPos`，与原版约定自洽，**没有**这个问题。）
 
-**证据（临时埋点，日志在 `run/logs/latest.log`，前缀 `[EXHDBG]` / `[EXHDBG-N]`）**
+**旁证（临时埋点，日志 `run/logs/latest.log`，前缀 `[EXHDBG]` / `[EXHDBG-N]`）**
 
 - 120 条"从空气进入实心方块"事件**全部落在 30° 那 3 秒内，90° 一条都没有**。
 - 本 tick 扫掠结果：**MISS 76 条**；HIT 44 条的法线**全是 `(±1,0,0)`/`(0,0,±1)`，没有一条是 +Y**。
@@ -531,12 +535,7 @@ protected void setLocationFromBoundingbox() {
 - 最典型一行：`t=16 (63.007) -> (62.913) grass_block 本tick=MISS qs=0.941 grow=2.0`
   —— 粒子中心只比地面高 **0.007**，而它的碰撞半径是 `0.941×0.2=0.188`：**已经在自己的碰撞壳层里**。
 
-**根因**（`ExhaustCollision.slab`）：球-箱扫掠用的是"把箱子按半径 r 三轴各膨胀"的写法。当**起点已经落在
-膨胀盒内**时，三个轴的 `near` 全是负数，而 `entry` 初值 0 只会被 `near >= entry` 更新 ⇒ `normalAxis` 恒为 -1
-⇒ 方法返回 `null`（判成"没撞到"）。于是粒子一旦进入"半径厚"的壳层就**再也拿不到任何碰撞响应**；
-偶尔擦到邻块侧面时只拿到 `±X/±Z` 法线，而侧壁响应**不会消掉朝里的速度** ⇒ 一路沉进方块内部。
-
-**次要缺陷（同一个根因的帮凶，也一起修了）**：`ExhaustCollision.slab` 在**起点已经落在膨胀壳层内**时
+**次要缺陷（帮凶，也一起修了）**：`ExhaustCollision.slab` 在**起点已经落在膨胀壳层内**时
 三轴的 `near` 全是负数，`entry`（初值 0）不会被 `near >= entry` 更新 ⇒ `normalAxis` 恒为 -1 ⇒ 返回 `null`，
 被当成"没撞到"。于是**只要粒子沉进"半径厚"的壳层，就再也拿不到任何碰撞响应**（只有斜擦邻块侧面时拿到
 `±X/±Z` 法线，而那不会消掉朝里的速度）。静默下坠 → 沉进壳层 → 碰撞彻底失效 → 穿过平面，
@@ -570,11 +569,13 @@ protected void setLocationFromBoundingbox() {
   `MAX_PARTICLES_PER_TICK` 乘气压，未做）。
 - 气压每 substep 求一次（`HashMap` 查维度数据 + 一次贝塞尔求值 + 一次 `Vector3d` 分配，常数级），
   多管时按管数线性增长，实测量级可忽略。
-- **粒子可见距离 = `MAX_EXHAUST_DISTANCE = 64 格**（§3.7）。原版对 `addParticle` 的硬限制是 32 格，
+- **粒子可见距离 = `MAX_EXHAUST_DISTANCE` = 64 格**（§3.7）。原版对 `addParticle` 的硬限制是 32 格，
   已用 9 参数 `addAlwaysVisibleParticle(..., ignoreRange = true)` 绕过；但超过 64 格我们主动不生成（省扫掠碰撞）。
   远处的可见度还受"粒子本身很小很淡"影响（`EXHAUST_SCALE=0.3` ⇒ 出生仅 0.1 格），
   真嫌远处看不见就得放大 `EXHAUST_SCALE`/`ALPHA_MAX`，而不是再改生成逻辑。
 - 排气粒子是纯客户端计算：各客户端看到的撞墙点/散射方向各自独立（原版粒子行为，未做服务端广播）。
+- **重力只作用于排气粒子**（`exhaustGravity`，默认 0.02，§3.6.1），尾迹仍然完全无重力（它是冰晶云）。
+  重力让"撞地"变频繁 ⇒ `IMPACT_GROWTH` 触发更多、粒子整体更大；嫌大就降 `IMPACT_GROWTH`（现 2.0）。
 - 粒子碰撞是**每颗粒子每 tick 一次扫掠**（半径 0.08~0.35、位移约 0.5~2 格 ⇒ 约 8~27 个方块）：
   单管 10 颗/tick × 寿命 ~16 tick ⇒ 同屏约 160 颗，实测未造成明显掉帧；多管并联时按管数线性增长。
   嫌重就先关撞地变大/缩短 `EXHAUST_LIFETIME`，或把扫掠改成「先长射线 clip，命中附近才逐方块扫」。
@@ -603,7 +604,7 @@ protected void setLocationFromBoundingbox() {
 4. ~~高空尾迹（contrail）~~：**已实现并经用户多轮实测定稿**（§8 计划 → §9 实现 → §9.7~§9.10 四轮模型迭代）。
    参数已全部配置化（§11），玩家直接改 `ccpe-client.toml` 即可调手感。
 5. 下次进游戏要确认的三件小事（其余都已确认）：
-   ① 配置界面能看到 17 项粒子配置且标题/说明正常、改完即时生效；
+   ① 配置**界面**能看到 17 项粒子配置且标题/说明文案正常（"改 toml 即时生效"已由 `exhaustGravity` 实测确认）；
    ② 物品 tooltip 按住 SHIFT 能展开 summary + 3 组说明；
    ③ 空手/潜行空手右键喷口已经**完全没有反应**。
 6. 若要继续美化尾迹，可考虑（都还没做）：把 `minecraft:generic_0..7` 换成专用白云贴图；
@@ -1140,7 +1141,7 @@ s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶�
 | `exhaustLifetime` | 16 tick | 排气寿命（+0~9 随机） |
 | `exhaustScale` | 0.3 格 | 排气尺寸 |
 | `exhaustSpeed` | 2.0 格/tick | 排气初速 |
-| `exhaustGravity` | 0.02 格/tick² | **排气重力**（0 = 失重 = 旧手感）。终端下沉速度 = 重力 × f/(1−f)，f = 0.965×(1−0.28×寿命进度) ⇒ 下坠前重后轻；建议 0.003~0.005 起步（§3.6 重力节） |
+| `exhaustGravity` | 0.02 格/tick² | **排气重力**（0 = 失重 = 加重力之前的手感）。终端下沉速度 = 重力 × f/(1−f)，f = 0.965×(1−0.28×寿命进度) ⇒ 下坠前重后轻。0.02 是用户逐档实测（0.002/0.005/0.02）后定稿的值，公式与取值表见 §3.6.1 |
 | `exhaustMaxDistance` | 64 格 | 排气发射距离上限 |
 
 ### 11.2 实现方式（为什么是访问器而不是缓存字段）
@@ -1245,7 +1246,7 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 
 ⇒ 本项目这 7 条文案**全部写成不带下划线的单行**文本，颜色稳定为 palette.primary。
 以后想加高亮：要么整条只用一对 `_`，**并且一次性检查所有行**，要么就别用。
-## 13. 现状总览（交接用，2026-08 定稿）
+## 13. 现状总览（交接用，2026-08 末更新）
 
 > 这一节是给「下次接手的人（或未来的自己）」看的速查：不用读 §1~§12 的历史过程也能上手。
 
@@ -1254,10 +1255,10 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | 能力 | 做法 | 状态 | 章节 |
 |---|---|---|---|
 | 定向推力 | 纯轴向恒定推力，点力打进 `sable:propulsion` 力组；1 RPM = 1 pN，乘气压 | ✅ 已实测校准 | §2.1 / §2.2 |
-| 排气粒子 `ccpe:exhaust` | 自研粒子：世界坐标、无重力、扫掠碰撞 + 撞墙反弹滑行 + 撞地变大、随寿命越大/越慢/越淡 | ✅ 已实测 | §3.6 |
+| 排气粒子 `ccpe:exhaust` | 自研粒子：世界坐标、扫掠碰撞（含"起点已嵌入"推出）+ 撞墙反弹滑行 + 撞地变大、随寿命越大/越慢/越淡、**可选轻微重力** | ✅ 已实测（含多角度不穿墙） | §3.6 / §3.6.1 / §3.8 |
 | 高空尾迹 `ccpe:contrail` | 自研粒子：按**移动距离**发射、峰值适宜度曲线、匀速直线飘荡（速度 = 总距离 ÷ 寿命）、无碰撞无重力 | ✅ 已实测（4 轮迭代） | §8 / §9 / §9.7~§9.10 |
 | 染料染色 | 手持染料右键喷口 ⇒ 只染**尾迹**；服务端权威 + BE 数据同步；护目镜 tooltip 显示当前色 | ✅ 已实测 | §10 |
-| 配置化 | 17 个性能参数进 `config/ccpe-client.toml` | ⏳ 待入游戏确认 | §11 |
+| 配置化 | 17 个参数进 `config/ccpe-client.toml`（`ConfigValue#get()` 本身带缓存，现查不贵，见 §11.2.1） | ✅ 改 toml 即时生效已实测；界面文案待看 | §11 |
 | 物品 tooltip | Create `ItemDescription`，Shift 展开 summary + 3 组说明 | ⏳ 待入游戏确认 | §12 |
 | mixin | **零 mixin**：Create 的 `NozzleBlockEntity` 对物理体无效、Sable 的力逻辑在 mixin 里 ⇒ 自研方块 + BE 成本最低 | ✅ | §1 |
 
@@ -1273,8 +1274,8 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | `particle/ExhaustParticleData.java` | 排气粒子参数 record（scale/lifetime/rgb/ownerId/gen） |
 | `particle/ContrailParticleData.java` | 尾迹粒子参数 record（width/lifetime/rgb） |
 | `particle/ContrailBudget.java` | 尾迹存活计数（common 包、只有 int，供 `contrailMaxLive` 安全阀用） |
-| `client/particle/ExhaustParticle.java` | 排气粒子：碰撞 + 撞墙散射 + 撞地变大（+ 默认关闭的分裂） |
-| `client/particle/ExhaustCollision.java` | 球-箱扫掠碰撞（主世界逐方块 + 其它物理体反投） |
+| `client/particle/ExhaustParticle.java` | 排气粒子：碰撞 + 撞墙散射 + 撞地变大 + 重力 `sinkAccel`（+ 默认关闭的分裂）。⚠️ `move()` **不能**调 `setLocationFromBoundingbox()`（§3.8） |
+| `client/particle/ExhaustCollision.java` | 球-箱扫掠碰撞（主世界逐方块 + 其它物理体反投）；含**起点已嵌入**分支 + 推出深度 `Hit.push`（§3.8） |
 | `client/particle/ContrailParticle.java` | 尾迹粒子：匀速直线、sqrt(t) 扩散、alpha ∝ 1/宽度、全亮渲染 |
 | `block/EngineCoreBlockEntity.java` | 提供 `public static float ambientTempAt(Level, float y)`（尾迹曲线复用引擎的高度→温度） |
 | `Config.java` | CLIENT 段新增 17 项粒子配置 |
@@ -1287,7 +1288,7 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 |---|---|
 | `assets/ccpe/blockstates/thrust_nozzle.json`、`models/block|item/thrust_nozzle.json`、`textures/block/thrust_nozzle.png` | 模型（用户 Blockbench 制作）；blockstate 未旋转变体 = `facing=up` |
 | `assets/ccpe/particles/exhaust.json`、`particles/contrail.json` | 精灵图列表，都是 `minecraft:generic_0..7` |
-| `assets/ccpe/lang/{zh_cn,en_us}.json` | 方块名、物品 tooltip 7 条、goggle 4 条、配置 32 条 |
+| `assets/ccpe/lang/{zh_cn,en_us}.json` | 方块名、物品 tooltip 7 条、goggle 4 条、配置 34 条 |
 | `data/ccpe/loot_table/blocks/thrust_nozzle.json` | 挖掘掉落 |
 | `data/ccpe/physics_block_properties/thrust_nozzle.json` | `sable:mass = 1.0`、`sable:volume = 0.5` |
 
@@ -1303,14 +1304,16 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | 空手 / 潜行空手右键 | **无任何反应**（清除入口已按用户要求删除） |
 | 戴 Create 护目镜看喷管 | `定向喷管` / `尾迹染色 <染料名> #RRGGBB`（未染色显示 `默认（未染色）`） |
 | 物品栏按住 SHIFT | summary（装在 encased fan 出风面增加出力）+ 3 组：风扇/高空尾迹/染料染色 |
-| 改 `config/ccpe-client.toml` | 尾迹与排气的寿命、密度、上限、尺寸、颜色亮度等 17 项即时生效 |
+| 改 `config/ccpe-client.toml` | 尾迹与排气的寿命、密度、上限、尺寸、初速、**重力**等 17 项即时生效（粒子类参数只对之后新生成的粒子生效） |
+| 任何角度喷向平面/墙面 | 粒子撞上后**沿面滑行**，不再穿墙漏到下方（§3.8，已多角度实测） |
+| `exhaustGravity` = 0.02（默认） | 排气离开喷口后先下沉、随后渐渐挂住；设 0 → 回到完全失重的飘散手感 |
 
 ### 13.4 参数在哪儿（三层，按可改性排序）
 
 1. **配置文件**（`config/ccpe-client.toml`，17 项，详见 §11.1）：`contrailEnabled`、`contrailLifeMin/Max`、
    `contrailSpacing`、`contrailMaxPerTick`、`contrailMaxLive`、`contrailMaxDistance`、`contrailWidth`、
    `contrailWidthTau`、`contrailAlpha`、`contrailDriftDistance`、`exhaustParticlesPerTick`、`exhaustLifetime`、
-   `exhaustScale`、`exhaustSpeed`、`exhaustMaxDistance`。
+   `exhaustScale`、`exhaustSpeed`、`exhaustGravity`、`exhaustMaxDistance`。
    BE 里通过 `Config.XXX.get()` 访问器**现查现用**（改完即时生效）。
 2. **代码常量 = 物理/曲线定义**（`ThrustNozzleBlockEntity` 顶部，见 §11.3）：`TRAIL_Y_MIN`(160 硬门)、
    `TRAIL_T_START/FULL/FADE_START/FADE_END`、`TRAIL_S_CEILING`、`TRAIL_TURB_CLOUD_Y`、`TRAIL_TURB_LOW_GAIN`、
@@ -1324,10 +1327,13 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 ### 13.5 验证状态
 
 **已由用户进游戏实测确认**：推力方向与手感、气压项、排气粒子各形态、尾迹出现的高度与密度、
-尾迹 32 格外可见、尾迹**越来越散**的手感、染料染色有效果。
+尾迹 32 格外可见、尾迹**越来越散**的手感、染料染色有效果、
+**排气在任意喷口角度下都不再穿墙/漏到平面下方**（§3.8，0°/30°/90° 多轮实测）、
+**排气轻微重力手感**（用户逐档试 0.002 / 0.005 / 0.02 后定稿 `exhaustGravity = 0.02`）、
+**改 `ccpe-client.toml` 即时生效**（`exhaustGravity` 改完当次游戏内即看到变化）。
 
-**还没进游戏确认的三项**（都是 2026-08 最后一批改动）：
-1. 配置 17 项：界面标题/说明是否正常解析、改完是否即时生效；
+**还没进游戏确认的三项**：
+1. 配置**界面**（Mods → … → Config）里 17 项的标题/说明文案是否正常；
 2. 物品 tooltip：Shift 展开是否正常、中文不是原始 key、`condition1..3` 连续；
 3. 潜行/空手右键喷口是否确实已无反应。
 
@@ -1352,6 +1358,8 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 | 物理体挡得住粒子、静态方块挡不住 | 射线在 plot 系里打，主世界命中的是**世界系**坐标 | 射线改到世界系、命中点统一换算 | §3.4 |
 | 离喷管 1 区块就没粒子 | 原版 `addParticleInternal` 离相机 >32 格直接丢弃 | 用 **9 参数** `addAlwaysVisibleParticle(ignoreRange=true)` | §3.7 |
 | 粒子穿透地面/墙面 | `getCollisionShape` 返回**方块局部** AABB，漏加 `pos` 偏移 | 加偏移（`ExhaustCollision#slab` 直接收偏移） | §3.6 |
+| **斜喷时全部粒子漏到平面下方**（越接近平行越糟） | `move()` 调了 `setLocationFromBoundingbox()`，它把 `y` 当包围盒**底边** ⇒ 每 tick 静默下坠 `quadSize/2`，且不在扫掠位移里 | 改成直接写 `this.x/y/z` | §3.8 |
+| 推出方向把粒子往下推穿 | 把"法线与运动反向"当成选面**主判据**；撞后粒子在向上弹，于是选到方块底面 | 主判据改「最小平移」，运动方向只做 tie-break | §3.8 |
 | 尾迹要等很久才出现 | 淡入写成「寿命的 5%」，寿命 18000 时 = 45 秒 | 淡入改**固定 tick** | §9.7 |
 | 粒子分布很散 | 随机游走**无界** + 低适宜度时间距被拉到 12 格 | 改匀速直线模型（距离 ÷ 寿命）+ 间距给下限 | §9.7 / §9.10 |
 | 尾迹长到某处不再延长 | 撞到 `contrailMaxLive` 存活上限 | 属预期；调配置或降寿命 | §9.7 / §11 |
@@ -1361,11 +1369,87 @@ block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
 
 ### 13.8 下一步（按优先级）
 
+0. ~~斜喷穿墙~~、~~排气轻微重力~~：**已完成并经用户实测确认**（§3.8 / §3.6.1 / §14）。
 1. 进游戏确认 §13.5 那三项。
 2. 定合成配方材料并补 `data/ccpe/recipe/`。
 3. 回到 `memo/flip-autopilot.md`：用新喷管重标落地/倒挂控制律（悬停油门 43% 只在海平面成立，§2.2；
    滚转单边差动只剩 6.4 rad/s² 余量 ⇒ 建议双边反向差动）。
 4. 可选美化：尾迹换专用白云贴图；或改带状 mesh 做「几分钟长」的真正尾迹（工作量大，§8.6）。
+
+## 14. 本轮工作记录（2026-08 末：斜喷穿墙修复 + 排气轻微重力）
+
+> 技术结论已分别落在 **§3.8**（穿墙根因与修法）、**§3.6.1**（重力）、**§11.2.1**（配置读取开销）。
+> 本节记录**过程与验收状态**，方便回看"当时是怎么查的、为什么前两次修错了"。
+
+### 14.1 起因
+
+用户实测两条互相关联的异常：
+
+1. 喷口**垂直于地面**时排气粒子表现正常（撞墙后沿面滑行），但**机体与平面成 30° 时全部粒子穿墙、漏到平面下方**，
+   且"越与平面平行问题越严重"；漏下去的粒子**已经变大、变慢**（说明确实撞到过东西）。
+2. 后来提出：希望排气**轻微受一点重力**。
+
+### 14.2 排查过程（三轮，前两轮都修错了方向 —— 值得记住的不是结论而是排除路径）
+
+| 轮次 | 假设 | 证据 | 结果 |
+|---|---|---|---|
+| 1 | 扫掠碰撞 `slab` 缺"起点已重叠"分支 ⇒ 粒子在壳层内收不到响应 | 埋点日志：120 条穿墙事件全部落在 30° 那 3 秒、90° 零条；HIT 的法线**全是 ±X/±Z**、没有 +Y；撞过的粒子占一半 | 假设成立但不是**触发点**（粒子怎么会进壳层没解释） |
+| 2 | 补"起点已嵌入"分支 + 推出；选面用"法线与运动反向" | 用户实测：**所有角度全漏，比之前更糟** | 修错：撞后粒子在**向上**弹，"与运动反向的面"是方块**底面** ⇒ 推出深度约一整格 = 往下推穿 |
+| 3 | 改成"最小平移 + 运动方向仅做 tie-break" | 用户实测：**仍然全漏** | 仍旧不对 ⇒ 说明还有别的位移来源 |
+
+**转折点**：不再猜代码，改成核对日志里 `pos` 与上一 tick 的 `mv`。发现两者逐 tick 对不上，
+差值恰好 = `quadSize/2` 且随寿命增长（例 #2460：`82.13 - 1.40` 应落 `80.73`，实际 `80.68`，差 0.05；
+下一 tick 0.06 → 0.07 → 0.08，而 `half` 每 tick 涨 0.0085）。
+
+顺带解释了两个"看不懂"的现象：
+
+- 为什么第 1、2 轮加的"穿墙检测"报 0 条 —— 因为粒子上一 tick 就已经沉过表面，检测条件（起点在空气里）不成立；
+- 为什么"撞过变大的粒子漏得更狠" —— `IMPACT_GROWTH` 让 `quadSize` 翻倍，隐形下坠速度跟着翻倍。
+
+### 14.3 根因与修法（详见 §3.8）
+
+`ExhaustParticle#move()` 建的是**以 y 为中心**的对称包围盒，随后调用 `Particle#setLocationFromBoundingbox()`；
+而 1.21.1 里那个方法是 `this.y = aabb.minY`（原版把位置 `y` 当**包围盒底边**，见 `Particle#setPos`）。
+⇒ **每 tick 位置被静默下移 `quadSize/2`，且这段位移不在扫掠的 `movement` 里**，等于一个不受碰撞约束的隐形下坠。
+
+角度相关性因此完全说得通：90° 入射的反弹给粒子 ~0.3-0.45 格/tick 上抛，压得住下沉；
+浅角度反弹的法向分量只有 ~0.05-0.09 格/tick，压不住 ⇒ 净位移朝下 ⇒ 沉穿平面。
+
+**修法**：不再调 `setLocationFromBoundingbox()`，直接写 `this.x/y/z`；包围盒仅用于视锥剔除。
+同时保留加固（现在才真正有意义）：`slab()` 的"起点已嵌入"分支 + `Hit.push` 推出 + 最小平移选面。
+
+### 14.4 排气轻微重力（详见 §3.6.1）
+
+- 新增配置 `exhaustGravity`（`ccpe-client.toml`，范围 0.0~0.1，**默认 0.02**）。
+- 实现：`ExhaustParticle` 构造时读一次缓存进 `sinkAccel`，每 tick 与浮力合并成一条
+  `yd += BUOYANCY + life×BUOYANCY_GROWTH - sinkAccel`。
+- 用户逐档实测（0.002 / 0.005 / 0.02）后定稿 0.02：出生后净下沉 ≈0.55 格/tick（≈11 格/秒），
+  中期 ≈1.95、末期 ≈1.0 格/秒。
+- 附带结论：**不需要给配置读取加缓存层**，NeoForge 的 `ConfigValue#get()` 本身带缓存（§11.2.1）。
+
+### 14.5 本轮改动的文件
+
+| 文件 | 改动 |
+|---|---|
+| `client/particle/ExhaustCollision.java` | `Hit` 增 `push` 字段；`slab()` 增"起点已嵌入"分支；新增 `depenetrationNormal()`（最小平移 + 运动方向 tie-break）；`scan()` 在 fraction 打平时取更小 push；物理体路径的 push 乘 `bodyScale` |
+| `client/particle/ExhaustParticle.java` | `move()` 改为直接写位置（**修掉 y 静默下坠**）；新增 `sinkAccel`（重力）并在 `tick()` 施加；调试埋点 `DEBUG_TRACE` 已改回默认 `false` |
+| `block/ThrustNozzleBlockEntity.java` | 调试开关 `DEBUG_EXHAUST_LOG` 默认 `false`（代码保留，将来复查可直接打开） |
+| `Config.java` | 新增 `EXHAUST_GRAVITY`（默认 0.02） |
+| `assets/ccpe/lang/{zh_cn,en_us}.json` | 各增 2 条 `exhaustGravity` 的标题与 tooltip |
+
+### 14.6 验收状态
+
+- `gradlew classes` / `processResources` 通过；两个 lang 文件均为合法 JSON（各 296 键）。
+- **用户实测确认**：任何角度都不再穿墙（判据不只是"看着不漏"，日志里 `pos` 与上一 tick `mv` 已完全吻合）；
+  `exhaustGravity = 0.02` 的手感符合预期；改 toml 即时生效。
+
+### 14.7 遗留
+
+- 两个调试开关（`ExhaustParticle.DEBUG_TRACE`、`ThrustNozzleBlockEntity.DEBUG_EXHAUST_LOG`）现为 `false`，
+  **代码与判读说明都保留在 §3.8 的"调试埋点"小节**，再遇到粒子位置异常可直接打开。
+- 重力让撞地更频繁 ⇒ `IMPACT_GROWTH` 触发更多、粒子整体偏大；若后续觉得太大，调 `IMPACT_GROWTH`（现 2.0）。
+- 排气粒子仍是纯客户端计算，撞墙点/散射方向各客户端独立（未做服务端广播）。
+
 
 
 
