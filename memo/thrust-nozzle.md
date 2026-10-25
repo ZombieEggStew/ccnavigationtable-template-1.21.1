@@ -512,6 +512,7 @@ addAlwaysVisibleParticle(data, ignoreRange, x,y,z, vx,vy,vz)
 | 21 | 要粒子**随时间越来越散** | 扩散半径从常数改 `R0 + RATE·√age`（软边界 + 6 格封顶）；边界内朝外速度按 `(dist/半径)²` 衰减（§9.9） | 编译通过，待进游戏确认 |
 | 22 | 改成「初速 = 飘荡距离 ÷ 寿命」，且飘荡距离随高度变化（云层×1、越低越散） | 删除随机游走/抖动/浮点边界；`spawnContrail` 反算恒定速度，新增 `trailTurbulence()`（200→1.0，160→2.5）与 `TRAIL_DRIFT_DISTANCE=2.0`（§9.10） | 编译通过，待进游戏确认 |
 | 23 | 想手感染料给**尾迹**染色 + 护目镜显示 | `useItemOn`/`useWithoutItem` 染料交互、BE 存 `trailDye`（NBT + `getUpdateTag/handleUpdateTag/getUpdatePacket` 同步）、`IHaveGoggleInformation` tooltip，颜色走进 `ContrailParticleData`（§10） | 编译通过，待进游戏确认 |
+| 26 | 物品 tooltip 要说明用途与染色 | 照 `trailing_wheel_mount` 注册 `ItemDescription.Modifier`（FMLClientSetupEvent），7 条 lang（summary + 3 组 condition/behaviour），文案不带 `_` 避免高亮奇偶翻转（§12） | ✅ 编译通过 |
 | 25 | 去掉「潜行空手右键清除染色」 | 删 `ThrustNozzleBlock#useWithoutItem`、goggle 的清除提示行、lang 的 `trail_dye_hint` / `trail_dye_cleared`（§10） | ✅ 编译通过 |
 | 24 | 性能参数要能配置调 | 16 个性能参数搬进 `ccpe-client.toml`（`Config` CLIENT 段）；BE 的常量换成 `Config.XXX.get()` 访问器（现查现用，改完即时生效），粒子里每 tick 用到的 alpha/tau 在构造时缓存（§11） | 编译通过，待进游戏确认 |
 
@@ -1017,6 +1018,54 @@ s      = 0  当 Y < TRAIL_Y_MIN = 160                                    // 阶�
 - `gradlew classes` 通过；`zh_cn.json` / `en_us.json` 均为合法 JSON（各 289 键，粒子配置 32 条）。
 - 进游戏看：Mods → CC Peripheral Extender → Config → 客户端分类，应能看到「尾迹 / 排气」两段共 16 项。
   也可以直接改 `config/ccpe-client.toml`，改完存档/重进即时生效（大部分项下一次发射就生效）。
+## 12. 物品 tooltip（2026-08，参考 trailing_wheel_mount）
+
+### 12.1 注册方式（与项目里已有 4 个方块完全一致）
+
+```java
+// CCPeripheralExtenderClient#onClientSetup(FMLClientSetupEvent)
+Item thrustNozzleItem = MyModBlocks.thrust_nozzle.get().asItem();
+TooltipModifier.REGISTRY.register(thrustNozzleItem,
+        new ItemDescription.Modifier(thrustNozzleItem, FontHelper.Palette.STANDARD_CREATE));
+```
+
+- **必须在 `FMLClientSetupEvent` 里注册**，不能放 mod 构造器：那时 `DeferredHolder` 还没绑定
+  （unbound value 直接崩）—— 这条坑 `fluid_port` 的注释里已经写过。
+- 参考实现：`CCPeripheralExtenderClient` 里 `fluid_port` / `quick_fill_fuel_vault` /
+  `quick_fill_fluid_tank` / `trailing_wheel_mount` 四处同款，本喷管是第 5 个。
+
+### 12.2 lang 键（Create `ItemDescription` 的约定）
+
+键前缀是**物品的 descriptionId**（= `block.ccpe.thrust_nozzle`，不是我们 goggle 用的 `tooltip.ccpe.*` 命名空间）：
+
+```
+block.ccpe.thrust_nozzle.tooltip.summary
+block.ccpe.thrust_nozzle.tooltip.condition1 / behaviour1
+block.ccpe.thrust_nozzle.tooltip.condition2 / behaviour2
+block.ccpe.thrust_nozzle.tooltip.condition3 / behaviour3
+```
+
+- 条件循环 `for (i = 1; ; i++)`，**遇到不存在的 `conditionN` 就停** ⇒ 编号必须从 1 连续。
+- 平时只显示「按住 SHIFT 查看描述」，按住 SHIFT 才展开 summary + 每组残 condition/behaviour。
+
+### 12.3 内容（用户要求的 3 点）
+
+| 键 | 中文 |
+|---|---|
+| summary | 装在 encased fan 的出风面上，把风扇的风压变成定向推力，比只用风扇本身有力得多。 |
+| condition1 / behaviour1 | 装在前方出风面的 encased fan 上时 → 推力随风扇转速提高；高空气压低时会明显变小 |
+| condition2 / behaviour2 | 在高空飞行时 → 喷口会拖出一条冰晶尾迹：约 Y160 以上才有，越靠近云层越浓 |
+| condition3 / behaviour3 | 手持染料右键点击时 → 把尾迹粒子染成该染料的颜色 |
+
+### 12.4 ⚠️ Create tooltip 的 `_` 高亮坑（写文案前必须知道）
+
+`TooltipHelper#cutTextComponent` 用 `<u>_</u>` 把一句话切成段并交替上色，而且**每处理完一行会翻转一次
+`currentlyHighlighted`**。结果是：只要一行里有下划线，后面所有行的奇偶颜色都会跟着翻 ——
+稍微写歪就出现「普通文字比高亮还亮」的错觉。
+
+⇒ 本项目这 7 条文案**全部写成不带下划线的单行**文本，颜色稳定为 palette.primary。
+以后想加高亮：要么整条只用一对 `_`，**并且一次性检查所有行**，要么就别用。
+
 
 
 

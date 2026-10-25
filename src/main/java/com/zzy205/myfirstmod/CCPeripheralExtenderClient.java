@@ -126,6 +126,12 @@ public class CCPeripheralExtenderClient {
         TooltipModifier.REGISTRY.register(trailingWheelMountItem,
                 new ItemDescription.Modifier(trailingWheelMountItem, FontHelper.Palette.STANDARD_CREATE));
 
+        // 定向喷管物品 tooltip（同 trailing_wheel_mount 模式：ItemDescription，平时只显示"按住 SHIFT 查看"提示，
+        // 按住 SHIFT 展开 summary + 装在风扇出风面 / 高空尾迹 / 染料染色 3 组说明；Create ClientEvents 自动应用）。
+        Item thrustNozzleItem = MyModBlocks.thrust_nozzle.get().asItem();
+        TooltipModifier.REGISTRY.register(thrustNozzleItem,
+                new ItemDescription.Modifier(thrustNozzleItem, FontHelper.Palette.STANDARD_CREATE));
+
         // 注册 Flywheel Visual（shaft 渲染）
         SimpleBlockEntityVisualizer.builder(MyModBlockEntities.transmission_peripheral_entity.get())
                 .factory(TransmissionPeripheralVisual::new)
