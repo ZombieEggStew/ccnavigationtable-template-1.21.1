@@ -125,3 +125,6 @@
 - Transmission peripheral: `setTargetSpeed` now accepts **negative speeds (-256 ~ 256)**  and `setRatio` accepts **negative ratios** — a negative value makes the downstream rotate **opposite to the input**.
 
   Stress is now charged on the signed difference `|output − input|`, so reversing costs more stress than slowing down in the same direction.
+
+  1.1.8
+  - Added the thrust nozzle: Mounts on the front face of an Encased Fan and turns its airflow into axial thrust - far stronger than the fan on its own.
