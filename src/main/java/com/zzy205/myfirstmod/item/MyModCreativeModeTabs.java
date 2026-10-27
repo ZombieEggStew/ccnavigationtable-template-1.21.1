@@ -64,6 +64,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.quick_fill_fuel_vault); // 快速装填燃料箱（单物品库存 1024，右键存入/蹲下空手取出，默认闭盖）
                 output.accept(MyModBlocks.fluid_port);
                 output.accept(MyModBlocks.trailing_wheel_mount); // 从动轮悬架（单轮无动力）
+                output.accept(MyModBlocks.thrust_nozzle); // 定向喷管（贴在 encased fan 出风面，纯轴向推力 + 排气/进气/尾迹粒子）
             })
             .build());
     public static void register(IEventBus modEventBus) {

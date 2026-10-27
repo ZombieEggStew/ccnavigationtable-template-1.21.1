@@ -103,6 +103,115 @@ public class Config {
             .comment("蒸汽动力室活塞'噗嗤'音效音量 (0.0-2.0，0 = 关闭该音效逻辑节省性能)。默认: 0.1（每活塞周期触发一次，Create STEAM 声，频率随转速）。")
             .defineInRange("engineSteamPuffVolume", 0.1, 0.0, 2.0);
 
+    // ═══════════════ 客户端：定向喷管粒子（性能主旋钮） ═══════════════
+    //
+    // 全部是<b>纯客户端</b>参数：尾迹/排气粒子只在客户端生成与推进（ThrustNozzleBlockEntity#tickClient、
+    // client.particle.ContrailParticle / ExhaustParticle），所以放进 ccpe-client.toml。
+    // 同屏粒子数 ≈ 发射密度 × 寿命，这两个（contrailSpacing / contrailLifeMax）是最大的性能杠杆；
+    // contrailMaxLive 是硬上限（满了停发），防止把寿命调到几分钟后把帧率打死。
+
+    public static final ModConfigSpec.BooleanValue CONTRAIL_ENABLED = CLIENT_BUILDER
+            .comment("高空尾迹总开关。关闭 = 完全没有尾迹（只剩喷口排气）。默认: 开启")
+            .define("contrailEnabled", true);
+
+    public static final ModConfigSpec.IntValue CONTRAIL_LIFE_MIN = CLIENT_BUILDER
+            .comment("尾迹寿命下限（tick，20 tick = 1 秒）：适宜度为 0 时用这个值。默认: 360 (18 秒)")
+            .defineInRange("contrailLifeMin", 360, 20, 24000);
+
+    public static final ModConfigSpec.IntValue CONTRAIL_LIFE_MAX = CLIENT_BUILDER
+            .comment("尾迹寿命上限（tick）：越冷越接近它。<b>性能主旋钮</b> —— 同屏粒子数 ≈ 发射密度 × 寿命。默认: 1200 (60 秒)")
+            .defineInRange("contrailLifeMax", 1200, 20, 24000);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_SPACING = CLIENT_BUILDER
+            .comment("尾迹发射间距（格）：机体每飞这么远吐一颗（温度不够冷时会按适宜度变稀，最多稀到 1/0.35）。<b>性能主旋钮</b>。默认: 1.2")
+            .defineInRange("contrailSpacing", 1.2, 0.1, 32.0);
+
+    public static final ModConfigSpec.IntValue CONTRAIL_MAX_PER_TICK = CLIENT_BUILDER
+            .comment("尾迹单 tick 最多补发几颗（防低帧率/瞬移时一帧吐出一长串）。默认: 6")
+            .defineInRange("contrailMaxPerTick", 6, 1, 64);
+
+    public static final ModConfigSpec.IntValue CONTRAIL_MAX_LIVE = CLIENT_BUILDER
+            .comment("尾迹粒子存活总数上限（0 = 不限）。性能安全阀：满了就停止发射，旧粒子死亡后腾出配额；"
+                    + "表现为「尾迹长到某处不再延长」而不是掉帧。默认: 6000")
+            .defineInRange("contrailMaxLive", 6000, 0, 200000);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_MAX_DISTANCE = CLIENT_BUILDER
+            .comment("尾迹发射距离上限（格，0 = 不限）：离最近玩家超过它就不再发射（远处看不见还每 tick 推进是纯浪费）。默认: 96")
+            .defineInRange("contrailMaxDistance", 96.0, 0.0, 512.0);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_WIDTH = CLIENT_BUILDER
+            .comment("尾迹出生宽度（格，quad 半径；可见宽度约 2 倍），寿命内按 sqrt(t) 继续扩散。越大越糊、填充率开销越大。默认: 1.0")
+            .defineInRange("contrailWidth", 1.0, 0.05, 8.0);
+
+    public static final ModConfigSpec.IntValue CONTRAIL_WIDTH_TAU = CLIENT_BUILDER
+            .comment("尾迹扩散时间常数（tick）：宽度 = 出生宽度 × sqrt(1 + age/本值)，越小散得越快。"
+                    + "经验值 ≈ 寿命/4（寿命改了记得一起改）。默认: 300")
+            .defineInRange("contrailWidthTau", 300, 10, 24000);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_ALPHA = CLIENT_BUILDER
+            .comment("尾迹出生不透明度上限（0~1）：实际会随扩散倍数同步变淡（质量守恒），再叠淡入淡出。默认: 0.6")
+            .defineInRange("contrailAlpha", 0.6, 0.0, 1.0);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_DRIFT_DISTANCE = CLIENT_BUILDER
+            .comment("单颗粒子一生飘荡距离（格）：速度 = 本值 ÷ 寿命，方向随机、匀速直线。越大尾迹越蓬松。默认: 4.0")
+            .defineInRange("contrailDriftDistance", 4.0, 0.0, 64.0);
+
+    public static final ModConfigSpec.IntValue EXHAUST_PARTICLES_PER_TICK = CLIENT_BUILDER
+            .comment("排气粒子在满转速（256 RPM）时每 tick 生成的颗数，按 |转速|/256 线性缩放。<b>性能主旋钮</b>。默认: 10")
+            .defineInRange("exhaustParticlesPerTick", 10, 0, 128);
+
+    public static final ModConfigSpec.IntValue EXHAUST_LIFETIME = CLIENT_BUILDER
+            .comment("排气粒子基准寿命（tick），实际再加 0~9 的随机。默认: 16")
+            .defineInRange("exhaustLifetime", 16, 2, 600);
+
+    public static final ModConfigSpec.DoubleValue EXHAUST_SCALE = CLIENT_BUILDER
+            .comment("排气粒子出生尺寸（格）。默认: 0.3")
+            .defineInRange("exhaustScale", 0.3, 0.01, 8.0);
+
+    public static final ModConfigSpec.DoubleValue EXHAUST_SPEED = CLIENT_BUILDER
+            .comment("排气粒子出生速度（格/tick，1 = 20 格/秒），实际再乘 (0.65 + 0.35×油门)。默认: 2.0")
+            .defineInRange("exhaustSpeed", 2.0, 0.0, 16.0);
+
+    public static final ModConfigSpec.DoubleValue EXHAUST_GRAVITY = CLIENT_BUILDER
+            .comment("排气粒子的轻微重力（格/tick²，0 = 不受重力）。实际终端下沉速度 = 重力 × f/(1−f)，"
+                    + "f = 0.965×(1−0.28×寿命进度)，所以下坠是前重后轻的（出生后最快、末期几乎挂住）。"
+                    + "默认: 0.02（用户进游戏实测定稿）")
+            .defineInRange("exhaustGravity", 0.02, 0.0, 0.1);
+
+    public static final ModConfigSpec.DoubleValue EXHAUST_MAX_DISTANCE = CLIENT_BUILDER
+            .comment("排气粒子发射距离上限（格，0 = 不限）。原版 addParticle 有 32 格硬限制，本模组用 9 参数 "
+                    + "addAlwaysVisibleParticle 绕过，所以这里自己给上限。默认: 64")
+            .defineInRange("exhaustMaxDistance", 64.0, 0.0, 512.0);
+
+    // ── 客户端：进气粒子（负转速 = 吸力时，空气被吸进口面） ──
+
+    public static final ModConfigSpec.BooleanValue INTAKE_ENABLED = CLIENT_BUILDER
+            .comment("吸力（负转速）时的进气粒子总开关。关闭 = 反转风扇时喷口完全没有粒子。默认: 开启")
+            .define("intakeEnabled", true);
+
+    public static final ModConfigSpec.IntValue INTAKE_PARTICLES_PER_TICK = CLIENT_BUILDER
+            .comment("进气粒子在满转速（256 RPM）时每 tick 生成的颗数，按 |转速|/256 线性缩放。<b>性能主旋钮</b>。默认: 8")
+            .defineInRange("intakeParticlesPerTick", 8, 0, 128);
+
+    public static final ModConfigSpec.DoubleValue INTAKE_FUNNEL_LENGTH = CLIENT_BUILDER
+            .comment("进气漏斗长度（格）：<b>满转速 256 RPM 时</b>粒子最远在喷口前方这么远的位置出生，"
+                    + "然后加速被吸进口面。实际按 |转速|/256 线性缩放（128 RPM ⇒ 一半，64 RPM ⇒ 四分之一）。"
+                    + "越大越像\"长吸气柱\"。默认: 8.0")
+            .defineInRange("intakeFunnelLength", 8.0, 0.4, 32.0);
+
+    public static final ModConfigSpec.DoubleValue INTAKE_SPEED = CLIENT_BUILDER
+            .comment("进气速度（格/tick，1 = 20 格/秒）：寿命 = 出生距离 ÷ 本值，所以调大 = 吸得更快、粒子更短命；"
+                    + "实际再乘 (0.6 + 0.4×油门)。默认: 0.5")
+            .defineInRange("intakeSpeed", 0.5, 0.05, 8.0);
+
+    public static final ModConfigSpec.DoubleValue INTAKE_SCALE = CLIENT_BUILDER
+            .comment("进气粒子出生尺寸（格），寿命内缩小到 0.3 倍后消失。默认: 0.28")
+            .defineInRange("intakeScale", 0.28, 0.01, 8.0);
+
+    public static final ModConfigSpec.DoubleValue INTAKE_MAX_DISTANCE = CLIENT_BUILDER
+            .comment("进气粒子发射距离上限（格，0 = 不限）：离最近玩家超过它就不再发射。默认: 64")
+            .defineInRange("intakeMaxDistance", 64.0, 0.0, 512.0);
+
     static final ModConfigSpec SPEC = BUILDER.build();
     static final ModConfigSpec CLIENT_SPEC = CLIENT_BUILDER.build();
 }

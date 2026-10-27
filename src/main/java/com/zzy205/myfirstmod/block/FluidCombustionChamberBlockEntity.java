@@ -36,12 +36,11 @@ public class FluidCombustionChamberBlockEntity extends BlockEntity {
     /**
      * 客户端：累积活塞相位（弧度 0~2π）。<b>累积而非 gameTime×speed</b>——转速变化只改变推进速率、
      * 不造成相位跳变（修复 Lua 每 tick 变油门 → 音效/动画高频重复播放，见 memo 踩坑 27）。
+     * <p>不加 {@code @OnlyIn(Dist.CLIENT)}：字段初始化器编译进公共 {@code <init>}，专用服务端被 RuntimeDistCleaner 抹字段而初始化器仍在 → {@code NoSuchFieldError} 崩服。
      */
-    @OnlyIn(Dist.CLIENT)
     protected float pistonAngle = 0f;
 
-    /** 客户端：上一 tick 累积相位（渲染 partialTick 插值 + 相位回绕检测） */
-    @OnlyIn(Dist.CLIENT)
+    /** 客户端：上一 tick 累积相位（渲染 partialTick 插值 + 相位回绕检测）；同上不加 {@code @OnlyIn} */
     protected float prevPistonAngle = 0f;
 
     public FluidCombustionChamberBlockEntity(BlockPos pos, BlockState state) {

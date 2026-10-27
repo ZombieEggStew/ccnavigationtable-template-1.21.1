@@ -31,6 +31,10 @@ import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
 import com.zzy205.myfirstmod.client.MonitorSlabGridOverlay;
 import com.zzy205.myfirstmod.client.MonitorUseInterceptor;
 import com.zzy205.myfirstmod.client.MonitorHoverInterceptor;
+import com.zzy205.myfirstmod.client.particle.ContrailParticle;
+import com.zzy205.myfirstmod.client.particle.ExhaustParticle;
+import com.zzy205.myfirstmod.client.particle.IntakeParticle;
+import com.zzy205.myfirstmod.particle.MyModParticles;
 import com.zzy205.myfirstmod.client.MonitorBackgrounds;
 import com.zzy205.myfirstmod.client.MonitorOutlineRenderer;
 import com.zzy205.myfirstmod.client.ControlDeskPlacementOverlay;
@@ -62,7 +66,9 @@ import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
 @Mod(value = CCPeripheralExtender.MOD_ID, dist = Dist.CLIENT)
@@ -80,6 +86,12 @@ public class CCPeripheralExtenderClient {
         ControlDeskGhostPreviewRenderer.register();
         SeatControlListener.register();
         NeoForge.EVENT_BUS.addListener(MonitorOutlineRenderer::onRenderHighlight);
+
+        // 排气粒子撞地分裂：子粒子先入队，这里每 tick 统一 flush
+        // （不能在 ParticleEngine 遍历粒子列表期间 addParticle）
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> ExhaustParticle.flushPendingSplits());
+        // 尾迹粒子的存活计数记账：换维度/换世界时清零（旧粒子被丢弃时不走 remove()）
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> ContrailParticle.onClientTick());
 
         // 预加载 Monitor 模块模型（仿 control-panels PreLoadedModel 模式）
         MonitorPreloadedModels.init();
@@ -114,6 +126,12 @@ public class CCPeripheralExtenderClient {
         Item trailingWheelMountItem = MyModBlocks.trailing_wheel_mount.get().asItem();
         TooltipModifier.REGISTRY.register(trailingWheelMountItem,
                 new ItemDescription.Modifier(trailingWheelMountItem, FontHelper.Palette.STANDARD_CREATE));
+
+        // 定向喷管物品 tooltip（同 trailing_wheel_mount 模式：ItemDescription，平时只显示"按住 SHIFT 查看"提示，
+        // 按住 SHIFT 展开 summary + 装在风扇出风面 / 高空尾迹 / 染料染色 3 组说明；Create ClientEvents 自动应用）。
+        Item thrustNozzleItem = MyModBlocks.thrust_nozzle.get().asItem();
+        TooltipModifier.REGISTRY.register(thrustNozzleItem,
+                new ItemDescription.Modifier(thrustNozzleItem, FontHelper.Palette.STANDARD_CREATE));
 
         // 注册 Flywheel Visual（shaft 渲染）
         SimpleBlockEntityVisualizer.builder(MyModBlockEntities.transmission_peripheral_entity.get())
@@ -234,6 +252,23 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.monitor_slab_entity.get(),
                 MonitorSlabRenderer::new);
+    }
+
+    /**
+     * 粒子 provider 注册。
+     * 用 {@code registerSpriteSet} —— 精灵图列表见 {@code assets/ccpe/particles/*.json}
+     * （三者都沿用 create:air 的那 8 张 {@code minecraft:generic_0..7}）：
+     * <ul>
+     * <li>{@code ccpe:exhaust} —— 喷管排气（扫掠碰撞 + 撞墙扩散）；</li>
+     * <li>{@code ccpe:contrail} —— 高空尾迹（无碰撞冰晶云）；</li>
+     * <li>{@code ccpe:intake} —— 吸力（负转速）时的进气粒子（向口面收拢并缩小消失）。</li>
+     * </ul>
+     */
+    @SubscribeEvent
+    static void registerParticles(RegisterParticleProvidersEvent event) {
+        event.registerSpriteSet(MyModParticles.EXHAUST.get(), ExhaustParticle.Provider::new);
+        event.registerSpriteSet(MyModParticles.CONTRAIL.get(), ContrailParticle.Provider::new);
+        event.registerSpriteSet(MyModParticles.INTAKE.get(), IntakeParticle.Provider::new);
     }
 
     @SubscribeEvent

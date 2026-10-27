@@ -226,8 +226,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected String lastSyncedSteamFuelType = "none", lastSyncedSteamFuelKey = "", lastSyncedSteamSolidFuelKey = "";
     /** 慢字段心跳计数器：每次 sendData 归零，≥SYNC_HEARTBEAT_INTERVAL 强制补发一次 */
     protected int syncHeartbeat;
-    /** 客户端：蒸汽倒计时外推基线时刻（最近一次 SteamBurnTicks 包到达时的 gameTime，方案 D：burnTicks 每 tick −效率 精确线性） */
-    @OnlyIn(Dist.CLIENT)
+    /** 客户端：蒸汽倒计时外推基线时刻（最近一次 SteamBurnTicks 包到达时的 gameTime，方案 D：burnTicks 每 tick −效率 精确线性）。
+     *  <b>字段一律不加 {@code @OnlyIn(Dist.CLIENT)}</b>：字段初始化器编译进公共 {@code <init>}，
+     *  专用服务端会被 RuntimeDistCleaner 抹掉字段而初始化器仍在 → {@code NoSuchFieldError} 崩服（见 issue）。 */
     protected long steamBurnTicksSyncTime;
 
     /** 模块温度（°C，controller 持有；NBT 持久化 + 客户端同步显示） */
@@ -238,13 +239,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected boolean overheated = false;
     /** 上次同步给客户端的温度（差量发包用） */
     protected float lastSyncedTemp = T_AMB_SEA;
-    /** 客户端温度显示值（服务端差量采样 → 趋势外推平滑，见 tickClient） */
-    @OnlyIn(Dist.CLIENT)
+    /** 客户端温度显示值（服务端差量采样 → 趋势外推平滑，见 tickClient）；不加 {@code @OnlyIn}，理由见 {@link #steamBurnTicksSyncTime} */
     protected float displayedTemperature = T_AMB_SEA;
-    /** 最近两个温度采样点（服务端差量发包到达时滚动，tickClient 沿斜率外推） */
-    @OnlyIn(Dist.CLIENT)
+    /** 最近两个温度采样点（服务端差量发包到达时滚动，tickClient 沿斜率外推）；不加 {@code @OnlyIn}，理由见 {@link #steamBurnTicksSyncTime} */
     protected float lastTempSample = T_AMB_SEA, newTempSample = T_AMB_SEA;
-    @OnlyIn(Dist.CLIENT)
     protected long lastTempSampleTime, newTempSampleTime;
 
     // ---- P4：Lua 控制（ccpe.engine 外设，挂 controller；方案见 memo/engine-module.md 关键机制 5） ----
@@ -254,8 +252,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 客户端：当前 goggle 悬停的引擎方块（核心 / 模块方块的 {@code IProxyHoveringInformation.getInformationSource}
      *  代理到本 controller 时记录——核心记录自身、蒸汽室记录蒸汽室、流体室/气道记录各自方块）。
      *  仅用于 {@link #addToGoggleTooltip} 按悬停方块分流四套 tooltip（核心 / 蒸汽动力室 / 流体燃烧室全量 / 冷却气道精简）；
-     *  每次 tooltip 渲染后复位（防跨帧串味）。 */
-    @OnlyIn(Dist.CLIENT)
+     *  每次 tooltip 渲染后复位（防跨帧串味）；不加 {@code @OnlyIn}，理由见 {@link #steamBurnTicksSyncTime}。 */
     private Block hoveredSourceBlock;
 
     /** 客户端：记录当前 goggle 悬停的模块方块（由模块方块的 getInformationSource 代理调用，调用方需已判 level.isClientSide） */
@@ -344,12 +341,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     @Nullable
     private IPeripheral peripheral;
 
-    /** 客户端：流体燃烧室活塞"噗嗤"音效池（每引擎一个，音量 = Config.ENGINE_FLUID_PUFF_VOLUME） */
-    @OnlyIn(Dist.CLIENT)
+    /** 客户端：流体燃烧室活塞"噗嗤"音效池（每引擎一个，音量 = Config.ENGINE_FLUID_PUFF_VOLUME）；不加 {@code @OnlyIn}，理由见 {@link #steamBurnTicksSyncTime} */
     protected SoundPool fluidPistonSoundPool;
 
-    /** 客户端：蒸汽动力室活塞"噗嗤"音效池（每引擎一个，音量 = Config.ENGINE_STEAM_PUFF_VOLUME） */
-    @OnlyIn(Dist.CLIENT)
+    /** 客户端：蒸汽动力室活塞"噗嗤"音效池（每引擎一个，音量 = Config.ENGINE_STEAM_PUFF_VOLUME）；不加 {@code @OnlyIn}，理由见 {@link #steamBurnTicksSyncTime} */
     protected SoundPool steamPistonSoundPool;
 
     public EngineCoreBlockEntity(BlockPos pos, BlockState state) {
@@ -1084,13 +1079,26 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      *   Y ≥ 320            → 恒 −40°C
      */
     protected float ambientTemp() {
-        if (hasLevel()) {
+        return ambientTempAt(hasLevel() ? level : null, engineAltitude());
+    }
+
+    /**
+     * 上一条曲线的<b>静态版</b>：给定维度与高度，返回同一套分段线性曲线上的环境温度（°C）。
+     * <p>
+     * 抽出来的原因：别的系统也要用同一条"高度→温度"（定向喷管的高空尾迹，见
+     * {@code ThrustNozzleBlockEntity#contrailSuitability}），不能再各写一套、以后调曲线还要改两处。
+     * 实例方法 {@link #ambientTemp()} 现在只是"取维度 + 取自身高度"再委托到本方法，<b>行为零变化</b>。
+     *
+     * @param level 只用来判维度（地狱 155°C 恒温 / 末地 0°C 恒温）；{@code null} 时按主世界曲线算
+     * @param y     世界高度（Y）
+     */
+    public static float ambientTempAt(@Nullable Level level, float y) {
+        if (level != null) {
             if (level.dimension() == Level.NETHER)
                 return T_AMB_NETHER;
             if (level.dimension() == Level.END)
                 return T_AMB_END;
         }
-        float y = engineAltitude();
         if (y <= T_AMB_SEA_Y)
             return T_AMB_SEA;
         if (y >= T_AMB_TOP_Y)
