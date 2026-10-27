@@ -10,6 +10,7 @@
 - **旋转顺序不可交换**：三维旋转不满足交换律，facing/yaw/pitch 顺序不能乱；PoseStack 后调用的 `mulPose` 是内层（先作用于顶点）。
 - **单位约定**：枢轴常量存像素（1/16 块），PoseStack 里用 `/16f` 转块；`createPitchedCaseShape` 直接用像素算。
 - **万向锁**：不处理，模组介绍中提示玩家避免 pitch=±90° 相关表现。
+- **`@OnlyIn(Dist.CLIENT)` 只能标方法，绝不能标字段**：字段初始化器（`= 0f` / `= T_AMB_SEA` 等）会编译进公共 `<init>`，而 NeoForge 的 RuntimeDistCleaner 在专用服务端**只删字段、不改 `<init>` 里的 putfield** ⇒ 一放置/破坏方块构造 BE 就 `NoSuchFieldError: Class ... does not have member field 'float xxx'` 崩服（客户端单人正常，只有专用服务端崩）。没初始化器的字段不报错（不生成 putfield）反而更危险：被剥离后仍被公共代码读到就崩。客户端状态字段不要标 `@OnlyIn`，改为在读写处用 `isClientSide` 门控（`displayedTemperature` / `lastTempSample` / `pistonAngle` / `prevPistonAngle` / `hoveredSourceBlock` / `*SoundPool` / `steamBurnTicksSyncTime` 已按此处理）。
 
 ## 喷管 / 排气粒子（Sable 子次元）
 
