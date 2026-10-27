@@ -128,3 +128,6 @@
 
   1.1.8
   - Added the thrust nozzle: Mounts on the front face of an Encased Fan and turns its airflow into axial thrust - far stronger than the fan on its own.
+
+1.1.9
+- Fixed a dedicated server crash (`NoSuchFieldError`) when placing or breaking the Engine Core, the Fluid Combustion Chamber or the Steam Power Chamber.
