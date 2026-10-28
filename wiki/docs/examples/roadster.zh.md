@@ -8,7 +8,7 @@
 
 !!! tip "说明"
     需求模组：
-    CC Peripheral Extender 1.1.7+
+    CC Peripheral Extender 1.1.8+
     CC:Tweaked
     Create
     Sable
