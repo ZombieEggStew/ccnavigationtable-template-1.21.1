@@ -131,3 +131,6 @@
 
 1.1.9
 - Fixed a dedicated server crash (`NoSuchFieldError`) when placing or breaking the Engine Core, the Fluid Combustion Chamber or the Steam Power Chamber.
+
+1.2.0
+- Added the auto packager.

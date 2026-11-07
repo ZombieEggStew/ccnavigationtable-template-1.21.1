@@ -2,20 +2,20 @@
   "type": "minecraft:crafting_shaped",
   "category": "misc",
   "key": {
-    "A": {
+    "C": {
       "item": "create:cardboard_block"
     },
-    "C": {
-      "tag": "c:ingots/iron"
+    "Z": {
+      "tag": "c:ingots/zinc"
     },
-    "R": {
-      "tag": "c:dusts/redstone"
+    "P": {
+      "item": "create:pulse_timer"
     }
   },
   "pattern": [
+    " Z ",
     " C ",
-    "CAC",
-    "RCR"
+    "ZPZ"
   ],
   "result": {
     "count": 1,
