@@ -25,6 +25,8 @@ import com.zzy205.myfirstmod.block.MonitorVisual;
 import com.zzy205.myfirstmod.block.MonitorPreloadedModels;
 import com.zzy205.myfirstmod.block.MonitorRenderer;
 import com.zzy205.myfirstmod.block.MonitorSlabRenderer;
+import com.zzy205.myfirstmod.block.AutoPackagerRenderer;
+import com.zzy205.myfirstmod.block.AutoPackagerVisual;
 import com.zzy205.myfirstmod.block.MyModPartialModels;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
 import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
@@ -50,6 +52,8 @@ import com.zzy205.myfirstmod.screen.ShortRangeLinkerScreen;
 import com.simibubi.create.foundation.item.ItemDescription;
 import com.simibubi.create.foundation.item.TooltipModifier;
 import net.createmod.catnip.lang.FontHelper;
+import net.minecraft.client.renderer.ItemBlockRenderTypes;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.item.Item;
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import dev.engine_room.flywheel.lib.visualization.SimpleBlockEntityVisualizer;
@@ -133,6 +137,16 @@ public class CCPeripheralExtenderClient {
         TooltipModifier.REGISTRY.register(thrustNozzleItem,
                 new ItemDescription.Modifier(thrustNozzleItem, FontHelper.Palette.STANDARD_CREATE));
 
+        // 自动打包机物品 tooltip（同 fluid_port 模式：ItemDescription，按住 SHIFT 展开
+        // summary + 连接容器自动打包 / 长按右键调间隔 2 组说明；Create ClientEvents 自动应用）。
+        Item autoPackagerItem = MyModBlocks.auto_packager.get().asItem();
+        TooltipModifier.REGISTRY.register(autoPackagerItem,
+                new ItemDescription.Modifier(autoPackagerItem, FontHelper.Palette.STANDARD_CREATE));
+
+        // 自动打包机方块模型用 cutoutMipped 渲染层（照 Create 的 AllBlocks 对 packager 的 .addLayer(RenderType::cutoutMipped)）：
+        // 方块模型直接复用 create:block/packager/*，其贴图带镂空（门/百叶），不设这一层镂空处会画成实心。
+        event.enqueueWork(() -> ItemBlockRenderTypes.setRenderLayer(MyModBlocks.auto_packager.get(), RenderType.cutoutMipped()));
+
         // 注册 Flywheel Visual（shaft 渲染）
         SimpleBlockEntityVisualizer.builder(MyModBlockEntities.transmission_peripheral_entity.get())
                 .factory(TransmissionPeripheralVisual::new)
@@ -203,6 +217,14 @@ public class CCPeripheralExtenderClient {
                 .skipVanillaRender(be -> VisualizationManager.supportsVisualization(be.getLevel()))
                 .apply();
 
+        // 注册 Flywheel Visual（自动打包机：门 hatch / 托盘 tray 实例化渲染）。
+        // 与 create:packager 一致：托盘上的包裹（ItemStack）必须由 BER 画，故不跳过 vanilla 渲染；
+        // AutoPackagerRenderer 内部在 Flywheel 可用时跳过 hatch/tray 这两部分。
+        SimpleBlockEntityVisualizer.builder(MyModBlockEntities.auto_packager_entity.get())
+                .factory(AutoPackagerVisual::new)
+                .neverSkipVanillaRender()
+                .apply();
+
         // 初始化自定义 PartialModel（参照 Create 的 AllPartialModels.init()）
         MyModPartialModels.init();
         event.enqueueWork(MonitorBackgrounds::reload);
@@ -252,6 +274,9 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.monitor_slab_entity.get(),
                 MonitorSlabRenderer::new);
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.auto_packager_entity.get(),
+                AutoPackagerRenderer::new);
     }
 
     /**

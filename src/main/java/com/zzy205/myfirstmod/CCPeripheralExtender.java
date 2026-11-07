@@ -2,6 +2,7 @@ package com.zzy205.myfirstmod;
 
 import com.mojang.logging.LogUtils;
 import com.tterrag.registrate.Registrate;
+import com.zzy205.myfirstmod.block.AutoPackagerBlockEntity;
 import com.zzy205.myfirstmod.block.EngineCoreBlockEntity;
 import com.zzy205.myfirstmod.block.EngineFuels;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
@@ -138,5 +139,11 @@ public class CCPeripheralExtender {
                 Capabilities.ItemHandler.BLOCK,
                 MyModBlockEntities.quick_fill_fuel_vault_entity.get(),
                 (be, side) -> ((QuickFillFuelVaultBlockEntity) be).getItemHandler());
+        // 自动打包机：托盘（heldBox）暴露成单槽 ItemHandler.BLOCK，与 create:packager 一致
+        // （能力按 BE 类型注册，Create 给 PACKAGER 类型注册的那份不会自动覆盖本 mod 的子类类型）。
+        event.registerBlockEntity(
+                Capabilities.ItemHandler.BLOCK,
+                MyModBlockEntities.auto_packager_entity.get(),
+                (be, side) -> ((AutoPackagerBlockEntity) be).inventory);
     }
 }

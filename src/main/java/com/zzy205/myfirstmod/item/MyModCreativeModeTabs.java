@@ -65,6 +65,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.fluid_port);
                 output.accept(MyModBlocks.trailing_wheel_mount); // 从动轮悬架（单轮无动力）
                 output.accept(MyModBlocks.thrust_nozzle); // 定向喷管（贴在 encased fan 出风面，纯轴向推力 + 排气/进气/尾迹粒子）
+                output.accept(MyModBlocks.auto_packager); // 自动打包机（继承 create:packager，不接红石，按间隔自动打包）
             })
             .build());
     public static void register(IEventBus modEventBus) {

@@ -1,0 +1,1179 @@
+[20:24:15] [main/INFO]: ModLauncher running: args [--username, ZZY205, --version, 1.21.1, --gameDir, D:\MC\profiles\NeoForge 1.21.1, --assetsDir, D:\MC\meta\assets, --assetIndex, 17, --uuid, 9ec10e15044f4bae91b631599c6d3601, --accessToken, ❄❄❄❄❄❄❄❄, --clientId, c4502edb-87c6-40cb-b595-64a280cf8906, --xuid, 0, --userType, msa, --versionType, release, --width, 854, --height, 480, --fml.neoForgeVersion, 21.1.265, --fml.fmlVersion, 4.0.45, --fml.mcVersion, 1.21.1, --fml.neoFormVersion, 20240808.144430, --launchTarget, forgeclient]
+[20:24:15] [main/INFO]: JVM identified as Azul Systems, Inc. OpenJDK 64-Bit Server VM 21.0.13+9-LTS
+[20:24:15] [main/INFO]: ModLauncher 11.0.5+main.901c6ea8 starting: java version 21.0.13 by Azul Systems, Inc.; OS Windows 10 arch amd64 version 10.0
+[20:24:15] [main/INFO]: Searching for graphics cards...
+[20:24:15] [main/INFO]: Found graphics adapter: AdapterInfo{vendor=INTEL, description='Intel(R) Iris(R) Xe Graphics', adapterType=0x0000032B, openglIcdFilePath='C:\Windows\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_b73e14e0ee83c7aa\igxelpicd64.dll', openglIcdVersion=31.0.101.4887}
+[20:24:15] [main/INFO]: Found graphics adapter: AdapterInfo{vendor=NVIDIA, description='NVIDIA GeForce RTX 3050 Ti Laptop GPU', adapterType=0x00000311, openglIcdFilePath='C:\Windows\System32\DriverStore\FileRepository\nvcvi.inf_amd64_446434655979a38c\nvoglv64.dll', openglIcdVersion=32.0.16.2101}
+[20:24:15] [main/WARN]: Sodium has applied one or more workarounds to prevent crashes or other issues on your system: [NVIDIA_THREADED_OPTIMIZATIONS_BROKEN]
+[20:24:15] [main/WARN]: This is not necessarily an issue, but it may result in certain features or optimizations being disabled. You can sometimes fix these issues by upgrading your graphics driver.
+[20:24:15] [main/INFO]: Modifying process environment to apply workarounds for the NVIDIA graphics driver...
+[20:24:15] [main/INFO]: Loading ImmediateWindowProvider fmlearlywindow
+[20:24:15] [main/INFO]: Trying GL version 4.6
+[20:24:16] [main/INFO]: Requested GL version 4.6 got version 4.6
+[20:24:16] [main/INFO]: SpongePowered MIXIN Subsystem Version=0.8.7 Source=union:/D:/MC/meta/libraries/net/fabricmc/sponge-mixin/0.16.4+mixin.0.8.7/sponge-mixin-0.16.4+mixin.0.8.7.jar%23166!/ Service=ModLauncher Env=CLIENT
+[20:24:16] [pool-2-thread-1/INFO]: GL info: NVIDIA GeForce RTX 3050 Ti Laptop GPU/PCIe/SSE2 GL version 4.6.0 NVIDIA 621.01, NVIDIA Corporation
+[20:24:16] [main/INFO]: Found mod file "client-1.21.1-20240808.144430-srg.jar" [locator: production client provider +net.neoforged:neoforge:21.1.265:client]
+[20:24:16] [main/INFO]: Found mod file "neoforge-21.1.265-universal.jar" [locator: PathBasedLocator[name=neoforge, paths=[D:\MC\meta\libraries\net\neoforged\neoforge\21.1.265\neoforge-21.1.265-universal.jar]], reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "net.caffeinemc.sodium-neoforge-0.8.13+mc1.21.1-mod.jar" [locator: net.caffeinemc.mods.sodium.service.SodiumServiceModLocator@49ef32e0, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fabric-rendering-data-attachment-v1-0.3.48+73761d2e19.jar" [locator: net.caffeinemc.mods.sodium.service.SodiumServiceModLocator@49ef32e0, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fabric-renderer-api-v1-3.4.1+9125b6dc19.jar" [locator: net.caffeinemc.mods.sodium.service.SodiumServiceModLocator@49ef32e0, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fabric-block-view-api-v2-1.0.10+9afaaf8c19.jar" [locator: net.caffeinemc.mods.sodium.service.SodiumServiceModLocator@49ef32e0, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fabric-api-base-0.4.42+d1308ded19.jar" [locator: net.caffeinemc.mods.sodium.service.SodiumServiceModLocator@49ef32e0, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "advancednetherite-neoforge-2.3.1-1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "alloy_smelter-neoforge-1.21.1-1.2.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "AlwaysEat-neoforge-1.0.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "appleskin-neoforge-mc1.21-3.0.9.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "architectury-13.0.11-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "attributefix-neoforge-1.21.1-21.1.3.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "azimuth-1.4.10.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "barbequesdelight-1.3.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "BetterAdvancements-NeoForge-1.21.1-0.4.3.21.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "biggerbetterendcities-1.21.1-1.0.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "biomespy-neoforge-1.21.1-1.3.3.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found gamelibrary file "bits_n_bobs-2.3.5.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "bookshelf-neoforge-1.21.1-21.1.81.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "BrewinAndChewin-neoforge-4.5.0+1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "byepregen-1.21.1-1.1.3.4.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "c6c-1.2.7.0-all.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "carryon-neoforge-1.21.1-2.2.6.13.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "cc-tweaked-1.21.1-forge-1.121.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "ccpe-1.1.9-1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "chefsdelight-1.0.6.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "Chunky-NeoForge-1.4.23.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "clientsort-neoforge-3.89.2+1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "cloth-config-15.0.140-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "colorwheel-neoforge-1.3.2+mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "colorwheel_patcher-neoforge-1.0.5+mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "CombatNouveau-v21.1.2-1.21.1-NeoForge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "configured-neoforge-1.21.1-2.6.3.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "ConstructionSticks-1.21.1-1.5.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "constructionwand-kots-1.21.1-2.16.13.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "copycats-3.0.9+mc.1.21.1-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "cratedelight-26.07.01-1.21-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create-1.21.1-6.0.10.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create-aeronautics-bundled-1.21.1-1.3.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create-central-kitchen-2.6.2b.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create-enchantment-industry-2.4.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create-integrated-farming-1.4.3.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create_compressed-2.2.0-neoforge-1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create_connected-1.3.3-mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create_easy_structures-0.2a-neoforge-1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create_ez_stock_ticker-1.1.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create_hypertube-0.6.0-NEOFORGE.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create_mechanical_spawner-1.21.1-1.3.2-6.0.10.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create_pattern_schematics-2.0.10.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create_power_loader-2.0.5-mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "create_schematicannon_autostonecutting-1.0.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createadditionallogistics-1.21.1-1.4.5.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createbetterfps-1.21.1-1.1.5.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createdeco-2.1.3.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createdieselgenerators-1.21.1-1.3.15.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "CreateDragonsPlus-1.11.9.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createefficientvisuals-1.21.1-0.2.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "CreateFastSchematicCannon-1.4.1-neoforge-1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "creategearsandtavern-1.1.9-1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createliquidfuel-3.0.0-1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createoreexcavation-1.21-1.6.8.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createphantom-1.0.3.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createprism-1.2.3.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createpropulsion-1.1.5.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createrailgrinding-1.2.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createredstonelinkgui-1.21.1-1.9.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "createultimine-1.21.1-neoforge-1.3.3.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "cristellib-neoforge-1.21.1-3.1.7.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "curios-neoforge-9.5.1+1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "dawnoftimebuilder-neoforge-1.21.1-1.6.8.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "disconnect-packet-fix-neoforge-2.0.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "displaydelight-1.7.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "DnT-ancient-city-overhaul-v2 [NeoForge].jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "easy-villagers-neoforge-1.21.1-1.1.49.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "efficient_hashing-neoforge-1.0.2+1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "electroenergetics-1.21.1-1.1.4.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "enchdesc-neoforge-1.21.1-21.1.11.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "ends_delight-2.6.1+neoforge.1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "exposure-neoforge-1.21.1-1.9.19.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "FarmersDelight-1.21.1-1.3.4.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fastleafdecay-35.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fastrecipesearch-1.21.1-26.8.4-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fasttag-1.21.1-26.1-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "ferritecore-7.0.3-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "flatbedrock-neoforge-87.0.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "flerovium-neoforge-1.21.1-1.2.0-all.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fluidlogistics-1.3.2-mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fragmentum-5.4.0+1.21.1-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "framework-neoforge-1.21.1-0.13.10.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "frequency-1.21.1-neoforge-0.2.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "ftb-library-neoforge-2101.1.30.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "ftb-teams-neoforge-2101.1.9.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "ftb-ultimine-neoforge-2101.1.14.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fusion-1.3.16-neoforge-mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fxntstorage-1.3.8+mc-1.21.1-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "fzzy_config-0.7.7+fix1+1.21+neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "gbf-1.21.1-1.0.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "geckolib-neoforge-1.21.1-4.9.3.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "goblintraders-neoforge-1.21.1-1.11.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "HopoBetterRuinedPortals-[1.21.1-1.21.3]-1.4.4b.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "hotbath-1.21.1-3.0.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "ImmediatelyFast-NeoForge-1.6.15+1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "iris-neoforge-1.8.14-beta.1+mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "Jade-1.21.1-NeoForge-15.10.6.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "JadeAddons-1.21.1-NeoForge-6.1.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "jecharacters-1.21.1-neoforge-4.5.30.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "jei-1.21.1-neoforge-19.70.0.469.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "JustEnoughProfessions-neoforge-1.21.1-4.0.5.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "kaleidoscope_compat-2.9.7-neoforge+mc1.21.1-Patch.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "kaleidoscopecookery-1.6.0-neoforge+mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "kaleidoscopecookery_automation-1.0.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "kaleidoscopedoll-1.4.2-neoforge+mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "kaleidoscopetavern-1.2.0-neoforge+mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found library file "kotlinforforge-5.12.0-all.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "lithium-neoforge-0.15.4+mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "lootr-neoforge-1.21.1-1.11.38.127.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "lukis-crazy-chambers-1.0.3.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "mafglib-0.4.3+mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "maxhealthfix-neoforge-1.21.1-21.1.4.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "mechanicals-1.21.1-1.1.6.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "medieval_buildings_end_edition-1.21.1-1.0.4-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found gamelibrary file "mezz_config-1.21.1-neoforge-0.6.10-standalone.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "mighty_mail-neoforge-1.21.1-1.1.4.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "modernfix-neoforge-5.27.27+mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "MoogsEndStructures-universal-1.21-2.1.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "MoogsStructureLib-neoforge-1.21.1-3.4.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "MouseTweaks-neoforge-mc1.21-2.26.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "MyNethersDelight-1.21.1-1.10.4.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "mysterious_mountain_lib-1.2.15-1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "NaturesCompass-1.21.1-3.4.0-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "obscure_tooltips-neoforge-1.21.1-4.2.5.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "packetfixer-3.3.1-1.20.5-1.21.X-merged.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "particular-1.21.1-NeoForge-1.5.7.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "Patchouli-1.21.1-93-NEOFORGE.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "Placebo-1.21.1-9.9.4.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "player-animation-lib-forge-2.0.4+1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "polymorph-neoforge-1.1.0+1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "prickle-neoforge-1.21.1-21.1.11.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "puzzleslib-v21.1.66-mc1.21.1+neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "railways-0.2.1+neoforge-mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "reddensstonelantern-1.0.4-neoforge-1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "repurposed_structures-7.5.22+1.21.1-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "resourcefulconfig-neoforge-1.21-3.0.11.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "resourcefullib-neoforge-1.21-3.0.12.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "sable-neoforge-1.21.1-2.0.6.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "Searchables-neoforge-1.21.1-1.0.2.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "smart_bounds-1.0.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "smrb-1.0.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "smsn-neoforge-1.4.5-1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "sootychimneys-neoforge-1.3.5.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "spark-1.10.124-neoforge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "structure_layout_optimizer-neoforge-1.0.12.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "StructureCompass-1.21.1-4.2.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found gamelibrary file "struts-1.3.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "takesapillage-neoforge-1.0.13+mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "TinySkeletons-v21.1.0-1.21.1-NeoForge.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "torchmaster-neoforge-1.21.1-21.1.13.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "trading_floor-3.0.16.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "tweakerge-0.4.3+mc1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "ultramarine-1.21.1-0.7.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "untitledduckmod-1.1.5-neoforge-1.21.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "UsefulSlime-neoforge-1.21-1.12.1.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "vanillin-neoforge-1.21.1-1.1.3-local.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "wwoo-neoforge-2.6.7.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "xaerominimap-neoforge-1.21.1-26.6.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:16] [main/INFO]: Found mod file "xaeroworldmap-neoforge-1.21.1-1.47.0.jar" [locator: {mods folder locator at D:\MC\profiles\NeoForge 1.21.1\mods}, reader: mod manifest]
+[20:24:18] [main/WARN]: Attempted to select two dependency jars from JarJar which have the same identification: Nested Mod File  in Mod File: D:\MC\profiles\NeoForge 1.21.1\mods\kotlinforforge-5.12.0-all.jar and Nested Mod File  in Nested Mod File  in Mod File: D:\MC\profiles\NeoForge 1.21.1\mods\fragmentum-5.4.0+1.21.1-neoforge.jar. Using Nested Mod File  in Mod File: D:\MC\profiles\NeoForge 1.21.1\mods\kotlinforforge-5.12.0-all.jar
+[20:24:18] [main/WARN]: Attempted to select two dependency jars from JarJar which have the same identification: Nested Mod File  in Mod File: D:\MC\profiles\NeoForge 1.21.1\mods\kotlinforforge-5.12.0-all.jar and Nested Mod File  in Nested Mod File  in Mod File: D:\MC\profiles\NeoForge 1.21.1\mods\fragmentum-5.4.0+1.21.1-neoforge.jar. Using Nested Mod File  in Mod File: D:\MC\profiles\NeoForge 1.21.1\mods\kotlinforforge-5.12.0-all.jar
+[20:24:18] [main/WARN]: Attempted to select two dependency jars from JarJar which have the same identification: Nested Mod File  in Mod File: D:\MC\profiles\NeoForge 1.21.1\mods\kotlinforforge-5.12.0-all.jar and Nested Mod File  in Nested Mod File  in Mod File: D:\MC\profiles\NeoForge 1.21.1\mods\fragmentum-5.4.0+1.21.1-neoforge.jar. Using Nested Mod File  in Mod File: D:\MC\profiles\NeoForge 1.21.1\mods\kotlinforforge-5.12.0-all.jar
+[20:24:18] [main/WARN]: Attempted to select a dependency jar for JarJar which was passed in as source: fabric_renderer_api_v1. Using Mod File: 
+[20:24:18] [main/WARN]: Attempted to select a dependency jar for JarJar which was passed in as source: fabric_block_view_api_v2. Using Mod File: 
+[20:24:18] [main/WARN]: Attempted to select a dependency jar for JarJar which was passed in as source: fabric_api_base. Using Mod File: 
+[20:24:18] [main/WARN]: Attempted to select a dependency jar for JarJar which was passed in as source: resourcefulconfig. Using Mod File: D:\MC\profiles\NeoForge 1.21.1\mods\resourcefulconfig-neoforge-1.21-3.0.11.jar
+[20:24:18] [main/WARN]: Attempted to select a dependency jar for JarJar which was passed in as source: fabric_rendering_data_attachment_v1. Using Mod File: 
+[20:24:18] [main/INFO]: Found 84 dependencies adding them to mods collection
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-fixes-worldgen-threading-issues-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-threading-lighting-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "PinIn-1.6.0.jar" [parent: jecharacters-1.21.1-neoforge-4.5.30.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "glsl-processor-0.2.3.jar" [parent: veil-neoforge-1.21.1-4.3.2.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "ponder-neoforge-1.0.82+mc1.21.1.jar" [parent: mechanicals-1.21.1-1.1.6.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "net.neoforged.neoforge-coremods-21.1.265.jar" [parent: neoforge-21.1.265-universal.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "xaerolib-neoforge-1.21.1-1.7.3.jar" [parent: xaerominimap-neoforge-1.21.1-26.6.0.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "dev.eriksonn.aeronautics.aeronautics-neoforge-1.21.1-1.3.2.jar" [parent: create-aeronautics-bundled-1.21.1-1.3.2.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "cobalt-0.9.9.jar" [parent: cc-tweaked-1.21.1-forge-1.121.0.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-opts-natives-math-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-fixes-general-threading-issues-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "kotlinx-coroutines-core-jvm-1.11.0.jar" [parent: kotlinforforge-5.12.0-all.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "yabn-1.0.3.jar" [parent: resourcefullib-neoforge-1.21-3.0.12.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "jctools-core-4.0.5.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found gamelibrary file "RecipeSearch-1.3.jar" [parent: fastrecipesearch-1.21.1-26.8.4-neoforge.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found gamelibrary file "mixinsquared-neoforge-0.3.7-beta.1.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "veil-neoforge-1.21.1-4.3.2.jar" [parent: sable-neoforge-1.21.1-2.0.6.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "kotlinx-coroutines-jdk8-1.11.0.jar" [parent: kotlinforforge-5.12.0-all.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-opts-math-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "dev.simulated_team.simulated.simulated-neoforge-1.21.1-1.3.2.jar" [parent: create-aeronautics-bundled-1.21.1-1.3.2.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-rewrites-chunk-system-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "rxjava-3.1.12.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "kotlin-stdlib-jdk7-2.4.0.jar" [parent: kotlinforforge-5.12.0-all.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "kotlin-stdlib-jdk8-2.4.0.jar" [parent: kotlinforforge-5.12.0-all.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "reactive-streams-1.0.4.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "molang-compiler-3.1.1.19.jar" [parent: veil-neoforge-1.21.1-4.3.2.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-base-mc1.21.1-0.4.0-alpha.0.124-all.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "Reflect-1.6.2.jar" [parent: ImmediatelyFast-NeoForge-1.6.15+1.21.1.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-opts-worldgen-vanilla-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-fixes-worldgen-vanilla-bugs-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "common-image-3.12.0.jar" [parent: yet-another-config-lib-3.6.6+1.21.1-neoforge.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "kotlinx-serialization-json-jvm-1.11.0.jar" [parent: kotlinforforge-5.12.0-all.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "bytecodecs-1.1.2.jar" [parent: resourcefullib-neoforge-1.21-3.0.12.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-opts-scheduling-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "greenhouseconfig_toml-1.1.0.jar" [parent: BrewinAndChewin-neoforge-4.5.0+1.21.1.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "dev.ryanhcode.offroad.offroad-neoforge-1.21.1-1.3.2.jar" [parent: create-aeronautics-bundled-1.21.1-1.3.2.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "exp4j-0.4.8.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "jankson-1.2.3.jar" [parent: fzzy_config-0.7.7+fix1+1.21+neoforge.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found gamelibrary file "l2serial-3.0.9+5.jar" [parent: barbequesdelight-1.3.0.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found gamelibrary file "mixinextras-neoforge-0.5.5.jar" [parent: neoforge-21.1.265-universal.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "jzlib-1.1.3.jar" [parent: cc-tweaked-1.21.1-forge-1.121.0.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-fixes-chunkio-threading-issues-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found gamelibrary file "dev.ryanhcode.sable.sable-sable_rapier-1.21.1-2.0.6.jar" [parent: sable-neoforge-1.21.1-2.0.6.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found gamelibrary file "mixinlite-0.2.0.jar" [parent: byepregen-1.21.1-1.1.3.4.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-client-uncapvd-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "greenhouseconfig-2.2.3+1.21.1-neoforge.jar" [parent: BrewinAndChewin-neoforge-4.5.0+1.21.1.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-server-utils-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "thedarkcolour.kfflang-5.12.0.jar" [parent: kotlinforforge-5.12.0-all.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "imageio-metadata-3.12.0.jar" [parent: yet-another-config-lib-3.6.6+1.21.1-neoforge.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found gamelibrary file "thedarkcolour.kfflib-5.12.0.jar" [parent: kotlinforforge-5.12.0-all.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "jcpp-1.4.14.jar" [parent: iris-neoforge-1.8.14-beta.1+mc1.21.1.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "glsl-transformer-3.0.0-pre3.jar" [parent: iris-neoforge-1.8.14-beta.1+mc1.21.1.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "kotlinforforge-neoforge-5.3.0-all.jar" [parent: fragmentum-5.4.0+1.21.1-neoforge.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "thedarkcolour.kffmod-5.12.0.jar" [parent: kotlinforforge-5.12.0-all.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "gson-0.2.1.jar" [parent: yet-another-config-lib-3.6.6+1.21.1-neoforge.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-opts-dfc-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "kotlin-stdlib-2.4.0.jar" [parent: kotlinforforge-5.12.0-all.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "kotlin-reflect-2.4.0.jar" [parent: kotlinforforge-5.12.0-all.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "sable-companion-common-1.21.1-1.6.0.jar" [parent: electroenergetics-1.21.1-1.1.4.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "flywheel-neoforge-1.21.1-1.0.6.jar" [parent: mechanicals-1.21.1-1.1.6.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "greenhouseconfig_night_config-1.1.0.jar" [parent: greenhouseconfig_toml-1.1.0.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found gamelibrary file "l2modularblocks-3.0.0+4.jar" [parent: barbequesdelight-1.3.0.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-notickvd-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "l2core-3.0.8+1.jar" [parent: barbequesdelight-1.3.0.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "JustEnoughCharacters.coremod-neoforge.jar" [parent: jecharacters-1.21.1-neoforge-4.5.30.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "tomlkt-jvm-0.3.7.jar" [parent: fzzy_config-0.7.7+fix1+1.21+neoforge.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-opts-worldgen-general-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-opts-chunkio-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "MixinSquared-0.3.7-beta.1.jar" [parent: mixinsquared-neoforge-0.3.7-beta.1.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "json-0.2.1.jar" [parent: yet-another-config-lib-3.6.6+1.21.1-neoforge.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "common-io-3.12.0.jar" [parent: yet-another-config-lib-3.6.6+1.21.1-neoforge.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "yet-another-config-lib-3.6.6+1.21.1-neoforge.jar" [parent: fragmentum-5.4.0+1.21.1-neoforge.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "conditional-mixin-neoforge-0.6.4.jar" [parent: CreateDragonsPlus-1.11.9.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "imageio-webp-3.12.0.jar" [parent: yet-another-config-lib-3.6.6+1.21.1-neoforge.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "fabric-networking-api-v1-4.3.0+6db6dff919.jar" [parent: mafglib-0.4.3+mc1.21.1.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "kotlinx-serialization-core-jvm-1.11.0.jar" [parent: kotlinforforge-5.12.0-all.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "caffeine-3.2.1.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found gamelibrary file "Registrate-MC1.21-1.3.0+67.jar" [parent: barbequesdelight-1.3.0.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-rewrites-chunkio-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found mod file "c2me-neoforge-opts-allocs-mc1.21.1-0.4.0-alpha.0.124.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: Found library file "common-lang-3.12.0.jar" [parent: yet-another-config-lib-3.6.6+1.21.1-neoforge.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "imageio-core-3.12.0.jar" [parent: yet-another-config-lib-3.6.6+1.21.1-neoforge.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found library file "asyncutil-0.1.0.jar" [parent: c2me-neoforge-mc1.21.1-0.4.0-alpha.0.124.jar, locator: jarinjar]
+[20:24:18] [main/INFO]: Found mod file "mezz_config-1.21.1-neoforge-0.6.10.jar" [parent: mezz_config-1.21.1-neoforge-0.6.10-standalone.jar, locator: jarinjar, reader: mod manifest]
+[20:24:18] [main/INFO]: 
+     Mod List:
+		Name Version (Mod Id)
+
+		Advanced Netherite 2.3.1 (advancednetherite)
+		Alloy Smelter 1.2.2 (alloy_smelter)
+		Always Eat 1.0.0 (always_eat)
+		AppleSkin 3.0.9+mc1.21 (appleskin)
+		Architectury 13.0.11 (architectury)
+		AttributeFix 21.1.3 (attributefix)
+		Azimuth 1.4.10 (azimuth)
+		Barbeque's Delight 1.3.0 (barbequesdelight)
+		Better Advancements 0.4.3.21 (betteradvancements)
+		BiggerBetterEndCities 1.21.1-1.0.0 (biggerbetterendcities)
+		BiomeSpy 1.3.3 (biomespy)
+		Bookshelf 21.1.81 (bookshelf)
+		Brewin' And Chewin' 4.5.0 (brewinandchewin)
+		ByePregen 1.1.3.4 (byepregen)
+		C6C 1.2.7.0 (c6c)
+		Carry On 2.2.6 (carryon)
+		CC Peripheral Extender 1.1.9-1.21.1 (ccpe)
+		CC: Tweaked 1.121.0 (computercraft)
+		Chefs Delight 1.0.6 (chefsdelight)
+		Chunky 1.4.23 (chunky)
+		ClientSort 3.89.2 (clientsort)
+		Cloth Config v15 API 15.0.140 (cloth_config)
+		Colorwheel 1.3.2+mc1.21.1 (colorwheel)
+		Colorwheel Patcher 1.0.5+mc1.21.1 (colorwheel_patcher)
+		Combat Nouveau 21.1.2 (combatnouveau)
+		Concurrent Chunk Management Engine 0.4.0-alpha.0.124+1.21.1 (c2me)
+		Concurrent Chunk Management Engine (Base) 0.4.0-alpha.0.124+1.21.1 (c2me_base)
+		Concurrent Chunk Management Engine (Client/Uncap View Distance) 0.4.0-alpha.0.124+1.21.1 (c2me_client_uncapvd)
+		Concurrent Chunk Management Engine (Fixes/Chunk IO/Threading Issues) 0.4.0-alpha.0.124+1.21.1 (c2me_fixes_chunkio_threading_issues)
+		Concurrent Chunk Management Engine (Fixes/General/Threading Issues) 0.4.0-alpha.0.124+1.21.1 (c2me_fixes_general_threading_issues)
+		Concurrent Chunk Management Engine (Fixes/WorldGen/Threading Issues) 0.4.0-alpha.0.124+1.21.1 (c2me_fixes_worldgen_threading_issues)
+		Concurrent Chunk Management Engine (Fixes/WorldGen/Vanilla Bugs) 0.4.0-alpha.0.124+1.21.1 (c2me_fixes_worldgen_vanilla_bugs)
+		Concurrent Chunk Management Engine (No Tick View Distance) 0.4.0-alpha.0.124+1.21.1 (c2me_notickvd)
+		Concurrent Chunk Management Engine (Optimizations/Chunk IO) 0.4.0-alpha.0.124+1.21.1 (c2me_opts_chunkio)
+		Concurrent Chunk Management Engine (Optimizations/Density Function Compiler) 0.4.0-alpha.0.124+1.21.1 (c2me_opts_dfc)
+		Concurrent Chunk Management Engine (Optimizations/General WorldGen) 0.4.0-alpha.0.124+1.21.1 (c2me_opts_worldgen_general)
+		Concurrent Chunk Management Engine (Optimizations/Math) 0.4.0-alpha.0.124+1.21.1 (c2me_opts_math)
+		Concurrent Chunk Management Engine (Optimizations/Memory Allocations) 0.4.0-alpha.0.124+1.21.1 (c2me_opts_allocs)
+		Concurrent Chunk Management Engine (Optimizations/Natives Math) 0.4.0-alpha.0.124+1.21.1 (c2me_opts_natives_math)
+		Concurrent Chunk Management Engine (Optimizations/Scheduling) 0.4.0-alpha.0.124+1.21.1 (c2me_opts_scheduling)
+		Concurrent Chunk Management Engine (Optimizations/Vanilla WorldGen) 0.4.0-alpha.0.124+1.21.1 (c2me_opts_worldgen_vanilla)
+		Concurrent Chunk Management Engine (Rewrites/Chunk IO) 0.4.0-alpha.0.124+1.21.1 (c2me_rewrites_chunkio)
+		Concurrent Chunk Management Engine (Rewrites/Chunk System) 0.4.0-alpha.0.124+1.21.1 (c2me_rewrites_chunk_system)
+		Concurrent Chunk Management Engine (Server Utils) 0.4.0-alpha.0.124+1.21.1 (c2me_server_utils)
+		Concurrent Chunk Management Engine (Threading/Lighting) 0.4.0-alpha.0.124+1.21.1 (c2me_threading_lighting)
+		conditional mixin 0.6.4 (conditional_mixin)
+		Configured 2.6.3 (configured)
+		Construction Sticks 1.5.0 (constructionstick)
+		Construction Wand KOTS 2.16.13 (constructionwand)
+		Crate Delight 26.07.01-1.21-neoforge (cratedelight)
+		Create 6.0.10 (create)
+		Create Aeronautics 1.3.2 (aeronautics_bundled)
+		Create Aeronautics 1.3.2 (aeronautics)
+		Create Bits 'n' Bobs 2.3.5 (bits_n_bobs)
+		Create Compressed 2.2.0 (create_compressed)
+		Create Deco 2.1.3 (createdeco)
+		Create Diesel Generators 1.21.1-1.3.15 (createdieselgenerators)
+		Create Efficient Visuals 0.2.0 (createefficientvisuals)
+		Create Electro Energetics 1.21.1-1.1.4 (electroenergetics)
+		Create FluidLogistics  1.3.2 (fluidlogistics)
+		Create Hypertube 0.6.0 (create_hypertube)
+		Create Liquid Fuel 3.0.0-1.21.1 (createliquidfuel)
+		Create Offroad 1.3.2 (offroad)
+		Create Ore Excavation 1.6.8 (createoreexcavation)
+		Create Phantom 1.0.3 (createphantom)
+		Create Propulsion: Simulated 1.1.5 (createpropulsion)
+		Create Simulated 1.3.2 (simulated)
+		Create Ultimine 1.3.3 (createultimine)
+		Create: Additional Logistics 1.4.5 (createadditionallogistics)
+		Create: Central Kitchen 2.6.2b (create_central_kitchen)
+		Create: Connected 1.3.3-mc1.21.1 (create_connected)
+		Create: Copycats+ 3.0.9+mc.1.21.1-neoforge (copycats)
+		Create: Dragons Plus 1.11.9 (create_dragons_plus)
+		Create: Easy Structures 0.2 (create_easy_structures)
+		Create: Enchantment Industry 2.4.2 (create_enchantment_industry)
+		Create: Ez Stock Ticker 1.1.2 (create_ez_stock_ticker)
+		Create: Fast Schematic Cannon 1.4.1-neoforge (createfastschematiccannon)
+		Create: Gears and Tavern 1.1.9 (creategearsandtavern)
+		Create: Integrated Farming 1.4.3 (create_integrated_farming)
+		Create: Mechanical spawner 1.3.1-6.0.10 (create_mechanical_spawner)
+		Create: Pattern Schematics 2.0.10 (create_pattern_schematics)
+		Create: Power Loader 2.0.5-mc1.21.1 (create_power_loader)
+		Create: Prismatic Shine 1.2.3 (createprism)
+		Create: Rail Grinding 1.2.2 (createrailgrinding)
+		Create: Redstone Link GUI 1.21.1-1.9.2 (createredstonelinkgui)
+		Create: Schematicannon Auto Stonecutting 1.0.0 (create_schematicannon_autostonecutting)
+		Create: Smart Bounds 1.0.0 (smart_bounds)
+		Create: Steam 'n' Rails 1.21.1 0.2.1+neoforge-mc1.21.1 (railways)
+		Create: Storage 1.3.8 (fxntstorage)
+		Create: Trading Floor 3.0.16 (trading_floor)
+		CreateBetterFps 1.1.5 (createbetterfps)
+		Cristel Lib 3.1.7 (cristellib)
+		Curios API 9.5.1+1.21.1 (curios)
+		Dawn Of Time 1.6.8 (dawnoftimebuilder)
+		Disconnect Packet Fix 2.0.1 (disconnect_packet_fix)
+		Display Delight 1.7.0 (displaydelight)
+		Dungeons and Taverns Ancient City Overhaul 1-v2 (mr_dungeons_andtavernsancientcityoverhaul)
+		Easy Villagers 1.21.1-1.1.49 (easy_villagers)
+		Efficient Hashing 1.0.2 (efficient_hashing)
+		EnchantmentDescriptions 21.1.11 (enchdesc)
+		End's Delight 2.6.1+neoforge.1.21.1 (ends_delight)
+		Exposure 1.9.19 (exposure)
+		Farmer's Delight 1.3.4 (farmersdelight)
+		Fast Recipe Search 1.21.1-26.8.4-neoforge (fastrecipesearch)
+		Fast Tag 1.21.1-26.1-neoforge (fasttag)
+		FastLeafDecay 35 (fastleafdecay)
+		Ferrite Core 7.0.3 (ferritecore)
+		Flat Bedrock 87.0.0 (flatbedrock)
+		Flerovium 1.2.0 (flerovium)
+		Flywheel 1.0.6 (flywheel)
+		Forgified Fabric API Base 0.4.42+d1308ded19 (fabric_api_base)
+		Forgified Fabric BlockView API (v2) 1.0.10+9afaaf8c19 (fabric_block_view_api_v2)
+		Forgified Fabric Networking API (v1)(ThinkingStudio) 4.3.0+6db6dff919 (fabric_networking_api_v1)
+		Forgified Fabric Renderer API (v1) 3.4.1+9125b6dc19 (fabric_renderer_api_v1)
+		Forgified Fabric Rendering Data Attachment (v1) 0.3.48+73761d2e19 (fabric_rendering_data_attachment_v1)
+		Fragmentum 5.4.0 (fragmentum)
+		Framework 0.13.10 (framework)
+		Frequency for Create 0.2.1 (frequency)
+		FTB Library 2101.1.30 (ftblibrary)
+		FTB Teams 2101.1.9 (ftbteams)
+		FTB Ultimine 2101.1.14 (ftbultimine)
+		Fusion 1.3.16 (fusion)
+		Fzzy Config 0.7.7+fix1+1.21+neoforge (fzzy_config)
+		GeckoBetterFPS 1.0.2 (gbf)
+		GeckoLib 4 4.9.3 (geckolib)
+		Goblin Traders 1.11.2 (goblintraders)
+		Greenhouse Config 2.2.3+1.21.1 (greenhouseconfig)
+		Greenhouse Config - Night Config 1.1.0 (greenhouseconfig_night_config)
+		Greenhouse Config - TOML 1.1.0 (greenhouseconfig_toml)
+		HopoBetterRuinedPortals 1.4.4 (hoporp)
+		Hot Bath 1.21.1-3.0.1 (hotbath)
+		ImmediatelyFast 1.6.15+1.21.1 (immediatelyfast)
+		Iris 1.8.14-beta.1+mc1.21.1 (iris)
+		It Takes a Pillage Continuation 1.0.13 (takesapillage)
+		Jade 15.10.6+neoforge (jade)
+		Jade Addons 6.1.2+neoforge (jadeaddons)
+		Just Enough Characters 4.5.30 (jecharacters)
+		Just Enough Items 19.70.0.469 (jei)
+		Just Enough Professions (JEP) 4.0.5 (justenoughprofessions)
+		Kaleidoscope Compat 2.9.7-neoforge+mc1.21.1 (kaleidoscope_compat)
+		Kaleidoscope Cookery 1.6.0-neoforge+mc1.21.1 (kaleidoscope_cookery)
+		Kaleidoscope Doll 1.4.2-neoforge+mc1.21.1 (kaleidoscope_doll)
+		Kaleidoscope Tavern 1.2.0-neoforge+mc1.21.1 (kaleidoscope_tavern)
+		KaleidoscopeCookery:Automation 1.0.2 (kaleidoscopecookery_automation)
+		Kotlin For Forge 5.12.0 (kotlinforforge)
+		L2Core 3.0.8+1 (l2core)
+		Lithium 0.15.4+mc1.21.1 (lithium)
+		Lootr 1.21.1-1.11.38.127 (lootr)
+		Luki's Crazy Chambers 1.0.3 (mr_lukis_crazychambers)
+		MaFgLib 0.4.3+mc1.21.1 (mafglib)
+		MaxHealthFix 21.1.4 (maxhealthfix)
+		Mechanicals Lib 1.1.6 (mechanicals)
+		Medieval Buildings [The End Edition] 1.0.4 (medievalend)
+		MezzConfig 0.6.10 (mezz_config)
+		Mighty Mail 1.1.4 (mighty_mail)
+		Minecraft 1.21.1 (minecraft)
+		ModernFix 5.27.27+mc1.21.1 (modernfix)
+		Moog's Structure Lib 3.4.2 (moogs_structures)
+		MoogsEndStructures 2.1.1 (mes)
+		Mouse Tweaks 2.26.1 (mousetweaks)
+		My Nether's Delight 1.10.4.1 (mynethersdelight)
+		Mysterious Mountain Lib 1.2.15-1.21.1 (mysterious_mountain_lib)
+		Nature's Compass 1.21.1-3.4.0-neoforge (naturescompass)
+		NeoForge 21.1.265 (neoforge)
+		Obscure Tooltips 4.2.5 (obscure_tooltips)
+		PacketFixer 3.3.1 (packetfixer)
+		Particular Reforged 1.5.7 (particular)
+		Patchouli 1.21.1-93-NEOFORGE (patchouli)
+		Placebo 9.9.4 (placebo)
+		Player Animator 2.0.4+1.21.1 (playeranimator)
+		Polymorph 1.1.0+1.21.1 (polymorph)
+		Ponder 1.0.82+mc1.21.1 (ponder)
+		PrickleMC 21.1.11 (prickle)
+		Puzzles Lib 21.1.66 (puzzleslib)
+		Redden's Stone Lanterns 1.0.4 (reddensstonelantern)
+		Repurposed Structures 7.5.22+1.21.1-neoforge (repurposed_structures)
+		Resourceful Lib 3.0.12 (resourcefullib)
+		Resourcefulconfig 3.0.11 (resourcefulconfig)
+		Sable 2.0.6 (sable)
+		Sable Companion 1.6.0 (sablecompanion)
+		Save My Shit Network 1.4.5-1.21.1 (smsn)
+		SaveMyRecipeBook 1.0.0 (smrb)
+		Searchables 1.0.2 (searchables)
+		Sodium 0.8.13+mc1.21.1 (sodium)
+		Sooty Chimneys 1.3.5 (sootychimneys)
+		spark 1.10.124 (spark)
+		Structure Compass Mod 4.2.1 (structurecompass)
+		Structure Layout Optimizer 1.0.12 (structure_layout_optimizer)
+		Strut Your Stuff 1.3.1 (struts)
+		Tiny Skeletons 21.1.0 (tinyskeletons)
+		Torchmaster 21.1.13 (torchmaster)
+		Tweakerge 0.4.3+mc1.21.1 (tweakerge)
+		Ultramarine 0.7 (ultramarine)
+		Untitled Duck Mod 1.1.5 (untitledduckmod)
+		UsefulSlime 1.12.1 (usefulslime)
+		Vanillin 1.1.3 (vanillin)
+		Veil 4.3.2 (veil)
+		William Wythers' Overhauled Overworld 2.6.7 (wwoo)
+		Xaero's Minimap 26.6.0 (xaerominimap)
+		Xaero's World Map 1.47.0 (xaeroworldmap)
+		XaeroLib 1.7.3 (xaerolib)
+		YetAnotherConfigLib 3.6.6+1.21.1-neoforge (yet_another_config_lib_v3)
+[20:24:18] [main/INFO]: Loading coremod script-engine for [xaerominimap, xaeroworldmap]
+[20:24:20] [main/INFO]: Compatibility level set to JAVA_21
+[20:24:20] [main/INFO]: Launching target 'forgeclient' with arguments [--version, 1.21.1, --gameDir, D:\MC\profiles\NeoForge 1.21.1, --assetsDir, D:\MC\meta\assets, --uuid, 9ec10e15044f4bae91b631599c6d3601, --username, ZZY205, --assetIndex, 17, --accessToken, ❄❄❄❄❄❄❄❄, --clientId, c4502edb-87c6-40cb-b595-64a280cf8906, --xuid, 0, --userType, msa, --versionType, release, --width, 854, --height, 480]
+[20:24:20] [main/INFO]: Initializing com.ishland.c2me.fixes.worldgen.threading_issues.mixin
+[20:24:20] [main/INFO]: Updating config from 0 to 1
+[20:24:20] [main/INFO]: Updating config from 1 to 2
+[20:24:20] [main/INFO]: Updating config from 2 to 3
+[20:24:20] [main/WARN]: Reference map 'alloy_smelter.refmap.json' for alloy_smelter.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/INFO]: Initializing com.ishland.c2me.fixes.general.threading_issues.mixin
+[20:24:20] [main/INFO]: Loaded configuration file for ModernFix 5.27.27+mc1.21.1: 89 options available, 3 override(s) found
+[20:24:20] [main/WARN]: Option 'mixin.perf.release_protochunks' overriden (by mods [c2me]) to 'false'
+[20:24:20] [main/WARN]: Option 'mixin.bugfix.paper_chunk_patches' overriden (by mods [c2me]) to 'false'
+[20:24:20] [main/WARN]: Option 'mixin.bugfix.chunk_deadlock' overriden (by mods [c2me]) to 'false'
+[20:24:20] [main/INFO]: Applying Nashorn fix
+[20:24:20] [main/INFO]: Configuring Minecraft's max.bg.threads option with 17 threads
+[20:24:20] [main/WARN]: Reference map 'maxhealthfix.refmap.json' for maxhealthfix.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'iris.refmap.json' for mixins.iris.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'iris.refmap.json' for mixins.iris.fantastic.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'iris.refmap.json' for mixins.iris.vertexformat.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'iris.refmap.json' for iris-batched-entity-rendering.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'iris.refmap.json' for mixins.iris.compat.sodium.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'mixins.medievalend.refmap.json' for mixins.medievalend.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'createdieselgenerators.refmap.json' for createdieselgenerators.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'kaleidoscope_cookery.refmap.json' for kaleidoscope_doll.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'clientsort.refmap.json' for clientsort.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'clientsort.refmap.json' for clientsort.neoforge.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'prickle.refmap.json' for prickle.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/WARN]: Reference map 'createbetterfps.refmap.json' for createbetterfps.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:20] [main/INFO]: Initializing com.ishland.c2me.base.mixin
+[20:24:21] [main/INFO]: CPU name: 12th Gen Intel(R) Core(TM) i7-12700H
+[20:24:21] [main/INFO]: Detected 14 available physical CPUs, 20 available logical CPUs
+[20:24:21] [main/INFO]: Detected 14 available physical CPUs, 20 available logical CPUs
+[20:24:21] [main/INFO]: Global Executor Parallelism: 9 configured, 9 evaluated, 9 default evaluated
+[20:24:21] [main/WARN]: Reference map 'torchmaster.refmap.json' for torchmaster.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.opts.dfc.mixin
+[20:24:21] [main/WARN]: Reference map 'curios.refmap.json' for curios.neoforge.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'curios.refmap.json' for curios.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '${mod_id}.refmap.json' for trading_floor.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'searchables.refmap.json' for searchables.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'searchables.refmap.json' for searchables.neoforge.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'jadeaddons.refmap.json' for jadeaddons.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.threading.lighting.mixin
+[20:24:21] [main/INFO]: Option 'mixin.experimental.entity.block_caching.suffocation' requires 'mixin.util.block_tracking=true' but found 'false'. Setting 'mixin.experimental.entity.block_caching.suffocation=false'.
+[20:24:21] [main/INFO]: Option 'mixin.experimental.entity.block_caching.block_support' requires 'mixin.util.block_tracking=true' but found 'false'. Setting 'mixin.experimental.entity.block_caching.block_support=false'.
+[20:24:21] [main/INFO]: Option 'mixin.experimental.entity.block_caching.block_touching' requires 'mixin.util.block_tracking=true' but found 'false'. Setting 'mixin.experimental.entity.block_caching.block_touching=false'.
+[20:24:21] [main/INFO]: Option 'mixin.experimental.entity.block_caching' requires 'mixin.util.block_tracking=true' but found 'false'. Setting 'mixin.experimental.entity.block_caching=false'.
+[20:24:21] [main/INFO]: Loaded configuration file for Lithium: 148 options available, 4 override(s) found
+[20:24:21] [main/WARN]: Reference map 'attributefix.refmap.json' for attributefix.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'aeronautics.refmap.json' for aeronautics.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'goblintraders.refmap.json' for goblintraders.common.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'fragmentum.mixins.refmap.json' for fragmentum.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.rewrites.chunksystem.mixin
+[20:24:21] [main/INFO]: Loaded configuration file for Sodium: 45 options available, 1 override(s) found
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.opts.worldgen.vanilla.mixin
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.opts.scheduling.mixin
+[20:24:21] [main/WARN]: Reference map 'offroad.refmap.json' for offroad.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'frequency.mixins.refmap.json' for frequency.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '' for brewinandchewin.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'xaerominimap.refmap.json' for xaerohud.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'xaerominimap.refmap.json' for xaerominimap.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'polymorph.refmap.json' for polymorph.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'polymorph.refmap.json' for polymorph-compatibility.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.notickvd.mixin
+[20:24:21] [main/WARN]: Reference map 'create_power_loader.refmap.json' for create_power_loader.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'pr.refmap.json' for c6c.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'geckolib.refmap.json' for geckolib.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.opts.natives_math.mixin
+[20:24:21] [main/WARN]: Disabling com.ishland.c2me.opts.natives_math.mixin due to incompatible Java version, see debug logs for details
+[20:24:21] [main/INFO]: Disabling com.ishland.c2me.opts.natives_math.mixin
+[20:24:21] [main/WARN]: Reference map 'kaleidoscope_tavern.refmap.json' for kaleidoscope_tavern.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'xaeroworldmap.refmap.json' for xaeroworldmap.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'placebo.refmap.json' for placebo.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'bookshelf.refmap.json' for bookshelf.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'biomespy.refmap.json' for biomespy.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.opts.math.mixin
+[20:24:21] [main/WARN]: Reference map 'simulated.refmap.json' for simulated.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'takesapillage.refmap.json' for takesapillage-common.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'takesapillage.refmap.json' for takesapillage-neoforge.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'Steam_Rails-neoforge-refmap.json' for railways.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'carryon.refmap.json' for carryon.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.fixes.worldgen.vanilla_bugs.mixin
+[20:24:21] [main/WARN]: Reference map 'create_connected.refmap.json' for create_connected.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.fixes.chunkio.threading_issues.mixin
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.client.uncapvd.mixin
+[20:24:21] [main/WARN]: Reference map 'patchouli.refmap.json' for patchouli_xplat.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'dawnoftimebuilder.refmap.json' for dawnoftimebuilder.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'dawnoftimebuilder.refmap.json' for dawnoftimebuilder.neoforge.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'create_hypertube.refmap.json' for create_hypertube.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'conflict_fix.refmap.json' for conflict_fix.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'CreateLiquidFuel.refmap.json' for createliquidfuel.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.rewrites.chunkio.mixin
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.opts.allocs.mixin
+[20:24:21] [main/WARN]: Reference map 'xaerolib.refmap.json' for xaerolib.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'particular.refmap.json' for particular.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'usefulslime.refmap.json' for usefulslime.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'enchdesc.refmap.json' for enchdesc.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'mixins.mmlib.refmap.json' for mixins.mmlib.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'obscure_tooltips.refmap.json' for obscure_tooltips.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'obscure_tooltips.refmap.json' for obscure_tooltips.neoforge.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'display.refmap.json' for displaydelight.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.server.utils.mixin
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.opts.worldgen.general.mixin
+[20:24:21] [main/INFO]: Initializing com.ishland.c2me.opts.chunkio.mixin
+[20:24:21] [main/WARN]: Reference map 'electroenergetics.refmap.json' for electroenergetics.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '${refmap_target}refmap.json' for ferritecore.predicates.mixin.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '${refmap_target}refmap.json' for ferritecore.fastmap.mixin.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '${refmap_target}refmap.json' for ferritecore.mrl.mixin.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '${refmap_target}refmap.json' for ferritecore.dedupmultipart.mixin.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '${refmap_target}refmap.json' for ferritecore.blockstatecache.mixin.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '${refmap_target}refmap.json' for ferritecore.dedupbakedquad.mixin.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '${refmap_target}refmap.json' for ferritecore.threaddetec.mixin.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '${refmap_target}refmap.json' for ferritecore.modelsides.mixin.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '${refmap_target}refmap.json' for ferritecore.datacomponents.mixin.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map '${refmap_target}refmap.json' for ferritecore.accessors.mixin.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'yet_another_config_lib_v3.refmap.json' for yacl.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'ponder.refmap.json' for ponder-common.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'createprism.refmap.json' for createprism.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'bits_n_bobs.refmap.json' for bits_n_bobs.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Using Sodium renderer mixins
+[20:24:21] [main/INFO]: Using Sodium renderer mixins
+[20:24:21] [main/WARN]: Reference map 'createpropulsion.refmap.json' for createpropulsion.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'creategearsandtavern.refmap.json' for creategearsandtavern.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/WARN]: Reference map 'kaleidoscope_cookery.refmap.json' for kaleidoscope_cookery.mixins.json could not be read. If this is a development environment you can ignore this message
+[20:24:21] [main/INFO]: Packet Fixer neoforge 1.20.5-1.21.X has been applied successfully.
+[20:24:21] [main/WARN]: Error loading class: xaero/common/patreon/Patreon (java.lang.ClassNotFoundException: xaero.common.patreon.Patreon)
+[20:24:21] [main/WARN]: @Mixin target xaero.common.patreon.Patreon was not found smsn.mixins.json:xaero.minimap.PatreonMixin from mod smsn
+[20:24:21] [main/WARN]: Error loading class: xaero/map/patreon/Patreon (java.lang.ClassNotFoundException: xaero.map.patreon.Patreon)
+[20:24:21] [main/WARN]: @Mixin target xaero.map.patreon.Patreon was not found smsn.mixins.json:xaero.world_map.PatreonMixin from mod smsn
+[20:24:21] [main/WARN]: Error loading class: com/portingdeadmods/cable_facades/events/GameClientEvents$2 (java.lang.ClassNotFoundException: com.portingdeadmods.cable_facades.events.GameClientEvents$2)
+[20:24:21] [main/WARN]: Error loading class: com/direwolf20/justdirethings/client/renderers/OurRenderTypes (java.lang.ClassNotFoundException: com.direwolf20.justdirethings.client.renderers.OurRenderTypes)
+[20:24:21] [main/WARN]: Error loading class: mekanism/client/render/entity/RenderFlame (java.lang.ClassNotFoundException: mekanism.client.render.entity.RenderFlame)
+[20:24:21] [main/WARN]: Error loading class: mekanism/client/render/armor/MekaSuitArmor (java.lang.ClassNotFoundException: mekanism.client.render.armor.MekaSuitArmor)
+[20:24:21] [main/WARN]: Error loading class: mekanism/client/render/lib/effect/BillboardingEffectRenderer (java.lang.ClassNotFoundException: mekanism.client.render.lib.effect.BillboardingEffectRenderer)
+[20:24:21] [main/WARN]: Error loading class: blusunrize/immersiveengineering/client/utils/IEGLShaders (java.lang.ClassNotFoundException: blusunrize.immersiveengineering.client.utils.IEGLShaders)
+[20:24:21] [main/WARN]: Error loading class: fuzs/easyanvils/world/inventory/ModAnvilMenu (java.lang.ClassNotFoundException: fuzs.easyanvils.world.inventory.ModAnvilMenu)
+[20:24:21] [main/WARN]: @Mixin target fuzs.easyanvils.world.inventory.ModAnvilMenu was not found exposure-common.mixins.json:compat.easy_anvils.ModAnvilMenuMixin from mod exposure
+[20:24:21] [main/WARN]: Error loading class: fuzs/easyanvils/client/gui/screens/inventory/ModAnvilScreen (java.lang.ClassNotFoundException: fuzs.easyanvils.client.gui.screens.inventory.ModAnvilScreen)
+[20:24:21] [main/WARN]: @Mixin target fuzs.easyanvils.client.gui.screens.inventory.ModAnvilScreen was not found exposure-common.mixins.json:compat.easy_anvils.ModAnvilScreenMixin from mod exposure
+[20:24:21] [main/WARN]: Error loading class: dev/latvian/mods/kubejs/client/KubeJSGameClientEventHandler (java.lang.ClassNotFoundException: dev.latvian.mods.kubejs.client.KubeJSGameClientEventHandler)
+[20:24:21] [main/WARN]: @Mixin target dev.latvian.mods.kubejs.client.KubeJSGameClientEventHandler was not found exposure-neoforge.mixins.json:KubeJSGameClientEventHandlerMixin from mod exposure
+[20:24:22] [main/INFO]: ingredient_sync is false, disabling sync mixin
+[20:24:22] [main/WARN]: Error loading class: ca/spottedleaf/starlight/common/thread/SchedulingUtil (java.lang.ClassNotFoundException: ca.spottedleaf.starlight.common.thread.SchedulingUtil)
+[20:24:22] [main/INFO]: Force-disabling mixin 'entity.collisions.unpushable_cramming.EntityMixin' as rule 'mixin.entity.collisions.unpushable_cramming' (added by mods [sable]) disables it and children
+[20:24:22] [main/INFO]: Force-disabling mixin 'entity.collisions.unpushable_cramming.EntitySectionMixin' as rule 'mixin.entity.collisions.unpushable_cramming' (added by mods [sable]) disables it and children
+[20:24:22] [main/INFO]: Force-disabling mixin 'entity.collisions.unpushable_cramming.EntitySelectorMixin' as rule 'mixin.entity.collisions.unpushable_cramming' (added by mods [sable]) disables it and children
+[20:24:22] [main/INFO]: Force-disabling mixin 'entity.collisions.unpushable_cramming.LivingEntityMixin' as rule 'mixin.entity.collisions.unpushable_cramming' (added by mods [sable]) disables it and children
+[20:24:22] [main/INFO]: Force-disabling mixin 'world.chunk_access.ChunkHolderMixin' as rule 'mixin.world.chunk_access' (added by mods [byepregen, sable]) disables it and children
+[20:24:22] [main/INFO]: Force-disabling mixin 'world.chunk_access.GenerationChunkHolderAccessor' as rule 'mixin.world.chunk_access' (added by mods [byepregen, sable]) disables it and children
+[20:24:22] [main/INFO]: Force-disabling mixin 'world.chunk_access.LevelMixin' as rule 'mixin.world.chunk_access' (added by mods [byepregen, sable]) disables it and children
+[20:24:22] [main/INFO]: Force-disabling mixin 'world.chunk_access.ServerChunkCacheMixin' as rule 'mixin.world.chunk_access' (added by mods [byepregen, sable]) disables it and children
+[20:24:22] [main/INFO]: Force-disabling mixin 'world.chunk_ticking.spread_ice.BiomeMixin' as rule 'mixin.world.chunk_ticking' (added by mods [sable]) disables it and children
+[20:24:22] [main/INFO]: Force-disabling mixin 'world.tick_scheduler.LevelChunkTicksMixin' as rule 'mixin.world.tick_scheduler' (added by mods [sable]) disables it and children
+[20:24:22] [main/WARN]: Error loading class: ca/spottedleaf/starlight/common/integration/v0/ChunkSystemHooks (java.lang.ClassNotFoundException: ca.spottedleaf.starlight.common.integration.v0.ChunkSystemHooks)
+[20:24:22] [main/WARN]: @Mixin target ca/spottedleaf/starlight/common/integration/v0/ChunkSystemHooks was not found c2me-rewrites-chunk-system.mixins.json:scalablelux.MixinChunkSystemHooks from mod c2me_rewrites_chunk_system
+[20:24:22] [main/WARN]: Force-disabling mixin 'features.render.world.sky.ClientLevelMixin' as rule 'mixin.features.render.world.sky' (added by mods [iris]) disables it and children
+[20:24:22] [main/WARN]: Force-disabling mixin 'features.render.world.sky.FogRendererMixin' as rule 'mixin.features.render.world.sky' (added by mods [iris]) disables it and children
+[20:24:22] [main/WARN]: Force-disabling mixin 'features.render.world.sky.LevelRendererMixin' as rule 'mixin.features.render.world.sky' (added by mods [iris]) disables it and children
+[20:24:22] [main/WARN]: Error loading class: mezz/jei/common/network/packets/PacketRecipeTransfer (java.lang.ClassNotFoundException: mezz.jei.common.network.packets.PacketRecipeTransfer)
+[20:24:22] [main/WARN]: @Mixin target mezz.jei.common.network.packets.PacketRecipeTransfer was not found polymorph-compatibility.mixins.json:jei.MixinPacketRecipeTransfer from mod polymorph
+[20:24:22] [main/WARN]: Error loading class: com/traverse/bhc/common/util/DropHandler (java.lang.ClassNotFoundException: com.traverse.bhc.common.util.DropHandler)
+[20:24:22] [main/WARN]: @Mixin target com.traverse.bhc.common.util.DropHandler was not found c6c.mixins.json:BHC.DropHandlerMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/blay09/mods/hardcorerevival/HardcoreRevival (java.lang.ClassNotFoundException: net.blay09.mods.hardcorerevival.HardcoreRevival)
+[20:24:22] [main/WARN]: @Mixin target net.blay09.mods.hardcorerevival.HardcoreRevival was not found c6c.mixins.json:hardcore_revival.HardcoreRevivalMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/l2hostility/content/logic/PlayerFinder (java.lang.ClassNotFoundException: dev.xkmc.l2hostility.content.logic.PlayerFinder)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.l2hostility.content.logic.PlayerFinder was not found c6c.mixins.json:Hostile.PlayerFinderMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/l2hostility/content/item/curio/ring/RingOfLife (java.lang.ClassNotFoundException: dev.xkmc.l2hostility.content.item.curio.ring.RingOfLife)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.l2hostility.content.item.curio.ring.RingOfLife was not found c6c.mixins.json:Hostile.RingOfLifeMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: io/redspace/ironsjewelry/item/CurioBaseItem (java.lang.ClassNotFoundException: io.redspace.ironsjewelry.item.CurioBaseItem)
+[20:24:22] [main/WARN]: @Mixin target io.redspace.ironsjewelry.item.CurioBaseItem was not found c6c.mixins.json:IronJewel.CurioBaseItemMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: io/redspace/ironsspellbooks/player/AdditionalWanderingTrades (java.lang.ClassNotFoundException: io.redspace.ironsspellbooks.player.AdditionalWanderingTrades)
+[20:24:22] [main/WARN]: @Mixin target io.redspace.ironsspellbooks.player.AdditionalWanderingTrades was not found c6c.mixins.json:IronSpell.AdditionalWanderingTradesMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: io/redspace/ironsspellbooks/block/BrazierBlock (java.lang.ClassNotFoundException: io.redspace.ironsspellbooks.block.BrazierBlock)
+[20:24:22] [main/WARN]: @Mixin target io.redspace.ironsspellbooks.block.BrazierBlock was not found c6c.mixins.json:IronSpell.BrazierBlockMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: io/redspace/ironsspellbooks/entity/mobs/dead_king_boss/DeadKingBoss (java.lang.ClassNotFoundException: io.redspace.ironsspellbooks.entity.mobs.dead_king_boss.DeadKingBoss)
+[20:24:22] [main/WARN]: @Mixin target io.redspace.ironsspellbooks.entity.mobs.dead_king_boss.DeadKingBoss was not found c6c.mixins.json:IronSpell.DeadKingBossMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: io/redspace/ironsspellbooks/entity/mobs/wizards/fire_boss/goals/FireBossAttackGoal (java.lang.ClassNotFoundException: io.redspace.ironsspellbooks.entity.mobs.wizards.fire_boss.goals.FireBossAttackGoal)
+[20:24:22] [main/WARN]: @Mixin target io.redspace.ironsspellbooks.entity.mobs.wizards.fire_boss.goals.FireBossAttackGoal was not found c6c.mixins.json:IronSpell.FireBossAttackGoalMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: io/redspace/ironsspellbooks/entity/mobs/wizards/fire_boss/FireBossEntity (java.lang.ClassNotFoundException: io.redspace.ironsspellbooks.entity.mobs.wizards.fire_boss.FireBossEntity)
+[20:24:22] [main/WARN]: @Mixin target io.redspace.ironsspellbooks.entity.mobs.wizards.fire_boss.FireBossEntity was not found c6c.mixins.json:IronSpell.FireBossEntityMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: io/redspace/ironsspellbooks/block/ice_spider_egg/IceSpiderEggBlock (java.lang.ClassNotFoundException: io.redspace.ironsspellbooks.block.ice_spider_egg.IceSpiderEggBlock)
+[20:24:22] [main/WARN]: @Mixin target io.redspace.ironsspellbooks.block.ice_spider_egg.IceSpiderEggBlock was not found c6c.mixins.json:IronSpell.IceSpiderEggBlockMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: io/redspace/ironsspellbooks/entity/mobs/abstract_spell_casting_mob/NeutralWizard (java.lang.ClassNotFoundException: io.redspace.ironsspellbooks.entity.mobs.abstract_spell_casting_mob.NeutralWizard)
+[20:24:22] [main/WARN]: @Mixin target io.redspace.ironsspellbooks.entity.mobs.abstract_spell_casting_mob.NeutralWizard was not found c6c.mixins.json:IronSpell.NeutralWizardMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: io/redspace/ironsspellbooks/entity/mobs/wizards/alchemist/ApothecaristEntity (java.lang.ClassNotFoundException: io.redspace.ironsspellbooks.entity.mobs.wizards.alchemist.ApothecaristEntity)
+[20:24:22] [main/WARN]: @Mixin target io.redspace.ironsspellbooks.entity.mobs.wizards.alchemist.ApothecaristEntity was not found c6c.mixins.json:IronSpell.NoTradeMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: io/redspace/ironsspellbooks/entity/mobs/wizards/priest/PriestEntity (java.lang.ClassNotFoundException: io.redspace.ironsspellbooks.entity.mobs.wizards.priest.PriestEntity)
+[20:24:22] [main/WARN]: @Mixin target io.redspace.ironsspellbooks.entity.mobs.wizards.priest.PriestEntity was not found c6c.mixins.json:IronSpell.NoTradeMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: io/redspace/ironsspellbooks/entity/mobs/wizards/pyromancer/PyromancerEntity (java.lang.ClassNotFoundException: io.redspace.ironsspellbooks.entity.mobs.wizards.pyromancer.PyromancerEntity)
+[20:24:22] [main/WARN]: @Mixin target io.redspace.ironsspellbooks.entity.mobs.wizards.pyromancer.PyromancerEntity was not found c6c.mixins.json:IronSpell.NoTradeMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: dev/latvian/mods/kubejs/recipe/RecipesKubeEvent (java.lang.ClassNotFoundException: dev.latvian.mods.kubejs.recipe.RecipesKubeEvent)
+[20:24:22] [main/WARN]: @Mixin target dev.latvian.mods.kubejs.recipe.RecipesKubeEvent was not found c6c.mixins.json:kubejs.RecipesKubeEventMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/l2hostility/content/item/curio/curse/CurseOfWrath (java.lang.ClassNotFoundException: dev.xkmc.l2hostility.content.item.curio.curse.CurseOfWrath)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.l2hostility.content.item.curio.curse.CurseOfWrath was not found c6c.mixins.json:L2.CurseOfWrathMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/l2hostility/content/traits/highlevel/DrainTrait (java.lang.ClassNotFoundException: dev.xkmc.l2hostility.content.traits.highlevel.DrainTrait)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.l2hostility.content.traits.highlevel.DrainTrait was not found c6c.mixins.json:L2.DrainTraitMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/l2hostility/content/traits/goals/EnderTrait (java.lang.ClassNotFoundException: dev.xkmc.l2hostility.content.traits.goals.EnderTrait)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.l2hostility.content.traits.goals.EnderTrait was not found c6c.mixins.json:L2.EnderTraitMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/l2hostility/events/LHAttackListener (java.lang.ClassNotFoundException: dev.xkmc.l2hostility.events.LHAttackListener)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.l2hostility.events.LHAttackListener was not found c6c.mixins.json:L2.LHAttackListenerMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/l2hostility/content/logic/MobDifficultyCollector (java.lang.ClassNotFoundException: dev.xkmc.l2hostility.content.logic.MobDifficultyCollector)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.l2hostility.content.logic.MobDifficultyCollector was not found c6c.mixins.json:L2.MobDifficultyCollectorAccessor from mod c6c
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/l2complements/content/item/wand/SonicShooter (java.lang.ClassNotFoundException: dev.xkmc.l2complements.content.item.wand.SonicShooter)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.l2complements.content.item.wand.SonicShooter was not found c6c.mixins.json:L2.SonicShooterMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/l2hostility/content/logic/TraitManager (java.lang.ClassNotFoundException: dev.xkmc.l2hostility.content.logic.TraitManager)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.l2hostility.content.logic.TraitManager was not found c6c.mixins.json:L2.TraitManagerMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/l2hostility/content/item/curio/misc/TripleStripCape (java.lang.ClassNotFoundException: dev.xkmc.l2hostility.content.item.curio.misc.TripleStripCape)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.l2hostility.content.item.curio.misc.TripleStripCape was not found c6c.mixins.json:L2.TripleStripCapeMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: com/github/tartaricacid/touhoulittlemaid/item/AbstractStoreMaidItem (java.lang.ClassNotFoundException: com.github.tartaricacid.touhoulittlemaid.item.AbstractStoreMaidItem)
+[20:24:22] [main/WARN]: @Mixin target com.github.tartaricacid.touhoulittlemaid.item.AbstractStoreMaidItem was not found c6c.mixins.json:Maid.AbstractStoreMaidItemMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: com/github/tartaricacid/touhoulittlemaid/entity/passive/EntityMaid (java.lang.ClassNotFoundException: com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid)
+[20:24:22] [main/WARN]: @Mixin target com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid was not found c6c.mixins.json:Maid.EntityMaidMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: com/github/tartaricacid/touhoulittlemaid/item/ItemSmartSlab (java.lang.ClassNotFoundException: com.github.tartaricacid.touhoulittlemaid.item.ItemSmartSlab)
+[20:24:22] [main/WARN]: @Mixin target com.github.tartaricacid.touhoulittlemaid.item.ItemSmartSlab was not found c6c.mixins.json:Maid.ItemSmartSlabMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: com/github/tartaricacid/touhoulittlemaid/event/EntityDeathEvent (java.lang.ClassNotFoundException: com.github.tartaricacid.touhoulittlemaid.event.EntityDeathEvent)
+[20:24:22] [main/WARN]: @Mixin target com.github.tartaricacid.touhoulittlemaid.event.EntityDeathEvent was not found c6c.mixins.json:Maid.onEntityDeathMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: com/github/tartaricacid/touhoulittlemaid/entity/item/control/PlayerBroomControl (java.lang.ClassNotFoundException: com.github.tartaricacid.touhoulittlemaid.entity.item.control.PlayerBroomControl)
+[20:24:22] [main/WARN]: @Mixin target com.github.tartaricacid.touhoulittlemaid.entity.item.control.PlayerBroomControl was not found c6c.mixins.json:Maid.PlayerBroomControlMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: com/lothrazar/simpletomb/event/CommandEvents (java.lang.ClassNotFoundException: com.lothrazar.simpletomb.event.CommandEvents)
+[20:24:22] [main/WARN]: @Mixin target com.lothrazar.simpletomb.event.CommandEvents was not found c6c.mixins.json:Optimizations.SimpleTomb.CommandEventsMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: com/lothrazar/simpletomb/event/PlayerTombEvents (java.lang.ClassNotFoundException: com.lothrazar.simpletomb.event.PlayerTombEvents)
+[20:24:22] [main/WARN]: @Mixin target com.lothrazar.simpletomb.event.PlayerTombEvents was not found c6c.mixins.json:Optimizations.SimpleTomb.PlayerTombEventsMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: com/lothrazar/simpletomb/helper/WorldHelper (java.lang.ClassNotFoundException: com.lothrazar.simpletomb.helper.WorldHelper)
+[20:24:22] [main/WARN]: @Mixin target com.lothrazar.simpletomb.helper.WorldHelper was not found c6c.mixins.json:Optimizations.SimpleTomb.WorldHelperMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/effect/MoodBonus (java.lang.ClassNotFoundException: net.tracen.umapyoi.effect.MoodBonus)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.effect.MoodBonus was not found c6c.mixins.json:umapyoi.MoodBonusMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/client/ActionBarOverlay (java.lang.ClassNotFoundException: net.tracen.umapyoi.client.ActionBarOverlay)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.client.ActionBarOverlay was not found c6c.mixins.json:umapyoi.OverlayMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/client/MotivationOverlay (java.lang.ClassNotFoundException: net.tracen.umapyoi.client.MotivationOverlay)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.client.MotivationOverlay was not found c6c.mixins.json:umapyoi.OverlayMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/client/SkillOverlay (java.lang.ClassNotFoundException: net.tracen.umapyoi.client.SkillOverlay)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.client.SkillOverlay was not found c6c.mixins.json:umapyoi.OverlayMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/container/RetireRegisterMenu (java.lang.ClassNotFoundException: net.tracen.umapyoi.container.RetireRegisterMenu)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.container.RetireRegisterMenu was not found c6c.mixins.json:umapyoi.RetireRegisterMenuMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/block/entity/SilverUmaPedestalBlockEntity (java.lang.ClassNotFoundException: net.tracen.umapyoi.block.entity.SilverUmaPedestalBlockEntity)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.block.entity.SilverUmaPedestalBlockEntity was not found c6c.mixins.json:umapyoi.UmaPedestalBlockEntityMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/block/entity/UmaPedestalBlockEntity (java.lang.ClassNotFoundException: net.tracen.umapyoi.block.entity.UmaPedestalBlockEntity)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.block.entity.UmaPedestalBlockEntity was not found c6c.mixins.json:umapyoi.UmaPedestalBlockEntityMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/block/entity/SilverSupportAlbumPedestalBlockEntity (java.lang.ClassNotFoundException: net.tracen.umapyoi.block.entity.SilverSupportAlbumPedestalBlockEntity)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.block.entity.SilverSupportAlbumPedestalBlockEntity was not found c6c.mixins.json:umapyoi.UmaPedestalBlockEntityMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/block/entity/SupportAlbumPedestalBlockEntity (java.lang.ClassNotFoundException: net.tracen.umapyoi.block.entity.SupportAlbumPedestalBlockEntity)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.block.entity.SupportAlbumPedestalBlockEntity was not found c6c.mixins.json:umapyoi.UmaPedestalBlockEntityMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/Umapyoi (java.lang.ClassNotFoundException: net.tracen.umapyoi.Umapyoi)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.Umapyoi was not found c6c.mixins.json:umapyoi.UmapyoiMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/curios/UmaSoulCuriosWrapper (java.lang.ClassNotFoundException: net.tracen.umapyoi.curios.UmaSoulCuriosWrapper)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.curios.UmaSoulCuriosWrapper was not found c6c.mixins.json:umapyoi.UmaSoulCuriosWrapperMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/villager/VillageRegistry (java.lang.ClassNotFoundException: net.tracen.umapyoi.villager.VillageRegistry)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.villager.VillageRegistry was not found c6c.mixins.json:umapyoi.VillageRegistryMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/tracen/umapyoi/villager/VillagerTradeHandler (java.lang.ClassNotFoundException: net.tracen.umapyoi.villager.VillagerTradeHandler)
+[20:24:22] [main/WARN]: @Mixin target net.tracen.umapyoi.villager.VillagerTradeHandler was not found c6c.mixins.json:umapyoi.VillagerTradeHandlerMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: de/cristelknight/wwee/utils/Updater (java.lang.ClassNotFoundException: de.cristelknight.wwee.utils.Updater)
+[20:24:22] [main/WARN]: @Mixin target de.cristelknight.wwee.utils.Updater was not found c6c.mixins.json:WWEE.UpdaterMixin from mod c6c
+[20:24:22] [main/WARN]: Error loading class: net/minecraft/client/gui/screens/controls/KeyBindsList$KeyEntry (java.lang.ClassNotFoundException: net.minecraft.client.gui.screens.controls.KeyBindsList$KeyEntry)
+[20:24:22] [main/WARN]: @Mixin target net.minecraft.client.gui.screens.controls.KeyBindsList$KeyEntry was not found railways-common.mixins.json:client.MixinKeyBindsListKeyEntry from mod railways
+[20:24:22] [main/WARN]: Error loading class: me/jellysquid/mods/lithium/common/ai/pathing/PathNodeDefaults (java.lang.ClassNotFoundException: me.jellysquid.mods.lithium.common.ai.pathing.PathNodeDefaults)
+[20:24:22] [main/WARN]: Error loading class: me/jellysquid/mods/sodium/client/gui/SodiumGameOptionPages (java.lang.ClassNotFoundException: me.jellysquid.mods.sodium.client.gui.SodiumGameOptionPages)
+[20:24:22] [main/WARN]: Error loading class: net/caffeinemc/sodium/config/user/UserConfigCategories (java.lang.ClassNotFoundException: net.caffeinemc.sodium.config.user.UserConfigCategories)
+[20:24:22] [main/WARN]: Error loading class: net/caffeinemc/mods/sodium/client/gui/SodiumGameOptionPages (java.lang.ClassNotFoundException: net.caffeinemc.mods.sodium.client.gui.SodiumGameOptionPages)
+[20:24:22] [main/WARN]: Error loading class: net/vulkanmod/config/option/Options (java.lang.ClassNotFoundException: net.vulkanmod.config.option.Options)
+[20:24:22] [main/WARN]: Error loading class: io/socol/betterthirdperson/api/CustomCamera (java.lang.ClassNotFoundException: io.socol.betterthirdperson.api.CustomCamera)
+[20:24:22] [main/WARN]: @Mixin target io.socol.betterthirdperson.api.CustomCamera was not found conflict_fix.mixins.json:MixinBetterThirdPerson from mod create_hypertube
+[20:24:22] [main/WARN]: Error loading class: me/jellysquid/mods/lithium/common/ai/pathing/PathNodeDefaults (java.lang.ClassNotFoundException: me.jellysquid.mods.lithium.common.ai.pathing.PathNodeDefaults)
+[20:24:22] [main/WARN]: Error loading class: net/dries007/tfc/common/fluids/MixingFluid (java.lang.ClassNotFoundException: net.dries007.tfc.common.fluids.MixingFluid)
+[20:24:22] [main/WARN]: @Mixin target net.dries007.tfc.common.fluids.MixingFluid was not found particular.tfc.mixins.json:TFCMixingFluidMixin from mod particular
+[20:24:22] [main/WARN]: Error loading class: dev/emi/emi/VanillaPlugin (java.lang.ClassNotFoundException: dev.emi.emi.VanillaPlugin)
+[20:24:22] [main/WARN]: Error loading class: me/shedaniel/rei/plugin/client/DefaultClientPlugin (java.lang.ClassNotFoundException: me.shedaniel.rei.plugin.client.DefaultClientPlugin)
+[20:24:22] [main/WARN]: Error loading class: net/satisfy/farm_and_charm/core/compat/jei/category/CookingPotCategory (java.lang.ClassNotFoundException: net.satisfy.farm_and_charm.core.compat.jei.category.CookingPotCategory)
+[20:24:22] [main/WARN]: @Mixin target net.satisfy.farm_and_charm.core.compat.jei.category.CookingPotCategory was not found kaleidoscope_compat.mixins.json:farm_and_charm.CookingPotCategoryMixin from mod kaleidoscope_compat
+[20:24:22] [main/WARN]: Error loading class: net/satisfy/farm_and_charm/core/recipe/CookingPotRecipe (java.lang.ClassNotFoundException: net.satisfy.farm_and_charm.core.recipe.CookingPotRecipe)
+[20:24:22] [main/WARN]: @Mixin target net.satisfy.farm_and_charm.core.recipe.CookingPotRecipe was not found kaleidoscope_compat.mixins.json:farm_and_charm.CookingPotRecipeMixin from mod kaleidoscope_compat
+[20:24:22] [main/WARN]: Error loading class: org/violetmoon/quark/api/event/SimpleHarvestEvent (java.lang.ClassNotFoundException: org.violetmoon.quark.api.event.SimpleHarvestEvent)
+[20:24:22] [main/WARN]: @Mixin target org.violetmoon.quark.api.event.SimpleHarvestEvent was not found kaleidoscope_compat.mixins.json:quark.SimpleHarvestEventMixin from mod kaleidoscope_compat
+[20:24:22] [main/WARN]: Error loading class: com/cazsius/solcarrot/tracking/FoodList (java.lang.ClassNotFoundException: com.cazsius.solcarrot.tracking.FoodList)
+[20:24:22] [main/WARN]: @Mixin target com.cazsius.solcarrot.tracking.FoodList was not found kaleidoscope_compat.mixins.json:solcarrot.FoodListMixin from mod kaleidoscope_compat
+[20:24:22] [main/WARN]: Error loading class: de/dafuqs/spectrum/blocks/pastel_network/nodes/PastelNodeBlockEntity (java.lang.ClassNotFoundException: de.dafuqs.spectrum.blocks.pastel_network.nodes.PastelNodeBlockEntity)
+[20:24:22] [main/WARN]: @Mixin target de.dafuqs.spectrum.blocks.pastel_network.nodes.PastelNodeBlockEntity was not found kaleidoscope_compat.mixins.json:spectrum.PastelNodeBlockEntityMixin from mod kaleidoscope_compat
+[20:24:22] [main/WARN]: Error loading class: de/dafuqs/spectrum/blocks/pastel_network/nodes/PastelNodeBlock (java.lang.ClassNotFoundException: de.dafuqs.spectrum.blocks.pastel_network.nodes.PastelNodeBlock)
+[20:24:22] [main/WARN]: @Mixin target de.dafuqs.spectrum.blocks.pastel_network.nodes.PastelNodeBlock was not found kaleidoscope_compat.mixins.json:spectrum.PastelNodeBlockMixin from mod kaleidoscope_compat
+[20:24:22] [main/WARN]: Error loading class: net/satisfy/vinery/core/recipe/FermentationBarrelRecipe (java.lang.ClassNotFoundException: net.satisfy.vinery.core.recipe.FermentationBarrelRecipe)
+[20:24:22] [main/WARN]: @Mixin target net.satisfy.vinery.core.recipe.FermentationBarrelRecipe was not found kaleidoscope_compat.mixins.json:vinery.FermentationBarrelRecipeMixin from mod kaleidoscope_compat
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/youkaishomecoming/content/pot/steamer/RackItemData (java.lang.ClassNotFoundException: dev.xkmc.youkaishomecoming.content.pot.steamer.RackItemData)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.youkaishomecoming.content.pot.steamer.RackItemData was not found kaleidoscope_compat.mixins.json:youkaisfeasts.RackItemDataMixin from mod kaleidoscope_compat
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/youkaishomecoming/content/pot/storage/bottle/SauceRackBlockEntity (java.lang.ClassNotFoundException: dev.xkmc.youkaishomecoming.content.pot.storage.bottle.SauceRackBlockEntity)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.youkaishomecoming.content.pot.storage.bottle.SauceRackBlockEntity was not found kaleidoscope_compat.mixins.json:youkaisfeasts.SauceRackBlockEntityMixin from mod kaleidoscope_compat
+[20:24:22] [main/WARN]: Error loading class: dev/xkmc/youkaishomecoming/content/pot/storage/shelf/WineShelfBlockEntity (java.lang.ClassNotFoundException: dev.xkmc.youkaishomecoming.content.pot.storage.shelf.WineShelfBlockEntity)
+[20:24:22] [main/WARN]: @Mixin target dev.xkmc.youkaishomecoming.content.pot.storage.shelf.WineShelfBlockEntity was not found kaleidoscope_compat.mixins.json:youkaisfeasts.WineShelfBlockEntityMixin from mod kaleidoscope_compat
+[20:24:22] [main/WARN]: Error loading class: com/cazsius/solcarrot/client/FoodItems (java.lang.ClassNotFoundException: com.cazsius.solcarrot.client.FoodItems)
+[20:24:22] [main/WARN]: @Mixin target com.cazsius.solcarrot.client.FoodItems was not found kaleidoscope_compat.mixins.json:solcarrot.FoodItemsMixin from mod kaleidoscope_compat
+[20:24:22] [main/WARN]: Error loading class: dev/shadowsoffire/apothic_attributes/api/ALObjects$Potions (java.lang.ClassNotFoundException: dev.shadowsoffire.apothic_attributes.api.ALObjects$Potions)
+[20:24:22] [main/WARN]: Error loading class: dev/shadowsoffire/apothic_attributes/api/ALObjects$Potions (java.lang.ClassNotFoundException: dev.shadowsoffire.apothic_attributes.api.ALObjects$Potions)
+[20:24:22] [main/WARN]: Error loading class: dev/shadowsoffire/apothic_attributes/api/ALObjects$Potions (java.lang.ClassNotFoundException: dev.shadowsoffire.apothic_attributes.api.ALObjects$Potions)
+[20:24:22] [main/WARN]: Error loading class: org/jetbrains/annotations/ApiStatus$Internal (java.lang.ClassNotFoundException: org.jetbrains.annotations.ApiStatus$Internal)
+[20:24:22] [main/WARN]: Error loading class: org/jetbrains/annotations/ApiStatus$ScheduledForRemoval (java.lang.ClassNotFoundException: org.jetbrains.annotations.ApiStatus$ScheduledForRemoval)
+[20:24:23] [main/INFO]: Initializing MixinExtras via com.llamalad7.mixinextras.service.MixinExtrasServiceImpl(version=0.5.5).
+[0511月2026 20:24:24.978] [Datafixer Bootstrap/INFO] [com.mojang.datafixers.DataFixerBuilder/]: 229 Datafixer optimizations took 321 milliseconds
+[0511月2026 20:24:25.113] [pool-23-thread-1/INFO] [net.minecraft.server.Bootstrap/]: ModernFix reached bootstrap stage (11.27 s after launch)
+[0511月2026 20:24:26.574] [pool-23-thread-1/WARN] [mixin/]: Error loading class: dev/xkmc/l2hostility/compat/curios/CurioCompat (java.lang.ClassNotFoundException: dev.xkmc.l2hostility.compat.curios.CurioCompat)
+[0511月2026 20:24:26.774] [main/WARN] [net.minecraft.SystemReport/]: Failed to get system info for GL Caps
+java.lang.IllegalStateException: Rendersystem called from wrong thread
+	at TRANSFORMER/minecraft@1.21.1/com.mojang.blaze3d.systems.RenderSystem.constructThreadException(RenderSystem.java:124) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?]
+	at TRANSFORMER/minecraft@1.21.1/com.mojang.blaze3d.systems.RenderSystem.assertOnRenderThread(RenderSystem.java:119) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?]
+	at TRANSFORMER/minecraft@1.21.1/com.mojang.blaze3d.systems.RenderSystem.getCapsString(RenderSystem.java:497) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?]
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.SystemReport.setDetail(SystemReport.java:70) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?]
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.client.Minecraft.fillSystemReport(Minecraft.java:2439) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?]
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.client.Minecraft.fillReport(Minecraft.java:2412) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?]
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.client.main.Main.main(Main.java:189) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source) ~[?:?]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[?:?]
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonLaunchHandler.runTarget(CommonLaunchHandler.java:136) ~[loader-4.0.45.jar%23152!/:4.0]
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonLaunchHandler.clientService(CommonLaunchHandler.java:124) ~[loader-4.0.45.jar%23152!/:4.0]
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonClientLaunchHandler.runService(CommonClientLaunchHandler.java:32) ~[loader-4.0.45.jar%23152!/:4.0]
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonLaunchHandler.lambda$launchService$4(CommonLaunchHandler.java:118) ~[loader-4.0.45.jar%23152!/:4.0]
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandlerDecorator.launch(LaunchServiceHandlerDecorator.java:30) [modlauncher-11.0.5.jar%23157!/:?]
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandler.launch(LaunchServiceHandler.java:53) [modlauncher-11.0.5.jar%23157!/:?]
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandler.launch(LaunchServiceHandler.java:71) [modlauncher-11.0.5.jar%23157!/:?]
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.Launcher.run(Launcher.java:103) [modlauncher-11.0.5.jar%23157!/:?]
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.Launcher.main(Launcher.java:74) [modlauncher-11.0.5.jar%23157!/:?]
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.BootstrapLaunchConsumer.accept(BootstrapLaunchConsumer.java:26) [modlauncher-11.0.5.jar%23157!/:?]
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.BootstrapLaunchConsumer.accept(BootstrapLaunchConsumer.java:23) [modlauncher-11.0.5.jar%23157!/:?]
+	at cpw.mods.bootstraplauncher@2.0.2/cpw.mods.bootstraplauncher.BootstrapLauncher.run(BootstrapLauncher.java:210) [bootstraplauncher-2.0.2.jar:?]
+	at cpw.mods.bootstraplauncher@2.0.2/cpw.mods.bootstraplauncher.BootstrapLauncher.main(BootstrapLauncher.java:69) [bootstraplauncher-2.0.2.jar:?]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source) ~[?:?]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[?:?]
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:63) [theseus.jar:?]
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28) [theseus.jar:?]
+[0511月2026 20:24:26.795] [main/INFO] [STDOUT/]: [net.minecraft.server.Bootstrap:realStdoutPrintln:135]: ---- Minecraft Crash Report ----
+// Hey, that tickles! Hehehe!
+
+Time: 2026-11-05 20:24:26
+Description: Bootstrap
+
+java.lang.RuntimeException: org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.BackgroundWaiter.runAndTick(BackgroundWaiter.java:29) ~[loader-4.0.45.jar%23152!/:4.0] {}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.client.main.Main.main(Main.java:114) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:runtimedistcleaner:A,re:classloading,pl:mixin:APP:veil.debug.mixins.json:client.DebugMainMixin from mod veil,pl:mixin:A,pl:runtimedistcleaner:A}
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source) ~[?:?] {}
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[?:?] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonLaunchHandler.runTarget(CommonLaunchHandler.java:136) ~[loader-4.0.45.jar%23152!/:4.0] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonLaunchHandler.clientService(CommonLaunchHandler.java:124) ~[loader-4.0.45.jar%23152!/:4.0] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonClientLaunchHandler.runService(CommonClientLaunchHandler.java:32) ~[loader-4.0.45.jar%23152!/:4.0] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonLaunchHandler.lambda$launchService$4(CommonLaunchHandler.java:118) ~[loader-4.0.45.jar%23152!/:4.0] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandlerDecorator.launch(LaunchServiceHandlerDecorator.java:30) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandler.launch(LaunchServiceHandler.java:53) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandler.launch(LaunchServiceHandler.java:71) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.Launcher.run(Launcher.java:103) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.Launcher.main(Launcher.java:74) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.BootstrapLaunchConsumer.accept(BootstrapLaunchConsumer.java:26) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.BootstrapLaunchConsumer.accept(BootstrapLaunchConsumer.java:23) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at cpw.mods.bootstraplauncher@2.0.2/cpw.mods.bootstraplauncher.BootstrapLauncher.run(BootstrapLauncher.java:210) [bootstraplauncher-2.0.2.jar:?] {}
+	at cpw.mods.bootstraplauncher@2.0.2/cpw.mods.bootstraplauncher.BootstrapLauncher.main(BootstrapLauncher.java:69) [bootstraplauncher-2.0.2.jar:?] {}
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source) ~[?:?] {}
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[?:?] {}
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:63) [theseus.jar:?] {}
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28) [theseus.jar:?] {}
+Caused by: org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:381) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClass(MixinTransformer.java:253) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.service.modlauncher.MixinTransformationHandler.processClass(MixinTransformationHandler.java:131) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.launch.MixinLaunchPluginLegacy.processClass(MixinLaunchPluginLegacy.java:131) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.serviceapi.ILaunchPluginService.processClassWithFlags(ILaunchPluginService.java:156) ~[modlauncher-11.0.5.jar:11.0.5+main.901c6ea8] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchPluginHandler.offerClassNodeToPlugins(LaunchPluginHandler.java:94) ~[modlauncher-11.0.5.jar:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.ClassTransformer.transform(ClassTransformer.java:120) ~[modlauncher-11.0.5.jar:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.TransformingClassLoader.maybeTransformClassBytes(TransformingClassLoader.java:57) ~[modlauncher-11.0.5.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.readerToClass(ModuleClassLoader.java:190) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.lambda$findClass$20(ModuleClassLoader.java:298) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.loadFromModule(ModuleClassLoader.java:311) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.findClass(ModuleClassLoader.java:298) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.loadClass(ModuleClassLoader.java:214) ~[securejarhandler-3.0.8.jar:?] {}
+	at java.base/java.lang.ClassLoader.loadClass(Unknown Source) ~[?:?] {}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.Blocks.stoneButton(Blocks.java:7766) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.reduce_blockstate_cache_rebuilds.BlocksMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.Blocks.<clinit>(Blocks.java:2192) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.reduce_blockstate_cache_rebuilds.BlocksMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.FireBlock.bootStrap(FireBlock.java:342) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:classloading,pl:accesstransformer:B}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.Bootstrap.bootStrap(Bootstrap.java:45) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:feature.measure_time.BootstrapMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.BootstrapMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.BootstrapClientMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.client.main.Main.lambda$main$0(Main.java:114) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:runtimedistcleaner:A,re:classloading,pl:mixin:APP:veil.debug.mixins.json:client.DebugMainMixin from mod veil,pl:mixin:A,pl:runtimedistcleaner:A}
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source) ~[?:?] {}
+	at java.base/java.lang.Thread.run(Unknown Source) ~[?:?] {}
+Caused by: org.spongepowered.asm.mixin.transformer.throwables.MixinPreProcessorException: Attach error for c6c.mixins.json:L2.AbstractArrowMixin from mod c6c during activity: [Transform -> Method wrapHurtEntity(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/damagesource/DamageSource;FLcom/llamalad7/mixinextras/injector/wrapoperation/Operation;)Z -> INVOKESTATIC -> dev/xkmc/l2hostility/compat/curios/CurioCompat::getItems:(Lnet/minecraft/world/entity/LivingEntity;Ljava/util/function/Predicate;)Ljava/util/List;]
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.attach(MixinPreProcessorStandard.java:313) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.createContextFor(MixinPreProcessorStandard.java:277) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinInfo.createContextFor(MixinInfo.java:1292) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.apply(MixinApplicatorStandard.java:203) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.TargetClassContext.apply(TargetClassContext.java:437) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.TargetClassContext.applyMixins(TargetClassContext.java:418) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:352) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClass(MixinTransformer.java:253) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.service.modlauncher.MixinTransformationHandler.processClass(MixinTransformationHandler.java:131) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.launch.MixinLaunchPluginLegacy.processClass(MixinLaunchPluginLegacy.java:131) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.serviceapi.ILaunchPluginService.processClassWithFlags(ILaunchPluginService.java:156) ~[modlauncher-11.0.5.jar:11.0.5+main.901c6ea8] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchPluginHandler.offerClassNodeToPlugins(LaunchPluginHandler.java:94) ~[modlauncher-11.0.5.jar:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.ClassTransformer.transform(ClassTransformer.java:120) ~[modlauncher-11.0.5.jar:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.TransformingClassLoader.maybeTransformClassBytes(TransformingClassLoader.java:57) ~[modlauncher-11.0.5.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.readerToClass(ModuleClassLoader.java:190) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.lambda$findClass$20(ModuleClassLoader.java:298) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.loadFromModule(ModuleClassLoader.java:311) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.findClass(ModuleClassLoader.java:298) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.loadClass(ModuleClassLoader.java:214) ~[securejarhandler-3.0.8.jar:?] {}
+	at java.base/java.lang.ClassLoader.loadClass(Unknown Source) ~[?:?] {}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.Blocks.stoneButton(Blocks.java:7766) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.reduce_blockstate_cache_rebuilds.BlocksMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.Blocks.<clinit>(Blocks.java:2192) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.reduce_blockstate_cache_rebuilds.BlocksMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.FireBlock.bootStrap(FireBlock.java:342) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:classloading,pl:accesstransformer:B}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.Bootstrap.bootStrap(Bootstrap.java:45) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:feature.measure_time.BootstrapMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.BootstrapMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.BootstrapClientMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.client.main.Main.lambda$main$0(Main.java:114) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:runtimedistcleaner:A,re:classloading,pl:mixin:APP:veil.debug.mixins.json:client.DebugMainMixin from mod veil,pl:mixin:A,pl:runtimedistcleaner:A}
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source) ~[?:?] {}
+	at java.base/java.lang.Thread.run(Unknown Source) ~[?:?] {}
+Caused by: java.lang.RuntimeException: java.lang.ClassNotFoundException: dev.xkmc.l2hostility.compat.curios.CurioCompat
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transformMemberReference(MixinPreProcessorStandard.java:791) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transformMethod(MixinPreProcessorStandard.java:777) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transform(MixinPreProcessorStandard.java:743) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.attach(MixinPreProcessorStandard.java:307) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.createContextFor(MixinPreProcessorStandard.java:277) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinInfo.createContextFor(MixinInfo.java:1292) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.apply(MixinApplicatorStandard.java:203) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.TargetClassContext.apply(TargetClassContext.java:437) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.TargetClassContext.applyMixins(TargetClassContext.java:418) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:352) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClass(MixinTransformer.java:253) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.service.modlauncher.MixinTransformationHandler.processClass(MixinTransformationHandler.java:131) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.launch.MixinLaunchPluginLegacy.processClass(MixinLaunchPluginLegacy.java:131) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.serviceapi.ILaunchPluginService.processClassWithFlags(ILaunchPluginService.java:156) ~[modlauncher-11.0.5.jar:11.0.5+main.901c6ea8] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchPluginHandler.offerClassNodeToPlugins(LaunchPluginHandler.java:94) ~[modlauncher-11.0.5.jar:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.ClassTransformer.transform(ClassTransformer.java:120) ~[modlauncher-11.0.5.jar:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.TransformingClassLoader.maybeTransformClassBytes(TransformingClassLoader.java:57) ~[modlauncher-11.0.5.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.readerToClass(ModuleClassLoader.java:190) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.lambda$findClass$20(ModuleClassLoader.java:298) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.loadFromModule(ModuleClassLoader.java:311) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.findClass(ModuleClassLoader.java:298) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.loadClass(ModuleClassLoader.java:214) ~[securejarhandler-3.0.8.jar:?] {}
+	at java.base/java.lang.ClassLoader.loadClass(Unknown Source) ~[?:?] {}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.Blocks.stoneButton(Blocks.java:7766) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.reduce_blockstate_cache_rebuilds.BlocksMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.Blocks.<clinit>(Blocks.java:2192) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.reduce_blockstate_cache_rebuilds.BlocksMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.FireBlock.bootStrap(FireBlock.java:342) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:classloading,pl:accesstransformer:B}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.Bootstrap.bootStrap(Bootstrap.java:45) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:feature.measure_time.BootstrapMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.BootstrapMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.BootstrapClientMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.client.main.Main.lambda$main$0(Main.java:114) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:runtimedistcleaner:A,re:classloading,pl:mixin:APP:veil.debug.mixins.json:client.DebugMainMixin from mod veil,pl:mixin:A,pl:runtimedistcleaner:A}
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source) ~[?:?] {}
+	at java.base/java.lang.Thread.run(Unknown Source) ~[?:?] {}
+Caused by: java.lang.ClassNotFoundException: dev.xkmc.l2hostility.compat.curios.CurioCompat
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transformMemberReference(MixinPreProcessorStandard.java:791) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transformMethod(MixinPreProcessorStandard.java:777) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transform(MixinPreProcessorStandard.java:743) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.attach(MixinPreProcessorStandard.java:307) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.createContextFor(MixinPreProcessorStandard.java:277) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinInfo.createContextFor(MixinInfo.java:1292) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.apply(MixinApplicatorStandard.java:203) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.TargetClassContext.apply(TargetClassContext.java:437) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.TargetClassContext.applyMixins(TargetClassContext.java:418) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:352) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClass(MixinTransformer.java:253) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.service.modlauncher.MixinTransformationHandler.processClass(MixinTransformationHandler.java:131) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.launch.MixinLaunchPluginLegacy.processClass(MixinLaunchPluginLegacy.java:131) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.serviceapi.ILaunchPluginService.processClassWithFlags(ILaunchPluginService.java:156) ~[modlauncher-11.0.5.jar:11.0.5+main.901c6ea8] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchPluginHandler.offerClassNodeToPlugins(LaunchPluginHandler.java:94) ~[modlauncher-11.0.5.jar:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.ClassTransformer.transform(ClassTransformer.java:120) ~[modlauncher-11.0.5.jar:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.TransformingClassLoader.maybeTransformClassBytes(TransformingClassLoader.java:57) ~[modlauncher-11.0.5.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.readerToClass(ModuleClassLoader.java:190) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.lambda$findClass$20(ModuleClassLoader.java:298) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.loadFromModule(ModuleClassLoader.java:311) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.findClass(ModuleClassLoader.java:298) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.loadClass(ModuleClassLoader.java:214) ~[securejarhandler-3.0.8.jar:?] {}
+	at java.base/java.lang.ClassLoader.loadClass(Unknown Source) ~[?:?] {}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.Blocks.stoneButton(Blocks.java:7766) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.reduce_blockstate_cache_rebuilds.BlocksMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.Blocks.<clinit>(Blocks.java:2192) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.reduce_blockstate_cache_rebuilds.BlocksMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.block.FireBlock.bootStrap(FireBlock.java:342) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:classloading,pl:accesstransformer:B}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.Bootstrap.bootStrap(Bootstrap.java:45) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,re:classloading,pl:mixin:APP:modernfix-modernfix.mixins.json:feature.measure_time.BootstrapMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.BootstrapMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.BootstrapClientMixin from mod modernfix,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.client.main.Main.lambda$main$0(Main.java:114) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:runtimedistcleaner:A,re:classloading,pl:mixin:APP:veil.debug.mixins.json:client.DebugMainMixin from mod veil,pl:mixin:A,pl:runtimedistcleaner:A}
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source) ~[?:?] {}
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source) ~[?:?] {}
+	at java.base/java.lang.Thread.run(Unknown Source) ~[?:?] {}
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: main
+Stacktrace:
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.BackgroundWaiter.runAndTick(BackgroundWaiter.java:29) ~[loader-4.0.45.jar%23152!/:4.0] {}
+-- Initialization --
+Details:
+	Modules: 
+		ADVAPI32.dll:高级 Windows 32 基本 API:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		COMCTL32.dll:用户体验控件库:6.10 (WinBuild.160101.0800):Microsoft Corporation
+		CRYPT32.dll:加密 API32:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		CRYPTSP.dll:Cryptographic Service Provider API:10.0.19041.5856 (WinBuild.160101.0800):Microsoft Corporation
+		ColorAdapterClient.dll:Microsoft Color Adapter Client:10.0.19041.5129 (WinBuild.160101.0800):Microsoft Corporation
+		CoreMessaging.dll:Microsoft CoreMessaging Dll:10.0.19041.5915:Microsoft Corporation
+		CoreUIComponents.dll:Microsoft Core UI Components Dll:10.0.19041.3636:Microsoft Corporation
+		DBGHELP.DLL:Windows Image Helper:10.0.19041.5848 (WinBuild.160101.0800):Microsoft Corporation
+		DEVOBJ.dll:Device Information Set DLL:10.0.19041.5794 (WinBuild.160101.0800):Microsoft Corporation
+		DNSAPI.dll:DNS 客户端 API DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		GDI32.dll:GDI Client DLL:10.0.19041.6157 (WinBuild.160101.0800):Microsoft Corporation
+		GLU32.dll:OpenGL 实用工具库 DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		IMM32.DLL:Multi-User Windows IMM32 API Client DLL:10.0.19041.6157 (WinBuild.160101.0800):Microsoft Corporation
+		IPHLPAPI.DLL:IP 帮助程序 API:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		IntelControlLib.dll:Intel Graphics Control Lib Runtime:1.0.164:
+		KERNEL32.DLL:Windows NT 基本 API 客户端 DLL:10.0.19041.5915 (WinBuild.160101.0800):Microsoft Corporation
+		KERNELBASE.dll:Windows NT 基本 API 客户端 DLL:10.0.19041.5915 (WinBuild.160101.0800):Microsoft Corporation
+		MSCTF.dll:MSCTF 服务器 DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		MpOav.dll:IOfficeAntiVirus Module:4.18.26100.4 (79b015c6fabb20b1ccd067f376e490f0bac19809):Microsoft Corporation
+		NLAapi.dll:Network Location Awareness 2:10.0.19041.6456 (WinBuild.160101.0800):Microsoft Corporation
+		NSI.dll:NSI User-mode interface DLL:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		NvMemMapStoragex.dll
+		NvMessageBus.dll:NVIDIA Message Bus::NVIDIA Corporation
+		OLEAUT32.dll:OLEAUT32.DLL:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		POWRPROF.dll:电源配置文件帮助程序 DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		PROPSYS.dll:Microsoft 属性系统:7.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		PSAPI.DLL:Process Status Helper:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		RPCRT4.dll:远程过程调用运行时:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		SETUPAPI.dll:Windows 安装程序 API:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		SHCORE.dll:SHCORE:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		SHELL32.dll:Windows Shell 公用 DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		UMPDC.dll
+		USER32.dll:多用户 Windows 用户 API 客户端 DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		USERENV.dll:Userenv:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		VCRUNTIME140.dll:Microsoft® C Runtime Library:14.40.33810.0:Microsoft Corporation
+		VERSION.dll:Version Checking and File Installation Libraries:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		WINHTTP.dll:Windows HTTP 服务:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		WINMM.dll:MCI API DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		WINSTA.dll:Winstation Library:10.0.19041.6456 (WinBuild.160101.0800):Microsoft Corporation
+		WINTRUST.dll:Microsoft Trust Verification APIs:10.0.19041.6456 (WinBuild.160101.0800):Microsoft Corporation
+		WS2_32.dll:Windows Socket 2.0 32 位 DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		WTSAPI32.dll:Windows Remote Desktop Session Host Server SDK APIs:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		Wldp.dll:Windows 锁定策略:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		amsi.dll:Anti-Malware Scan Interface:10.0.19041.4355 (WinBuild.160101.0800):Microsoft Corporation
+		apphelp.dll:应用程序兼容性客户端库:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		bcrypt.dll:Windows 加密基元库:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		bcryptPrimitives.dll:Windows Cryptographic Primitives Library:10.0.19041.5007 (WinBuild.160101.0800):Microsoft Corporation
+		cfgmgr32.dll:Configuration Manager DLL:10.0.19041.3996 (WinBuild.160101.0800):Microsoft Corporation
+		clbcatq.dll:COM+ Configuration Catalog:2001.12.10941.16384 (WinBuild.160101.0800):Microsoft Corporation
+		combase.dll:用于 Windows 的 Microsoft COM:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		cryptbase.dll:Base cryptographic API DLL:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		cryptnet.dll:Crypto Network Related API:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		d3d11.dll:Direct3D 11 Runtime:10.0.19041.5794 (WinBuild.160101.0800):Microsoft Corporation
+		dbgcore.DLL:Windows Core Debugging Helpers:10.0.19041.5794 (WinBuild.160101.0800):Microsoft Corporation
+		dcomp.dll:Microsoft DirectComposition Library:10.0.19041.6157 (WinBuild.160101.0800):Microsoft Corporation
+		dinput8.dll:Microsoft DirectInput:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		drvstore.dll:Driver Store API:10.0.19041.5794 (WinBuild.160101.0800):Microsoft Corporation
+		dwmapi.dll:Microsoft 桌面窗口管理器 API:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		dxcore.dll:DXCore:10.0.19041.5794 (WinBuild.160101.0800):Microsoft Corporation
+		dxgi.dll:DirectX Graphics Infrastructure:10.0.19041.5794 (WinBuild.160101.0800):Microsoft Corporation
+		extnet.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		fwpuclnt.dll:FWP/IPsec 用户模式 API:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		gdi32full.dll:GDI Client DLL:10.0.19041.6157 (WinBuild.160101.0800):Microsoft Corporation
+		glfw.dll:GLFW 3.4.0 DLL:3.4.0:GLFW
+		icm32.dll:Microsoft Color Management Module (CMM):10.0.19041.5129 (WinBuild.160101.0800):Microsoft Corporation
+		igc64.dll:Intel Graphics Shader Compiler for Intel(R) Graphics Accelerator:31.0.101.4887:Intel Corporation
+		igd10iumd64.dll:User Mode Driver for Intel(R) Graphics Technology:31.0.101.4887:Intel Corporation
+		igd10um64xe.DLL:User Mode Driver for Intel(R) Graphics Technology:31.0.101.4887:Intel Corporation
+		igdgmm64.dll:User Mode Driver for Intel(R) Graphics Technology:31.0.101.4887:Intel Corporation
+		imagehlp.dll:Windows NT Image Helper:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		inputhost.dll:InputHost:10.0.19041.5794 (WinBuild.160101.0800):Microsoft Corporation
+		instrument.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		java.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		javaw.exe:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		jemalloc.dll
+		jimage.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		jli.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		jna8740864248007808951.dll:JNA native library:7.0.0:Java(TM) Native Access (JNA)
+		jsvml.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		jvm.dll:Zulu 64-Bit Server VM:21.0.13:Azul Systems Inc.
+		kernel.appcore.dll:AppModel API Host:10.0.19041.3758 (WinBuild.160101.0800):Microsoft Corporation
+		lwjgl.dll
+		lwjgl_opengl.dll
+		lwjgl_stb.dll
+		management.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		management_ext.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		msasn1.dll:ASN.1 Runtime APIs:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		mscms.dll:Microsoft 颜色匹配系统 DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		msvcp140.dll:Microsoft® C Runtime Library:14.40.33810.0:Microsoft Corporation
+		msvcp_win.dll:Microsoft® C Runtime Library:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		msvcrt.dll:Windows NT CRT DLL:7.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		mswsock.dll:Microsoft Windows Sockets 2.0 服务提供程序:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		napinsp.dll:电子邮件命名填充提供程序:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		net.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		nio.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		ntdll.dll:NT 层 DLL:10.0.19041.4842 (WinBuild.160101.0800):Microsoft Corporation
+		ntmarta.dll:Windows NT MARTA 提供程序:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		nvapi64.dll:NVIDIA NVAPI Loader Dll, Version 621.01 :32.0.16.2101:NVIDIA Corporation
+		nvapi64_impl.dll:NVIDIA NVAPI Library, Version 621.01 :32.0.16.2101:NVIDIA Corporation
+		nvgpucomp64.dll:NVIDIA GPU Compiler Driver, Version 621.01 :32.0.16.2101:NVIDIA Corporation
+		nvldumdx.dll:NVIDIA Driver Loader, Version 621.01 :32.0.16.2101:NVIDIA Corporation
+		nvoglv64.dll:NVIDIA Compatible OpenGL ICD:32.0.16.2101:NVIDIA Corporation
+		nvppex.dll:NVIDIA Driver, Version 621.01 :32.0.16.2101:NVIDIA Corporation
+		nvspcap64.dll:NVIDIA Game Proxy 8FileVersion  1:11.0.9.565  8Produc:NVIDIA Corporation  L$FileDescriptio
+		nvwgf2umx.dll:NVIDIA D3D10 Driver, Version 621.01 :32.0.16.2101:NVIDIA Corporation
+		ole32.dll:用于 Windows 的 Microsoft OLE:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		opengl32.dll:OpenGL Client DLL:10.0.19041.5794 (WinBuild.160101.0800):Microsoft Corporation
+		pdh.dll:Windows 性能数据助手 DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		perfos.dll:Windows 系统性能对象 DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		perfproc.dll:Windows 系统进程性能对象 DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		pnrpnsp.dll:PNRP 命名空间提供程序:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		profapi.dll:User Profile Basic API:10.0.19041.6033 (WinBuild.160101.0800):Microsoft Corporation
+		rasadhlp.dll:Remote Access AutoDial Helper:10.0.19041.6328 (WinBuild.160101.0800):Microsoft Corporation
+		rsaenh.dll:Microsoft Enhanced Cryptographic Provider:10.0.19041.1 (WinBuild.160101.0800):Microsoft Corporation
+		sechost.dll:Host for SCM/SDDL/LSA Lookup APIs:10.0.19041.1 (WinBuild.160101.0800):Microsoft Corporation
+		shlwapi.dll:外壳简易实用工具库:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		textinputframework.dll:"TextInputFramework.DYNLINK":10.0.19041.6456 (WinBuild.160101.0800):Microsoft Corporation
+		ucrtbase.dll:Microsoft® C Runtime Library:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		uxtheme.dll:Microsoft UxTheme 库:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		vcruntime140_1.dll:Microsoft® C Runtime Library:14.40.33810.0:Microsoft Corporation
+		verify.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+		win32u.dll:Win32u:10.0.19041.6456 (WinBuild.160101.0800):Microsoft Corporation
+		windows.storage.dll:Microsoft WinRT Storage API:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		winrnr.dll:LDAP RnR Provider DLL:10.0.19041.3636 (WinBuild.160101.0800):Microsoft Corporation
+		wintypes.dll:Windows 基本类型 DLL:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		wshbth.dll:Windows Sockets Helper DLL:10.0.19041.5848 (WinBuild.160101.0800):Microsoft Corporation
+		xinput1_4.dll:Microsoft 公共控制器 API:10.0.19041.4522 (WinBuild.160101.0800):Microsoft Corporation
+		zip.dll:Zulu Platform x64 Architecture:21.0.13:Azul Systems Inc.
+Stacktrace:
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.client.main.Main.main(Main.java:114) ~[client-1.21.1-20240808.144430-srg.jar%23353!/:?] {re:mixin,pl:runtimedistcleaner:A,re:classloading,pl:mixin:APP:veil.debug.mixins.json:client.DebugMainMixin from mod veil,pl:mixin:A,pl:runtimedistcleaner:A}
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source) ~[?:?] {}
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[?:?] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonLaunchHandler.runTarget(CommonLaunchHandler.java:136) ~[loader-4.0.45.jar%23152!/:4.0] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonLaunchHandler.clientService(CommonLaunchHandler.java:124) ~[loader-4.0.45.jar%23152!/:4.0] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonClientLaunchHandler.runService(CommonClientLaunchHandler.java:32) ~[loader-4.0.45.jar%23152!/:4.0] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.45/net.neoforged.fml.loading.targets.CommonLaunchHandler.lambda$launchService$4(CommonLaunchHandler.java:118) ~[loader-4.0.45.jar%23152!/:4.0] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandlerDecorator.launch(LaunchServiceHandlerDecorator.java:30) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandler.launch(LaunchServiceHandler.java:53) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandler.launch(LaunchServiceHandler.java:71) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.Launcher.run(Launcher.java:103) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.Launcher.main(Launcher.java:74) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.BootstrapLaunchConsumer.accept(BootstrapLaunchConsumer.java:26) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.BootstrapLaunchConsumer.accept(BootstrapLaunchConsumer.java:23) [modlauncher-11.0.5.jar%23157!/:?] {}
+	at cpw.mods.bootstraplauncher@2.0.2/cpw.mods.bootstraplauncher.BootstrapLauncher.run(BootstrapLauncher.java:210) [bootstraplauncher-2.0.2.jar:?] {}
+	at cpw.mods.bootstraplauncher@2.0.2/cpw.mods.bootstraplauncher.BootstrapLauncher.main(BootstrapLauncher.java:69) [bootstraplauncher-2.0.2.jar:?] {}
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source) ~[?:?] {}
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[?:?] {}
+	at com.modrinth.theseus.MinecraftLaunch.relaunch(MinecraftLaunch.java:63) [theseus.jar:?] {}
+	at com.modrinth.theseus.MinecraftLaunch.main(MinecraftLaunch.java:28) [theseus.jar:?] {}
+
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.1
+	Minecraft Version ID: 1.21.1
+	Operating System: Windows 10 (amd64) version 10.0
+	Java Version: 21.0.13, Azul Systems, Inc.
+	Java VM Version: OpenJDK 64-Bit Server VM (mixed mode, sharing), Azul Systems, Inc.
+	Memory: 531726384 bytes (507 MiB) / 1600126976 bytes (1526 MiB) up to 4294967296 bytes (4096 MiB)
+	CPUs: 20
+	Processor Vendor: GenuineIntel
+	Processor Name: 12th Gen Intel(R) Core(TM) i7-12700H
+	Identifier: Intel64 Family 6 Model 154 Stepping 3
+	Microarchitecture: Alder Lake
+	Frequency (GHz): 2.69
+	Number of physical packages: 1
+	Number of physical CPUs: 14
+	Number of logical CPUs: 20
+	Graphics card #0 name: Intel(R) Iris(R) Xe Graphics
+	Graphics card #0 vendor: Intel Corporation
+	Graphics card #0 VRAM (MiB): 1024.00
+	Graphics card #0 deviceId: VideoController1
+	Graphics card #0 versionInfo: 31.0.101.4887
+	Graphics card #1 name: NVIDIA GeForce RTX 3050 Ti Laptop GPU
+	Graphics card #1 vendor: NVIDIA
+	Graphics card #1 VRAM (MiB): 4096.00
+	Graphics card #1 deviceId: VideoController2
+	Graphics card #1 versionInfo: 32.0.16.2101
+	Memory slot #0 capacity (MiB): 8192.00
+	Memory slot #0 clockSpeed (GHz): 3.20
+	Memory slot #0 type: DDR4
+	Memory slot #1 capacity (MiB): 8192.00
+	Memory slot #1 clockSpeed (GHz): 3.20
+	Memory slot #1 type: DDR4
+	Virtual memory max (MiB): 28342.99
+	Virtual memory used (MiB): 18625.00
+	Swap memory total (MiB): 12254.50
+	Swap memory used (MiB): 2247.83
+	Space in storage for jna.tmpdir (MiB): available: 13910.11, total: 812032.00
+	Space in storage for org.lwjgl.system.SharedLibraryExtractPath (MiB): available: 13910.11, total: 812032.00
+	Space in storage for io.netty.native.workdir (MiB): available: 13910.11, total: 812032.00
+	Space in storage for java.io.tmpdir (MiB): available: 24064.46, total: 164005.00
+	Space in storage for workdir (MiB): available: 13910.11, total: 812032.00
+	JVM Flags: 2 total; -XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump -Xmx4096M
+	Launched Version: 1.21.1
+	Launcher name: theseus
+	Backend library: LWJGL version 3.3.3+5
+	Backend API: Unknown
+	Window size: <not initialized>
+	GFLW Platform: win32
+	GL Caps: ERR
+	GL debug messages: <disabled>
+	Is Modded: Definitely; Client brand changed to 'neoforge'
+	Universe: 404
+	Type: Client (map_client.txt)
+	Locale: zh_CN
+	System encoding: GBK
+	File encoding: UTF-8
+	CPU: <unknown>
+[0511月2026 20:24:26.802] [main/INFO] [STDOUT/]: [net.minecraft.server.Bootstrap:realStdoutPrintln:135]: #@!@# Game crashed! Crash report saved to: #@!@# D:\MC\profiles\NeoForge 1.21.1\crash-reports\crash-2026-11-05_20.24.26-client.txt
