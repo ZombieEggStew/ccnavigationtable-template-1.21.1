@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.AutoPackagerBlockEntity;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.EngineCoreBlockEntity;
 import com.zzy205.myfirstmod.block.MonitorBlockEntity;
@@ -77,6 +78,13 @@ public final class CCPeripheralCapabilities {
                 PeripheralCapability.get(),
                 MyModBlockEntities.trailing_wheel_mount_entity.get(),
                 (be, side) -> new TrailingWheelMountPeripheral((TrailingWheelMountBlockEntity) be)
+        );
+        // auto_packager 作为 CC:T 外设（直接复用 Create 的 PackagerPeripheral：list / getItemDetail /
+        // makePackage / getAddress / setAddress，功能与 create:packager 的电脑接口完全一致）
+        event.registerBlockEntity(
+                PeripheralCapability.get(),
+                MyModBlockEntities.auto_packager_entity.get(),
+                (be, side) -> ((AutoPackagerBlockEntity) be).computerBehaviour.getPeripheralCapability()
         );
     }
 }

@@ -2,6 +2,7 @@
   "values": [
     "ccpe:red_position_light",
     "ccpe:green_position_light",
-    "ccpe:white_position_light"
+    "ccpe:white_position_light",
+    "ccpe:auto_packager"
   ]
 }

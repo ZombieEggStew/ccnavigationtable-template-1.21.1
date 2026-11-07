@@ -5,6 +5,7 @@ import com.zzy205.myfirstmod.item.MyModItems;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.material.MapColor;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -219,6 +220,26 @@ public class MyModBlocks {
                     sound(SoundType.COPPER).
                     strength(1.0f, 6.0f).
                     noOcclusion()
+            ));
+
+    /**
+     * 自动打包机（auto_packager）：完整继承 {@code create:packager} 的打包逻辑（从 FACING 反方向贴着的容器取货打包、
+     * 告示牌地址、青蛙港拉包、库存联动、扳手、蓝图、比较器输出），唯一差别是 <b>不接收红石信号</b>，
+     * 改为按可调间隔自动打包（间隔靠长按右键数值面板调整，面板与 create:pulse_timer 一致）。
+     * <p>
+     * 属性照抄 Create 的 {@code BuilderTransformers.packager()}：软金属基础属性（3.0 / 6.0 + 需镐）
+     * + TERRACOTTA_BLUE 地图色 + NETHERITE_BLOCK 音效 + noOcclusion + 不导电（isRedstoneConductor → false）。
+     * 外观直接复用 Create 的 packager 模型与贴图（blockstate 见 assets/ccpe/blockstates/auto_packager.json）。
+     * 见 {@link AutoPackagerBlock} / {@link AutoPackagerBlockEntity}。
+     */
+    public static final DeferredBlock<AutoPackagerBlock> auto_packager =
+            registerBlocks("auto_packager", () -> new AutoPackagerBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(3.0f, 6.0f).
+                    requiresCorrectToolForDrops().
+                    mapColor(MapColor.TERRACOTTA_BLUE).
+                    noOcclusion().
+                    isRedstoneConductor((state, level, pos) -> false)
             ));
 
     private static <T extends Block> DeferredBlock<T> registerBlocks(String name, Supplier<T> block) {
