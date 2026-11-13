@@ -28,7 +28,8 @@ import java.util.Map;
  * <pre>
  * {
  *   "fluid": "minecraft:water",   // 流体 id（唯一键）
- *   "efficiency": 1.0             // 冷却效率倍率（省略时默认 1.0，必须 > 0）
+ *   "efficiency": 1.0,            // 冷却效率倍率（默认 1.0，必须 > 0）：直接乘进水冷散热贡献
+ *   "boilMultiplier": 1.0         // 沸腾失液倍率（可选，默认 1.0，必须 > 0）：越大越容易在高热区间蒸发损失
  * }
  * </pre>
  * <b>双重作用</b>：
@@ -55,8 +56,8 @@ public class EngineCoolants {
 
     private static final Map<ResourceLocation, Entry> COOLANTS = new HashMap<>();
 
-    /** 单条冷却液：流体 id + 冷却效率倍率 */
-    public record Entry(ResourceLocation fluid, float efficiency) {}
+    /** 单条冷却液：流体 id + 冷却效率倍率 + 沸腾失液倍率 */
+    public record Entry(ResourceLocation fluid, float efficiency, float boilMultiplier) {}
 
     public static void registerAddReloadListener(AddReloadListenerEvent event) {
         event.addListener(new ReloadListener());
@@ -88,6 +89,12 @@ public class EngineCoolants {
         return entry == null ? 0f : entry.efficiency();
     }
 
+    /** 沸腾失液倍率（P9）；表外流体返回 1.0 */
+    public static float boilMultiplierOf(FluidStack stack) {
+        Entry entry = get(stack);
+        return entry == null ? 1f : entry.boilMultiplier();
+    }
+
     /** 已加载冷却液数量（调试用） */
     public static int size() {
         return COOLANTS.size();
@@ -113,12 +120,18 @@ public class EngineCoolants {
                     JsonObject json = e.getValue().getAsJsonObject();
                     ResourceLocation fluid = ResourceLocation.parse(json.get("fluid").getAsString());
                     float efficiency = json.has("efficiency") ? json.get("efficiency").getAsFloat() : 1f;
+                    float boilMultiplier = json.has("boilMultiplier") ? json.get("boilMultiplier").getAsFloat() : 1f;
                     if (!Float.isFinite(efficiency) || efficiency <= 0f) {
                         LOGGER.error("Ignoring coolant {}: efficiency must be a positive number (got {})",
                                 e.getKey(), efficiency);
                         continue;
                     }
-                    if (parsed.put(fluid, new Entry(fluid, efficiency)) != null)
+                    if (!Float.isFinite(boilMultiplier) || boilMultiplier <= 0f) {
+                        LOGGER.error("Ignoring coolant {}: boilMultiplier must be a positive number (got {})",
+                                e.getKey(), boilMultiplier);
+                        continue;
+                    }
+                    if (parsed.put(fluid, new Entry(fluid, efficiency, boilMultiplier)) != null)
                         LOGGER.warn("Duplicate coolant entry for fluid {} - file {} overrides it", fluid, e.getKey());
                 } catch (Exception ex) {
                     LOGGER.error("Failed to parse coolant {}", e.getKey(), ex);

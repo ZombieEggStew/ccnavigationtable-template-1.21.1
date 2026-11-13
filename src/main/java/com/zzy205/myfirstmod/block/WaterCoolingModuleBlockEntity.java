@@ -100,7 +100,31 @@ public class WaterCoolingModuleBlockEntity extends BlockEntity implements IHaveG
                                 .withStyle(ChatFormatting.AQUA)
                         : Component.translatable("tooltip.ccpe.water_cooling_module.efficiency_none")
                                 .withStyle(ChatFormatting.DARK_GRAY)));
+
+        // P9 散热行：本模块的散热贡献（模块口径 = K_WATER × min(液量/COOLANT_FULL, 1) × 冷却液效率）——
+        // 引擎侧的回路开度（Lua setWaterCooling）在核心上，本模块不感知，故此处不含开度。
+        final float power = EngineCoreBlockEntity.K_WATER * coolantFill() * Math.max(0f, efficiency);
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.water_cooling_module.cooling")
+                        .withStyle(ChatFormatting.GRAY))
+                .append(power > 0f
+                        ? Component.literal(String.format(Locale.ROOT, "+%.2f", power))
+                                .withStyle(ChatFormatting.AQUA)
+                        : Component.translatable("tooltip.ccpe.water_cooling_module.cooling_none")
+                                .withStyle(ChatFormatting.DARK_GRAY))
+                .append(power > 0f && coolantFill() < 1f
+                        ? Component.translatable("tooltip.ccpe.water_cooling_module.cooling_low")
+                                .withStyle(ChatFormatting.DARK_GRAY)
+                        : Component.empty()));
         return true;
+    }
+
+    /** 冷却液「满效比例」（0~1）：≥ {@link EngineCoreBlockEntity#COOLANT_FULL} 满效，之下线性衰减到 0（玩家定稿） */
+    public float coolantFill() {
+        final int amount = tank.getFluidAmount();
+        if (amount <= 0)
+            return 0f;
+        return Math.min(1f, amount / EngineCoreBlockEntity.COOLANT_FULL);
     }
 
     // ── NBT（持久化 + 客户端同步：goggle tooltip 在客户端读 TankContent） ──

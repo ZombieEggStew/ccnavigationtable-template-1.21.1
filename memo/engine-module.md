@@ -15,6 +15,7 @@
 | `fluid_combustion_chamber`（流体燃烧室） | 烧 datapack 流体燃料，**每室 8192 SU**（×燃料 stress 倍率） |
 | `steam_power_chamber`（蒸汽动力室） | 烧水 + 燃料产生蒸汽，**每室 4096 SU**；简单稳定、永不过热；燃料箱固体燃料并行燃烧 + 余热运转 |
 | `cooling_air_duct`（冷却气道） | 散热（计入 K_DUCT）+ 风门数值消费（setCooling 无门控纯存值）；**setMixture 无门控（纯存值，仅流体消费）** |
+| `water_cooling_module`（水冷模块） | 8000mb 单槽**冷却液**（只收 `coolant/*.json` 表内流体）+ 散热（计入 K_WATER，**不吃冲压/气压**）+ 200~220°C 缓慢沸腾失液；`setWaterCooling` 回路开度 |
 
 **两种引擎对照（wiki 用）**：
 
@@ -206,11 +207,14 @@ heatLoad        = max(load, IDLE_LOAD_FLOOR=0.2)                     // 流体�
 
 ```
 Q_heat   = Σ运行室 × load × 燃料.heat × heatFactor(m_eff) × 类型基础热      // P8：load 替代原 efficiency
-K_total  = (K_CORE×length + K_AMB×N + K_DUCT×D×风门) × ram(speed) × f(pressure)
+K_air    = (K_CORE×length + K_AMB×(running?运行室数:0) + K_DUCT×D×风门) × ram(speed) × f(pressure)
+K_water  = K_WATER × Σ_模块 min(液量/4000, 1) × 冷却液效率 × 回路开度        // P9：不吃 ram、不吃 f(pressure)
+K_total  = K_air + K_water
 T_amb    = 地狱维度（the_nether）恒 155℃、末地维度（the_end）恒 0℃，均全高度、与高度无关；其余维度分段线性：Y≤63 → 20℃；63→200（云层）20→0℃；200→320（世界顶）0→−40℃；≥320 恒 −40℃
 T'       = (Q_heat − K_total×(T − T_amb)) / C_th
 T       += T'/20；钳制 [T_amb, T_max×1.2]
 overheat = T ≥ 220 → 硬停；resume = T ≤ 200（滞回）
+沸腾失液（P9）：只要 T > 200°C（不看引擎开关）→ 每工作模块每秒掉 0.5×(T−200) mb；常态运行成本 = 引擎开着时每工作模块每 8 秒 1mb（累积器⊇1mb 才真 drain）
 
 ram(speed)：<10 m/s = 1.0，10→30 线性爬升到 2.0
 f(pressure)：pressure^0.8（钳位下限 0.25）
@@ -232,6 +236,10 @@ altitude：运动体取 getSubLevelWorldPos().y，静态取方块 Y
 | PRESSURE_FLOOR | 0.25 | 气压因子下限 |
 | **ENGINE_T_OPT** | **155°C** | 经济目标（引擎固定，不随燃料/油门） |
 | **ENGINE_MIN_WORK_TEMP** | **100°C** | 过冷阈值（引擎固定，与蒸汽暖机门槛同值） |
+| **K_WATER** | **0.33** | 每个水冷模块满效散热（**不进 ram/pressure**）。定值依据：1 个满罐水冷模块把 2 个满载流体室压到 ~150°C（`Q=2×1.0×heat×30=60`、`k=60/130=0.462`、`k_air≈0.13`） |
+| **COOLANT_FULL** | **4000 mb** | 冷却液满效量：≥4000 满效，0~4000 线性衰减，0 mb = 0（P9 玩家定稿） |
+| **COOLANT_RUNTIME_TICKS_PER_MB** | **160 tick（8 秒）** | **常态运行成本**：每工作模块每 8 秒掉 1mb；**引擎开着才计**（停机/过热硬停不耗） |
+| **COOLANT_BOIL_MB_PER_DEGREE_SEC** | **0.5** | **过热沸腾**：**只要 T>200°C** 每工作模块每秒掉 `0.5×(T−200)×ΣboilMultiplier` mb（210°C≈5mb/s、219°C≈9.5mb/s）；**不看引擎开关**（硬停后余热继续烧） |
 
 **实现要点**：温度存 controller NBT 持久化；过载与过热独立；**tooltip 同步 P7+ 优化（方案 A+B+D）**——事件差量 + 温度 ≥1°C 门控 + 慢字段 20 tick（1Hz）心跳，稳态包量降到 1/20 以下；经济/过冷/油耗系数客户端按公式现算（`economyFactor()/coldFactor()/fuelFactor()`），蒸汽倒计时客户端线性外推（`steamBurnTicksDisplay()`）；客户端趋势外推显示温度。
 
@@ -279,6 +287,27 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 - `SensorSystemAPI.evaluatePressure(y)` 镜像同一条公式（锚点间三次 Hermite）作用在静态曲线快照上（Lua 需 mainThread=false 零 Level 访问）。
 - 主世界默认锚点：(−38,1.5)/(63,1.0)/(263,0.4493)/(280,0.4198)/(320,0)；Y≥320 为 0。
 - 引擎侧：`getPressureForEngine(engineAltitude())`；客户端显示一律用服务端同步值。
+
+---
+
+### 7.10 水冷模块（P9，`ccpe:water_cooling_module`）
+
+**定位**：低速 / 静态 / 高空引擎的散热解——风道在这三种场景最弱（冲压无增益、气压被砍），水冷恰好**不吃冲压也不吃气压**（液体回路不看空气）。
+
+| 项 | 规则 |
+|---|---|
+| 储罐 | 8000mb 单槽（`WaterCoolingModuleBlockEntity`，照 create:fluid_tank：FluidHandler capability + 手持容器右键 + `containedFluidTooltip`） |
+| 只收冷却液 | `FluidTank` validator = `EngineCoolants#isCoolant`（数据包 `coolant/*.json` 表）；管道/泵与手持容器两条途径都自动被拦 |
+| 归属 | 与冷却气道同口径：贴在**核心成员 ∪ 燃烧室**上即计入（`seen` 去重），无 FACING 归属限制（不是燃烧室） |
+| 散热 | `k_water = K_WATER(0.33) × Σ min(液量/4000, 1) × 冷却液效率 × 回路开度`，**加在 kTotal 的 ram/pressure 括号外**；**蒸汽引擎完全不参与**（闭式锅炉自调节，水冷对它无效） |
+| 液量曲线 | ≥4000mb 满效；0~4000 线性衰减；0 = 0（**平滑、无门槛抖动**） |
+| 常态运行成本 | **引擎开着**时：每工作模块每 **8 秒掉 1mb**（满罐 ≈ 17.8 小时）；停机/过热硬停不耗 |
+| 过热沸腾 | **只要 T > 200°C**（不看引擎开关）：每工作模块每秒掉 `0.5 × (T − 200) × Σ boilMultiplier` mb（210°C≈5mb/s、219°C≈9.5mb/s）→ 与温度成正比，200°C 整点速率为 0（无边界抖动）；过热硬停后靠余热继续烧，冷却液越少散热越弱 → 掉得更快（正反馈） |
+| 回路开度 | Lua `setWaterCooling(0~1)`（默认 1.0）：只缩放 k_water，0 = 关闭（既不散热也不沸腾）；纯存值无门控 |
+| 客户端 | 散热贡献/工作模块数/冷却液总量/开度**全部服务端同步**（`WaterPower`/`WaterModules`/`CoolantAmount`/`WaterCoolingStrength`/`WaterModule`），客户端不重算（踩坑 10） |
+| 引擎源扫描 | `rebuildSources` 跳过水冷模块（冷却液不是锅炉水/燃料；`levitite_blend` 同时是 engine_fuel 条目，必须排除） |
+
+**已否掉的方案**（用户定稿）：失液下限烧到 0 / 「T>190 微量失液」这种额外常态成本（常态成本已定为 10mb/游戏小时）/ 每引擎模块数上限——都按「先不加，实测再说」。
 
 ---
 
@@ -352,6 +381,11 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 | `hasAirDuct()` | false | boolean | 是否装冷却气道（信息用；setMixture/setCooling 均无门控，装风道时风门值才被 K_DUCT 分量消费） |
 | `getActiveFuel()` | false | table | 活动燃料：流体 `{type="fluid", fluid, optimalTemp=155}`；蒸汽 `{type="steam", optimalTemp=155}`；停机 `{type="none"}` |
 | `getCooling()` / `setCooling(0~1)` | false/true | boolean | 风门：只缩 K_DUCT 分量，只能降；**无门控（纯存值，仅装冷却气道时被消费）** |
+| `hasWaterCooling()` | false | boolean | 是否装了水冷模块（P9） |
+| `getWaterCooling()` / `setWaterCooling(0~1)` | false/true | number/boolean | 水冷**回路开度**（默认 1.0）：只缩 k_water；**0 = 关闭回路（不散热、也不沸腾失液）**；无门控纯存值 |
+| `getWaterCoolingPower()` | false | number | 当前有效水冷散热 k_water（含液量比例/效率/开度；不含冲压/气压） |
+| `getWaterCoolingModules()` | false | number | 工作中的水冷模块数（液量 > 0） |
+| `getCoolantAmount()` | false | number | 冷却液总量 mb（工作模块合计；服务端同步值） |
 | `isWarmingUp()` | false | boolean | 蒸汽暖机中（T<100°C 只烧不发电） |
 
 **运行条件**（全满足才发电）：≥1 运行燃烧室 && 效率>0 && 未过热（仅流体）&& 蒸汽 T≥100°C 且水可用（**过载不停机**，方案 C 对齐 Create）。停机原因：缺燃料/缺水、油门 0、流体过热（滞回 T≤200 恢复）、蒸汽暖机未完成。
@@ -388,6 +422,17 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 温度：XX.X°C
 冷却：80%                    ← = setCooling 风门百分比（coolingStrength；<100% 已关小保热）
 ```
+
+**水冷模块**（悬停 water_cooling_module；自身 tooltip，**不代理引擎核心**）：
+
+```
+流体容器                     ← create:fluid_tank 同款（流体名 + 量/8000mb，空罐显示总容量）
+  水 8000 mB / 8000 mB
+冷却效率：×1.00              ← coolant/*.json 的 efficiency（服务端算好随包同步）
+散热：+0.33                  ← K_WATER × min(液量/4000,1) × 效率；<4000mb 追加「液量不足」提示
+```
+
+**引擎核心新增行（P9，装了水冷模块时显示）**：`水冷散热：+0.33`（无冷却液/回路关闭/蒸汽引擎 → 灰「无」），模块清单加 `- 水冷模块 xN`。
 
 **流体燃烧室**（全量引擎状态）：
 
@@ -429,7 +474,19 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 - **P2.5 删 priority**：多个燃料可用时按源列表查找顺序选第一个（引擎扫邻居储罐的顺序，见 `EngineCoreBlockEntity#rebuildSources`）；旧数据包 priority 字段忽略不读。
 - **无温度字段**——过热 220 / 过冷 100 / 经济目标 155 全部引擎固定。
 
-**蒸汽引擎燃料**：不加 datapack——**流体燃料** = 桶物品原版熔炉燃烧时长 >0 即可用（熔岩桶 20000 tick；添加方式 = 按原版给桶物品设置熔炉燃料，与熔炉共享同一套燃料注册）；**固体燃料** = 任意物品原版 `burnTime > 0`（煤炭 1600 tick 等），存入周围 `quick_fill_fuel_vault` 燃料箱由引擎自动抽取（并行燃烧、流体优先）。
+**蒸汽引擎燃料**：不加 datapack——**流体燃料** = 桶物品原版熔炉燃烧时长 >0 即可用（熔岩桶 20000 tick；添加方式 = 按原版给桶物品设置熔炉燃烧时间，与熔炉共享同一套燃料注册）；**固体燃料** = 任意物品原版 `burnTime > 0`（煤炭 1600 tick 等），存入周围 `quick_fill_fuel_vault` 燃料箱由引擎自动抽取（并行燃烧、流体优先）。
+
+**水冷模块冷却液**（P9，datapack，`data/<ns>/coolant/*.json`，`/reload` 热加载；目录名与 `engine_fuel` 同构）：
+
+```json
+{ "fluid": "minecraft:water", "efficiency": 1.0, "boilMultiplier": 1.0 }
+```
+
+- `fluid`：流体 id（唯一键）；**表内流体 = 水冷模块的填充白名单**（表外流体管道/手持容器一律装不进）。
+- `efficiency`：冷却效率倍率（默认 1.0，必须 > 0）——直接乘进 k_water。
+- `boilMultiplier`：沸腾失液倍率（可选，默认 1.0，必须 > 0）——越大越容易在 200~220°C 蒸发损失。
+- 自带条目：`minecraft:water`（1.0）、`aeronautics:levitite_blend`（1.5，namespace 是 `aeronautics` 不是 `simulated`）。
+- 表与流体注册表解耦：可写未安装 mod 的流体 id，加载时只在日志提示，不崩。
 
 ---
 
