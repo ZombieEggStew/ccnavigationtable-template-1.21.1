@@ -35,6 +35,12 @@ local e = peripheral.wrap("front")
 | `getActiveFuel()` | false | table | Active fuel: fluid `{type="fluid", fluid=<id>, optimalTemp=155}`; steam `{type="steam", optimalTemp=155}`; stopped `{type="none"}` |
 | `getCooling()` | false | number | Cooling shutter 0..1 (default 1.0) |
 | `setCooling(0..1)` | true | boolean | Shutter: only scales the duct dissipation component, can only reduce; **no gating** (pure storage, consumed only with a duct installed) |
+| `hasWaterCooling()` | false | boolean | Whether a water cooling module is installed (see [Water Cooling Module](water-cooling-module.md)) |
+| `getWaterCooling()` | false | number | Water loop **opening** 0..1 (default 1.0) |
+| `setWaterCooling(0~1)` | true | boolean | Water loop opening: only scales the water `k_water` component; **0 = closed loop** (no cooling, and no coolant evaporation); **no gating** (pure storage, no effect without a module) |
+| `getWaterCoolingPower()` | false | number | Current effective water dissipation `k_water` (amount ratio × coolant efficiency × opening; immune to ram air and pressure) |
+| `getWaterCoolingModules()` | false | number | Number of working water cooling modules (coolant amount > 0) |
+| `getCoolantAmount()` | false | number | Total coolant in mB (sum over working modules; server-synced value) |
 | `isWarmingUp()` | false | boolean | Steam warm-up in progress (T<100°C burns without generating) |
 
 ## Status tiers (fluid engine, via `getTemperature()`)

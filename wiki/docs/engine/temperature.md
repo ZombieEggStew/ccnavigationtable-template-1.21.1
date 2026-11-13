@@ -11,10 +11,12 @@ heat gain      Q_heat = Σ running chambers × heat load × fuel.heat × BASE_HE
                heat load = max(actual network load, idle floor 0.2)
 heat loss      P_loss = K_total × (T − T_amb)
                  K_total = (K_CORE×length + K_AMB×running chambers + K_DUCT×ducts×shutter) × ram(speed) × f(pressure)
+                                + k_water        <- water cooling module: no ram air, no pressure
 
 integration    T += (Q_heat − P_loss) / C_th / 20      (per tick; C_th = C_TH_BASE × length)
 clamp          T in [T_amb, OVERHEAT_TEMP × 1.2]
 overheat       T ≥ 220°C → hard stop; resume at T ≤ 200°C (hysteresis)
+coolant        running: 1 mB per 8 s per working module; boiling: whenever T > 200°C, 0.5×(T−200) mB/s per module
 ```
 
 The engine reaches equilibrium when **heat gain = heat loss** — every change in **load**, altitude or cooling moves the equilibrium temperature. The throttle only affects it indirectly, by raising the machines' stress demand (and therefore the load).
@@ -71,7 +73,7 @@ Formula: `T_eq = T_amb + running chambers × 30 × heat load / k_total`.
 ## Heat dissipation (K_total)
 
 ```
-K_total = (K_CORE×length + K_AMB×running chambers + K_DUCT×ducts×shutter) × ram(speed) × f(pressure)
+K_total = (K_CORE×length + K_AMB×running chambers + K_DUCT×ducts×shutter) × ram(speed) × f(pressure) + k_water
 ```
 
 | Term | Meaning |
@@ -82,6 +84,19 @@ K_total = (K_CORE×length + K_AMB×running chambers + K_DUCT×ducts×shutter) ×
 | `shutter` | `coolingStrength` (0..1, default 1.0) — only shrinks the duct component (real cowl flaps). |
 | `ram(speed)` | **Ram-air cooling**: 1.0 below 10 m/s, linear ramp to **×2.0 at 30 m/s** — flying fast cools the engine for free. Static (non-physics) blocks = 1.0. |
 | `f(pressure)` | **Pressure factor**: `pressure^0.8` (clamped to a floor of 0.25). At altitude the air is thin → heat transfer is worse → **cooling is worse at altitude**. |
+| `k_water` | **Water cooling module contribution** (below), **added outside the brackets** — immune to ram air and pressure. |
+
+### Water cooling module (liquid cooling)
+
+```
+k_water = K_WATER(0.33) × Σ_modules [ min(amount / 4000, 1) × coolant efficiency ] × loop opening
+```
+
+- **Immune to ram air and pressure**: a liquid loop does not care about the air — so it backs up exactly the three cases where ducts are weakest (static, low speed, high altitude).
+- **Amount curve**: full effect at ≥ 4000 mB; linear falloff below 4000 mB; 0 at 0 mB (smooth, no threshold flicker).
+- **Loop opening**: Lua `setWaterCooling(0..1)` (default 1.0) only scales `k_water`; 0 = closed loop (and no evaporation either).
+- **Fluid engines only**: a steam engine pins its temperature at `BOILER_T_OPT`, so water cooling has no effect on it and consumes no coolant.
+- Full details on the [Water Cooling Module](water-cooling-module.md) page.
 
 ## Ambient temperature (altitude → temperature)
 

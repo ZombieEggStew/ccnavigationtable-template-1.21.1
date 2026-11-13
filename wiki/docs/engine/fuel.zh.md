@@ -40,6 +40,22 @@
 
 ---
 
+## 冷却液（水冷模块，不是燃料）
+
+[水冷模块](water-cooling-module.zh.md)用的是独立的数据包表 `data/<命名空间>/coolant/*.json`（同样是 `/reload` 热加载），与燃料互不相通：
+
+```json
+{ "fluid": "minecraft:water", "efficiency": 1.0, "boilMultiplier": 1.0 }
+```
+
+- `fluid`：冷却液 id——**表内流体 = 水冷模块的填充白名单**（表外流体装不进去）。
+- `efficiency`：冷却效率倍率（默认 1.0），直接乘进水冷散热。
+- `boilMultiplier`：沸腾失液倍率（默认 1.0），200°C 以上蒸发速度的倍率。
+- 自带 `minecraft:water`（1.0）与 `aeronautics:levitite_blend`（1.5）。
+- **冷却液不会被引擎当燃料/锅炉水**：controller 的源扫描跳过水冷模块，所以装水的水冷模块不会被蒸汽引擎抽走、装 levitite blend 也不会被流体燃烧室烧掉。
+
+---
+
 ## 快速装填流体储罐 {#quick-fill-fluid-tank}
 
 ![quick_fill_fluid_tank](../img/quick_fill_fluid_tank.png)

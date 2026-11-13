@@ -35,6 +35,12 @@ local e = peripheral.wrap("front")
 | `getActiveFuel()` | false | table | 活动燃料：流体 `{type="fluid", fluid=<id>, optimalTemp=155}`；蒸汽 `{type="steam", optimalTemp=155}`；停机 `{type="none"}` |
 | `getCooling()` | false | number | 冷却风门 0..1（默认 1.0） |
 | `setCooling(0~1)` | true | boolean | 风门：只缩 K_DUCT 风道散热分量，只能降；**无门控**（纯存值，仅装冷却气道时被消费） |
+| `hasWaterCooling()` | false | boolean | 是否装了水冷模块（见[水冷模块](water-cooling-module.zh.md)） |
+| `getWaterCooling()` | false | number | 水冷**回路开度** 0..1（默认 1.0） |
+| `setWaterCooling(0~1)` | true | boolean | 水冷回路开度：只缩 `k_water` 水冷散热分量；**0 = 关闭回路**（既不散热、也不蒸发失液）；**无门控**（纯存值，没装模块存了不生效） |
+| `getWaterCoolingPower()` | false | number | 当前有效水冷散热 `k_water`（液量比例 × 冷却液效率 × 回路开度；不吃冲压/气压） |
+| `getWaterCoolingModules()` | false | number | 工作中的水冷模块数（冷却液量 > 0） |
+| `getCoolantAmount()` | false | number | 冷却液总量 mb（工作模块合计；服务端同步值） |
 | `isWarmingUp()` | false | boolean | 蒸汽暖机中（T<100°C 只烧不发电） |
 
 ## 状态档位（流体引擎，按 `getTemperature()`）

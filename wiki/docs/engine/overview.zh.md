@@ -17,6 +17,7 @@
 | [流体燃烧室](fluid-combustion-chamber.zh.md) | `ccpe:fluid_combustion_chamber` | 烧 **其他模组的流体燃料**；**每室 8192 SU**（× 燃料 stress 倍率） |
 | [蒸汽动力室](steam-power-chamber.zh.md) | `ccpe:steam_power_chamber` | 烧 **水 + 燃料**产生蒸汽；**每室 4096 SU**；简单稳定、永不过热 |
 | [冷却气道](cooling-air-duct.zh.md) | `ccpe:cooling_air_duct` | 散热鳍片 + 可调风门 |
+| [水冷模块](water-cooling-module.zh.md) | `ccpe:water_cooling_module` | 8000mb 冷却液储罐 + 强散热（**不吃冲压/气压**）；平时耗冷却液、过热时加速蒸发 |
 
 引擎供料辅助方块：
 
@@ -58,6 +59,7 @@
 - [流体燃烧室](fluid-combustion-chamber.zh.md) — datapack 燃料、混合比与经济玩法
 - [蒸汽动力室](steam-power-chamber.zh.md) — 水 + 燃料、暖机、余热运转
 - [冷却气道](cooling-air-duct.zh.md) — 散热鳍片与风门
+- [水冷模块](water-cooling-module.zh.md) — 8000mb 冷却液、静态/低速/高空散热、冷却液消耗
 - [温度与冷却模型](temperature.zh.md) — 发热与散热如何计算（高度→温度与气压）
 - [燃料与燃料源](fuel.zh.md) — datapack 燃料、原版燃料、快速装填储罐/燃料箱
 - [Lua API](lua-api.zh.md) — `ccpe:engine` 外设参考

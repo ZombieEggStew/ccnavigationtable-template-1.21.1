@@ -40,6 +40,22 @@ No datapack needed — vanilla furnace rules apply:
 
 ---
 
+## Coolants (water cooling module — not fuel)
+
+The [Water Cooling Module](water-cooling-module.md) uses a separate datapack table, `data/<namespace>/coolant/*.json` (also hot-reloaded with `/reload`), completely independent of fuel:
+
+```json
+{ "fluid": "minecraft:water", "efficiency": 1.0, "boilMultiplier": 1.0 }
+```
+
+- `fluid`: coolant id — **the table is the module's filling whitelist** (anything else cannot be inserted).
+- `efficiency`: cooling efficiency multiplier (default 1.0), multiplied straight into the water dissipation.
+- `boilMultiplier`: boil-off multiplier (default 1.0), scales evaporation above 200°C.
+- Bundled: `minecraft:water` (1.0) and `aeronautics:levitite_blend` (1.5).
+- **Coolant is never treated as fuel or boiler water**: the controller's source scan skips water cooling modules, so a water-filled module is not drained by a steam engine and a levitite-blend-filled one is not burned by a fluid combustion chamber.
+
+---
+
 ## Quick-Fill Fluid Tank
 
 ![quick_fill_fluid_tank](../img/quick_fill_fluid_tank.png)

@@ -18,6 +18,7 @@ This mod's **Modular Engine System** offers a new solution: a modular multi-bloc
 | [Fluid Combustion Chamber](fluid-combustion-chamber.md) | `ccpe:fluid_combustion_chamber` | Burns **fluid fuels from other mods**; **8192 SU per chamber** (× the fuel's stress multiplier) |
 | [Steam Power Chamber](steam-power-chamber.md) | `ccpe:steam_power_chamber` | Burns **water + fuel** to produce steam; **4096 SU per chamber**; simple and stable, never overheats |
 | [Cooling Air Duct](cooling-air-duct.md) | `ccpe:cooling_air_duct` | Cooling fins + adjustable shutter |
+| [Water Cooling Module](water-cooling-module.md) | `ccpe:water_cooling_module` | 8000 mB coolant tank + strong cooling (**no ram-air, no pressure**); costs coolant while running, evaporates faster when hot |
 
 Engine fuel-supply helper blocks:
 
@@ -59,6 +60,7 @@ The system decouples into three quantities that never interfere:
 - [Fluid Combustion Chamber](fluid-combustion-chamber.md) — datapack fuel, mixture and economy gameplay
 - [Steam Power Chamber](steam-power-chamber.md) — water + fuel, warm-up, residual-heat operation
 - [Cooling Air Duct](cooling-air-duct.md) — cooling fins and the shutter
+- [Water Cooling Module](water-cooling-module.md) — 8000 mB coolant, static/low-speed/high-altitude cooling, coolant consumption
 - [Temperature & Cooling Model](temperature.md) — how heat is generated and dissipated (altitude → temperature & pressure)
 - [Fuel & Fuel Sources](fuel.md) — datapack fuel, vanilla fuel, quick-fill tank / fuel vault
 - [Lua API](lua-api.md) — the `ccpe:engine` peripheral reference
