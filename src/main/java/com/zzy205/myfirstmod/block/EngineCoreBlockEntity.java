@@ -45,6 +45,7 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -417,8 +418,14 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 冷却液总量（mb，工作模块合计；同步 Goggle/Lua） */
     protected float coolantAmount = 0f;
 
-    /** 冷却液消耗累积器（mb）：⊇1 才真 drain（模块 BE 每次内容变化都会发包，逐 tick 抽会产生大量小包） */
-    protected double coolantDebt = 0f;
+    /**
+     * <b>逐模块</b>冷却液消耗累积器（mb，键 = 水冷模块方块坐标）：每个模块只攒自己的欠账、只抽<b>自己的</b>罐，
+     * 攒满 1mb 才真 drain（模块 BE 每次内容变化都会发包，逐 tick 抽会产生大量小包）。
+     * 旧版是「整机一个累积器 + 从列表第一个模块抽到够」——第一个罐 8000mb 永远抽够，其余模块一滴不掉，
+     * 多模块时看起来只有第一个在工作（本次修正的就是这一点）。
+     * <b>transient，不落盘</b>（拆模块 / 回路关闭 / 蒸汽引擎 → 清空）。
+     */
+    protected final Map<BlockPos, Double> coolantDebtByPos = new HashMap<>();
 
     /** 沸腾权重的模块合计（Σ 各工作模块冷却液的 {@code boilMultiplier}；服务端 tick 算） */
     protected float coolantBoilWeight = 0f;
@@ -814,7 +821,29 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             coolingDucts += scanChamberNeighbors(seen, neighbors, waterModules, chamber);
         for (BlockPos chamber : steamChambers)
             coolingDucts += scanChamberNeighbors(seen, neighbors, waterModules, chamber);
+        // 水冷模块<b>链式扩散</b>：上面收集到的是「贴着核心成员 ∪ 燃烧室」的种子，再沿相邻的水冷模块扩散——
+        // 于是「核心四周堆一排散热器」（第二个贴第一个）同样计入。只扩散水冷模块本身，<b>不并入 neighbors</b>
+        // （冷却液不是引擎水源/燃料，见 rebuildSources 的排除）。
+        expandWaterModuleChain(seen, waterModules);
         return new ModuleScan(fluidChambers, steamChambers, neighbors, coolingDucts, waterModules);
+    }
+
+    /**
+     * 水冷模块链式扩散（广度优先，就地扩 {@code waterModules}）：从种子（贴核心成员 ∪ 贴燃烧室）出发，
+     * 6 邻居里凡是水冷模块且未见过就继续计入并排队，直到整条散热器阵列扫完。
+     * <p>
+     * 用「按索引遍历同一个 List」代替显式队列：{@code waterModules} 会在遍历中变长，
+     * {@code for (int i = 0; i < waterModules.size(); i++)} 天然就是 BFS 队列（见 {@link #scanModule}）。
+     */
+    private void expandWaterModuleChain(Set<BlockPos> seen, List<BlockPos> waterModules) {
+        for (int i = 0; i < waterModules.size(); i++) {
+            BlockPos module = waterModules.get(i);
+            for (Direction dir : Direction.values()) {
+                BlockPos neighbor = module.relative(dir);
+                if (level.getBlockState(neighbor).is(MyModBlocks.water_cooling_module.get()) && seen.add(neighbor))
+                    waterModules.add(neighbor);
+            }
+        }
     }
 
     private void addNeighbor(Set<BlockPos> seen, List<BlockPos> list, BlockPos pos) {
@@ -1234,6 +1263,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * waterCoolingPower  = Σ 模块贡献_i × waterCoolingStrength（回路开度；蒸汽引擎强制 0）
      * coolantBoilWeight  = Σ boilMultiplier_i（过热沸腾的权重合计）
      * </pre>
+     * <b>多模块并行</b>：每个模块各算各的贡献再<b>求和</b>（液量/效率/沸腾都按模块自己的罐与冷却液算），
+     * 装 N 个满罐模块 = N 份散热；模块集合由 {@code scanModule} 的<b>链式扫描</b>给出
+     * （贴核心成员 ∪ 贴燃烧室的是种子，贴着另一个水冷模块的也计入）。
      * <b>不吃冲压/气压</b>（与风道相反）：所以在 kTotal 里加在 ram/pressure 括号<b>之外</b>。
      * <strong>蒸汽引擎完全忽略水冷模块</strong>（闭式锅炉温度自调节，散热项不参与）——温度不管，也不消耗冷却液。
      * 客户端 tick 同样会跑，但这里直接 return——客户端一律读同步值（踩坑 10）。
@@ -1281,59 +1313,71 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
-     * 冷却液消耗结算（<b>仅服务端</b>，在温度更新之后调用；两种消耗共用累积器）：
+     * 冷却液消耗结算（<b>仅服务端</b>，在温度更新之后调用；<b>逐模块独立计账</b>）：
      * <ol>
      *   <li><b>常态运行成本</b>：<b>引擎开着</b>时，每工作模块每 {@link #COOLANT_RUNTIME_TICKS_PER_MB} tick（8 秒）掉 1mb
      *       ——停机（油门 0 / 过热硬停）不耗，语义同「停机不烧油」；</li>
      *   <li><b>过热沸腾</b>：<b>不看引擎开关</b>，只要温度 &gt; {@link #OVERHEAT_RESUME}（200°C），每工作模块每秒再掉
-     *       `{@link #COOLANT_BOIL_MB_PER_DEGREE_SEC} × (T − 200) × Σ boilMultiplier` mb（越热掉越快；过热硬停后继续烧）。</li>
+     *       `{@link #COOLANT_BOIL_MB_PER_DEGREE_SEC} × (T − 200) × 该模块自己的 boilMultiplier` mb
+     *       （越热掉越快；过热硬停后继续烧）。</li>
      * </ol>
-     * 累积器 {@link #coolantDebt} 满 1mb 才真 drain：模块 BE 每次内容变化都会发包，
-     * 逐 tick 抽会变成大量小包（P7+ 同步优化的原则）。蒸汽引擎不消耗（水冷对它无效）；回路关闭（开度 0）同样不消耗。
+     * <b>每个模块只攒自己的欠账、只抽自己的罐</b>（{@link #coolantDebtByPos}）：N 个模块并行工作 → N 个罐按各自
+     * 速率同时掉液。旧版把总成本记进一个整体累积器、再从列表第一个模块抽到够——第一个罐 8000mb 永远抽够，
+     * 其余模块一滴不掉（多模块「只有一个在工作」的根因）。
+     * <p>
+     * 累积器满 1mb 才真 drain：模块 BE 每次内容变化都会发包，逐 tick 抽会变成大量小包（P7+ 同步优化的原则）。
+     * 蒸汽引擎不消耗（水冷对它无效）；回路关闭（开度 0）同样不消耗（此时清空全部欠账，不留跨状态残账）。
      */
     protected void tickCoolantConsumption(ModuleScan scan) {
         if (level == null || level.isClientSide)
             return;
         if (steamEngine || waterCoolingStrength <= 0f || waterCoolingModules <= 0) {
-            coolantDebt = 0f;
+            coolantDebtByPos.clear();
             return;
         }
 
-        double mbPerTick = 0d;
-        // ① 常态运行成本：引擎开着才计
-        if (running)
-            mbPerTick += (double) waterCoolingModules / COOLANT_RUNTIME_TICKS_PER_MB;
-        // ② 过热沸腾：只看温度（不需要引擎开着）；200°C 整点速率为 0 → 无边界抖动
-        if (temperature > OVERHEAT_RESUME)
-            mbPerTick += (double) COOLANT_BOIL_MB_PER_DEGREE_SEC
-                    * (temperature - OVERHEAT_RESUME) * coolantBoilWeight / 20d;
-        if (mbPerTick <= 0d)
-            return;
-
-        coolantDebt += mbPerTick;
-        if (coolantDebt < 1f)
-            return;
-
-        int wanted = Math.min((int) coolantDebt, 256);
-        int drained = 0;
+        // 逐模块：算本模块自己的成本 → 累积到本模块的欠账 → 满 1mb 只抽本模块的罐
         for (BlockPos pos : scan.waterModules()) {
-            if (drained >= wanted)
-                break;
             IFluidHandler handler = fluidHandlerAt(pos);
             if (handler == null || handler.getTanks() < 1)
                 continue;
             FluidStack stack = handler.getFluidInTank(0);
             if (stack.isEmpty())
                 continue;
-            int ask = Math.min(wanted - drained, stack.getAmount());
+            EngineCoolants.Entry coolant = EngineCoolants.get(stack);
+            if (coolant == null)
+                continue; // 表外流体（正常流程进不来，保险）
+            // 空罐/未到满效量下限 = 不工作（与 updateWaterCooling 的 working 口径一致）
+            if (Math.min(1f, stack.getAmount() / COOLANT_FULL) <= 0f)
+                continue;
+
+            double mbPerTick = 0d;
+            // ① 常态运行成本：引擎开着才计（每工作模块固定 1mb / COOLANT_RUNTIME_TICKS_PER_MB）
+            if (running)
+                mbPerTick += 1d / COOLANT_RUNTIME_TICKS_PER_MB;
+            // ② 过热沸腾：只看温度（不需要引擎开着）；按<b>本模块</b>的冷却液沸腾系数；200°C 整点速率为 0 → 无边界抖动
+            if (temperature > OVERHEAT_RESUME)
+                mbPerTick += (double) COOLANT_BOIL_MB_PER_DEGREE_SEC
+                        * (temperature - OVERHEAT_RESUME) * coolant.boilMultiplier() / 20d;
+            if (mbPerTick <= 0d)
+                continue; // 停机且不过热：本 tick 无成本，已有欠账留着下次接着攒
+
+            double debt = coolantDebtByPos.getOrDefault(pos, 0d) + mbPerTick;
+            if (debt < 1d) {
+                coolantDebtByPos.put(pos, debt);
+                continue;
+            }
+
+            int wanted = Math.min((int) debt, 256);
+            int ask = Math.min(wanted, stack.getAmount());
             FluidStack moved = handler.drain(new FluidStack(stack.getFluid(), ask), IFluidHandler.FluidAction.EXECUTE);
-            drained += moved.getAmount();
+            debt -= moved.getAmount();
+            // 欠账钳 [0, 256]：全部抽干时不留无限欠账
+            coolantDebtByPos.put(pos, Math.min(Math.max(debt, 0d), 256d));
         }
-        coolantDebt -= drained;
-        if (coolantDebt < 0f)
-            coolantDebt = 0f;
-        if (coolantDebt > 256f)
-            coolantDebt = 256f; // 全部抽干时不留无限欠账
+
+        // 剪掉已消失（拆除/换方块）的模块欠账，避免残留坐标永远占着
+        coolantDebtByPos.keySet().removeIf(pos -> !scan.waterModules().contains(pos));
     }
 
     /**

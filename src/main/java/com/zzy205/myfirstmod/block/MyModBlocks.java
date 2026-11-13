@@ -205,7 +205,7 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
-    /** 水冷模块（water_cooling_module）：6 向贴附（只有 FACING 一个属性，blockstate 结构照 create:encased_fan，见 WaterCoolingModuleBlock）；低速/静态引擎的散热模块，**当前只做方块接入、无逻辑**（不进引擎模块枚举、无 BE）；整格模型，选择框/碰撞箱用默认整块 */
+    /** 水冷模块（water_cooling_module）：6 向贴附（只有 FACING 一个属性，blockstate 结构照 create:encased_fan，见 WaterCoolingModuleBlock）；低速/静态引擎的散热模块（BE 带 8000mb 单槽冷却液，引擎侧计入 K_WATER 散热并逐模块消耗；模块集合由 core 的 scanModule 链式收集，多模块线性叠加）；整格模型，选择框贴模型、碰撞箱用默认整块 */
     public static final DeferredBlock<WaterCoolingModuleBlock> water_cooling_module =
             registerBlocks("water_cooling_module", () -> new WaterCoolingModuleBlock(BlockBehaviour.Properties.of().
                     sound(SoundType.NETHERITE_BLOCK).

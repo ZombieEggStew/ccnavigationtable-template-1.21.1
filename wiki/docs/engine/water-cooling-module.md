@@ -11,7 +11,7 @@ The key difference from the [Cooling Air Duct](cooling-air-duct.md): water cooli
 - A 6-directional block (6 block states).
 - **Facing follows the player's look direction** (like `create:encased_fan`): placed without sneaking → the cooling face (the plate) faces the player; placed while sneaking → 180° the other way (along the look direction).
 - **Wrench**: right-click = rotate 90° around the clicked face's axis; sneak-right-click = dismantle (drops back into the inventory).
-- **Ownership**: any of the 6 neighbouring cells of an **engine core segment or a chamber** counts towards that engine (same rule as cooling ducts, de-duplicated with `seen`). Several modules add up linearly.
+- **Ownership**: any of the 6 neighbouring cells of an **engine core segment or a chamber** counts towards that engine (same rule as cooling ducts, de-duplicated with `seen`). Those then act as seeds for a **chain expansion** — a module touching **another water cooling module** counts too, so you can stack a whole radiator array around the core. Several modules add up linearly (no cap), each using its own coolant amount and coolant type.
 - The selection box hugs the model (the plate + the body); the collision box is still the full block.
 
 ## Coolant
@@ -71,8 +71,9 @@ Two consumptions exist side by side (computed server-side every tick, actually d
 | Consumption | Trigger | Rate |
 |---|---|---|
 | **Running cost** | **Engine running** (throttle ≠ 0 and not hard-stopped) | **1 mB per 8 seconds per working module** (a full tank ≈ 17.8 hours) |
-| **Overheat boiling** | **Whenever T > 200°C** (from the "about to overheat" band up, **no running required**) | `0.5 × (T − 200)` mB/s per working module — 210°C ≈ 5 mB/s, 219°C ≈ 9.5 mB/s |
+| **Overheat boiling** | **Whenever T > 200°C** (from the "about to overheat" band up, **no running required**) | `0.5 × (T − 200) × its own boilMultiplier` mB/s per working module — 210°C ≈ 5 mB/s, 219°C ≈ 9.5 mB/s |
 
+- **Bookkeeping is per module**: each module accumulates its own debt and is drained from **its own tank** — N modules means N tanks losing coolant at their own rates (never "only the first module drains").
 - Boiling is **proportional to temperature**: the rate is 0 exactly at 200°C (no boundary flicker) and grows as it gets hotter.
 - **It keeps draining after the engine hard-stops**: reaching 220°C hard-stops the engine (no fuel burned), but as long as the temperature stays above 200°C the coolant keeps evaporating — and less coolant → weaker cooling → hotter → faster loss (positive feedback). A full tank lasts ≈ 14 minutes at 219°C and ≈ 27 minutes at 210°C.
 - **Stopped engines pay no running cost**: at throttle 0 only boiling drain applies (same semantics as "a stopped engine burns no fuel").

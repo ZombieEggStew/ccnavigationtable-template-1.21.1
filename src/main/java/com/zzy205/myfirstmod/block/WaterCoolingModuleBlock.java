@@ -43,10 +43,11 @@ import java.util.Map;
  * blockstate 结构照 {@code create:encased_fan}（6 向单模型 + x/y 旋转，无第二属性）。
  * <p>
  * 定位（见 memo/engine-module.md）：低速 / 静态引擎的散热模块，贴着引擎核心（或燃烧室）的外表面摆放。
- * <b>当前进度</b>：方块接入（放置 / 渲染 / 扳手）+ <b>8000mb 单槽冷却液存储</b>
- * （{@link WaterCoolingModuleBlockEntity}，只接受 {@link EngineCoolants} 表内流体）；引擎侧逻辑
- * （模块枚举、散热计数、温度模型消费冷却效率）<b>还没接</b>——不参与
- * {@code EngineCoreBlockEntity#scanModule} 的模块枚举、不计数散热、不代理 goggle。
+ * <b>进度</b>：方块接入（放置 / 渲染 / 扳手）+ <b>8000mb 单槽冷却液存储</b>
+ * （{@link WaterCoolingModuleBlockEntity}，只接受 {@link EngineCoolants} 表内流体）+ 引擎侧散热/消耗
+ * （{@code EngineCoreBlockEntity}：计入 {@code K_WATER} 散热、逐模块消耗冷却液）<b>均已接入</b>；
+ * 模块集合由 {@code EngineCoreBlockEntity#scanModule} 收集（贴核心成员 ∪ 燃烧室的是种子，
+ * 再对相邻的水冷模块做链式扩散 → 可以堆成散热器阵列，多模块散热线性叠加）。
  * <p>
  * 朝向语义：<b>{@code FACING} = 模块朝外的方向</b>（= 模型那块 16×16 薄板的外法线），
  * 即薄板（散热面）朝外、机身与鳍朝里贴住被放置的方块。
