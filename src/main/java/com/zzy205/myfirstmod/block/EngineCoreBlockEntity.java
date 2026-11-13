@@ -272,9 +272,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * <b>这个常数只决定「烧多快」（续航），<u>不</u>决定平台温度</b>：沸腾散热的斜率由
      * {@link #BOIL_COOLING_PER_DEGREE} 单独锁定（{@link #EVAP_LATENT_GAIN} = 两者相除）。所以想缩短/延长
      * 「高温还能撑多久」只改这一个数，平台温度不动。玩家定稿（2026-09）：<b>蒸发维持高温只是紧急方案，不许长时间维持</b>
-     * → 由 0.5 提到 1.5（3 倍）：满罐续航 ≈26 分钟 → ≈9 分钟。
+     * → 由 0.5 提到 3.0（6 倍）：满罐续航 ≈26 分钟 → <b>≈4.3 分钟</b>（210°C 档 ≈31 mb/s）。
      */
-    public static final float COOLANT_BOIL_MB_PER_DEGREE_SEC = 1.5f;
+    public static final float COOLANT_BOIL_MB_PER_DEGREE_SEC = 3.0f;
 
     /**
      * <b>沸腾散热斜率</b>（°C/s 每 °C 过热，**与 kTotal 同量纲**）：直接决定<b>平台温度</b>，不随失液速率变化。
@@ -297,7 +297,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * 必须<b>真烧冷却液</b>才给这份信用：蒸发速率与消耗计账共用同一份数值（{@link #workingCoolantModules}），
      * 不会出现「少烧水多散热」。
      * <p>
-     * 现值 = 1.5 ÷ 1.5 = <b>1.0</b>：相当于只承认 ≈57% 的纯潜热当量（1 mB 水汽化 ≈2.26 kJ ≈1.74 °C/s，
+     * 现值 = 1.5 ÷ 3.0 = <b>0.5</b>：相当于只承认 ≈29% 的纯潜热当量（1 mB 水汽化 ≈2.26 kJ ≈1.74 °C/s，
      * 见下方换算），其余随排放口/排气带走、不回到缸体。这是"缩短续航"的代价所在：每 mB 的有效散热变小了。
      * <pre>
      * 物理当量换算：1 °C/s ≈ 1.3 kW（由「2 满载流体室 = 60 °C/s ↔ 现实 ~80 kW」反推）

@@ -1,4 +1,4 @@
-# Water Cooling Module
+﻿# Water Cooling Module
 
 ![water_cooling_module](../img/water_cooling_module.png)
 
@@ -39,7 +39,7 @@ Once the coolant boils above **200°C**, what escapes really is **heat** (1 mB o
 
 ```
 heat_net = heat − EVAP_LATENT_GAIN × 20 × Σ(boiling mB/tick)
-EVAP_LATENT_GAIN = BOIL_COOLING_PER_DEGREE ÷ COOLANT_BOIL_MB_PER_DEGREE_SEC = 1.5 ÷ 1.5 = 1.0 °C/s per mB/s
+EVAP_LATENT_GAIN = BOIL_COOLING_PER_DEGREE ÷ COOLANT_BOIL_MB_PER_DEGREE_SEC = 1.5 ÷ 3.0 = 0.5 °C/s per mB/s
 (equivalent form: Q_evap = 1.5 × (T − 200), i.e. "1.5 °C/s removed per °C of superheat" — same dimension as k_total)
 ```
 
@@ -53,12 +53,12 @@ EVAP_LATENT_GAIN = BOIL_COOLING_PER_DEGREE ÷ COOLANT_BOIL_MB_PER_DEGREE_SEC = 1
 | | Equilibrium | Boiling drain | Runtime per 8000 mB |
 |---|---|---|---|
 | Without the boiling term | ≈238°C (**repeated 220 hard-stop / 200 restart cycle**) | 0 | — |
-| With it (current value) | **≈210°C (stable)** | ≈15.4 mB/s | ≈8.7 minutes |
+| With it (current value) | **≈210°C (stable)** | ≈30.9 mB/s | ≈4.3 minutes |
 
 !!! note "Plateau temperature and runtime are two separate constants"
     - **`BOIL_COOLING_PER_DEGREE = 1.5`** (°C/s per °C of superheat) **locks the plateau**: `T − 200 = (heat − 180×k_total) / (that value + k_total)`.
-    - **`COOLANT_BOIL_MB_PER_DEGREE_SEC = 1.5`** sets **only how fast the tank empties**: a full tank lasts ≈8.7 minutes.
-    - `EVAP_LATENT_GAIN` = the ratio = **1.0**, i.e. only ≈57% of the pure latent-heat equivalent (≈1.74) is credited — the rest leaves through the vent/exhaust. That is the price of the shorter runtime.
+    - **`COOLANT_BOIL_MB_PER_DEGREE_SEC = 3.0`** sets **only how fast the tank empties**: a full tank lasts ≈4.3 minutes.
+    - `EVAP_LATENT_GAIN` = the ratio = **0.5**, i.e. only ≈29% of the pure latent-heat equivalent (≈1.74) is credited — the rest leaves through the vent/exhaust. That is the price of the shorter runtime.
     - **Design ruling**: boiling-driven high-temperature operation is an **emergency measure, never a long-term mode**. Adjust the drain rate to change the runtime; the plateau will not drift.
     - Hotter fuels (diesel, `heat=1.25`) still push the plateau to ≈225°C and overheat — add another water module or run rich in that case.
 
@@ -93,7 +93,7 @@ Two consumptions exist side by side (computed server-side every tick, actually d
 | Consumption | Trigger | Rate |
 |---|---|---|
 | **Running cost** | **Engine running** (throttle ≠ 0 and not hard-stopped) | **1 mB per 8 seconds per working module** (a full tank ≈ 17.8 hours) |
-| **Overheat boiling** | **Whenever T > 200°C** (from the "about to overheat" band up, **no running required**) | `1.5 × (T − 200) × its own boilMultiplier` mB/s per working module — 210°C ≈ 15 mB/s (a full tank ≈8.7 minutes) |
+| **Overheat boiling** | **Whenever T > 200°C** (from the "about to overheat" band up, **no running required**) | `3.0 × (T − 200) × its own boilMultiplier` mB/s per working module — 210°C ≈ 31 mB/s (a full tank ≈4.3 minutes) |
 
 - **Bookkeeping is per module**: each module accumulates its own debt and is drained from **its own tank** — N modules means N tanks losing coolant at their own rates (never "only the first module drains").
 - Boiling is **proportional to temperature**: the rate is 0 exactly at 200°C (no boundary flicker) and grows as it gets hotter.
