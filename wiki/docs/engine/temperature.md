@@ -7,7 +7,8 @@ The engine temperature is a continuous value computed **every tick on the server
 ## The model at a glance
 
 ```
-heat gain      Q_heat = Σ running chambers × throttle × fuel.heat × BASE_HEAT_FLUID × heatFactor(m_eff)
+heat gain      Q_heat = Σ running chambers × heat load × fuel.heat × BASE_HEAT_FLUID × heatFactor(m_eff)
+               heat load = max(actual network load, idle floor 0.2)
 heat loss      P_loss = K_total × (T − T_amb)
                  K_total = (K_CORE×length + K_AMB×running chambers + K_DUCT×ducts×shutter) × ram(speed) × f(pressure)
 
@@ -16,20 +17,20 @@ clamp          T in [T_amb, OVERHEAT_TEMP × 1.2]
 overheat       T ≥ 220°C → hard stop; resume at T ≤ 200°C (hysteresis)
 ```
 
-The engine reaches equilibrium when **heat gain = heat loss** — every throttle / altitude / cooling change moves the equilibrium temperature.
+The engine reaches equilibrium when **heat gain = heat loss** — every change in **load**, altitude or cooling moves the equilibrium temperature. The throttle only affects it indirectly, by raising the machines' stress demand (and therefore the load).
 
 ## Heat generation (Q_heat)
 
 Only running fluid chambers generate heat, and only while the engine is running and not overheated:
 
 ```
-Q_heat = running chambers × throttle × fuel.heat × BASE_HEAT_FLUID(30) × heatFactor(m_eff)
+Q_heat = running chambers × heat load × fuel.heat × BASE_HEAT_FLUID(30) × heatFactor(m_eff)
 ```
 
 | Term | Meaning |
 |---|---|
 | `running chambers` | number of burning fluid combustion chambers |
-| `throttle` | 0..1 — heat is proportional to throttle |
+| `heat load` | = max(actual network load, idle floor 0.2) — **heat is proportional to load**, i.e. "downstream machines' stress used / engine capacity available" |
 | `fuel.heat` | the fuel's `heat` multiplier from its datapack entry (see [Fuel](fuel.md)) |
 | `BASE_HEAT_FLUID` | **30 °C/s** — the fluid chamber's base heat |
 | `heatFactor(m_eff)` | the mixture heat factor (below) |
@@ -44,6 +45,28 @@ Q_heat = running chambers × throttle × fuel.heat × BASE_HEAT_FLUID(30) × hea
 - **Altitude auto-rich/lean is free heat control**: the carburettor meters by intake air volume — at altitude it naturally enriches (`autoRichness` up to ×1.25) which only cools (`heatFactor` down to ≈0.75 at full auto-rich); below sea level high pressure naturally leans (down to ×0.75) which only heats — it never costs fuel.
 
 The heat factor only scales **heat** — it never feeds back into fuel cost (economy factor multiplies fuel consumption only).
+
+### Load vs equilibrium temperature
+
+**Load** is the stress network's "stress used / capacity available" (see the "Load" section of the [Fluid Combustion Chamber](fluid-combustion-chamber.md) page).
+
+- Attaching more machines, or raising the speed (each machine's stress is ∝ speed), raises the load and therefore the equilibrium temperature.
+- At zero load the engine still generates heat at the **idle floor (20%)** (a real engine's idle fuel consumption), so an idling engine settles at a "cool but warm" equilibrium instead of dropping to ambient.
+- **Whether full load is sustainable depends on the cooling** — exactly the real rule that *maximum continuous power < maximum power*.
+
+Example: sea level, static, **4 fluid chambers + 2 cooling air ducts** (`k_total = 0.38`, `C_th = 4`, `BASE_HEAT_FLUID = 30`):
+
+| Load | Equilibrium T | Notes |
+|---|---|---|
+| 0% (idle, heat uses 20%) | ≈83°C | just below the 100°C working line |
+| 25% | ≈99°C | just crosses the working line |
+| 43% | ≈156°C | economy band 145~165 |
+| 63% | ≈219°C | overheat threshold 220 |
+| 100% | ≈336°C (clamped to 264) | full load while static inevitably overheats |
+
+With the same 4+2 setup: at **30 m/s airspeed (ram ×2)** full load only reaches ≈178°C; at **Y≈260 (pressure factor ≈0.53, roughly half the heat transfer)** a 25% load already reaches ≈169°C and a 34% load hits the 220°C overheat line — at altitude you must lower the speed or attach fewer machines.
+
+Formula: `T_eq = T_amb + running chambers × 30 × heat load / k_total`.
 
 ## Heat dissipation (K_total)
 
@@ -100,8 +123,11 @@ At altitude three things change at once:
 
 The two cooling effects partially cancel; auto-rich is the player's free altitude-compensation tool (pull the mixture lever to `m_eff ≈ 1.0` to also earn the economy factor).
 
+**Cooling capacity is the cap on how many machines you can drive**: heat is ∝ load, so wherever cooling is poor (static, high altitude, few ducts, shutter closed) the sustainable load is low. Keeping the load inside what the cooling can carry is how you cruise at altitude.
+
 ## Overheat & hysteresis (fluid engine)
 
 - **T ≥ 220°C** → the engine hard-stops (no fuel burned) and sets `overheated`.
 - **T ≤ 200°C** → it unlocks and can restart (hysteresis prevents rapid on/off cycling around the threshold).
-- All thresholds (155°C economy target / 100°C overcooling / 220°C overheat) are **fixed engine constants** — they do not change with fuel or throttle, like a real engine's design point / thermostat.
+- All thresholds (155°C economy target / 100°C overcooling / 220°C overheat) are **fixed engine constants** — they do not change with fuel, throttle or load, like a real engine's design point / thermostat.
+- **Thermal tripping**: when the load sits at the top and the cooling cannot keep up, the engine cycles "overheat stop → cool to 200°C → generate again → overheat". That is thermal protection, not a bug — fix it by lowering the load (fewer machines / lower speed) or improving cooling (more ducts, open the shutter, fly faster, go lower).

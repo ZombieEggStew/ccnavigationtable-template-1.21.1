@@ -2,7 +2,7 @@
 
 ![fluid_combustion_chamber](../img/fluid_combustion_chamber.png)
 
-The **Fluid Combustion Chamber** (`ccpe:fluid_combustion_chamber`) attaches to an [Engine Core](engine-core.md) and burns **fluid fuels from other mods** — each chamber contributes **8192 SU** (× the fuel's stress multiplier). This is the "economy management" half of the engine system: fuel cost and temperature are tuned through the **mixture**, the throttle and the cooling duct shutter.
+The **Fluid Combustion Chamber** (`ccpe:fluid_combustion_chamber`) attaches to an [Engine Core](engine-core.md) and burns **fluid fuels from other mods** — each chamber contributes **8192 SU** (× the fuel's stress multiplier). This is the "economy management" half of the engine system: fuel cost and temperature are driven by the **stress-network load**, then trimmed with the **mixture**, the economy window, the overcooling penalty and the cooling duct shutter.
 
 ## Placement
 
@@ -40,13 +40,36 @@ How the multipliers matter:
 
 ## Output & consumption model
 
-- **Stress capacity** = running chambers × 8192 × fuel `stress` × throttle.
-- **Fuel burn** = lever × economy factor × cold penalty (see below), × fuel `consumption`.
-- **Heat** = running chambers × fuel `heat` × `heatFactor(actual mixture)` × throttle.
+- **Stress capacity** = running chambers × 8192 × fuel `stress` — **constant, independent of throttle** (the throttle only sets speed).
+- **Fuel burn** = running chambers × fuel `consumption` × **burn intensity** × lever × economy factor × cold penalty (see below).
+- **Heat** = running chambers × **heat load** × fuel `heat` × `BASE_HEAT_FLUID(30)` × `heatFactor(actual mixture)`.
+- Where **burn intensity = max(previous-tick load, idle floor 0.2)** (0 when throttle is 0) and **heat load = max(load, 0.2)**;
+  the `lever / economy factor / cold penalty` **multiply fuel burn only and never touch heat** (otherwise "economy saves fuel but not heat" and "rich mixture buys cooling" both collapse).
+
+## Load
+
+**Load** is the stress network's "stress used / capacity available". It is the power gauge of this engine:
+
+- **How it changes**: attach more machines (their stress impacts add up) or raise the speed (every machine's stress is ∝ speed) → the load rises. So **pushing the throttle and adding machines are equivalent on the temperature gauge**.
+- **What it drives**: fuel burn and heat are both ∝ load. To save fuel / cool down, remove machines or lower the speed; to heat up, add machines or raise the speed.
+- **Idle floor**: with zero load the engine still burns at **20%** so it stays warm (same idea as a real engine's idle fuel consumption). The core goggle's **Load** line shows the **actual utilization (0%)** — the floor only enters the calculation.
+- **Overload**: when the load exceeds the available capacity it clamps at 100%, the goggles show a red "Network overloaded" line at the top, and the engine keeps burning at full load (it does not stop).
+
+Equilibrium temperatures for a sea-level, static example with 4 fluid chambers + 2 cooling air ducts (derivation on the [Temperature & Cooling Model](temperature.md) page):
+
+| Load | Equilibrium T | Notes |
+|---|---|---|
+| 0% (idle, heat uses 20%) | ≈83°C | idle warm-keeping, just below working temperature |
+| 25% | ≈99°C | just crosses the 100°C working line |
+| 43% | ≈156°C | **economy band** (145~165) |
+| 63% | ≈219°C | **overheat threshold** 220°C |
+| 100% | clamps at 264°C | full load while static inevitably overheats |
+
+**Bottom line**: whether full load is sustainable depends on cooling — airspeed (ram ×2), duct count and shutter opening, and altitude. This mirrors the real-engine rule that **maximum continuous power < maximum power**.
 
 ## Mixture
 
-`setMixture(0.6..1.4)` (default 1.0) only affects **fuel cost and temperature** — never stress or speed:
+`setMixture(0.6..1.4)` (default 1.0) only affects **fuel cost and heat at a given load** — never stress or speed:
 
 - **Single linear heat factor for both sides**: `heatFactor = 1 − (m−1)` (i.e. `2 − m`), slope −1, no convex curve, no floor clamp.
 - **Lean (< 1.0)** = fuel saving, but hotter. Heat factor rises linearly: `m=0.8 → ×1.20`.
@@ -69,7 +92,7 @@ The **economy factor** is an AND-gated, time-unlocked discount (0.75–1.0):
 - **Newton cooling model**: heat generated minus heat dissipated (ambient + core + cooling ducts, scaled by ram air at speed and air pressure at altitude), integrated against thermal mass.
 - **Environment temperature** varies by height in the overworld (sea level 20°C → clouds 0°C → world top −40°C); the Nether is a constant **155°C** at all heights, the End a constant **0°C**.
 - **Ram air cooling**: 1.0 below 10 m/s, ramping linearly to **×2.0 at 30 m/s** — flying fast cools the engine for free.
-- **Overcooling penalty** (`cold`): below 100°C the fuel cost rises: `cold = 1 + max(0, 100−T)/100` (≈×1.8 at 20°C). Warm up at low throttle before pushing it — this is the "small-throttle warm-up" gameplay.
+- **Overcooling penalty** (`cold`): below 100°C the fuel cost rises: `cold = 1 + max(0, 100−T)/100` (≈×1.8 at 20°C). A cold engine also runs at low load, so the absolute fuel loss is small; bring the machines / speed up and the penalty disappears once the temperature reaches the economy band.
 - **Overheat**: T ≥ **220°C** hard-stops the engine (no fuel burned); it resumes at T ≤ **200°C** (hysteresis). Overheating is the only thing that shuts a fluid engine down besides throttle 0 / no fuel.
 
 ## Status display
@@ -80,10 +103,12 @@ Hover the chamber with goggles (full engine status):
 Engine Status
 Status: Stopped / Cold / Normal / Efficient / Getting hot / Overheated
 Temperature: XX.X°C
-Throttle: 50%
 Fuel: ×0.60
 Heat Factor: ×1.08
 ```
+
+!!! note "Throttle and Load are not shown here"
+    Both only appear on the [Engine Core](engine-core.md) goggles — this chamber's tooltip covers its own status, temperature and fuel cost.
 
 | Temperature | Status | Colour |
 |---|---|---|
@@ -95,7 +120,7 @@ Heat Factor: ×1.08
 | 200 ~ <220°C | Getting hot | gold |
 | ≥ 220°C | Overheated (resumes at 200°C) | red |
 
-The **Fuel** line shows the final fuel-cost multiplier = lever × economy × cold; **Heat Factor** = `heatFactor(lever × altitude auto-rich)`.
+The **Fuel** line shows the fuel-cost multiplier **per unit load** = lever × economy × cold (the actual burn rate additionally multiplies by load and burn intensity); **Heat Factor** = `heatFactor(lever × altitude auto-rich)`. The status tier is the joint result of **load + cooling**, no longer of the throttle alone.
 
 !!! note "Overheating thresholds are fixed by the engine design"
-    155°C economy target / 100°C overcooling threshold / 220°C overheat are engine constants — they do **not** change with fuel or throttle (like a real engine's design point / thermostat).
+    155°C economy target / 100°C overcooling threshold / 220°C overheat are engine constants — they do **not** change with fuel, throttle or load (like a real engine's design point / thermostat). Which tier you actually sit in depends on the **load versus cooling** balance.

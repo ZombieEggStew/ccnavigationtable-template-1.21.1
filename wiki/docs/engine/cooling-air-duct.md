@@ -14,6 +14,7 @@ The **Cooling Air Duct** (`ccpe:cooling_air_duct`) is a pure cooling module for 
 - **Cooling fins**: each duct adds a fixed dissipation component to the engine's Newton cooling (`K_DUCT = 0.05` per duct), so more ducts = faster cooling.
 - **Cooling shutter**: `setCooling(0..1)` (default 1.0 = fully open) only scales the duct dissipation component — closing the shutter reduces the duct's cooling (real cowl-flap behaviour, "keep the heat in"). It **cannot increase** cooling beyond the ducts you have: to cool more, add more ducts.
 - It is **purely a cooling module**: it does not gate the economy factor, mixture or fuel cost.
+- **Cooling capacity is the cap on how many machines you can drive**: the engine's heat is ∝ the **stress-network load**, so cooling directly decides how much machinery the engine can sustain (the real "maximum continuous power < maximum power" rule). Static placement, altitude, few ducts and a closed shutter all shrink that cap.
 
 !!! note "`setCooling` / `setMixture` are pure storage"
     `setCooling` and `setMixture` are always accepted (no gating). The shutter value is only *consumed* while a cooling duct is installed (the `K_DUCT` component); the mixture value is only consumed by fluid engines. On a steam engine both are stored but have no effect.

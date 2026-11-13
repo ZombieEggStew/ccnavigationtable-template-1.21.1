@@ -30,14 +30,28 @@ Engine fuel-supply helper blocks:
 
 | | Fluid engine | Steam engine |
 |---|---|---|
-| Output | **8192 SU**/chamber (× stress) | **4096 SU**/chamber |
+| Output | **8192 SU**/chamber (× stress) — **capacity is fixed, independent of throttle** | **4096 SU**/chamber — **capacity is fixed, independent of throttle** |
 | Fuel | Pure datapack (`engine_fuel/*.json`) | Pure vanilla (bucket items' furnace burn time + solid items' `burnTime`, auto-drawn from the fuel vault) |
 | Mixture / economy zone / shutter | Yes — the core gameplay | None (constant 1.0) |
 | Temperature | Newton cooling + overheat/overcooling management (fixed engine thresholds) | Closed boiler self-regulates, pins at **155°C**, never overheats |
-| Consumption | Fuel ∝ throttle (lever × economy × overcooling) | **Consumption ∝ throttle** (real steam throttle: low throttle saves fuel), parallel burning |
+| Consumption | Fuel ∝ **stress-network load** (× lever × economy × overcooling) | **Consumption ∝ network load** (idle floor keeps the boiler warm), parallel burning |
 | Complexity | High ceiling: fuel-saving / cooling / mixture triple management | Simple and stable: ignite & warm up → generate |
 
 The two chamber types are **physically mutually exclusive**: one engine cannot mix fluid combustion chambers and steam power chambers (placement is blocked; the controller arbitrates by majority).
+
+## Three independent knobs: chambers → capacity, throttle → speed, machines → load
+
+The system decouples into three quantities that never interfere:
+
+| Knob | What it decides | How to change it |
+|---|---|---|
+| **Chamber count + fuel `stress`** | **Stress capacity** (8192 SU × stress per fluid chamber, 4096 SU per steam chamber) — **constant, independent of throttle** | Add chambers / use better fuel |
+| **Throttle** | **Output speed** (speed = throttle × 256 rpm; throttle 0 = stopped) | Lua `setThrottle` |
+| **How many machines are attached** | **Load** (= stress used / capacity available, 0~1) — **fuel burn and heat follow it** | Add/remove machines, change speed |
+
+- With nothing attached (load 0) the engine still burns at the **idle floor (20%)** so it stays warm instead of shutting down.
+- The higher the load, the faster it burns and the hotter it runs. Holding the load sane and backing it with cooling (ducts, shutter, ram air, low altitude) is the driving skill this engine asks for.
+- The **Load** line on the core goggles shows the **actual utilization** (0% when idle); the idle floor is only applied inside the fuel-burn and heat calculations.
 
 ## Page index
 

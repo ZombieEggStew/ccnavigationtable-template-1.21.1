@@ -21,9 +21,12 @@ local e = peripheral.wrap("front")
 | `getTemperature()` | false | number | 引擎温度 °C |
 | `isOverheated()` | false | boolean | 过热锁定（仅流体引擎：T≥220°C 硬停，T≤200°C 解锁） |
 | `getFluidTanks()` | true | table[] | 所有连接储罐：`{fluid, amount, remaining, capacity}`（空罐 fluid 为 nil） |
-| `getThrottle()` | false | number | 油门 0..1（默认 0.25）。应力与转速同比例（0 = 停机不烧油，唯一启停控制） |
-| `setThrottle(0~1)` | true | boolean | 设置油门（越界钳制；非法参数返回 false） |
-| `getMixture()` | false | number | 混合比杆 0.6..1.4（仅流体引擎；蒸汽恒 1.0） |
+| `getThrottle()` | false | number | 油门 0..1（默认 0.25）。**只决定输出转速**（转速 = 油门 × 256 rpm；应力容量恒定；0 = 停机不烧油，唯一启停控制） |
+| `getLoad()` | false | number | **负载** 0..1 = 应力网络「已用应力 / 可提供容量」（**实际值，不叠加怠速下限**；空转 0、停机 0）。**油耗与发热的驱动量**，适合做经济调度 |
+| `getStressUsed()` | false | number | 所在网络的已用应力（SU，整网总量：Σ 机器应力影响 × 转速；停机/脱网 → 0） |
+| `getStressCapacity()` | false | number | 所在网络的可提供容量（SU，整网总量；本引擎自身贡献恒定 = 8192×流体室 / 4096×蒸汽室） |
+| `setThrottle(0~1)` | true | boolean | 设置油门（越界钳制；非法参数返回 false）。**只改转速**，不改应力容量；油耗随负载变化 |
+| `getMixture()` | false | number | 混合比杆 0.6..1.4（仅流体引擎；蒸汽恒 1.0）。只影响**给定负载下**的油耗与发热 |
 | `setMixture(x)` | true | boolean | 混合比：油耗 × 杆值、温度 × 热因子；**无门控**（纯存值，非流体引擎不生效） |
 | `getEffectiveMixture()` | false | number | 实际混合比 = 杆 × 高空自动富油（经济窗口与发热反馈用；高空 > 杆值） |
 | `getAutoRichness()` | false | number | 自然高度混合比 = 仅高度自动浓稀系数（不含杆值）：海平面 1.0，高空最高 ×1.25，海平面以下高气压最低 ×0.75（自动稀油）（蒸汽恒 1.0）。海拔补偿参考——拉到 ≈ 1 / getAutoRichness() 使 m_eff ≈ 1.0 |
@@ -35,6 +38,8 @@ local e = peripheral.wrap("front")
 | `isWarmingUp()` | false | boolean | 蒸汽暖机中（T<100°C 只烧不发电） |
 
 ## 状态档位（流体引擎，按 `getTemperature()`）
+
+温度档位由「**负载 vs 散热**」共同决定：负载越高越热，散热（气道/风门/冲压/低海拔）越好越凉。想凉下来就降负载或加强散热。
 
 | 温度区间 | 状态 |
 |---|---|
