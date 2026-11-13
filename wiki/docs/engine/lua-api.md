@@ -21,9 +21,12 @@ local e = peripheral.wrap("front")
 | `getTemperature()` | false | number | Engine temperature in °C |
 | `isOverheated()` | false | boolean | Overheat lock (fluid engines only; hard-stop at T≥220°C, unlock at T≤200°C) |
 | `getFluidTanks()` | true | table[] | All connected fluid tanks: `{fluid, amount, remaining, capacity}` (fluid is `nil` when empty) |
-| `getThrottle()` | false | number | Throttle 0..1 (default 0.25). Scales stress **and** speed together (0 = stopped, no fuel burned; the only on/off control) |
-| `setThrottle(0..1)` | true | boolean | Set throttle (clamped; returns `false` on invalid input) |
-| `getMixture()` | false | number | Mixture lever 0.6..1.4 (fluid engines only; steam is always 1.0) |
+| `getThrottle()` | false | number | Throttle 0..1 (default 0.25). **Sets the output speed only** (speed = throttle × 256 rpm; stress capacity is constant; 0 = stopped, no fuel burned; the only on/off control) |
+| `getLoad()` | false | number | **Load** 0..1 = stress network's "stress used / capacity available" (**actual value, idle floor not included**; 0 when idle, 0 when stopped). **The driver of fuel burn and heat** — handy for economy scheduling |
+| `getStressUsed()` | false | number | Stress used by the network (SU, whole network: Σ machine impact × speed; stopped/unattached → 0) |
+| `getStressCapacity()` | false | number | Capacity available on the network (SU, whole network; this engine's own contribution is constant = 8192 per fluid chamber / 4096 per steam chamber) |
+| `setThrottle(0..1)` | true | boolean | Set throttle (clamped; returns `false` on invalid input). **Changes speed only**, never the stress capacity; fuel consumption follows the load |
+| `getMixture()` | false | number | Mixture lever 0.6..1.4 (fluid engines only; steam is always 1.0). Affects fuel cost and heat **at a given load** |
 | `setMixture(x)` | true | boolean | Mixture: fuel × lever, temperature × heat factor; **no gating** (pure storage — no effect on non-fluid engines) |
 | `getEffectiveMixture()` | false | number | Actual mixture = lever × altitude auto-rich (used by the economy window and heat feedback; > lever at altitude) |
 | `getAutoRichness()` | false | number | Natural altitude mixture = the altitude auto-rich/lean coefficient only (no lever): 1.0 at sea level, up to ×1.25 at high altitude, down to ×0.75 below sea level (auto-lean at high pressure) (steam: always 1.0). Reference for how far to pull the lever — pull to ≈ 1 / getAutoRichness() so m_eff ≈ 1.0 |
@@ -32,9 +35,17 @@ local e = peripheral.wrap("front")
 | `getActiveFuel()` | false | table | Active fuel: fluid `{type="fluid", fluid=<id>, optimalTemp=155}`; steam `{type="steam", optimalTemp=155}`; stopped `{type="none"}` |
 | `getCooling()` | false | number | Cooling shutter 0..1 (default 1.0) |
 | `setCooling(0..1)` | true | boolean | Shutter: only scales the duct dissipation component, can only reduce; **no gating** (pure storage, consumed only with a duct installed) |
+| `hasWaterCooling()` | false | boolean | Whether a water cooling module is installed (see [Water Cooling Module](water-cooling-module.md)) |
+| `getWaterCooling()` | false | number | Water loop **opening** 0..1 (default 1.0) |
+| `setWaterCooling(0~1)` | true | boolean | Water loop opening: only scales the water `k_water` component; **0 = closed loop** (no cooling, and no coolant evaporation); **no gating** (pure storage, no effect without a module) |
+| `getWaterCoolingPower()` | false | number | Current effective water dissipation `k_water` (amount ratio × coolant efficiency × opening; immune to ram air and pressure) |
+| `getWaterCoolingModules()` | false | number | Number of working water cooling modules (coolant amount > 0) |
+| `getCoolantAmount()` | false | number | Total coolant in mB (sum over working modules; server-synced value) |
 | `isWarmingUp()` | false | boolean | Steam warm-up in progress (T<100°C burns without generating) |
 
 ## Status tiers (fluid engine, via `getTemperature()`)
+
+The tier is decided by **load vs cooling**: more load = hotter, better cooling (ducts / shutter / ram air / low altitude) = cooler. To cool down, drop the load or improve the cooling.
 
 | Temperature | Status |
 |---|---|

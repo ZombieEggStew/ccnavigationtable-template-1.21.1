@@ -49,6 +49,7 @@ A modular, multi-block Create power source for aircraft, driven by a **single th
 - **[Fluid Combustion Chamber](engine/fluid-combustion-chamber.md)** — datapack fuel, 8192 SU per chamber, mixture/economy gameplay
 - **[Steam Power Chamber](engine/steam-power-chamber.md)** — water + vanilla fuel, 4096 SU per chamber, never overheats, residual-heat operation
 - **[Cooling Air Duct](engine/cooling-air-duct.md)** — cooling fins & adjustable shutter
+- **[Water Cooling Module](engine/water-cooling-module.md)** — 8000 mB coolant, static/low-speed/high-altitude cooling (immune to ram air and pressure)
 - Lua control via `ccpe:engine` (no redstone)
 
 ### [🛰️ Sensor System](sensor-system/overview.md)

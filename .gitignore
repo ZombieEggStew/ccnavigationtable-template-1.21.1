@@ -63,3 +63,4 @@ wiki/.tmp/
 start-mkdocs.bat
 
 .env
+.dsh-drop/

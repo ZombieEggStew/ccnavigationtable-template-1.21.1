@@ -57,6 +57,7 @@ plugins:
             Fluid Combustion Chamber: 流体燃烧室
             Steam Power Chamber: 蒸汽动力室
             Cooling Air Duct: 冷却气道
+            Water Cooling Module: 水冷模块
             Fuel & Fuel Sources: 燃料与燃料源
             Engine Lua API: 引擎 Lua API
             Temperature & Cooling Model: 温度与冷却模型
@@ -139,6 +140,7 @@ nav:
     - Steam Power Chamber: engine/steam-power-chamber.md
     - Fluid Combustion Chamber: engine/fluid-combustion-chamber.md
     - Cooling Air Duct: engine/cooling-air-duct.md
+    - Water Cooling Module: engine/water-cooling-module.md
     - Fuel & Fuel Sources: engine/fuel.md
     - Temperature & Cooling Model: engine/temperature.md
     - Engine Lua API: engine/lua-api.md

@@ -45,6 +45,7 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -98,6 +99,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 每个蒸汽动力室的基础应力贡献（SU） */
     public static final float STEAM_STRESS_PER_CHAMBER = 4096;
 
+    // ---- P8：应力固定 + 消耗 ∝ 网络负载（memo/engine-module.md 关键机制 7.4）----
+    /** 怠速负载下限：油门 > 0 但网络负载为 0 时仍按此比例燃烧（真实内燃机怠速 ≈ 满载的 5~15%）。
+     *  <b>进游戏实测确定值</b>：0.2 对应「4 室 + 2 风道静止海平面」怠速平衡温度 ≈ 83°C（≈ 真车怠速水温 85~95°C 下沿）。 */
+    public static final float IDLE_LOAD_FLOOR = 0.2f;
+
+    /** 负载钳制上限：网络过载（应力 > 容量）时按满负载燃烧（引擎不停机，对齐 Create 过载语义） */
+    public static final float LOAD_MAX = 1.0f;
+
+    /** 负载读数的除零保护（网络容量小于此值视为无网络 → 负载 0） */
+    private static final float LOAD_EPS = 1e-4f;
+
     /** 整条引擎的总节数（每个成员都存同一值，由 ConnectivityHandler.setHeight 维护） */
     protected int length = 1;
     /** controller 坐标；自己是 controller 时为 null */
@@ -110,8 +122,18 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     // ---- P1：燃烧/发电状态（仅 controller 计算；Running 同步给客户端驱动音效/动画） ----
     /** 是否运行（有燃烧室 + 燃料可用 + 未过载） */
     protected boolean running = false;
-    /** 模块总容量（SU，当前转速下）＝运行燃烧室数 × 8192 × 燃料 stress 倍率 */
+    /** 模块总容量（SU，<b>P8 起恒定</b>）＝流体室数 × 8192 × 燃料 stress 倍率 + 蒸汽室数 × 4096（不再随油门缩放） */
     protected float moduleCapacity = 0;
+    /** 本 tick 的负载因子（0..1）= <b>实际网络利用率</b>（= 整网应力 / 整网容量，钳 [0, LOAD_MAX]；空载可为 0，停机 = 0）。
+     *  <b>不含怠速下限</b>——Goggle「负载」行与 Lua {@code getLoad()} 显示的就是它；怠速下限只在消耗/发热时叠加
+     *  （见 {@link #combustionIntensity()} / {@link #heatLoad()}）。经 NBT {@code Load} 同步客户端（慢字段 1Hz 心跳） */
+    protected float loadFactor = 0f;
+    /** 上一 tick 的实际负载因子：<b>消耗用</b>——本 tick 的 running / 负载在消耗之后才算出，1 tick 滞后无害（见 {@link #combustionIntensity()}） */
+    protected float lastLoadFactor = 0f;
+    /** 上次通知给应力网络的 capacityPerRPM（每 tick 对账用；NaN = 下 tick 必通知）。
+     *  照 {@code TransmissionPeripheralBlockEntity#updateStressImpact} 的每 tick 对账手法：容量恒定后，
+     *  变转速只改 capacityPerRPM，网络不会自己发现，必须主动刷新。 */
+    private float lastNotifiedCapacityPerRPM = Float.NaN;
 
     // ---- P2.5：源列表 + 储备（transient，事件化重建；方案见 memo/engine-module.md 关键机制 7.3） ----
     /** 引擎源抽取批次倍数（K，进游戏缓存一次）：批次 = 引擎数量 × K（水/流体燃料 mb、固体燃料 个）。
@@ -207,6 +229,91 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final float K_DUCT = 0.05f;
     /** 引擎核心自身散热系数（°C/s/°C/节）：停机时核心仍缓慢散热（不依赖冷却气道），τ ≈ 1/0.02 = 50s */
     public static final float K_CORE = 0.02f;
+
+    // ---- P9：水冷模块（water_cooling_module，冷却液 = data/<ns>/coolant/*.json 表内流体）----
+
+    /**
+     * 每个水冷模块的散热系数（°C/s/°C，<b>满效</b>时）。
+     * <p>
+     * <b>定值依据</b>（玩家需求：1 个装满水的水冷模块把 <b>2 个满载流体燃烧室</b>压到 ~150°C）：
+     * <pre>
+     * Q      = 2 室 × 满载(1.0) × 燃料heat(1.0) × H0(30) = 60 °C/s
+     * 需要 k = Q / (150 − 20) = 0.462
+     * k_air  = K_CORE×length + K_AMB×2 = 0.12（length=1）/ 0.14（length=2）
+     * → K_WATER ≈ 0.462 − 0.13 ≈ 0.33
+     * </pre>
+     * 实测校验（海平面静止，2 室，燃料 heat=1.0，无风道）：k_total ≈ 0.45~0.47 → T_eq ≈ 148~153°C。
+     * 注意两个前提：燃料 heat 倍率（柴油 1.25 → 平衡温度升到 ~180°C）、以及引擎长度/风道数量都会移动平衡点。
+     * <p>
+     * <b>与风道的本质区别</b>：水冷<b>不吃冲压（ramFactor）也不吃气压（pressureFactor）</b>——
+     * 液体回路不看空气，所以它同时是最低速 / 静止 / 高空场景的解（风道在这三种场景最弱）。
+     * 实际贡献 = K_WATER × min(液量 / {@link #COOLANT_FULL}, 1) × 冷却液效率 × 回路开度，见 {@link #waterCoolingPower}。
+     */
+    public static final float K_WATER = 0.33f;
+
+    /** 冷却液「满效」量（mb）：≥ 该量满效；0~该量<b>线性衰减</b>，0 mb = 散热归零（玩家定稿：4000mb 满效、逐滴归零） */
+    public static final float COOLANT_FULL = 4000f;
+
+    // ---- P9 冷却液消耗（两条独立的消耗，共用累积器）----
+
+    /**
+     * <b>常态运行成本</b>：每工作模块每 {@link #COOLANT_RUNTIME_TICKS_PER_MB} tick（= 8 游戏秒）消耗 <b>1mb</b>。
+     * <b>只在引擎开着（running）时计</b>——停机（油门 0 / 过热硬停）不耗冷却液，语义同「停机不烧油」。
+     * 满罐 8000mb ≈ 17.8 小时。
+     */
+    public static final int COOLANT_RUNTIME_TICKS_PER_MB = 160;
+
+    /**
+     * <b>过热沸腾失液速率</b>（mb/s 每 °C 过热）：每工作模块<b>每秒</b>损失
+     * `COOLANT_BOIL_MB_PER_DEGREE_SEC × (T − 200)` mb。与温度成正比：200°C 整点速率为 0（无边界抖动），越热掉得越快。
+     * <b>不需要引擎开着</b>（玩家定稿）：只要温度还在 200°C 以上就继续掉——过热硬停后靠余热敞着烧冷却液，
+     * 直到温度被散热压低到 200°C 以下（冷却液越少 → 散热越弱 → 掉得更快，是正反馈）。
+     * <p>
+     * <b>这个常数只决定「烧多快」（续航），<u>不</u>决定平台温度</b>：沸腾散热的斜率由
+     * {@link #BOIL_COOLING_PER_DEGREE} 单独锁定（{@link #EVAP_LATENT_GAIN} = 两者相除）。所以想缩短/延长
+     * 「高温还能撑多久」只改这一个数，平台温度不动。玩家定稿（2026-09）：<b>蒸发维持高温只是紧急方案，不许长时间维持</b>
+     * → 由 0.5 提到 5.0（10 倍）：满罐续航 ≈26 分钟 → <b>≈2.6 分钟</b>（210°C 档 ≈51 mb/s）。
+     */
+    public static final float COOLANT_BOIL_MB_PER_DEGREE_SEC = 5.0f;
+
+    /**
+     * <b>沸腾散热斜率</b>（°C/s 每 °C 过热，**与 kTotal 同量纲**）：直接决定<b>平台温度</b>，不随失液速率变化。
+     * <pre>
+     * 平衡式：heat − BOIL_COOLING_PER_DEGREE × (T − 200) = k_total × (T − T_amb)
+     * → (T − 200) = (heat − 180 × k_total) / (BOIL_COOLING_PER_DEGREE + k_total)
+     * </pre>
+     * 实测基准（燃料 heat=1.0、4 满载流体室 + 1 满罐水模块、1 节核心、静态、海平面，k≈0.55 / heat=120）：
+     * 本项 = 1.5 → 平台 ≈210°C（游戏内实测 206.6），沸腾失液由沸点常数决定。想要更低/更高的平台只改这个数。
+     * 物理对应：≈1.5 °C/s 每 °C ≈ 现实「核态沸腾把换热系数抬到单相的数倍」的那个斜率。
+     */
+    public static final float BOIL_COOLING_PER_DEGREE = 1.5f;
+
+    /**
+     * <b>每 mB/s 蒸发的有效散热当量</b>（°C/s 每 mB/s）＝ {@link #BOIL_COOLING_PER_DEGREE} ÷
+     * {@link #COOLANT_BOIL_MB_PER_DEGREE_SEC}（<b>派生值，不要单独手改</b>）：两者相乘 = 沸腾散热的斜率。
+     * <p>
+     * <b>怎么算</b>：{@code heat_net = heat − EVAP_LATENT_GAIN × 20 × Σ(mb/tick)}，扣在净发热一侧，
+     * <b>不进 kTotal</b>——它是质量流量项（∝ 失液速率），不随温差变化，也不吃冲压/气压/风道。
+     * 必须<b>真烧冷却液</b>才给这份信用：蒸发速率与消耗计账共用同一份数值（{@link #workingCoolantModules}），
+     * 不会出现「少烧水多散热」。
+     * <p>
+     * 现值 = 1.5 ÷ 5.0 = <b>0.3</b>：相当于只承认 ≈17% 的纯潜热当量（1 mB 水汽化 ≈2.26 kJ ≈1.74 °C/s，
+     * 见下方换算），其余随排放口/排气带走、不回到缸体。这是"缩短续航"的代价所在：每 mB 的有效散热变小了。
+     * <pre>
+     * 物理当量换算：1 °C/s ≈ 1.3 kW（由「2 满载流体室 = 60 °C/s ↔ 现实 ~80 kW」反推）
+     *              → 1 mB 水汽化 2.26 kJ ÷ 1.3 kJ·s⁻¹ ≈ 1.74 °C/s
+     * </pre>
+     */
+    public static final float EVAP_LATENT_GAIN = BOIL_COOLING_PER_DEGREE / COOLANT_BOIL_MB_PER_DEGREE_SEC;
+
+    /**
+     * 冷却液抽液<b>批处理粒度</b>（mb）：本模块欠账攒够这么多才真 drain 一次。
+     * 模块 BE 每次内容变化都会发包（{@code sendBlockUpdated}），逐 tick 抽会变成大量小包——
+     * 沸腾速率提到 5.0 后单模块约 ≈2.5 mb/tick（基准配置），若按 1mb 抽就是每 tick 一个包（20 个/秒）；
+     * 攒到 16mb 后约 6 tick 一次（≈3 个/秒）。总消耗量完全不变（欠账照样累计），
+     * 相对 8000mb 罐容也只是 0.2% 的步进，观感无差别。详见 memo 的 P7+ 同步优化原则。
+     */
+    public static final int COOLANT_DRAIN_CHUNK_MB = 16;
     /** 冲压冷却满增益（×）：运动 ≥RAM_FULL 时总散热 ×2.0（eff100% + 1风道/室 + 冲压 ⇒ 足够） */
     public static final float RAM_MAX = 2.0f;
     /** 冲压起始速度（m/s）：低于此无增益 */
@@ -223,6 +330,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final int SYNC_HEARTBEAT_INTERVAL = 20;
     /** 上次 sendData 时各离散 tooltip 字段快照（P7+ 方案 A 差量门控；温度用 {@link #lastSyncedTemp} 单独门控） */
     protected boolean lastSyncedRunning, lastSyncedOverheated, lastSyncedWarmingUp, lastSyncedSteamEngine, lastSyncedAirDuct;
+    /** P9：水冷同步快照（装没装 / 工作模块数 / 有效散热贡献；power 用 0.01 容差门控） */
+    protected boolean lastSyncedWaterModule;
+    protected int lastSyncedWaterModules;
+    protected float lastSyncedWaterPower;
+    /** P9：水冷散热贡献的同步容差（k_water 变化 ≥ 该值才发包；粗量变化，防止每 tick 发包） */
+    public static final float SYNC_WATER_POWER_DELTA = 0.01f;
     protected String lastSyncedSteamFuelType = "none", lastSyncedSteamFuelKey = "", lastSyncedSteamSolidFuelKey = "";
     /** 慢字段心跳计数器：每次 sendData 归零，≥SYNC_HEARTBEAT_INTERVAL 强制补发一次 */
     protected int syncHeartbeat;
@@ -233,7 +346,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /** 模块温度（°C，controller 持有；NBT 持久化 + 客户端同步显示） */
     protected float temperature = T_AMB_SEA;
-    /** 效率（=油门，同时缩出力和热量；P3 默认 0.25，P4 由 Lua 控制） */
+    /** 效率（= 油门：P8 起<b>只决定输出转速</b>——应力容量恒定、燃料消耗 ∝ 网络负载；默认 0.25 → 64rpm，由 Lua setThrottle 控制） */
     protected float efficiency = 0.25f;
     /** 过热锁定（滞回：T≥OVERHEAT_TEMP 置位，T≤OVERHEAT_RESUME 复位） */
     protected boolean overheated = false;
@@ -324,6 +437,60 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 冷却强度（风门，0~1，默认 1.0 = 全开；只缩放 K_DUCT 风道散热分量，冲压/气压/环境不动；仅装冷却气道后可调，只能降——真实 cowl flap）。NBT 持久化。 */
     protected float coolingStrength = 1f;
 
+    // ---- P9：水冷模块（water_cooling_module；冷却液走 capability 读/抽，零缓存）----
+
+    /**
+     * 水冷回路开度（0~1，默认 1.0 = 全开；Lua {@code setWaterCooling}）。语义与风门 {@link #coolingStrength} 对称：
+     * <b>只缩放水冷散热分量</b>，冲压/气压/风道/环境全不动；0 = 关闭回路（既不散热，也不沸腾失液）。
+     * 纯存值无门控（没装水冷模块时存了不生效）。NBT 持久化 + 同步客户端。
+     */
+    protected float waterCoolingStrength = 1f;
+
+    /** 是否装了水冷模块（tick 扫描；信息用 + Goggle 模块清单）。NBT 同步客户端 */
+    protected boolean hasWaterCooling = false;
+
+    /** 工作中的水冷模块数（液量 &gt; 0；服务端每 tick 算，同步 Goggle/Lua） */
+    protected int waterCoolingModules = 0;
+
+    /**
+     * 有效水冷散热贡献（k_water，0~；含「液量/4000 比例 + 冷却液效率 + 回路开度」）。
+     * 服务端每 tick 计算、随包同步（Goggle 水冷行 / Lua getWaterCoolingPower）——客户端不重算（踩坑 10）。
+     */
+    protected float waterCoolingPower = 0f;
+
+    /** 冷却液总量（mb，工作模块合计；同步 Goggle/Lua） */
+    protected float coolantAmount = 0f;
+
+    /**
+     * <b>逐模块</b>冷却液消耗累积器（mb，键 = 水冷模块方块坐标）：每个模块只攒自己的欠账、只抽<b>自己的</b>罐，
+     * 攒满 1mb 才真 drain（模块 BE 每次内容变化都会发包，逐 tick 抽会产生大量小包）。
+     * 旧版是「整机一个累积器 + 从列表第一个模块抽到够」——第一个罐 8000mb 永远抽够，其余模块一滴不掉，
+     * 多模块时看起来只有第一个在工作（本次修正的就是这一点）。
+     * <b>transient，不落盘</b>（拆模块 / 回路关闭 / 蒸汽引擎 → 清空）。
+     */
+    protected final Map<BlockPos, Double> coolantDebtByPos = new HashMap<>();
+
+    /**
+     * 本 tick 的<b>工作模块</b>清单（服务端每 tick 由 {@link #updateWaterCooling} 重建）：
+     * 每个模块记「自己的沸腾失液速率（mb/tick；T ≤ 200°C 时为 0）」。
+     * <b>蒸发散热（{@link #evapCooling}）与消耗计账（{@link #tickCoolantConsumption}）都读这一份</b>，
+     * 保证「散掉多少热 = 烧掉多少液」，两处公式永不漂移。transient，不落盘。
+     */
+    protected record CoolantModule(BlockPos pos, float boilMbPerTick) {}
+
+    /** 本 tick 的工作模块清单（见 {@link CoolantModule}；配合 {@link #coolantDebtByPos} 逐模块计账） */
+    protected List<CoolantModule> workingCoolantModules = List.of();
+
+    /**
+     * 本 tick 的<b>蒸发潜热散热</b>（°C/s，服务端算）：{@code EVAP_LATENT_GAIN × 20 × Σ boilMbPerTick}。
+     * 蒸汽引擎 / 回路关闭（开度 0）/ 没模块 / T ≤ 200°C → 恒 0（这几种情况本来也不烧冷却液，信用与代价一致）。
+     * 只影响温度，不做 goggle/Lua 暴露（玩家定稿：内部生效即可）。
+     */
+    protected float evapCooling = 0f;
+
+    /** 沸腾权重的模块合计（Σ 各工作模块冷却液的 {@code boilMultiplier}；服务端 tick 算） */
+    protected float coolantBoilWeight = 0f;
+
     // ---- P6：Lua getActiveFuel 缓存（服务端 tick 更新，供读缓存） ----
     /** 当前活动燃料类型："none" / "fluid" / "steam" */
     protected String activeFuelType = "none";
@@ -388,6 +555,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
         // P6 Plan B：蒸汽类型在仲裁后判定（物理排斥 → 互斥）；蒸汽 = 闭式锅炉自调节，永不过热
         steamEngine = !steamChambers.isEmpty();
+        // P9：水冷模块结算（必须在 steamEngine 判定之后：蒸汽引擎<b>完全忽略</b>水冷模块——温度不管、也不消耗冷却液）
+        updateWaterCooling(scan);
 
         // 过热锁定（滞回）：T≥OVERHEAT_TEMP 停机锁定，T≤OVERHEAT_RESUME 解锁——仅流体引擎
         // （蒸汽引擎温度钉在 BOILER_T_OPT 设计点，永不过热，见 Plan B）
@@ -427,7 +596,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             rebuildSources(neighbors);
         }
         // 流体燃烧室（P1/P2.5 批量）：储备空才补料（批次 = 室数×K mb），running = 储备>0 且燃料条目已知；
-        // 每室 consumption mb/s × 效率 × 杆值 × 经济 × 过冷（P7，蒸汽引擎无流体室 → 跳过）。
+        // 每室 consumption mb/s × 燃烧强度(max(负载,怠速下限)) × 杆值 × 经济 × 过冷（P8；蒸汽引擎无流体室 → 跳过）。
         // !sourcesAllFailed = 全源失败等待重扫期间不补料（避免每 tick 扫空表）
         int runningFluid = 0;
         float fluidCapacity = 0;
@@ -441,8 +610,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 // P7 经济区（只省油耗、绝不反哺 Q_heat）：eco = 双因素 AND 门控 + 解锁进度（上 tick 值，1 tick 滞后可忽略）
                 // P7 过冷惩罚：cold = 1 + COLD_K×(ENGINE_MIN_WORK_TEMP−T)/ENGINE_MIN_WORK_TEMP（刚开机低温 = 油耗惩罚，小油门暖机；只乘油耗）
                 // P7 奖励驱动：油耗 = 杆值 × eco × cold（自动富油/heatFactor 不进油耗；高空不拉稀 = ×1.0 无惩罚）
+                // P8 负载驱动：燃烧强度 = max(上一 tick 网络负载, IDLE_LOAD_FLOOR)（油门 0 → 0），替换原「∝ 油门」——
+                //   空载 = 怠速燃烧保温；重载 = 满烧；油耗 ∝ 实际做功（P7 的 eco/cold/杆值语义全部不变）
                 float coldPen = coldPenalty(temperature);
-                fluidFuelReserve -= runningFluid * fluidFuel.consumption() * efficiency * leverMixture
+                fluidFuelReserve -= runningFluid * fluidFuel.consumption() * combustionIntensity() * leverMixture
                         * (1f - (1f - ECO_MIN) * ecoProgress) * coldPen / 20f;
             } else if (fluidFuelReserve <= 0f) {
                 fluidFuel = null; // 储备耗尽且补不到 → 无活动燃料
@@ -469,25 +640,26 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                     if (!refillSteamFluidFuel(steamChambers))
                         tryPullSolidFuelBatch(steamChambers);
                 }
-                // 燃烧：各室并行倒计时（每秒烧 油门 个 burnTick → 25% 油门燃料耐用 4 倍，同燃同熄；
-                // Goggle 燃料行显示墙钟剩余秒 = burnTicks/(油门×20)）
+                // 燃烧：各室并行倒计时（P8：每秒烧 max(负载, 怠速下限) 个 burnTick → 空载怠速烧、满载满烧，同燃同熄；
+                // Goggle 燃料行显示墙钟剩余秒 = burnTicks/(max(负载,怠速下限)×20)）
                 for (BlockPos sp : steamChambers) {
                     if (!(level.getBlockEntity(sp) instanceof SteamPowerChamberBlockEntity be))
                         continue;
                     if (be.burnTicks > 0) {
-                        be.burnTicks -= efficiency;
+                        be.burnTicks -= combustionIntensity();
                         if (be.burnTicks <= 0)
                             be.setChanged();
                         runningSteam++;
                     }
                 }
-                // 耗水：1mb/s/室 × 油门（从水储备扣）。门控 = 引擎在工作（running）或正烧燃料暖机（runningSteam>0）——
-                // 水是工质（蒸汽流量 ∝ 油门），燃料只影响加热不影响发电（memo §7.7/§15）：无燃料余热运转 / 地狱环境热运转
+                // 耗水：1mb/s/室 × 燃烧强度(max(负载,怠速下限))（从水储备扣）。门控 = 引擎在工作（running）或正烧燃料暖机（runningSteam>0）——
+                // 水是工质（蒸汽流量 ∝ 负载，P8），燃料只影响加热不影响发电（memo §7.7/§15）：无燃料余热运转（冷却到 100°C 前） / 地狱环境热运转
                 // （T≥100 只靠环境）同样正常耗水（踩坑 30：原门控 runningSteam>0 → 无燃料永不耗水）。
                 // 耗水室数：工作中 = 全部蒸汽室（容量 = 全部室满出力）；暖机 = 正在烧的室。
                 if (running || runningSteam > 0) {
                     int waterChambers = running ? steamChambers.size() : runningSteam;
-                    waterReserve -= waterChambers * 0.05f * efficiency;
+                    // P8：蒸汽流量 ∝ 负载（空载怠速下限仍耗水；油门 0 → combustionIntensity=0 → 零耗水）
+                    waterReserve -= waterChambers * 0.05f * combustionIntensity();
                     // 储备刚好耗尽 → 立即补一批（同一 tick 内补回，避免 running 判定出现 1 tick 空档
                     // → 应力网络不闪断；补不到（全源失败）才真停机）
                     if (waterReserve <= 0f && efficiency > 0f)
@@ -512,9 +684,29 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         running = !overheated && efficiency > 0f && steamReady && steamWaterReady
                 && (runningTotal > 0 || steamEngine);
         // 蒸汽容量 = 运行状态下的全部蒸汽室（余热运转同样满出力，容量不受燃料储备限制）；暖机/停机 = 0
-        float steamCapacityChambers = steamEngine && running ? steamChambers.size()
-                : (steamReady ? runningSteam : 0);
-        moduleCapacity = (fluidCapacity + steamCapacityChambers * STEAM_STRESS_PER_CHAMBER) * efficiency;
+        float steamCapacityChambers = steamEngine && running ? steamChambers.size() : 0;
+        // P8：容量固定（SU，单位 = 应力容量本身，不再 ×efficiency）——油门只改转速，见 calculateAddedStressCapacity()
+        moduleCapacity = fluidCapacity + steamCapacityChambers * STEAM_STRESS_PER_CHAMBER;
+
+        // ---- P8：应力网络对账 + 负载因子 ----
+        // ① 容量恒定后，油门变化只改 capacityPerRPM，网络不会自己发现该刷新 → 每 tick 与网络缓存对账并主动通知
+        //    （照 Electronic Transmission 的 updateStressImpact 手法：不依赖事件/不依赖 reActivateSource 覆盖面）。
+        if (hasNetwork() && getGeneratedSpeed() != 0f) {
+            float capacityPerRPM = calculateAddedStressCapacity();
+            if (!Mth.equal(capacityPerRPM, lastNotifiedCapacityPerRPM)) {
+                notifyStressCapacityChange(capacityPerRPM);
+                lastNotifiedCapacityPerRPM = capacityPerRPM;
+            }
+        } else {
+            lastNotifiedCapacityPerRPM = Float.NaN; // 脱网（油门 0/停机）→ 重挂时重新通知
+        }
+        // ② 负载 = 网络应力 / 网络容量（Create 的 stress/capacity 字段是整网总量；引擎脱网时会被清 0 → 除零保护）。
+        //    loadFactor 存的是<b>实际利用率</b>（钳 [0, LOAD_MAX]，空载可以是 0）→ Goggle / Lua 直接读它，不做任何修饰；
+        //    怠速下限 IDLE_LOAD_FLOOR 只在「消耗 / 发热」计算时叠加（见 combustionIntensity() / heatLoad()）。
+        //    lastLoadFactor 保留上一 tick 实际值供消耗使用（消耗发生在本段之前，1 tick 滞后无害）。
+        lastLoadFactor = loadFactor;
+        float util = (capacity > LOAD_EPS) ? Mth.clamp(stress / capacity, 0f, LOAD_MAX) : 0f;
+        loadFactor = running ? util : 0f;
 
         // ---- P3/P6 Plan B：温度更新 ----
         float tAmb = ambientTemp();
@@ -525,11 +717,15 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             // 停火 → 牛顿冷却缓慢降温（K_CORE 自散热）。
             // 注意：runningSteam 计的是「有燃料储备（burnTicks>0）的室」；油门 0（efficiency=0）时 burnTicks 冻结、
             // 不抽油，必须加 efficiency>0 才视为点火——否则「不转不耗油但温度钉住」。
+            // P8（需求 3）：蒸汽温度<b>与负载无关</b>——只要油门 > 0 且正在烧燃料（有储备）就收敛钉 155，
+            //   负载只决定「烧多快」（combustionIntensity），不决定「烧不烧」；燃料烧完 → runningSteam=0 → 冷却停机
+            //   （即温度维持是要花燃料的，杜绝「无燃料照样满出力」）。
             if (runningSteam > 0 && efficiency > 0f) {
                 temperature += (BOILER_T_OPT - temperature) * STEAM_WARMUP_RATE / 20f;
             } else {
                 // 修正：K_AMBIENT 只计「运行中」的室——停机（油门 0）时 runningSteam 仍计有储备的室，
                 // 而储备≠在消耗，不加门控会导致「有剩燃料冷得更快」（踩坑 13 原则；冷却按运行中室数计，memo §15）
+                // P9：水冷模块<b>不参与蒸汽引擎温度</b>（玩家定稿：闭式锅炉自调节，水冷对它无效）
                 float kCool = K_CORE * length + K_AMBIENT * (running ? runningTotal : 0)
                         + K_DUCT * scan.coolingDucts * (hasAirDuct ? coolingStrength : 1f);
                 temperature += (-kCool * (temperature - tAmb)) / thermalCapacity() / 20f;
@@ -537,17 +733,27 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         } else {
             // 流体引擎：牛顿冷却（发热 − 散热），气压/冲压/风道/风门全部生效
             float heat = 0;
+            // P8：发热 ∝ 负载（替换原「∝ 油门」）——注意<b>只换这一项</b>：lever/eco/cold 绝不乘进发热
+            //   （否则「经济只省油」「富油花油买冷」两条设计张力立刻崩塌，memo §7.6 地基）
             if (running && !overheated && runningFluid > 0 && fluidFuel != null)
-                heat += runningFluid * efficiency * fluidFuel.heat() * BASE_HEAT_FLUID * mixtureHeatFactor;
+                heat += runningFluid * heatLoad() * fluidFuel.heat() * BASE_HEAT_FLUID * mixtureHeatFactor;
+            // P9：<b>蒸发潜热</b>散热（沸腾带走的潜热）从净发热里扣。它是质量流量项（∝ 失液速率），
+            // 不随温差变化，所以<b>不进 kTotal</b>（也因此不吃冲压/气压/风道）；T ≤ 200°C 时 evapCooling 恒 0，
+            // 200 以下的既有平衡（风道/水冷/经济区/过冷惩罚）一个数都不动。
+            heat -= evapCooling;
             // P6 风门：冷却强度只缩放冷却气道散热分量（冲压/气压/环境不动）；无气道时 D=0 无影响
             // P3 修正：K_AMBIENT 只计「运行中」的室——停机（油门 0）时 runningFluid 仍计有储备的室，
             // 储备≠在消耗，不加门控会导致「有剩燃料冷得更快」（踩坑 13 原则；冷却按运行中室数计，memo §15）
             float kTotal = (K_CORE * length + K_AMBIENT * (running ? runningTotal : 0)
                     + K_DUCT * scan.coolingDucts * (hasAirDuct ? coolingStrength : 1f))
-                    * ramFactor() * pressureFactor();
+                    * ramFactor() * pressureFactor()
+                    // P9：水冷模块加在括号外——不吃冲压、不吃气压（液体回路不看空气；这是它相对风道的卖点）
+                    + waterCoolingPower;
             temperature += (heat - kTotal * (temperature - tAmb)) / thermalCapacity() / 20f;
         }
         temperature = Mth.clamp(temperature, tAmb, OVERHEAT_TEMP * 1.2f);
+        // P9：冷却液消耗（常态运行成本 + 过热沸腾；蒸汽引擎不消耗）
+        tickCoolantConsumption(scan);
 
         // P7：经济系数（双因素 AND 门控 + 解锁进度；仅流体引擎；蒸汽无经济区恒 1.0；停机/油门 0 → 进度流失、1.0 无意义）
         // P7 修订：温度阈值全部引擎固定（经济 ENGINE_T_OPT=155 / 过冷 ENGINE_MIN_WORK_TEMP=100），不随燃料/油门
@@ -592,6 +798,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         boolean discreteChanged = running != lastSyncedRunning || overheated != lastSyncedOverheated
                 || warmingUp != lastSyncedWarmingUp || steamEngine != lastSyncedSteamEngine
                 || hasAirDuct != lastSyncedAirDuct || capacityChanged
+                // P9：水冷（装没装 / 工作模块数变化发；散热贡献用容差门控）
+                || hasWaterCooling != lastSyncedWaterModule
+                || waterCoolingModules != lastSyncedWaterModules
+                || Math.abs(waterCoolingPower - lastSyncedWaterPower) >= SYNC_WATER_POWER_DELTA
                 || !Objects.equals(steamFuelType, lastSyncedSteamFuelType)
                 || !Objects.equals(steamFuelKey, lastSyncedSteamFuelKey)
                 || !Objects.equals(steamSolidFuelKey, lastSyncedSteamSolidFuelKey);
@@ -606,6 +816,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             lastSyncedWarmingUp = warmingUp;
             lastSyncedSteamEngine = steamEngine;
             lastSyncedAirDuct = hasAirDuct;
+            lastSyncedWaterModule = hasWaterCooling;
+            lastSyncedWaterModules = waterCoolingModules;
+            lastSyncedWaterPower = waterCoolingPower;
             lastSyncedSteamFuelType = steamFuelType;
             lastSyncedSteamFuelKey = steamFuelKey;
             lastSyncedSteamSolidFuelKey = steamSolidFuelKey;
@@ -630,7 +843,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /** 模块扫描结果：一次遍历收集两类燃烧室 + 冷却气道数 + 去重后的全部邻居（core 成员 6 邻居 ∪ 燃烧室 6 邻居） */
     protected record ModuleScan(List<BlockPos> fluidChambers, List<BlockPos> steamChambers, List<BlockPos> neighbors,
-                                int coolingDucts) {}
+                                int coolingDucts, List<BlockPos> waterModules) {}
 
     /**
      * 扫描本条引擎（全部成员）：统计贴附的流体/蒸汽燃烧室（仅计入背面 FACING 反方向正贴核心的，
@@ -643,6 +856,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         Set<BlockPos> seen = new HashSet<>();
         List<BlockPos> neighbors = new ArrayList<>();
         int coolingDucts = 0;
+        List<BlockPos> waterModules = new ArrayList<>();
 
         Direction.Axis axis = getMainConnectionAxis();
         for (int i = 0; i < length; i++) {
@@ -661,15 +875,40 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 // 冷却气道：贴在核心成员上即计入（blockstate 计数，无 BE；去重防两核心间重复计）
                 if (state.is(MyModBlocks.cooling_air_duct.get()) && seen.add(neighbor))
                     coolingDucts++;
+                // 水冷模块：同风道口径（贴在核心成员 ∪ 燃烧室上，seen 去重），位置留作散热/沸腾读罐用
+                else if (state.is(MyModBlocks.water_cooling_module.get()) && seen.add(neighbor))
+                    waterModules.add(neighbor);
                 addNeighbor(seen, neighbors, neighbor);
             }
         }
-        // 燃烧室自己的邻居（罐/容器可能贴着燃烧室；冷却气道贴在燃烧室旁同样计入冷却）
+        // 燃烧室自己的邻居（罐/容器可能贴着燃烧室；冷却气道/水冷模块贴在燃烧室旁同样计入）
         for (BlockPos chamber : fluidChambers)
-            coolingDucts += scanChamberNeighbors(seen, neighbors, chamber);
+            coolingDucts += scanChamberNeighbors(seen, neighbors, waterModules, chamber);
         for (BlockPos chamber : steamChambers)
-            coolingDucts += scanChamberNeighbors(seen, neighbors, chamber);
-        return new ModuleScan(fluidChambers, steamChambers, neighbors, coolingDucts);
+            coolingDucts += scanChamberNeighbors(seen, neighbors, waterModules, chamber);
+        // 水冷模块<b>链式扩散</b>：上面收集到的是「贴着核心成员 ∪ 燃烧室」的种子，再沿相邻的水冷模块扩散——
+        // 于是「核心四周堆一排散热器」（第二个贴第一个）同样计入。只扩散水冷模块本身，<b>不并入 neighbors</b>
+        // （冷却液不是引擎水源/燃料，见 rebuildSources 的排除）。
+        expandWaterModuleChain(seen, waterModules);
+        return new ModuleScan(fluidChambers, steamChambers, neighbors, coolingDucts, waterModules);
+    }
+
+    /**
+     * 水冷模块链式扩散（广度优先，就地扩 {@code waterModules}）：从种子（贴核心成员 ∪ 贴燃烧室）出发，
+     * 6 邻居里凡是水冷模块且未见过就继续计入并排队，直到整条散热器阵列扫完。
+     * <p>
+     * 用「按索引遍历同一个 List」代替显式队列：{@code waterModules} 会在遍历中变长，
+     * {@code for (int i = 0; i < waterModules.size(); i++)} 天然就是 BFS 队列（见 {@link #scanModule}）。
+     */
+    private void expandWaterModuleChain(Set<BlockPos> seen, List<BlockPos> waterModules) {
+        for (int i = 0; i < waterModules.size(); i++) {
+            BlockPos module = waterModules.get(i);
+            for (Direction dir : Direction.values()) {
+                BlockPos neighbor = module.relative(dir);
+                if (level.getBlockState(neighbor).is(MyModBlocks.water_cooling_module.get()) && seen.add(neighbor))
+                    waterModules.add(neighbor);
+            }
+        }
     }
 
     private void addNeighbor(Set<BlockPos> seen, List<BlockPos> list, BlockPos pos) {
@@ -684,14 +923,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /**
      * 扫描 pos（燃烧室）的 6 邻居：冷却气道计入冷却计数（返回新计入数，经 seen 去重防核心/燃烧室间重复计），
-     * 其余邻居并入模块邻居列表（水和流体燃料的源罐/容器查找范围）。
+     * 水冷模块位置并入 {@code waterModules}（同样 seen 去重），其余邻居并入模块邻居列表（水和流体燃料的源罐/容器查找范围）。
      */
-    private int scanChamberNeighbors(Set<BlockPos> seen, List<BlockPos> neighbors, BlockPos pos) {
+    private int scanChamberNeighbors(Set<BlockPos> seen, List<BlockPos> neighbors, List<BlockPos> waterModules, BlockPos pos) {
         int ducts = 0;
         for (Direction dir : Direction.values()) {
             BlockPos neighbor = pos.relative(dir);
-            if (level.getBlockState(neighbor).is(MyModBlocks.cooling_air_duct.get()) && seen.add(neighbor))
+            BlockState state = level.getBlockState(neighbor);
+            if (state.is(MyModBlocks.cooling_air_duct.get()) && seen.add(neighbor))
                 ducts++;
+            else if (state.is(MyModBlocks.water_cooling_module.get()) && seen.add(neighbor))
+                waterModules.add(neighbor);
             addNeighbor(seen, neighbors, neighbor);
         }
         return ducts;
@@ -709,6 +951,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      *   <li>蒸汽室固体燃料：带 ItemHandler 且含可烧物品的容器（quick_fill_fuel_vault 等）。</li>
      * </ul>
      * 只走 capability，绝不直接改罐/容器 BE。列表 transient 不落盘。
+     * <p>
+     * <b>水冷模块排除</b>：{@code water_cooling_module} 自带 8000mb 冷却液槽（数据表 coolant/*.json），
+     * 但它<b>不是</b>引擎燃料/水源——否则装水会被蒸汽引擎当锅炉水抽走、装
+     * {@code aeronautics:levitite_blend}（它同时是 engine_fuel 条目）会被流体燃烧室当燃料烧掉。
+     * 所以这里直接跳过该方块（冷却液只由水冷模块自己保管，散热逻辑以后单独读）。
      */
     protected void rebuildSources(List<BlockPos> neighbors) {
         List<BlockPos> water = new ArrayList<>();
@@ -716,6 +963,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         List<SteamFuelSource> steamFuelList = new ArrayList<>();
         List<BlockPos> solid = new ArrayList<>();
         for (BlockPos pos : neighbors) {
+            // 水冷模块的冷却液不算引擎水源 / 燃料（见方法注释；它也含 item handler 之外的液体槽，直接跳过最稳）
+            if (level != null && level.getBlockState(pos).is(MyModBlocks.water_cooling_module.get()))
+                continue;
             IFluidHandler fh = fluidHandlerAt(pos);
             if (fh != null) {
                 FluidStack stack = fh.getFluidInTank(0);
@@ -1068,6 +1318,142 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return (float) Math.pow(Math.max(p, PRESSURE_FLOOR), 0.8);
     }
 
+    // ================= P9：水冷模块（water_cooling_module） =================
+
+    /**
+     * 水冷结算（<b>仅服务端</b>，每 tick 一次，必须在 {@code steamEngine} 判定之后调用）：逐模块走
+     * {@code FluidHandler} capability（零缓存、不落盘）读「液量 + 流体 id」，按表算出：
+     * <pre>
+     * 模块贡献_i = K_WATER × min(液量_i / COOLANT_FULL, 1) × 冷却液效率_i
+     * waterCoolingPower  = Σ 模块贡献_i × waterCoolingStrength（回路开度；蒸汽引擎强制 0）
+     * coolantBoilWeight  = Σ boilMultiplier_i（过热沸腾的权重合计）
+     * </pre>
+     * <b>多模块并行</b>：每个模块各算各的贡献再<b>求和</b>（液量/效率/沸腾都按模块自己的罐与冷却液算），
+     * 装 N 个满罐模块 = N 份散热；模块集合由 {@code scanModule} 的<b>链式扫描</b>给出
+     * （贴核心成员 ∪ 贴燃烧室的是种子，贴着另一个水冷模块的也计入）。
+     * <b>不吃冲压/气压</b>（与风道相反）：所以在 kTotal 里加在 ram/pressure 括号<b>之外</b>。
+     * <strong>蒸汽引擎完全忽略水冷模块</strong>（闭式锅炉温度自调节，散热项不参与）——温度不管，也不消耗冷却液。
+     * 客户端 tick 同样会跑，但这里直接 return——客户端一律读同步值（踩坑 10）。
+     */
+    protected void updateWaterCooling(ModuleScan scan) {
+        // 客户端一律读同步值（踩坑 10）：这里先 return，绝不覆盖 synced 字段（否则 goggle 会读到 0）
+        if (level == null || level.isClientSide)
+            return;
+        hasWaterCooling = !scan.waterModules().isEmpty();
+        if (!hasWaterCooling) {
+            waterCoolingModules = 0;
+            waterCoolingPower = 0f;
+            coolantAmount = 0f;
+            coolantBoilWeight = 0f;
+            workingCoolantModules = List.of();
+            evapCooling = 0f;
+            return;
+        }
+
+        int working = 0;
+        float power = 0f;
+        float amount = 0f;
+        float boilWeight = 0f;
+        double boilPerTick = 0d;
+        List<CoolantModule> workingList = new ArrayList<>();
+        for (BlockPos pos : scan.waterModules()) {
+            IFluidHandler handler = fluidHandlerAt(pos);
+            if (handler == null || handler.getTanks() < 1)
+                continue;
+            FluidStack stack = handler.getFluidInTank(0);
+            if (stack.isEmpty())
+                continue;
+            EngineCoolants.Entry coolant = EngineCoolants.get(stack);
+            if (coolant == null)
+                continue; // 表外流体（正常流程进不来，保险）
+            amount += stack.getAmount();
+            float fill = Math.min(1f, stack.getAmount() / COOLANT_FULL);
+            if (fill <= 0f)
+                continue;
+            working++;
+            power += K_WATER * fill * coolant.efficiency();
+            boilWeight += coolant.boilMultiplier();
+            // 沸腾失液速率（mb/tick）：只看温度（不看引擎开关），按<b>本模块</b>自己的冷却液；T ≤ 200°C 时为 0。
+            // ★ 这份数值是全模块唯一来源：蒸发散热（evapCooling）与消耗抽液（tickCoolantConsumption）都读它
+            float boil = temperature > OVERHEAT_RESUME
+                    ? COOLANT_BOIL_MB_PER_DEGREE_SEC * (temperature - OVERHEAT_RESUME)
+                            * coolant.boilMultiplier() / 20f
+                    : 0f;
+            boilPerTick += boil;
+            workingList.add(new CoolantModule(pos, boil));
+        }
+        waterCoolingModules = working;
+        coolantAmount = amount;
+        coolantBoilWeight = boilWeight;
+        workingCoolantModules = workingList;
+        // 蒸汽引擎：水冷不参与温度（玩家定稿），所以贡献强制 0；模块数/液量仍如实记录（Lua 信息用）
+        waterCoolingPower = steamEngine ? 0f : power * waterCoolingStrength;
+        // 蒸发潜热散热：T>200°C 时把沸腾带走的热量从净发热里扣；蒸汽引擎 / 回路关闭 → 0（这两种也都不烧液）
+        evapCooling = steamEngine || waterCoolingStrength <= 0f
+                ? 0f : EVAP_LATENT_GAIN * 20f * (float) boilPerTick;
+    }
+
+    /**
+     * 冷却液消耗结算（<b>仅服务端</b>，在温度更新之后调用；<b>逐模块独立计账</b>）：
+     * <ol>
+     *   <li><b>常态运行成本</b>：<b>引擎开着</b>时，每工作模块每 {@link #COOLANT_RUNTIME_TICKS_PER_MB} tick（8 秒）掉 1mb
+     *       ——停机（油门 0 / 过热硬停）不耗，语义同「停机不烧油」；</li>
+     *   <li><b>过热沸腾</b>：<b>不看引擎开关</b>，只要温度 &gt; {@link #OVERHEAT_RESUME}（200°C），每工作模块每秒掉
+     *       `{@link #COOLANT_BOIL_MB_PER_DEGREE_SEC} × (T − 200) × 该模块自己的 boilMultiplier` mb
+     *       （越热掉越快；过热硬停后继续烧）。</li>
+     * </ol>
+     * <b>每个模块只攒自己的欠账、只抽自己的罐</b>（{@link #coolantDebtByPos}）：N 个模块并行工作 → N 个罐按各自
+     * 速率同时掉液。旧版把总成本记进一个整体累积器、再从列表第一个模块抽到够——第一个罐 8000mb 永远抽够，
+     * 其余模块一滴不掉（多模块「只有一个在工作」的根因）。
+     * <p>
+     * 沸腾速率<b>直接读</b> {@link #workingCoolantModules}（{@link #updateWaterCooling} 本 tick 算好的那份）——
+     * 与蒸发潜热散热 {@link #evapCooling} 共用同一份数值，所以「散掉的热」与「烧掉的液」严格对应。
+     * <p>
+     * 累积器攒够 {@link #COOLANT_DRAIN_CHUNK_MB} 才真 drain 一次：模块 BE 每次内容变化都会发包，
+     * 沸腾加速后逐 tick 抽会变成大量小包（P7+ 同步优化的原则）。总消耗量不受粒度影响（欠账照样累计）。
+     * 蒸汽引擎不消耗（水冷对它无效）；回路关闭（开度 0）同样不消耗（此时清空全部欠账，不留跨状态残账）。
+     */
+    protected void tickCoolantConsumption(ModuleScan scan) {
+        if (level == null || level.isClientSide)
+            return;
+        if (steamEngine || waterCoolingStrength <= 0f || waterCoolingModules <= 0) {
+            coolantDebtByPos.clear();
+            return;
+        }
+
+        // 逐模块：本模块成本 = 常态（开着才计）+ 自己缓存下来的沸腾速率 → 挤进本模块欠账 → 满 1mb 只抽本模块的罐
+        double runtimePerTick = running ? 1d / COOLANT_RUNTIME_TICKS_PER_MB : 0d;
+        for (CoolantModule module : workingCoolantModules) {
+            BlockPos pos = module.pos();
+            double mbPerTick = runtimePerTick + module.boilMbPerTick();
+            if (mbPerTick <= 0d)
+                continue; // 停机且不过热：本 tick 无成本，已有欠账留着下次接着攒
+
+            IFluidHandler handler = fluidHandlerAt(pos);
+            if (handler == null || handler.getTanks() < 1)
+                continue;
+            FluidStack stack = handler.getFluidInTank(0);
+            if (stack.isEmpty())
+                continue;
+
+            double debt = coolantDebtByPos.getOrDefault(pos, 0d) + mbPerTick;
+            if (debt < COOLANT_DRAIN_CHUNK_MB) {
+                coolantDebtByPos.put(pos, debt);
+                continue;
+            }
+
+            int wanted = Math.min((int) debt, 256);
+            int ask = Math.min(wanted, stack.getAmount());
+            FluidStack moved = handler.drain(new FluidStack(stack.getFluid(), ask), IFluidHandler.FluidAction.EXECUTE);
+            debt -= moved.getAmount();
+            // 欠账钳 [0, 256]：全部抽干时不留无限欠账
+            coolantDebtByPos.put(pos, Math.min(Math.max(debt, 0d), 256d));
+        }
+
+        // 剪掉已消失（拆除/换方块）的模块欠账，避免残留坐标永远占着
+        coolantDebtByPos.keySet().removeIf(pos -> !scan.waterModules().contains(pos));
+    }
+
     /**
      * 环境温度（°C）：地狱维度（the_nether）全高度恒 {@link #T_AMB_NETHER}=155°C（热环境）、
      * 末地维度（the_end）全高度恒 {@link #T_AMB_END}=0°C（冷寂环境），均与高度无关；
@@ -1152,7 +1538,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /**
      * P7 过冷惩罚（只乘油耗、绝不反哺 Q_heat）：cold = 1 + COLD_K × max(0, ENGINE_MIN_WORK_TEMP − T) / ENGINE_MIN_WORK_TEMP。
-     * T ≥ 100°C（引擎最低工作温度，引擎固定）无惩罚；刚开机 20°C ≈×1.8——玩家先小油门暖机（绝对油耗小、损失轻）再推油门。
+     * T ≥ 100°C（引擎最低工作温度，引擎固定）无惩罚；刚开机 20°C ≈×1.8——冷机时负载低（发热少、绝对油耗小），
+     * 损失轻；负载上来温度进经济带后惩罚自然消失（P8：发热 ∝ 负载，暖机节奏由负载而非油门决定）。
      * 阈值引擎固定（不随燃料/油门），真实 = 最低工作油温。
      */
     protected float coldPenalty(float temp) {
@@ -1163,6 +1550,33 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 热容：C_TH_BASE × 节数（模块越大热得越慢） */
     protected float thermalCapacity() {
         return C_TH_BASE * Math.max(1, length);
+    }
+
+    /**
+     * 本 tick 的<b>燃烧强度</b>（0..1）：全部消耗口径的唯一入口
+     * （流体燃料 mb、蒸汽室水 mb、蒸汽室 burnTicks）。
+     * <p>P8：<b>油门 0 → 0</b>（停机不烧油/不耗水）；否则 = max(<b>上一 tick</b> 的网络负载, {@link #IDLE_LOAD_FLOOR})——
+     * 真实内燃机怠速仍在燃烧（≈ 满载的 5~15%），空载靠怠速燃烧保温，重载满烧。</p>
+     * <p>用上一 tick 的负载是刻意的：本 tick 的 running / 负载要等消耗算完（reserve 判定）之后才确定，
+     * 取上一 tick 值 = 1 tick 滞后，对数值无影响，也不破坏「储备耗尽同 tick 补料防闪断」的语义。</p>
+     */
+    protected float combustionIntensity() {
+        return efficiency > 0f ? Math.max(lastLoadFactor, IDLE_LOAD_FLOOR) : 0f;
+    }
+
+    /**
+     * 发热用的负载 = max(<b>实际负载</b>, {@link #IDLE_LOAD_FLOOR})。
+     * <p>怠速下限只在「烧多少油 / 发多少热」上生效：怠速确实在烧油，也就确实在发热（否则"烧了油却不发热"与
+     * 真实怠速保温矛盾）。<b>Goggle / Lua 的 load 读数仍是实际利用率</b>，不叠加下限。</p>
+     */
+    protected float heatLoad() {
+        return Math.max(loadFactor, IDLE_LOAD_FLOOR);
+    }
+
+    /** 客户端：本 tick 燃烧强度（与服务端 {@link #combustionIntensity()} 同式；用同步的 {@code Load} 代替上一 tick 值）。
+     *  供蒸汽倒计时线性外推（P7+ 方案 D）与燃料行墙钟秒换算。 */
+    private float clientBurnRate() {
+        return Math.max(loadFactor, IDLE_LOAD_FLOOR);
     }
 
     protected IFluidHandler fluidHandlerAt(BlockPos pos) {
@@ -1289,7 +1703,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * for _, t in ipairs(e.getFluidTanks()) do -- 引擎源储罐：fluid/amount/remaining/capacity
      *   print(t.fluid, t.amount, t.remaining, t.capacity)
      * end
-     * e.setThrottle(0.5)                     -- 油门（0..1；应力与转速同比例：50% = 半应力 + 128rpm；0 = 停机）
+     * e.setThrottle(0.5)                     -- 油门（0..1）：<b>只改转速</b>（50% = 128rpm），应力容量恒定；0 = 停机
+     * e.getLoad()                            -- 负载（0..1）：应力网络利用率，驱动油耗与发热
+     * e.getStressUsed() / e.getStressCapacity() -- 网络已用应力 / 可提供容量（SU）
      * e.setMixture(0.8)                      -- 混合比（0.6~1.4；只影响油耗与温度：稀=省油但更热，浓=费油但降温）
      * e.getEffectiveMixture()                -- 实际混合比（杆 × 高空自动富油，气压驱动；高空 > 杆值）
      * }</pre>
@@ -1347,6 +1763,31 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return temperature;
         }
 
+        /**
+         * 引擎负载（0..1，P8）：应力网络利用率 = <b>整网应力 / 整网容量</b>（Create 语义：应力 = Σ impact × 转速）。
+         * <p>停机/脱网 → 0；空载 → 怠速下限 {@code IDLE_LOAD_FLOOR}（仍按该比例燃烧保温）；
+         * 网络过载（应力 &gt; 容量）→ 钳 {@code LOAD_MAX}=1.0（满烧，引擎不停机）。</p>
+         * <p>P8 起<b>负载驱动燃料消耗与发热</b>，油门只决定转速——负载就是「挂了多少机器 × 转速多高」的合成读数，
+         * 适合 Lua 做经济调度（例如负载过高降转速、负载过低关部分机器）。</p>
+         */
+        @LuaFunction
+        public final double getLoad() {
+            return loadFactor;
+        }
+
+        /** 本引擎所在应力网络的<b>已用应力</b>（SU，整网总量：Σ impact × 转速；停机/脱网 → 0） */
+        @LuaFunction
+        public final double getStressUsed() {
+            return stress;
+        }
+
+        /** 本引擎所在应力网络的<b>可提供应力容量</b>（SU，整网总量）。P8 起引擎贡献恒定：
+         *  流体室 8192 × 燃料 stress 倍率 / 蒸汽室 4096（与油门无关） */
+        @LuaFunction
+        public final double getStressCapacity() {
+            return capacity;
+        }
+
         /** 是否过热锁定（T≥OVERHEAT_TEMP 硬停，T≤OVERHEAT_RESUME 滞回解锁） */
         @LuaFunction
         public final boolean isOverheated() {
@@ -1365,7 +1806,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return fluidTanksCache;
         }
 
-        /** 当前油门（0..1；默认 0.25——静态无风道不过热的既有定标值）。定距桨单杆模型：转速 = 油门 × 256 */
+        /** 当前油门（0..1；默认 0.25 → 64rpm）。P8：油门<b>只决定输出转速</b>（容量恒定、消耗 ∝ 网络负载）；0 = 停机不烧油 */
         @LuaFunction
         public final double getThrottle() {
             return efficiency;
@@ -1373,9 +1814,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
         /**
          * 设置油门（0..1，越界钳制；非法参数返回 false）。
-         * 定距桨单杆模型（P4 定稿）：油门同时线性缩放<b>应力输出与转速</b>（100% = 满应力 + 256rpm，
-         * 50% = 半应力 + 128rpm，0 = 停机），发热与燃料消耗 ∝ 油门；与转速控制器组合不会产生作弊
-         * （预算 = 应力×转速 恒随油门缩放，外部变速无法放大）。
+         * <b>P8 语义：油门只改输出转速</b>（转速 = 油门 × 256；0 = 停机不烧油），<b>不</b>改应力容量——
+         * 容量由燃烧室数量与燃料 stress 决定、恒定输出（每流体室 8192×stress、每蒸汽室 4096 SU）；
+         * 发热与燃料消耗改由<b>应力网络负载</b>驱动（挂多少机器 / 转速多高合成；空载按怠速下限燃烧保温）。
+         * 外部转速控制器无法作弊：容量绑的是引擎<b>自身生成转速</b>（Create {@code KineticNetwork#getActualCapacityOf}），
+         * 强行提速只会抬高下游应力需求 → 过载。
          */
         @LuaFunction(mainThread = true)
         public final boolean setThrottle(double value) {
@@ -1504,6 +1947,59 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             setChanged();
             sendData();
             return true;
+        }
+
+        // ---- P9：水冷模块（冷却液 data/<ns>/coolant/*.json） ----
+
+        /** P9：是否装了水冷模块（信息用；散热贡献见 {@link #getWaterCoolingPower()}） */
+        @LuaFunction
+        public final boolean hasWaterCooling() {
+            return hasWaterCooling;
+        }
+
+        /** P9：当前水冷回路开度（0~1，默认 1.0 = 全开）。只缩放水冷散热分量，与风门 {@link #getCooling()} 互不影响 */
+        @LuaFunction
+        public final double getWaterCooling() {
+            return waterCoolingStrength;
+        }
+
+        /**
+         * P9：设置水冷回路开度（0~1，越界钳制；非法参数返回 false）。
+         * <b>无门控，纯存值</b>（没装水冷模块时存了不生效）；<b>0 = 关闭回路</b>：既不散热、也不沸腾失液。
+         * 与风门语义对称（风门只管风道散热，这里只管水冷散热）。
+         */
+        @LuaFunction(mainThread = true)
+        public final boolean setWaterCooling(double value) {
+            if (!Double.isFinite(value))
+                return false;
+            float clamped = (float) Mth.clamp(value, 0.0, 1.0);
+            if (Mth.equal(waterCoolingStrength, clamped))
+                return true;
+            waterCoolingStrength = clamped;
+            setChanged();
+            sendData();
+            return true;
+        }
+
+        /**
+         * P9：当前有效水冷散热贡献（k_water，0~；{@code K_WATER × min(液量/4000,1) × 冷却液效率 × 回路开度} 的模块合计）。
+         * 服务端每 tick 计算，读缓存 ≤1 tick 滞后；<b>不含冲压/气压</b>（水冷与空气密度无关）。
+         */
+        @LuaFunction
+        public final double getWaterCoolingPower() {
+            return waterCoolingPower;
+        }
+
+        /** P9：工作中的水冷模块数（液量 &gt; 0；缺冷却液/空罐的模块不计） */
+        @LuaFunction
+        public final int getWaterCoolingModules() {
+            return waterCoolingModules;
+        }
+
+        /** P9：冷却液总量（mb，所有工作模块合计；服务端同步值，读缓存 ≤1 tick 滞后） */
+        @LuaFunction
+        public final double getCoolantAmount() {
+            return coolantAmount;
         }
     }
 
@@ -1806,6 +2302,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         running = compound.getBoolean("Running");
         overheated = compound.getBoolean("Overheated");
         moduleCapacity = compound.getFloat("Capacity");
+        // P8：负载因子（慢字段，1Hz 心跳同步；旧存档/旧包无 Load 字段 → 0，服务端下一 tick 重算）
+        loadFactor = compound.contains("Load") ? compound.getFloat("Load") : 0f;
         if (compound.contains("Temperature"))
             temperature = compound.getFloat("Temperature");
         if (compound.contains("Efficiency"))
@@ -1821,6 +2319,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // 经济/过冷/油耗系数：旧包/旧档兼容兜底（新包不再含此四字段，缺省即默认值，服务端每 tick 重算）
         lastEconomyFactor = compound.contains("EconomyFactor") ? compound.getFloat("EconomyFactor") : 1f;
         coolingStrength = compound.contains("CoolingStrength") ? compound.getFloat("CoolingStrength") : 1f;
+        // P9：水冷模块字段（旧存档/旧包无字段 → 默认「没装/0/1.0 开度」，服务端下一 tick 重算）
+        hasWaterCooling = compound.getBoolean("WaterModule");
+        waterCoolingModules = compound.getInt("WaterModules");
+        waterCoolingPower = compound.getFloat("WaterPower");
+        coolantAmount = compound.getFloat("CoolantAmount");
+        waterCoolingStrength = compound.contains("WaterCoolingStrength")
+                ? compound.getFloat("WaterCoolingStrength") : 1f;
         // P7：经济解锁进度（服务端权威，客户端据此推导经济系数）；P7+ 方案 B 起 EconomyFactor/OptimalTemp/
         // ColdFactor/FuelFactor 不再随包同步——contains 兜底保留（旧包/旧档兼容，缺省即默认值）
         ecoProgress = compound.contains("EcoProgress") ? compound.getFloat("EcoProgress") : 0f;
@@ -1870,8 +2375,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             compound.putInt("Height", length);
         compound.putBoolean("Running", running);
         compound.putBoolean("Overheated", overheated);
-        // 总应力输出（SU，当前转速下）：客户端 Goggle「总应力输出」行——客户端拿不到燃料表 stress 倍率，必须以服务端值为准
+        // 总应力输出（SU，P8 起恒定、与油门无关）：客户端 Goggle「总应力输出」行——客户端拿不到燃料表 stress 倍率，必须以服务端值为准
         compound.putFloat("Capacity", moduleCapacity);
+        // P8：负载因子（驱动 Goggle「负载」行 + 蒸汽倒计时外推基准；慢字段，随 1Hz 心跳校准）
+        compound.putFloat("Load", loadFactor);
         compound.putFloat("Temperature", temperature);
         compound.putFloat("Efficiency", efficiency);
         compound.putFloat("Mixture", mixture);
@@ -1882,6 +2389,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putBoolean("WarmingUp", warmingUp);
         compound.putBoolean("AirDuct", hasAirDuct);
         compound.putFloat("CoolingStrength", coolingStrength);
+        // P9：水冷模块（装没装 / 工作模块数 / 有效散热贡献 / 冷却液总量 / 回路开度）——Goggle 与 Lua 读，客户端不重算
+        compound.putBoolean("WaterModule", hasWaterCooling);
+        compound.putInt("WaterModules", waterCoolingModules);
+        compound.putFloat("WaterPower", waterCoolingPower);
+        compound.putFloat("CoolantAmount", coolantAmount);
+        compound.putFloat("WaterCoolingStrength", waterCoolingStrength);
         // P7+ 方案 B：经济解锁进度（服务端权威，同步客户端 Goggle）——经济系数/过冷系数/油耗系数均为其
         // 纯函数（1−0.25×ecoProgress / coldPenalty(T) / 杆值×经济×过冷），客户端按公式现算，不再随包同步
         // （EconomyFactor/OptimalTemp/ColdFactor/FuelFactor 已从客户端包移除，read 保留旧包兼容兜底）。
@@ -1899,9 +2412,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     }
 
     /**
-     * Goggle 提示：非 controller 委托给 controller；按悬停方块分流四套 tooltip——引擎核心（温度 / Lua 控制 /
-     * 总应力输出 / 目前转速 / 连接的模块）、蒸汽动力室（状态 / 温度 / 油门）、冷却气道（温度 / 效率=风门）、
-     * 流体燃烧室（全量引擎状态，行为不变）。
+     * Goggle 提示：非 controller 委托给 controller；按悬停方块分流四套 tooltip——引擎核心（温度 /
+     * 总应力输出 / 油门 / 目前转速 / 负载 / 连接的模块）、蒸汽动力室（状态 / 温度 / 燃料）、冷却气道（温度 / 风门）、
+     * 流体燃烧室（全量引擎状态：状态 / 温度 / 油耗 / 发热系数）。**油门与负载只在核心显示**。
      * 首行标题（Create overlay 视为标题行，其后有间距）→ 内容整体下移一行。
      * <p>悬停方块由各引擎方块（核心 {@code EngineCoreBlock} / 模块方块）的 {@code IProxyHoveringInformation.getInformationSource}
      * 代理到本 controller 时记录在 {@link #hoveredSourceBlock}：模块记录自身 → 按类型分流；核心记录自身 → 核心 tooltip。
@@ -1941,7 +2454,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return true;
     }
 
-    /** 引擎核心 tooltip：温度 + 总应力输出 + 目前转速 + 连接的模块清单 */
+    /** 引擎核心 tooltip：温度 + 总应力输出 + 油门 + 目前转速 + 负载 + 连接的模块清单（**油门/负载只在核心显示**） */
     private void addCoreTooltip(List<Component> tooltip) {
         tooltip.add(Component.literal("    ")
                 .append(Component.translatable("tooltip.ccpe.engine.header")
@@ -1951,22 +2464,40 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 .append(Component.translatable("tooltip.ccpe.engine.temperature").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(String.format(Locale.ROOT, "%.1f°C", tooltipTemp()))
                         .withStyle(overheated ? ChatFormatting.RED : ChatFormatting.GOLD)));
-        // 总应力输出（用户要求显示产生的总应力；服务端同步 moduleCapacity——客户端拿不到燃料表 stress 倍率，不自算）
+        // 总应力输出（P8：容量固定，与油门无关；服务端同步 moduleCapacity——客户端拿不到燃料表 stress 倍率，不自算）
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.stress_output").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(Math.round(moduleCapacity) + " SU").withStyle(ChatFormatting.AQUA)));
-        // 目前转速（定距桨：油门 × 256；停机 = 0）
+        // 油门（P8：油门只定转速，应力容量恒定——油门/负载两行只在本核心 tooltip 显示，模块 tooltip 不重复）
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.throttle").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.format(Locale.ROOT, "%.1f%%", efficiency * 100))
+                        .withStyle(ChatFormatting.AQUA)));
+        // 目前转速（定距桨：油门 × 256；停机 = 0）——P8 起油门只改这一项
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.speed").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(Math.round(getGeneratedSpeed()) + " RPM").withStyle(ChatFormatting.AQUA)));
+        // 负载（P8：<b>实际</b>应力网络利用率 = 应力/容量，不叠加怠速下限；决定发热与燃料消耗）
+        addLoadLine(tooltip);
+        // P9：水冷散热行（水冷模块存在时显示；服务端同步的 k_water——含液量比例、冷却液效率、回路开度）
+        if (hasWaterCooling) {
+            tooltip.add(Component.literal("     ")
+                    .append(Component.translatable("tooltip.ccpe.engine.water_cooling").withStyle(ChatFormatting.GRAY))
+                    .append(waterCoolingPower > 0f
+                            ? Component.literal(String.format(Locale.ROOT, "+%.2f", waterCoolingPower))
+                                    .withStyle(ChatFormatting.AQUA)
+                            : Component.translatable("tooltip.ccpe.engine.water_cooling_none")
+                                    .withStyle(ChatFormatting.DARK_GRAY)));
+        }
         // 连接的模块清单（显示用：blockstate 轻扫，与服务端 scanModule 同判定；燃烧室按 FACING 反面贴核心归属，不双计）
         ModuleScan scan = scanModule();
         int fluid = scan.fluidChambers().size();
         int steam = scan.steamChambers().size();
         int ducts = scan.coolingDucts;
+        int water = scan.waterModules().size();
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.modules").withStyle(ChatFormatting.GRAY)));
-        if (fluid + steam + ducts == 0) {
+        if (fluid + steam + ducts + water == 0) {
             tooltip.add(Component.literal("     ")
                     .append(Component.literal("- ").withStyle(ChatFormatting.GRAY))
                     .append(Component.translatable("tooltip.ccpe.engine.modules_none").withStyle(ChatFormatting.DARK_GRAY)));
@@ -1977,7 +2508,19 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 addModuleLine(tooltip, MyModBlocks.steam_power_chamber.get().getName(), steam);
             if (ducts > 0)
                 addModuleLine(tooltip, MyModBlocks.cooling_air_duct.get().getName(), ducts);
+            if (water > 0)
+                addModuleLine(tooltip, MyModBlocks.water_cooling_module.get().getName(), water);
         }
+    }
+
+    /** 负载行（P8，仅引擎核心 tooltip）：<b>实际</b>网络利用率 = 应力 / 容量（不叠加怠速下限）；停机灰、接近满负载红 */
+    private void addLoadLine(List<Component> tooltip) {
+        ChatFormatting color = !running ? ChatFormatting.GRAY
+                : (loadFactor >= 0.9f ? ChatFormatting.RED : ChatFormatting.AQUA);
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.load").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.format(Locale.ROOT, "%.0f%%", loadFactor * 100))
+                        .withStyle(color)));
     }
 
     /** 模块清单行：- 名称 x数量 */
@@ -2015,18 +2558,19 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         return lastFuelFactor;
     }
 
-    /** 蒸汽倒计时剩余（P7+ 方案 D 客户端线性外推）：服务端低频同步 + burnTicks 每 tick −效率 精确线性；
-     *  运行中才外推（停机/油门 0 时服务端冻结储备，不外推避免显示归零过早）；服务端返回权威值 */
+    /** 蒸汽倒计时剩余（P7+ 方案 D 客户端线性外推）：服务端低频同步 + burnTicks 每 tick −燃烧强度 精确线性；
+     *  运行中且油门开启才外推（停机/油门 0 时服务端冻结储备，不外推避免显示归零过早）；服务端返回权威值。
+     *  P8：外推基准从「效率」改为「max(同步负载, 怠速下限)」（{@link #clientBurnRate()}）——误差 ≤ 1Hz 包间隔。 */
     private float steamBurnTicksDisplay() {
         if (level != null && level.isClientSide && running && efficiency > 0f) {
             float remaining = steamBurnTicksRemaining
-                    - efficiency * Math.max(0, level.getGameTime() - steamBurnTicksSyncTime);
+                    - clientBurnRate() * Math.max(0, level.getGameTime() - steamBurnTicksSyncTime);
             return Math.max(0f, remaining);
         }
         return steamBurnTicksRemaining;
     }
 
-    /** 蒸汽动力室 tooltip：状态（停机 / 正常 / 暖机中）+ 温度 + 油门（= 效率百分比） */
+    /** 蒸汽动力室 tooltip：状态（停机 / 正常 / 暖机中）+ 温度 + 燃料（油门/负载只在核心显示，这里不重复） */
     private void addSteamChamberTooltip(List<Component> tooltip) {
         tooltip.add(Component.literal("    ")
                 .append(Component.translatable("tooltip.ccpe.engine.header")
@@ -2050,10 +2594,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 .append(Component.translatable("tooltip.ccpe.engine.temperature").withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(String.format(Locale.ROOT, "%.1f°C", tooltipTemp()))
                         .withStyle(ChatFormatting.GOLD)));
-        tooltip.add(Component.literal("     ")
-                .append(Component.translatable("tooltip.ccpe.engine.throttle").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal(String.format(Locale.ROOT, "%.1f%%", efficiency * 100))
-                        .withStyle(ChatFormatting.AQUA)));
+        // 油门 / 负载行只在引擎核心 tooltip 显示（用户要求，模块 tooltip 不重复——蒸汽室的"烧多快"由负载决定）
         // 燃料（正在使用的燃料；固体显示剩余燃烧时间，流体不显示——参考 simulated portable_engine）
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.engine.fuel").withStyle(ChatFormatting.GRAY))
@@ -2073,10 +2614,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             Component name = Component.translatable(steamFuelKey)
                     .append(Component.literal(" x" + chambers))
                     .withStyle(ChatFormatting.GREEN);
-            // P7+ 方案 D：倒计时用客户端线性外推值（低频同步 + 每 tick −效率 精确线性，逐秒平滑跳动）
+            // P7+ 方案 D：倒计时用客户端线性外推值（低频同步 + 每 tick −燃烧强度 精确线性，逐秒平滑跳动）
+            // P8：墙钟剩余秒 = burnTicks/(max(负载,怠速下限)×20)
             float burnTicks = steamBurnTicksDisplay();
             if (burnTicks > 0 && efficiency > 0f) {
-                int seconds = Math.max(0, Math.round(burnTicks / efficiency / 20f));
+                int seconds = Math.max(0, Math.round(burnTicks / clientBurnRate() / 20f));
                 name = name.copy().append(Component.literal(" (" + formatBurnTime(seconds) + ")")
                         .withStyle(ChatFormatting.AQUA));
             }
@@ -2171,10 +2713,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (overheated)
             tooltip.add(Component.literal("     ")
                     .append(Component.translatable("tooltip.ccpe.engine.overheated").withStyle(ChatFormatting.RED)));
-        tooltip.add(Component.literal("     ")
-                .append(Component.translatable("tooltip.ccpe.engine.throttle").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal(String.format(Locale.ROOT, "%.1f%%", efficiency * 100))
-                        .withStyle(ChatFormatting.AQUA)));
+        // 油门 / 负载行只在引擎核心 tooltip 显示（用户要求，模块 tooltip 不重复）
         // 油耗 / 发热系数（仅流体引擎；蒸汽 Plan B = 恒温自调节、无这两行）
         if (!steamEngine) {
             // 油耗（P7+ 方案 B：客户端按公式现算「最终油耗系数」= 杆值 × 经济系数 × 过冷惩罚，即除油门/自动富油外的全部油耗因子；<1 = 省油中）
@@ -2198,18 +2737,24 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (!isController() || !running)
             return 0;
         // 定距桨模型（P4 定稿）：转速 = 油门 × 最大转速（0~256 线性；0 油门 = 停机）
+        // P8：油门<b>只</b>影响转速——应力容量恒定（见 calculateAddedStressCapacity）
         return GENERATED_SPEED * efficiency;
     }
 
     /**
-     * 应力容量（SU per RPM，Create 语义）：总容量 = 运行燃烧室数 × 8192 × 燃料 stress 倍率，
-     * 除以当前转速即为每 RPM 容量（CDG modular engine 同款公式）。
+     * 应力容量（SU per RPM，Create 语义）：网络实际容量 = 本返回值 × |<b>自身</b>生成转速| = {@link #moduleCapacity}（固定 SU）。
+     * <p>P8：容量<b>不再随油门缩放</b>——油门只改转速，本值相应反比变化，网络乘回来得到的 SU 恒定
+     * （每流体室 8192 × 燃料 stress 倍率、每蒸汽室 4096）。</p>
+     * <p>防作弊：Create {@code KineticNetwork#getActualCapacityOf} 用的是引擎<b>自身生成转速</b>而不是网络转速，
+     * 外部转速控制器/变速器只能抬高下游应力需求（→ 过载），无法放大容量。</p>
+     * <p>同时写入 {@code lastCapacityProvided}（Create 基类约定：读档 {@code initialize → addSilently}
+     * 要拿它减去旧量，漏写会造成短暂的容量重复计数）。</p>
      */
     @Override
     public float calculateAddedStressCapacity() {
         float speed = Math.abs(getGeneratedSpeed());
-        if (speed == 0)
-            return 0;
-        return moduleCapacity / speed;
+        float capacityPerRPM = speed == 0 ? 0f : moduleCapacity / speed;
+        this.lastCapacityProvided = capacityPerRPM;
+        return capacityPerRPM;
     }
 }

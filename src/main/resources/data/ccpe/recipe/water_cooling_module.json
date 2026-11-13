@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:copper_sheet"
+    },
+    "X": {
+      "item": "create:encased_fan"
+    },
+    "Y": {
+      "item": "create:fluid_tank"
+    },
+    "Z": {
+      "item": "create:mechanical_pump"
+    }
+  },
+  "pattern": [
+    " X ",
+    " Y ",
+    "#Z#"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:water_cooling_module"
+  }
+}

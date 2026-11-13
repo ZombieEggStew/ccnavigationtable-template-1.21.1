@@ -1,0 +1,28 @@
+{
+  "variants": {
+    "facing=down": {
+      "model": "ccpe:block/water_cooling_module/water_cooling_module",
+      "x": 90
+    },
+    "facing=east": {
+      "model": "ccpe:block/water_cooling_module/water_cooling_module",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "ccpe:block/water_cooling_module/water_cooling_module"
+    },
+    "facing=south": {
+      "model": "ccpe:block/water_cooling_module/water_cooling_module",
+      "y": 180
+    },
+    "facing=up": {
+      "model": "ccpe:block/water_cooling_module/water_cooling_module",
+      "x": 270,
+      "y": 180
+    },
+    "facing=west": {
+      "model": "ccpe:block/water_cooling_module/water_cooling_module",
+      "y": 270
+    }
+  }
+}

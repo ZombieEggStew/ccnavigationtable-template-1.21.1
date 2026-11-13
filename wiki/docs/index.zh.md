@@ -51,6 +51,7 @@ Sable 物理轴承，直接轴向动力输入。**Lua 控制模式**下旋转角
 - **[流体燃烧室](engine/fluid-combustion-chamber.zh.md)** — datapack 燃料、每室 8192 SU、混合比/经济玩法
 - **[蒸汽动力室](engine/steam-power-chamber.zh.md)** — 水 + 原版燃料、每室 4096 SU、永不过热、余热运转
 - **[冷却气道](engine/cooling-air-duct.zh.md)** — 散热鳍片与可调风门
+- **[水冷模块](engine/water-cooling-module.zh.md)** — 8000mb 冷却液、静态/低速/高空散热（不吃冲压与气压）
 - Lua 控制（`ccpe:engine`，无红石）
 
 ### [🛰️ 传感器系统](sensor-system/overview.zh.md)

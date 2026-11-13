@@ -61,13 +61,13 @@ public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock, 
     /**
      * 选择框 / 碰撞箱基准（{@code facing=up} 未旋转的模型坐标系，单位 = 1/16 格）。
      * <p>
-     * 用户定稿：(1,12,1,15,15,15) 顶盖 + (2,0,2,14,12,14) 筒身。
+     * 用户定稿：(1,13,1,15,16,15) 顶盖 + (2,0,2,14,13,14) 筒身。
      * 六个朝向的盒子由 {@link #buildShapes()} 按 blockstate 的模型旋转生成，
      * 与 {@code blockstates/thrust_nozzle.json} 的 x/y 旋转严格一致（变换链照抄 {@link AicBlock}）。
      */
     private static final VoxelShape BASE_SHAPE =
-            Shapes.or(Block.box(1.0D, 12.0D, 1.0D, 15.0D, 15.0D, 15.0D),
-                      Block.box(2.0D, 0.0D, 2.0D, 14.0D, 12.0D, 14.0D));
+            Shapes.or(Block.box(1.0D, 13.0D, 1.0D, 15.0D, 16.0D, 15.0D),
+                      Block.box(2.0D, 0.0D, 2.0D, 14.0D, 13.0D, 14.0D));
 
     private static final Map<Direction, VoxelShape> SHAPES = buildShapes();
 
