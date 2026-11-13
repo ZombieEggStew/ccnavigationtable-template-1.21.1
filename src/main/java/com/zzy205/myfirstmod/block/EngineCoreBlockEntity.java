@@ -758,6 +758,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      *   <li>蒸汽室固体燃料：带 ItemHandler 且含可烧物品的容器（quick_fill_fuel_vault 等）。</li>
      * </ul>
      * 只走 capability，绝不直接改罐/容器 BE。列表 transient 不落盘。
+     * <p>
+     * <b>水冷模块排除</b>：{@code water_cooling_module} 自带 8000mb 冷却液槽（数据表 coolant/*.json），
+     * 但它<b>不是</b>引擎燃料/水源——否则装水会被蒸汽引擎当锅炉水抽走、装
+     * {@code aeronautics:levitite_blend}（它同时是 engine_fuel 条目）会被流体燃烧室当燃料烧掉。
+     * 所以这里直接跳过该方块（冷却液只由水冷模块自己保管，散热逻辑以后单独读）。
      */
     protected void rebuildSources(List<BlockPos> neighbors) {
         List<BlockPos> water = new ArrayList<>();
@@ -765,6 +770,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         List<SteamFuelSource> steamFuelList = new ArrayList<>();
         List<BlockPos> solid = new ArrayList<>();
         for (BlockPos pos : neighbors) {
+            // 水冷模块的冷却液不算引擎水源 / 燃料（见方法注释；它也含 item handler 之外的液体槽，直接跳过最稳）
+            if (level != null && level.getBlockState(pos).is(MyModBlocks.water_cooling_module.get()))
+                continue;
             IFluidHandler fh = fluidHandlerAt(pos);
             if (fh != null) {
                 FluidStack stack = fh.getFluidInTank(0);

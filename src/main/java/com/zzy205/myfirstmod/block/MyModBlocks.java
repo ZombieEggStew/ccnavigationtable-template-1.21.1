@@ -205,6 +205,14 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 水冷模块（water_cooling_module）：6 向贴附（只有 FACING 一个属性，blockstate 结构照 create:encased_fan，见 WaterCoolingModuleBlock）；低速/静态引擎的散热模块，**当前只做方块接入、无逻辑**（不进引擎模块枚举、无 BE）；整格模型，选择框/碰撞箱用默认整块 */
+    public static final DeferredBlock<WaterCoolingModuleBlock> water_cooling_module =
+            registerBlocks("water_cooling_module", () -> new WaterCoolingModuleBlock(BlockBehaviour.Properties.of().
+                    sound(SoundType.NETHERITE_BLOCK).
+                    strength(1.0f, 6.0f).
+                    noOcclusion()
+            ));
+
     /**
      * 定向喷管（thrust_nozzle）：贴在 {@code create:encased_fan} 出风面上的推力方块。
      * <p>

@@ -38,6 +38,7 @@ public class MyModCreativeModeTabs {
                 output.accept(MyModBlocks.fluid_combustion_chamber); // 流体燃烧室（活塞动态渲染）
                 output.accept(MyModBlocks.steam_power_chamber); // 蒸汽动力室（活塞动态渲染）
                 output.accept(MyModBlocks.cooling_air_duct); // 冷却气道（12 态；纯散热 + setCooling 风门；混合比拉稀权由流体燃烧室门控）
+                output.accept(MyModBlocks.water_cooling_module); // 水冷模块（6 态；低速/静态引擎散热；当前只做方块接入，无逻辑）
                 // 3. 控制台
                 output.accept(MyModBlocks.my_control_desk);
                 output.accept(MyModItems.CONTROL_PEDAL);

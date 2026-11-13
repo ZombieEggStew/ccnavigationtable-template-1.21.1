@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod;
 import com.mojang.logging.LogUtils;
 import com.tterrag.registrate.Registrate;
 import com.zzy205.myfirstmod.block.AutoPackagerBlockEntity;
+import com.zzy205.myfirstmod.block.EngineCoolants;
 import com.zzy205.myfirstmod.block.EngineCoreBlockEntity;
 import com.zzy205.myfirstmod.block.EngineFuels;
 import com.zzy205.myfirstmod.block.MyModBlockEntities;
@@ -10,6 +11,7 @@ import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.block.QuickFillFluidTankBlockEntity;
 import com.zzy205.myfirstmod.block.QuickFillFuelVaultBlockEntity;
 import com.zzy205.myfirstmod.block.TrailingWheelMountBlockEntity;
+import com.zzy205.myfirstmod.block.WaterCoolingModuleBlockEntity;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralCapabilities;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralExtenderSetup;
@@ -76,6 +78,9 @@ public class CCPeripheralExtender {
         // 引擎燃料表（engine_fuel/*.json）：服务端数据包重载时加载（P1，见 EngineFuels）
         NeoForge.EVENT_BUS.addListener(EngineFuels::registerAddReloadListener);
 
+        // 冷却液表（coolant/*.json）：服务端数据包重载时加载（水冷模块的填充白名单 + 冷却效率，见 EngineCoolants）
+        NeoForge.EVENT_BUS.addListener(EngineCoolants::registerAddReloadListener);
+
         // 注册 CC:T 外设 capability（支持 peripheral.wrap / peripheral.find）
         modEventBus.addListener(RegisterCapabilitiesEvent.class, CCPeripheralCapabilities::register);
 
@@ -135,6 +140,11 @@ public class CCPeripheralExtender {
                 Capabilities.FluidHandler.BLOCK,
                 MyModBlockEntities.quick_fill_fluid_tank_entity.get(),
                 (be, side) -> ((QuickFillFluidTankBlockEntity) be).getTank());
+        // 水冷模块：8000mb 单槽冷却液（isFluidValid = EngineCoolants 白名单，管道/泵灌不进去非冷却液）
+        event.registerBlockEntity(
+                Capabilities.FluidHandler.BLOCK,
+                MyModBlockEntities.water_cooling_module_entity.get(),
+                (be, side) -> ((WaterCoolingModuleBlockEntity) be).getTank());
         event.registerBlockEntity(
                 Capabilities.ItemHandler.BLOCK,
                 MyModBlockEntities.quick_fill_fuel_vault_entity.get(),
