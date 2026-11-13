@@ -136,4 +136,10 @@
 - Added the auto packager.
 
 1.2.1
-- 
+- **IMPORTANT!!!** Reworked how the engine makes power: each chamber now provides a **fixed amount of stress** (8192 SU per fluid combustion chamber, × its fuel multiplier; 4096 SU per steam power chamber) that **no longer changes with the throttle**. The throttle now only sets the output **rotation speed** (0-256 rpm, 0 = stopped).Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/engine-core/
+
+- Engine fuel consumption now follows the **load on the stress network** — how many machines are attached and how hard they are working — instead of the throttle. An engine with nothing attached still burns a little at idle (20%) so that it stays warm instead of shutting down.
+
+- Cooling becomes the real limit on how many machines an engine can drive.
+
+- Added `getLoad`, `getStressUsed` and `getStressCapacity` Lua methods to the engine peripheral. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/lua-api/
