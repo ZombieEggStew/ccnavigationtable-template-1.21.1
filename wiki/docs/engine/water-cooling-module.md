@@ -6,13 +6,6 @@ The **Water Cooling Module** (`ccpe:water_cooling_module`) is the [Engine System
 
 The key difference from the [Cooling Air Duct](cooling-air-duct.md): water cooling is **not affected by ram air (airspeed) or ambient pressure (altitude)** — a liquid loop does not care about the air. So it is the answer for the three situations where ducts are weakest: **static, low speed and high altitude**. The price is **coolant consumption**, which accelerates while the engine runs hot, and it is also heavy.
 
-## Placement
-
-- A 6-directional block (6 block states).
-- **Facing follows the player's look direction** (like `create:encased_fan`): placed without sneaking → the cooling face (the plate) faces the player; placed while sneaking → 180° the other way (along the look direction).
-- **Wrench**: right-click = rotate 90° around the clicked face's axis; sneak-right-click = dismantle (drops back into the inventory).
-- **Ownership**: any of the 6 neighbouring cells of an **engine core segment or a chamber** counts towards that engine (same rule as cooling ducts, de-duplicated with `seen`). Those then act as seeds for a **chain expansion** — a module touching **another water cooling module** counts too, so you can stack a whole radiator array around the core. Several modules add up linearly (no cap), each using its own coolant amount and coolant type.
-- The selection box hugs the model (the plate + the body); the collision box is still the full block.
 
 ## Coolant
 
