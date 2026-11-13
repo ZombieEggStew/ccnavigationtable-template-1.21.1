@@ -264,13 +264,55 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final int COOLANT_RUNTIME_TICKS_PER_MB = 160;
 
     /**
-     * <b>过热沸腾</b>（T &gt; 200°C）：每工作模块<b>每秒</b>损失
-     * `COOLANT_BOIL_MB_PER_DEGREE_SEC × (T − 200)` mb —— 210°C ≈ 5mb/s、219°C ≈ 9.5mb/s。
-     * 与温度成正比：200°C 整点速率为 0（无边界抖动），越热掉得越快。
+     * <b>过热沸腾失液速率</b>（mb/s 每 °C 过热）：每工作模块<b>每秒</b>损失
+     * `COOLANT_BOIL_MB_PER_DEGREE_SEC × (T − 200)` mb。与温度成正比：200°C 整点速率为 0（无边界抖动），越热掉得越快。
      * <b>不需要引擎开着</b>（玩家定稿）：只要温度还在 200°C 以上就继续掉——过热硬停后靠余热敞着烧冷却液，
      * 直到温度被散热压低到 200°C 以下（冷却液越少 → 散热越弱 → 掉得更快，是正反馈）。
+     * <p>
+     * <b>这个常数只决定「烧多快」（续航），<u>不</u>决定平台温度</b>：沸腾散热的斜率由
+     * {@link #BOIL_COOLING_PER_DEGREE} 单独锁定（{@link #EVAP_LATENT_GAIN} = 两者相除）。所以想缩短/延长
+     * 「高温还能撑多久」只改这一个数，平台温度不动。玩家定稿（2026-09）：<b>蒸发维持高温只是紧急方案，不许长时间维持</b>
+     * → 由 0.5 提到 1.5（3 倍）：满罐续航 ≈26 分钟 → ≈9 分钟。
      */
-    public static final float COOLANT_BOIL_MB_PER_DEGREE_SEC = 0.5f;
+    public static final float COOLANT_BOIL_MB_PER_DEGREE_SEC = 1.5f;
+
+    /**
+     * <b>沸腾散热斜率</b>（°C/s 每 °C 过热，**与 kTotal 同量纲**）：直接决定<b>平台温度</b>，不随失液速率变化。
+     * <pre>
+     * 平衡式：heat − BOIL_COOLING_PER_DEGREE × (T − 200) = k_total × (T − T_amb)
+     * → (T − 200) = (heat − 180 × k_total) / (BOIL_COOLING_PER_DEGREE + k_total)
+     * </pre>
+     * 实测基准（燃料 heat=1.0、4 满载流体室 + 1 满罐水模块、1 节核心、静态、海平面，k≈0.55 / heat=120）：
+     * 本项 = 1.5 → 平台 ≈210°C（游戏内实测 206.6），沸腾失液由沸点常数决定。想要更低/更高的平台只改这个数。
+     * 物理对应：≈1.5 °C/s 每 °C ≈ 现实「核态沸腾把换热系数抬到单相的数倍」的那个斜率。
+     */
+    public static final float BOIL_COOLING_PER_DEGREE = 1.5f;
+
+    /**
+     * <b>每 mB/s 蒸发的有效散热当量</b>（°C/s 每 mB/s）＝ {@link #BOIL_COOLING_PER_DEGREE} ÷
+     * {@link #COOLANT_BOIL_MB_PER_DEGREE_SEC}（<b>派生值，不要单独手改</b>）：两者相乘 = 沸腾散热的斜率。
+     * <p>
+     * <b>怎么算</b>：{@code heat_net = heat − EVAP_LATENT_GAIN × 20 × Σ(mb/tick)}，扣在净发热一侧，
+     * <b>不进 kTotal</b>——它是质量流量项（∝ 失液速率），不随温差变化，也不吃冲压/气压/风道。
+     * 必须<b>真烧冷却液</b>才给这份信用：蒸发速率与消耗计账共用同一份数值（{@link #workingCoolantModules}），
+     * 不会出现「少烧水多散热」。
+     * <p>
+     * 现值 = 1.5 ÷ 1.5 = <b>1.0</b>：相当于只承认 ≈57% 的纯潜热当量（1 mB 水汽化 ≈2.26 kJ ≈1.74 °C/s，
+     * 见下方换算），其余随排放口/排气带走、不回到缸体。这是"缩短续航"的代价所在：每 mB 的有效散热变小了。
+     * <pre>
+     * 物理当量换算：1 °C/s ≈ 1.3 kW（由「2 满载流体室 = 60 °C/s ↔ 现实 ~80 kW」反推）
+     *              → 1 mB 水汽化 2.26 kJ ÷ 1.3 kJ·s⁻¹ ≈ 1.74 °C/s
+     * </pre>
+     */
+    public static final float EVAP_LATENT_GAIN = BOIL_COOLING_PER_DEGREE / COOLANT_BOIL_MB_PER_DEGREE_SEC;
+
+    /**
+     * 冷却液抽液<b>批处理粒度</b>（mb）：本模块欠账攒够这么多才真 drain 一次。
+     * 模块 BE 每次内容变化都会发包（{@code sendBlockUpdated}），逐 tick 抽会变成大量小包——
+     * 沸腾加速后（≈1.5 mb/tick）如果按 1mb 抽，就是每 tick 一个包（20 个/秒）；攒到 8mb 后约 5 tick 一次（4 个/秒），
+     * 总消耗量完全不变（欠账照样累计）。详见 memo 的 P7+ 同步优化原则。
+     */
+    public static final int COOLANT_DRAIN_CHUNK_MB = 8;
     /** 冲压冷却满增益（×）：运动 ≥RAM_FULL 时总散热 ×2.0（eff100% + 1风道/室 + 冲压 ⇒ 足够） */
     public static final float RAM_MAX = 2.0f;
     /** 冲压起始速度（m/s）：低于此无增益 */
@@ -426,6 +468,24 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * <b>transient，不落盘</b>（拆模块 / 回路关闭 / 蒸汽引擎 → 清空）。
      */
     protected final Map<BlockPos, Double> coolantDebtByPos = new HashMap<>();
+
+    /**
+     * 本 tick 的<b>工作模块</b>清单（服务端每 tick 由 {@link #updateWaterCooling} 重建）：
+     * 每个模块记「自己的沸腾失液速率（mb/tick；T ≤ 200°C 时为 0）」。
+     * <b>蒸发散热（{@link #evapCooling}）与消耗计账（{@link #tickCoolantConsumption}）都读这一份</b>，
+     * 保证「散掉多少热 = 烧掉多少液」，两处公式永不漂移。transient，不落盘。
+     */
+    protected record CoolantModule(BlockPos pos, float boilMbPerTick) {}
+
+    /** 本 tick 的工作模块清单（见 {@link CoolantModule}；配合 {@link #coolantDebtByPos} 逐模块计账） */
+    protected List<CoolantModule> workingCoolantModules = List.of();
+
+    /**
+     * 本 tick 的<b>蒸发潜热散热</b>（°C/s，服务端算）：{@code EVAP_LATENT_GAIN × 20 × Σ boilMbPerTick}。
+     * 蒸汽引擎 / 回路关闭（开度 0）/ 没模块 / T ≤ 200°C → 恒 0（这几种情况本来也不烧冷却液，信用与代价一致）。
+     * 只影响温度，不做 goggle/Lua 暴露（玩家定稿：内部生效即可）。
+     */
+    protected float evapCooling = 0f;
 
     /** 沸腾权重的模块合计（Σ 各工作模块冷却液的 {@code boilMultiplier}；服务端 tick 算） */
     protected float coolantBoilWeight = 0f;
@@ -676,6 +736,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             //   （否则「经济只省油」「富油花油买冷」两条设计张力立刻崩塌，memo §7.6 地基）
             if (running && !overheated && runningFluid > 0 && fluidFuel != null)
                 heat += runningFluid * heatLoad() * fluidFuel.heat() * BASE_HEAT_FLUID * mixtureHeatFactor;
+            // P9：<b>蒸发潜热</b>散热（沸腾带走的潜热）从净发热里扣。它是质量流量项（∝ 失液速率），
+            // 不随温差变化，所以<b>不进 kTotal</b>（也因此不吃冲压/气压/风道）；T ≤ 200°C 时 evapCooling 恒 0，
+            // 200 以下的既有平衡（风道/水冷/经济区/过冷惩罚）一个数都不动。
+            heat -= evapCooling;
             // P6 风门：冷却强度只缩放冷却气道散热分量（冲压/气压/环境不动）；无气道时 D=0 无影响
             // P3 修正：K_AMBIENT 只计「运行中」的室——停机（油门 0）时 runningFluid 仍计有储备的室，
             // 储备≠在消耗，不加门控会导致「有剩燃料冷得更快」（踩坑 13 原则；冷却按运行中室数计，memo §15）
@@ -1280,6 +1344,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             waterCoolingPower = 0f;
             coolantAmount = 0f;
             coolantBoilWeight = 0f;
+            workingCoolantModules = List.of();
+            evapCooling = 0f;
             return;
         }
 
@@ -1287,6 +1353,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         float power = 0f;
         float amount = 0f;
         float boilWeight = 0f;
+        double boilPerTick = 0d;
+        List<CoolantModule> workingList = new ArrayList<>();
         for (BlockPos pos : scan.waterModules()) {
             IFluidHandler handler = fluidHandlerAt(pos);
             if (handler == null || handler.getTanks() < 1)
@@ -1304,12 +1372,24 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             working++;
             power += K_WATER * fill * coolant.efficiency();
             boilWeight += coolant.boilMultiplier();
+            // 沸腾失液速率（mb/tick）：只看温度（不看引擎开关），按<b>本模块</b>自己的冷却液；T ≤ 200°C 时为 0。
+            // ★ 这份数值是全模块唯一来源：蒸发散热（evapCooling）与消耗抽液（tickCoolantConsumption）都读它
+            float boil = temperature > OVERHEAT_RESUME
+                    ? COOLANT_BOIL_MB_PER_DEGREE_SEC * (temperature - OVERHEAT_RESUME)
+                            * coolant.boilMultiplier() / 20f
+                    : 0f;
+            boilPerTick += boil;
+            workingList.add(new CoolantModule(pos, boil));
         }
         waterCoolingModules = working;
         coolantAmount = amount;
         coolantBoilWeight = boilWeight;
+        workingCoolantModules = workingList;
         // 蒸汽引擎：水冷不参与温度（玩家定稿），所以贡献强制 0；模块数/液量仍如实记录（Lua 信息用）
         waterCoolingPower = steamEngine ? 0f : power * waterCoolingStrength;
+        // 蒸发潜热散热：T>200°C 时把沸腾带走的热量从净发热里扣；蒸汽引擎 / 回路关闭 → 0（这两种也都不烧液）
+        evapCooling = steamEngine || waterCoolingStrength <= 0f
+                ? 0f : EVAP_LATENT_GAIN * 20f * (float) boilPerTick;
     }
 
     /**
@@ -1317,7 +1397,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * <ol>
      *   <li><b>常态运行成本</b>：<b>引擎开着</b>时，每工作模块每 {@link #COOLANT_RUNTIME_TICKS_PER_MB} tick（8 秒）掉 1mb
      *       ——停机（油门 0 / 过热硬停）不耗，语义同「停机不烧油」；</li>
-     *   <li><b>过热沸腾</b>：<b>不看引擎开关</b>，只要温度 &gt; {@link #OVERHEAT_RESUME}（200°C），每工作模块每秒再掉
+     *   <li><b>过热沸腾</b>：<b>不看引擎开关</b>，只要温度 &gt; {@link #OVERHEAT_RESUME}（200°C），每工作模块每秒掉
      *       `{@link #COOLANT_BOIL_MB_PER_DEGREE_SEC} × (T − 200) × 该模块自己的 boilMultiplier` mb
      *       （越热掉越快；过热硬停后继续烧）。</li>
      * </ol>
@@ -1325,7 +1405,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * 速率同时掉液。旧版把总成本记进一个整体累积器、再从列表第一个模块抽到够——第一个罐 8000mb 永远抽够，
      * 其余模块一滴不掉（多模块「只有一个在工作」的根因）。
      * <p>
-     * 累积器满 1mb 才真 drain：模块 BE 每次内容变化都会发包，逐 tick 抽会变成大量小包（P7+ 同步优化的原则）。
+     * 沸腾速率<b>直接读</b> {@link #workingCoolantModules}（{@link #updateWaterCooling} 本 tick 算好的那份）——
+     * 与蒸发潜热散热 {@link #evapCooling} 共用同一份数值，所以「散掉的热」与「烧掉的液」严格对应。
+     * <p>
+     * 累积器攒够 {@link #COOLANT_DRAIN_CHUNK_MB} 才真 drain 一次：模块 BE 每次内容变化都会发包，
+     * 沸腾加速后逐 tick 抽会变成大量小包（P7+ 同步优化的原则）。总消耗量不受粒度影响（欠账照样累计）。
      * 蒸汽引擎不消耗（水冷对它无效）；回路关闭（开度 0）同样不消耗（此时清空全部欠账，不留跨状态残账）。
      */
     protected void tickCoolantConsumption(ModuleScan scan) {
@@ -1336,34 +1420,23 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return;
         }
 
-        // 逐模块：算本模块自己的成本 → 累积到本模块的欠账 → 满 1mb 只抽本模块的罐
-        for (BlockPos pos : scan.waterModules()) {
+        // 逐模块：本模块成本 = 常态（开着才计）+ 自己缓存下来的沸腾速率 → 挤进本模块欠账 → 满 1mb 只抽本模块的罐
+        double runtimePerTick = running ? 1d / COOLANT_RUNTIME_TICKS_PER_MB : 0d;
+        for (CoolantModule module : workingCoolantModules) {
+            BlockPos pos = module.pos();
+            double mbPerTick = runtimePerTick + module.boilMbPerTick();
+            if (mbPerTick <= 0d)
+                continue; // 停机且不过热：本 tick 无成本，已有欠账留着下次接着攒
+
             IFluidHandler handler = fluidHandlerAt(pos);
             if (handler == null || handler.getTanks() < 1)
                 continue;
             FluidStack stack = handler.getFluidInTank(0);
             if (stack.isEmpty())
                 continue;
-            EngineCoolants.Entry coolant = EngineCoolants.get(stack);
-            if (coolant == null)
-                continue; // 表外流体（正常流程进不来，保险）
-            // 空罐/未到满效量下限 = 不工作（与 updateWaterCooling 的 working 口径一致）
-            if (Math.min(1f, stack.getAmount() / COOLANT_FULL) <= 0f)
-                continue;
-
-            double mbPerTick = 0d;
-            // ① 常态运行成本：引擎开着才计（每工作模块固定 1mb / COOLANT_RUNTIME_TICKS_PER_MB）
-            if (running)
-                mbPerTick += 1d / COOLANT_RUNTIME_TICKS_PER_MB;
-            // ② 过热沸腾：只看温度（不需要引擎开着）；按<b>本模块</b>的冷却液沸腾系数；200°C 整点速率为 0 → 无边界抖动
-            if (temperature > OVERHEAT_RESUME)
-                mbPerTick += (double) COOLANT_BOIL_MB_PER_DEGREE_SEC
-                        * (temperature - OVERHEAT_RESUME) * coolant.boilMultiplier() / 20d;
-            if (mbPerTick <= 0d)
-                continue; // 停机且不过热：本 tick 无成本，已有欠账留着下次接着攒
 
             double debt = coolantDebtByPos.getOrDefault(pos, 0d) + mbPerTick;
-            if (debt < 1d) {
+            if (debt < COOLANT_DRAIN_CHUNK_MB) {
                 coolantDebtByPos.put(pos, debt);
                 continue;
             }

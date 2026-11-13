@@ -9,17 +9,18 @@ The engine temperature is a continuous value computed **every tick on the server
 ```
 heat gain      Q_heat = Σ running chambers × heat load × fuel.heat × BASE_HEAT_FLUID × heatFactor(m_eff)
                heat load = max(actual network load, idle floor 0.2)
+boil cooling   Q_evap = 1.5 × (T − 200)          <- non-zero only above 200°C; subtracted from the net gain, never inside K_total
 heat loss      P_loss = K_total × (T − T_amb)
                  K_total = (K_CORE×length + K_AMB×running chambers + K_DUCT×ducts×shutter) × ram(speed) × f(pressure)
                                 + k_water        <- water cooling module: no ram air, no pressure
 
-integration    T += (Q_heat − P_loss) / C_th / 20      (per tick; C_th = C_TH_BASE × length)
+integration    T += (Q_heat − Q_evap − P_loss) / C_th / 20      (per tick; C_th = C_TH_BASE × length)
 clamp          T in [T_amb, OVERHEAT_TEMP × 1.2]
 overheat       T ≥ 220°C → hard stop; resume at T ≤ 200°C (hysteresis)
-coolant        running: 1 mB per 8 s per working module; boiling: whenever T > 200°C, 0.5×(T−200) mB/s per module
+coolant        running: 1 mB per 8 s per working module; boiling: whenever T > 200°C, 1.5×(T−200) mB/s per module
 ```
 
-The engine reaches equilibrium when **heat gain = heat loss** — every change in **load**, altitude or cooling moves the equilibrium temperature. The throttle only affects it indirectly, by raising the machines' stress demand (and therefore the load).
+The engine reaches equilibrium when **heat gain − boil cooling = heat loss** — every change in **load**, altitude or cooling moves the equilibrium temperature. The throttle only affects it indirectly, by raising the machines' stress demand (and therefore the load).
 
 ## Heat generation (Q_heat)
 
@@ -95,6 +96,7 @@ k_water = K_WATER(0.33) × Σ_modules [ min(amount / 4000, 1) × coolant efficie
 - **Immune to ram air and pressure**: a liquid loop does not care about the air — so it backs up exactly the three cases where ducts are weakest (static, low speed, high altitude).
 - **Amount curve**: full effect at ≥ 4000 mB; linear falloff below 4000 mB; 0 at 0 mB (smooth, no threshold flicker).
 - **Loop opening**: Lua `setWaterCooling(0..1)` (default 1.0) only scales `k_water`; 0 = closed loop (and no evaporation either).
+- **Boiling adds extra cooling** (above 200°C): `Q_evap = 1.5 × (T − 200)` — the latent heat carried away by vapour is subtracted from the net gain and **never enters `K_total`**, so it ignores ram air and pressure too. It buys **emergency** operation at high load, not a permanent mode: one full tank plus 4 full-load fluid chambers settles at ≈210°C and lasts **≈8.7 minutes** (the plateau is locked by that slope, the runtime by the drain rate).
 - **Fluid engines only**: a steam engine pins its temperature at `BOILER_T_OPT`, so water cooling has no effect on it and consumes no coolant.
 - Full details on the [Water Cooling Module](water-cooling-module.md) page.
 
