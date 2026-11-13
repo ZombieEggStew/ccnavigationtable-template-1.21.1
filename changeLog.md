@@ -134,3 +134,6 @@
 
 1.2.0
 - Added the auto packager.
+
+1.2.1
+- 
