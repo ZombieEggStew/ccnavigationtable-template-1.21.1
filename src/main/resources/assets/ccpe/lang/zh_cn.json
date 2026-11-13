@@ -112,6 +112,7 @@
   "tooltip.ccpe.engine.overheated": "过热停机！",
   "tooltip.ccpe.engine.efficiency": "效率：",
   "tooltip.ccpe.engine.throttle": "油门：",
+  "tooltip.ccpe.engine.load": "负载：",
   "tooltip.ccpe.engine.fuel": "燃料：",
   "tooltip.ccpe.engine.fuel_none": "无",
   "tooltip.ccpe.engine.mixture": "混合比：",

@@ -112,6 +112,7 @@
   "tooltip.ccpe.engine.overheated": "Overheated!",
   "tooltip.ccpe.engine.efficiency": "Efficiency:",
   "tooltip.ccpe.engine.throttle": "Throttle:",
+  "tooltip.ccpe.engine.load": "Load:",
   "tooltip.ccpe.engine.fuel": "Fuel:",
   "tooltip.ccpe.engine.fuel_none": "None",
   "tooltip.ccpe.engine.mixture": "Mixture:",
