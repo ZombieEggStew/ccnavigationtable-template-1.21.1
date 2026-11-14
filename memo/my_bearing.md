@@ -210,7 +210,7 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 |---|---|
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlock.java` | 轴承方块（轴向输入、ASSEMBLED、空手右键装配、扳手先拆卸、放置朝向=点击面、扳手旋转 Create 标准（同 swivel，无 ROTATION）、装配后基座选择框 y 0-11.9、Sable 装配移动回调） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlock.java` | plate 方块（同 swivel link block，无物品、拾取给主轴承；模型对称无 ROTATION；选中框 y 12.1-16 / 碰撞框 y 12-16 xz 3-13） |
-| `src/main/java/com/zzy205/myfirstmod/block/MyBearingShapes.java` | 基座/plate 选择框与碰撞框（数值对齐 SimBlockShapes：BEARING_ASSEMBLED / PLATE / PLATE_COLLISION） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingShapes.java` | 选择框 = 碰撞框（`BEARING` 三盒并集新形状 / `BEARING_ASSEMBLED` 两盒十字 / `PLATE` 顶部满块；均以 UP 为基准 `forDirectional`） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlockEntity.java` | 轴承 BE：装配/拆卸/重连/约束/NBT + PD 伺服（惯性缩放、装配时当前朝向初始化防晃动、目标角只由 Lua 设定）+ 应力消耗（impact 4.0）+ 应力网络贯通（addPropagationLocations / propagateRotationTo / isCustomConnection）+ CC 外设（setTargetAngle 绝对定位；isControlMode 恒 true）+ 护目镜 tooltip（当前/目标角度 + 应力） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingVisual.java` | Flywheel 渲染：背面半个传动杆（SHAFT_HALF，OrientedInstance） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingRenderer.java` | BER 回退渲染：背面半个传动杆（SHAFT_HALF，kineticRotationTransform） |

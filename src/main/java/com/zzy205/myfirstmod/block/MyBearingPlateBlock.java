@@ -79,15 +79,18 @@ public class MyBearingPlateBlock extends DirectionalKineticBlock implements IBE<
         return super.useItemOn(stack, state, level, pos, player, hand, hitResult);
     }
 
+    /** 碰撞框与选择框一致（顶盘满块 y 12-16） */
     @Override
     protected VoxelShape getCollisionShape(final BlockState blockState, final BlockGetter blockGetter, final BlockPos blockPos, final CollisionContext collisionContext) {
-        // 同 swivel：plate 碰撞框（y 12-16、xz 3-13）
-        return MyBearingShapes.PLATE_COLLISION.get(blockState.getValue(FACING));
+        return MyBearingShapes.PLATE.get(blockState.getValue(FACING));
     }
 
+    /**
+     * 选择框：顶盘满块（y 12-16）。
+     * 装配后底座只占 y 0-12（{@link MyBearingShapes#BEARING_ASSEMBLED}），两者不重叠、可分别点选。
+     */
     @Override
     protected VoxelShape getShape(final BlockState blockState, final BlockGetter blockGetter, final BlockPos blockPos, final CollisionContext collisionContext) {
-        // 同 swivel：plate 选中框（y 12.1-16），与基座选择框（y 0-11.9）分离、可分别点选
         return MyBearingShapes.PLATE.get(blockState.getValue(FACING));
     }
 

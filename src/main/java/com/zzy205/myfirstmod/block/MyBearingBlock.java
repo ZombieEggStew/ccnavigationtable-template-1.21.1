@@ -25,7 +25,6 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
-import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
@@ -156,12 +155,27 @@ public class MyBearingBlock extends DirectionalKineticBlock implements IBE<MyBea
         return MyModBlockEntities.aero_bearing_entity.get();
     }
 
+    /**
+     * 选择框：
+     * <ul>
+     *   <li>未装配：十字梁（y 0-12）+ 顶部满块（y 12-16），{@link MyBearingShapes#BEARING}；</li>
+     *   <li>装配后：只剩底座十字梁（y 0-12），顶部让给顶盘（两者分离可分别点选），
+     *       {@link MyBearingShapes#BEARING_ASSEMBLED}。</li>
+     * </ul>
+     */
     @Override
     protected VoxelShape getShape(final BlockState blockState, final BlockGetter blockGetter, final BlockPos blockPos, final CollisionContext collisionContext) {
-        // 装配后基座用专属 shape（y 0-11.9，顶部让给 plate，两者分离可分别点选），同 swivel
         return blockState.getValue(ASSEMBLED)
                 ? MyBearingShapes.BEARING_ASSEMBLED.get(blockState.getValue(FACING))
-                : Shapes.block();
+                : MyBearingShapes.BEARING.get(blockState.getValue(FACING));
+    }
+
+    /** 碰撞框与选择框一致（用户要求：物理碰撞同步为新形状） */
+    @Override
+    protected VoxelShape getCollisionShape(final BlockState blockState, final BlockGetter blockGetter, final BlockPos blockPos, final CollisionContext collisionContext) {
+        return blockState.getValue(ASSEMBLED)
+                ? MyBearingShapes.BEARING_ASSEMBLED.get(blockState.getValue(FACING))
+                : MyBearingShapes.BEARING.get(blockState.getValue(FACING));
     }
 
     // ═══════════════ Sable 装配移动回调 ═══════════════
