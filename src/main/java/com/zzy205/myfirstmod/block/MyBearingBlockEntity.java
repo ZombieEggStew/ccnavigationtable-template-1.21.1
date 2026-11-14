@@ -34,6 +34,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -63,9 +64,11 @@ import java.util.UUID;
  *   <li>空手右键 → {@code assembleNextTick} → {@link #assemble()} / {@link #disassemble()}；
  *       plate 方块在装配时自动放置到 sub-level plot 内（{@code aero_bearing_plate}）；</li>
  *   <li>约束：{@code RotaryConstraintConfiguration}（pos1/pos2 各自 plot 内坐标，normal 归一化）；</li>
- *   <li><b>驱动策略</b>：定盘 / 从动物理体的物理角<b>只能</b>由 Lua {@code setTargetAngle} 改变
- *       （PD 伺服把从动物理体锁在 {@code targetAngleDegrees}）；装配后输入动力<b>不驱动</b>物理角，
- *       只按 {@link #calculateStressApplied()} 计费应力，并经 plate 贯通把转速传进 sub-level 内部机械
+ *   <li><b>驱动策略</b>：Lua {@code setTargetAngle} 只写命令终点 {@code commandedAngleDegrees}；
+ *       伺服参考 {@code targetAngleDegrees} 每 tick 以「顶盘旋转速度」（默认 = 输入转速，
+ *       可由 Lua {@code setRotationSpeed} 固定为 0~96 RPM；默认上限 96 RPM）推进，见 {@link #advanceTowardsCommandedAngle()}。
+ *       <b>没有动力不能转</b>：输入转速为 0 时顶盘不动。装配后输入动力另外只做两件事：
+ *       按 {@link #calculateStressApplied()} 计费应力；经 plate 贯通把转速传进 sub-level 内部机械
  *       （见 {@link #propagateRotationTo} 等三个网络连接覆写）。</li>
  * </ul>
  * 参考来源：{@code references/Simulated-Project-main/.../swivel_bearing/SwivelBearingBlockEntity.java}、
@@ -83,11 +86,23 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
      */
     private double lastTargetAngleDegrees = 0;
     /**
-     * 当前目标角（度）
+     * 当前目标角（度，伺服参考）：每 tick 以受限速度朝 {@link #commandedAngleDegrees} 推进
      */
     private double targetAngleDegrees = 0;
+    /**
+     * Lua 命令角（度）：{@code setTargetAngle} 写入的终点。
+     * 伺服参考 {@link #targetAngleDegrees} 以「顶盘旋转速度」为上限逐 tick 逼近它，到位后两者相等。
+     */
+    private double commandedAngleDegrees = 0;
+    /**
+     * Lua 配置的顶盘旋转速度（RPM，0~96）。
+     * <p>
+     * {@code 0} = 自动：顶盘旋转速度 = {@code min(输入转速, 96)}（见 {@link #getEffectiveRotationSpeedRpm()}）。
+     * 一旦通过 Lua 设过非 0 值，就一直沿用该值（不再跟随输入转速），直到再次设为 0。
+     */
+    private float configuredRotationSpeedRpm = 0;
     // 注：原 sequencedAngleLimit（sequenced gearshift 剩余角）与 controlMode 两个字段已移除——
-    // 输入动力只做应力计费与贯通传输，定盘角度恒由 Lua 控制（CC 外设见下）。
+    // 输入动力只做应力计费与贯通传输，顶盘角度恒由 Lua 控制（CC 外设见下）。
     /**
      * CC:T 外设实例（懒加载）
      */
@@ -142,16 +157,89 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
             this.checkPersistence(this.getSubLevelID());
         }
 
-        // ── 驱动策略：输入转速<b>不驱动</b>定盘 / 从动物理体 ──
-        // 装配后应力网络只做两件事：
-        //   1. 按 {@link #calculateStressApplied()} 计费应力（输入有转速即消耗，与是否转动无关）；
-        //   2. 经 plate 贯通（{@link #propagateRotationTo}）把转速原样传给 sub-level 内部机械。
-        // 定盘与从动物理体的物理角<b>只由 Lua {@code setTargetAngle} 改变</b>，
-        // PD 伺服（{@link #updateServoCoefficients()}）把从动物理体锁在 {@code targetAngleDegrees}。
-        // lastTargetAngleDegrees 仅用于物理 tick 间的角度插值（AngleHelper.angleLerp），不再参与推进。
+        // ── 驱动策略：顶盘 / 从动物理体的物理角只由 Lua 命令驱动，且需要动力 ──
+        // 装配后应力网络的作用：
+        //   1. 按 {@link #calculateStressApplied()} 计费应力（输入有转速即消耗）；
+        //   2. 经 plate 贯通（{@link #propagateRotationTo}）把转速原样传给 sub-level 内部机械；
+        //   3. <b>作为顶盘转动的动力来源</b>：输入转速为 0 时顶盘一律不转（没有动力不能转）。
+        // Lua {@code setTargetAngle} 只写入终点 {@code commandedAngleDegrees}，
+        // 伺服参考 {@code targetAngleDegrees} 每 tick 以「顶盘旋转速度」推进，逼近终点后停住。
+        // lastTargetAngleDegrees 供物理 tick 间的角度插值（AngleHelper.angleLerp）。
         this.lastTargetAngleDegrees = this.targetAngleDegrees;
 
+        if (this.isAssembled()) {
+            this.advanceTowardsCommandedAngle();
+        }
+
         this.assembleNextTick = false;
+    }
+
+    // ═══════════════ 限速到位（Lua 命令 → 伺服参考） ═══════════════
+
+    /**
+     * 顶盘旋转速度上限（RPM）：输入转速再高，顶盘最多按 96 RPM 走
+     * （取值对齐 swivel 的 {@code maxSwivelBearingSpeed} 默认 96）。
+     * Lua {@code setRotationSpeed} 的参数也按 0~96 钳制。
+     */
+    public static final float MAX_PLATE_ROTATION_RPM = 96.0f;
+
+    /**
+     * 当前生效的顶盘旋转速度（RPM）：
+     * <ul>
+     *   <li>Lua 设过非 0 值 → 该值（已被钳到 0~96）；</li>
+     *   <li>否则 → {@code min(|输入转速|, 96)}（默认：顶盘转速 = 输入转速，最高 96）。</li>
+     * </ul>
+     */
+    public float getEffectiveRotationSpeedRpm() {
+        if (this.configuredRotationSpeedRpm > 0.0f) {
+            return Math.min(this.configuredRotationSpeedRpm, MAX_PLATE_ROTATION_RPM);
+        }
+
+        return Math.min(Math.abs(this.getSpeed()), MAX_PLATE_ROTATION_RPM);
+    }
+
+    /**
+     * 以「顶盘旋转速度」为上限，把伺服参考 {@link #targetAngleDegrees} 逐 tick 推向
+     * Lua 命令终点 {@link #commandedAngleDegrees}（走最短路径）。
+     * <p>
+     * 旋转速度（RPM）见 {@link #getEffectiveRotationSpeedRpm()}：Lua 设过非 0 值时恒用该值，
+     * 否则为 {@code min(|输入转速|, 96)}。每 tick 步进角度 = {@code convertToAngular(rpm)}（同 swivel 的换算）。
+     * <p>
+     * <b>动力门控</b>：输入转速（应力网络 {@code getSpeed()}）为 0 时直接返回——没有动力，顶盘不转。
+     */
+    private void advanceTowardsCommandedAngle() {
+        if (this.commandedAngleDegrees == this.targetAngleDegrees) {
+            return;
+        }
+
+        // 没有动力（输入转速为 0）就不驱动：顶盘只能被动力带动
+        if (this.getSpeed() == 0.0f) {
+            return;
+        }
+
+        final double stepDegrees = Math.abs(convertToAngular(this.getEffectiveRotationSpeedRpm()));
+
+        if (stepDegrees <= 0.0) {
+            return;
+        }
+
+        // 走最短路径：把角度差归一化到 (-180, 180]
+        double delta = this.commandedAngleDegrees - this.targetAngleDegrees;
+        delta = delta % 360.0;
+        if (delta > 180.0) {
+            delta -= 360.0;
+        } else if (delta <= -180.0) {
+            delta += 360.0;
+        }
+
+        if (Math.abs(delta) <= stepDegrees) {
+            // 本 tick 可到位：直接对齐终点，避免在终点附近来回抖动
+            this.targetAngleDegrees = this.commandedAngleDegrees;
+        } else {
+            this.targetAngleDegrees += Math.signum(delta) * stepDegrees;
+        }
+
+        this.wakeUpSubLevels();
     }
 
     // ═══════════════ 装配 / 拆卸 ═══════════════
@@ -268,6 +356,8 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
         this.setSubLevelID(null);
         this.setPlatePos(null);
         this.targetAngleDegrees = 0;
+        this.commandedAngleDegrees = 0;
+        this.lastTargetAngleDegrees = 0;
         this.sendData();
     }
 
@@ -358,7 +448,7 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     /**
      * 内嵌外设类（同 TransmissionPeripheralBlockEntity 模式）：
      * <ul>
-     *   <li><b>角度唯一来源</b>：定盘 / 从动物理体的物理角只能由 {@code setTargetAngle} 设定；
+     *   <li><b>角度唯一来源</b>：顶盘 / 从动物理体的物理角只能由 {@code setTargetAngle} 设定；
      *       输入动力的转速不推进角度（只计费应力并经 plate 贯通传给 sub-level 内部）；</li>
      *   <li>角度为<b>服务端权威</b>（{@code targetAngleDegrees}，NBT 持久化），
      *       PD 伺服（plate BE 每物理 tick 调用 {@link #updateServoCoefficients()}）把从动物理体锁在该目标角。</li>
@@ -385,7 +475,7 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
         /**
          * 是否处于 Lua 控制模式。
          * <p>
-         * 恒为 {@code true}：本轴承的定盘 / 从动物理体物理角<b>只能</b>由 Lua {@code setTargetAngle} 改变，
+         * 恒为 {@code true}：本轴承的顶盘 / 从动物理体物理角<b>只能</b>由 Lua {@code setTargetAngle} 改变，
          * 输入动力的转速不再推进角度（只做应力计费与贯通传输）。
          */
         @LuaFunction
@@ -397,39 +487,81 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
          * 兼容旧脚本的空实现：无论 {@code enabled} 为何都返回 {@code true}。
          * <p>
          * 「应力驱动模式」（输入转速直接推角度）已取消——输入动力装配后只消耗并传输应力，
-         * 定盘不跟着转；要转动请用 {@code setTargetAngle}。
+         * 顶盘不跟着转；要转动请用 {@code setTargetAngle}。
          */
         @LuaFunction(mainThread = true)
         public final boolean setControlMode(boolean enabled) {
             return true;
         }
 
-        /** 当前目标角（度，服务端权威） */
+        /** 当前伺服参考角（度，服务端权威；正以「顶盘旋转速度」逼近命令终点） */
         @LuaFunction
         public final double getTargetAngle() {
             return targetAngleDegrees;
         }
 
-        /** 当前目标角（弧度，同 swivel 官方外设 getTargetAngleRad） */
+        /** 当前伺服参考角（弧度，同 swivel 官方外设 getTargetAngleRad） */
         @LuaFunction
         public final double getTargetAngleRad() {
             return Math.toRadians(targetAngleDegrees);
         }
 
+        /** Lua 命令终点角（度）：{@code setTargetAngle} 写入的值，到位后与 {@code getTargetAngle()} 相等 */
+        @LuaFunction
+        public final double getCommandedAngle() {
+            return commandedAngleDegrees;
+        }
+
         /**
-         * 绝对定位从动物理体到指定角度（度）——定盘 / 从动物理体唯一的角度来源。
-         * 需要先装配（右键装配生成从动物理体）；未装配返回 false。
+         * 绝对定位顶盘 / 从动物理体到指定角度（度）——唯一的角度来源。
+         * <p>
+         * 顶盘不会瞬移：伺服参考角每 tick 以「顶盘旋转速度」逼近该终点（见 {@code setRotationSpeed}）。
+         * <b>没有动力（背面输入转速为 0）时不会转动</b>，动力恢复后继续朝终点走。
+         * 需要先装配；未装配返回 false。
          */
         @LuaFunction(mainThread = true)
         public final boolean setTargetAngle(double degrees) {
             if (!Double.isFinite(degrees)) return false;
             if (!isAssembled()) return false;
 
-            targetAngleDegrees = degrees;
+            commandedAngleDegrees = degrees;
             wakeUpSubLevels();
             setChanged();
             sendData();
             return true;
+        }
+
+        /**
+         * 设置顶盘旋转速度（RPM），范围 <b>0~96</b>（自动钳制）。
+         * <p>
+         * {@code 0} = 自动：顶盘旋转速度 = {@code min(输入转速, 96)}（默认）；非 0 则一直沿用该值，
+         * 不再跟随输入转速。每 tick 步进角度 = {@code convertToAngular(rpm)}，即按该速度走完
+         * {@code setTargetAngle} 的差值。<b>速度只是「怎么走」，能不能走仍取决于动力</b>：
+         * 输入转速为 0 时顶盘不转。
+         *
+         * @param rpm 目标转速（RPM）；负数按绝对值处理，超过 96 自动钳到 96
+         * @return 实际生效的配置值（0 表示自动）
+         */
+        @LuaFunction(mainThread = true)
+        public final double setRotationSpeed(double rpm) {
+            if (!Double.isFinite(rpm)) return configuredRotationSpeedRpm;
+
+            configuredRotationSpeedRpm = (float) Mth.clamp(Math.abs(rpm), 0.0, MAX_PLATE_ROTATION_RPM);
+            setChanged();
+            sendData();
+            return configuredRotationSpeedRpm;
+        }
+
+        /** 当前配置的顶盘旋转速度（RPM）；{@code 0} 表示自动（= 输入转速，最高 96） */
+        @LuaFunction
+        public final double getRotationSpeed() {
+            return configuredRotationSpeedRpm;
+        }
+
+        /** 输入转速（RPM，应力网络 {@code getSpeed()}）——顶盘转动的动力前提 */
+        @LuaFunction
+        public final double getInputSpeed() {
+            return getSpeed();
         }
 
         /** 是否已装配（有从动物理体） */
@@ -456,9 +588,9 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     }
 
     /**
-     * 唤醒两侧 sub-level，让 PD 伺服立即驱动到新目标角（同 swivel tick 244-258 行）。
+     * 唤醒两侧 sub-level，让 PD 伺服立即跟上新的伺服参考角（同 swivel tick 244-258 行）。
      * <p>
-     * 仅在 Lua 下新目标角时调用；输入动力不再驱动物理角，故 {@link #tick()} 里不需要唤醒。
+     * 在 {@code setTargetAngle} / 每 tick 推进参考角时调用。
      */
     private void wakeUpSubLevels() {
         final SubLevel attached = this.getAttachedSubLevel();
@@ -508,11 +640,14 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     }
 
     /**
-     * 把目标角更新为当前物理朝向（swivel 在锁定开始时调用，避免 PD 伺服强扭到 0° 导致晃动）。
+     * 把伺服参考角与命令终点都初始化为当前物理朝向（装配后调用，同 swivel 锁定开始时的
+     * {@code setTargetAngleFromCurrentOrientation}），避免 PD 伺服把从动物理体强扭到 0° 导致晃动。
      */
     private void setTargetAngleFromCurrentOrientation() {
-        this.targetAngleDegrees = this.getCurrentAngleDegrees();
-        this.lastTargetAngleDegrees = this.targetAngleDegrees;
+        final double current = this.getCurrentAngleDegrees();
+        this.targetAngleDegrees = current;
+        this.commandedAngleDegrees = current;
+        this.lastTargetAngleDegrees = current;
     }
 
     /**
@@ -522,7 +657,8 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
      *   <li>目标角用 {@code angleLerp} 在物理 tick 间插值（平滑）；</li>
      *   <li>aero_bearing 无 POWERED 锁定开关（swivel 的红石锁定），恒为锁定态
      *       （防风帆被气流吹动），直接走 swivel 的锁定分支；</li>
-     *   <li><b>目标角只由 Lua {@code setTargetAngle} 改变</b>（{@link #tick()} 不再按转速推进）。</li>
+     *   <li><b>目标角只由 Lua {@code setTargetAngle} 设定</b>，并以「顶盘旋转速度」限速逼近
+     *       （{@link #advanceTowardsCommandedAngle()}）；输入转速为 0 时不转动。</li>
      * </ul>
      */
     public void updateServoCoefficients() {
@@ -577,6 +713,8 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     protected void write(final CompoundTag compound, final HolderLookup.Provider registries, final boolean clientPacket) {
         super.write(compound, registries, clientPacket);
         compound.putDouble("TargetAngle", this.targetAngleDegrees);
+        compound.putDouble("CommandedAngle", this.commandedAngleDegrees);
+        compound.putFloat("LuaRotationSpeed", this.configuredRotationSpeedRpm);
 
         final UUID id = this.getSubLevelID();
         if (id != null) {
@@ -595,6 +733,12 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     protected void read(final CompoundTag compound, final HolderLookup.Provider registries, final boolean clientPacket) {
         super.read(compound, registries, clientPacket);
         this.targetAngleDegrees = compound.getDouble("TargetAngle");
+        this.commandedAngleDegrees = compound.contains("CommandedAngle")
+                ? compound.getDouble("CommandedAngle")
+                : this.targetAngleDegrees;
+        this.configuredRotationSpeedRpm = compound.contains("LuaRotationSpeed")
+                ? Mth.clamp(compound.getFloat("LuaRotationSpeed"), 0.0f, MAX_PLATE_ROTATION_RPM)
+                : 0.0f;
         this.lastTargetAngleDegrees = this.targetAngleDegrees;
 
         if (compound.hasUUID("SubLevelID")) {
@@ -687,12 +831,19 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
         }
     }
 
+    /** 伺服参考角（度）：每 tick 以「顶盘旋转速度」逼近命令终点 */
     public double getTargetAngleDegrees() {
         return this.targetAngleDegrees;
     }
 
-    public void setTargetAngleDegrees(final double targetAngleDegrees) {
-        this.targetAngleDegrees = targetAngleDegrees;
+    /** 命令终点角（度）：{@code setTargetAngle} 写入的目标，顶盘以限速走到这里后停住 */
+    public double getCommandedAngleDegrees() {
+        return this.commandedAngleDegrees;
+    }
+
+    /** 配置的顶盘旋转速度（RPM，0 = 自动跟随输入转速） */
+    public float getConfiguredRotationSpeedRpm() {
+        return this.configuredRotationSpeedRpm;
     }
 
     public @Nullable UUID getSubLevelID() {
@@ -769,9 +920,17 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
                 .append(Component.translatable("tooltip.ccpe.aero_bearing.header")
                         .withStyle(ChatFormatting.WHITE)));
 
-        // 角度恒由 Lua 控制（输入转速不再推进角度），故总是显示当前/目标角
+        // 角度恒由 Lua 控制（限速逼近命令终点），故总是显示当前角 / 命令终点角
         tooltip.add(angleLine("tooltip.ccpe.aero_bearing.current_angle", this.getCurrentAngleDegrees()));
-        tooltip.add(angleLine("tooltip.ccpe.aero_bearing.target_angle", this.getTargetAngleDegrees()));
+        tooltip.add(angleLine("tooltip.ccpe.aero_bearing.target_angle", this.commandedAngleDegrees));
+
+        // 动力与转速：输入转速是「能不能转」的前提，旋转速度是「转多快」（自动时最高 96 RPM）
+        tooltip.add(rpmLine("tooltip.ccpe.aero_bearing.input_speed", this.getSpeed(), null));
+        tooltip.add(rpmLine("tooltip.ccpe.aero_bearing.plate_speed",
+                this.getEffectiveRotationSpeedRpm(),
+                this.configuredRotationSpeedRpm > 0.0f
+                        ? null
+                        : "tooltip.ccpe.aero_bearing.plate_speed_auto"));
 
         tooltip.add(Component.empty());
         addStressImpactStats(tooltip, calculateStressApplied());
@@ -783,6 +942,21 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
                 .append(Component.translatable(key).withStyle(ChatFormatting.GRAY))
                 .append(Component.literal(String.format(Locale.ROOT, "%.1f°", angle))
                         .withStyle(ChatFormatting.AQUA));
+    }
+
+    /**
+     * 转速行：主值 {@code %.1f RPM}，可选附加一个后缀标签（如「自动（=输入转速）」）。
+     */
+    private Component rpmLine(final String key, final float rpm, final @Nullable String suffixKey) {
+        final Component line = Component.literal("     ")
+                .append(Component.translatable(key).withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(String.format(Locale.ROOT, "%.1f RPM", rpm))
+                        .withStyle(ChatFormatting.AQUA));
+
+        return suffixKey == null
+                ? line
+                : line.copy().append(Component.literal(" ").withStyle(ChatFormatting.GRAY))
+                        .append(Component.translatable(suffixKey).withStyle(ChatFormatting.DARK_GRAY));
     }
 
     @Override

@@ -27,7 +27,7 @@
         从动物理体（sub-level，被约束旋转；应力经 plate 贯通进内部机械）
 ```
 
-**核心思想**：动力输入走 Create 应力网络（轴向），驱动走 Sable 物理约束（RotaryConstraint + PD 伺服）。**输入转速不驱动物理角**——它只用于计费应力（impact 4.0）并经 plate 贯通把转速传给 sub-level 内部机械（输入转速 = 输出转速）；定盘/从动物理体的物理角**只由 Lua `setTargetAngle` 设定**，PD 伺服把从动物理体锁在该目标角（防风帆被气流吹动）。
+**核心思想**：动力输入走 Create 应力网络（轴向），驱动走 Sable 物理约束（RotaryConstraint + PD 伺服）。输入转速**不直接推物理角**，但它是顶盘转动的**唯一动力前提**：按 4.0 计费应力、经 plate 贯通把转速传给 sub-level 内部机械、并允许顶盘以「顶盘旋转速度」（默认 = `min(输入转速, 96)`，可 Lua 固定 0~96）限速走向 Lua 命令终点角。没有输入转速时顶盘一律不转。
 
 ## 为什么这样能解决需求
 
@@ -90,19 +90,28 @@
 - `disassemble()`：移除约束 + 拆回世界（`SimAssemblyHelper.disassembleSubLevel`）
 - **待验证**：重载重连（`checkPersistence` → `reattachConstraint`）与 plate 装配流程需进游戏实测
 
-### 阶段 4：驱动（物理角只由 Lua 控制）（已实现）
+### 阶段 4：驱动（限速到位 + 动力门控）（已实现）
 
-`tick()` 每 tick **只做** `lastTargetAngleDegrees = targetAngleDegrees`（供伺服插值），**不再推进目标角**：
+`tick()`：`lastTargetAngleDegrees = targetAngleDegrees`（供伺服插值），然后装配状态下调
+`advanceTowardsCommandedAngle()`。
 
 1. ~~输入转速 → 目标角推进~~（已移除：`convertToAngular` 累计、`limitSpeed`/`maxSwivelBearingSpeed` 钳制、
-   FACING 负轴取反、`pipeline.wakeUp` 唤醒——由输入动力触发物理旋转的整段逻辑都删掉了）
+   FACING 负轴取反——由输入动力直接推物理角的整段逻辑都删掉了）
 2. ~~序列化角度输入~~（已移除：`sequencedAngleLimit`、`onSpeedChanged` 覆写、NBT `SequencedAngleLimit`；
-   `create:sequenced_gearshift` 不再能直接转动定盘）
+   `create:sequenced_gearshift` 不再能直接转动顶盘）
 3. `controlMode` 字段已移除：`isControlMode()` 恒返回 `true`，`setControlMode(bool)` 是返回 `true` 的空实现（兼容旧脚本）
-4. 装配后输入动力的作用只剩两条：按 `calculateStressApplied()`（4.0）计费应力；经 plate 贯通把转速传给
-   sub-level 内部机械（见阶段 5b）
+4. 装配后输入动力的作用：按 `calculateStressApplied()`（4.0）计费应力；经 plate 贯通把转速传给
+   sub-level 内部机械（阶段 5b）；**并且是顶盘转动唯一的动力前提**
 
-定盘 / 从动物理体角度的唯一来源：Lua `setTargetAngle()`（内部 `wakeUpSubLevels()` 唤醒两侧物理体让伺服跟上）
+**限速到位（`advanceTowardsCommandedAngle`）**：
+
+- `commandedAngleDegrees` = Lua `setTargetAngle` 写入的终点；`targetAngleDegrees` = 伺服参考，
+  每 tick 以「顶盘旋转速度」朝终点推进（角度差归一化到 (-180,180] 走最短路径，本 tick 能到位就直接对齐，防终点抖动）
+- 旋转速度 RPM = `configuredRotationSpeedRpm`（Lua `setRotationSpeed` 设过非 0 值就恒用它，参数钳到 0~96）；
+  否则 = `min(|输入转速|, 96)`（默认：顶盘转速 = 输入转速，上限 96，对齐 swivel `maxSwivelBearingSpeed`）
+  ——见 `getEffectiveRotationSpeedRpm()`。每 tick 步进 = `convertToAngular(rpm)`
+- **动力门控**：`getSpeed() == 0`（背面没有输入转速）时直接 return —— 没动力顶盘不转
+  （修掉「不接应力也能被 Lua 转到」的 bug）；动力恢复后继续朝终点走
 
 PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 
@@ -142,19 +151,24 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 ### 阶段 6：CC 外设（Lua 控制）（已实现）
 
 - 外设类型 `ccpe:aero_bearing`，注册见 `compat/cc/CCPeripheralCapabilities.java`
-- **角度恒由 Lua 控制**：输入动力不驱动定盘/从动物理体（见阶段 4），`setTargetAngle` 是唯一角度来源
-- Lua API：`setTargetAngle(deg)`（绝对定位，需先装配，未装配返回 false）、`getTargetAngle()`（度）、
-  `getTargetAngleRad()`（弧度，同 swivel 官方外设）、`isControlMode()`（恒 true）、`setControlMode(bool)`（空实现，兼容旧脚本）、
-  `isAssembled()`（是否已装配）、`assemble()`（装配 FACING 方向结构，返回是否成功）、
-  `disassemble()`（拆回世界，返回是否成功）
-- 角度服务端权威（`targetAngleDegrees` 入 NBT）；PD 伺服照常由 plate BE 每物理 tick 驱动；
-  `setTargetAngle` 后 `wakeUp` 两侧 sub-level
-- **待验证**：`setTargetAngle` 大角度（>360°）时物理走最短路径还是累计多圈
+- **角度恒由 Lua 控制**，且限速到位 + 需动力（见阶段 4）：`setTargetAngle` 写命令终点，
+  伺服参考以「顶盘旋转速度」逼近它；输入转速为 0 时不动
+- Lua API：
+  - `setTargetAngle(deg)`（写命令终点；需先装配，未装配返回 false）、`getTargetAngle()`（伺服参考角，度）、
+    `getTargetAngleRad()`（弧度）、`getCommandedAngle()`（命令终点角，度）
+  - `setRotationSpeed(rpm)`（顶盘旋转速度 **0~96 RPM**，钳制；`0` = 自动 = `min(输入转速, 96)`；返回生效值）——
+    设过非 0 值就一直用它（NBT `LuaRotationSpeed` 持久化）
+  - `getRotationSpeed()`（配置值，0 = 自动）、`getInputSpeed()`（输入转速 RPM）
+  - `isControlMode()`（恒 true）、`setControlMode(bool)`（空实现，兼容旧脚本）
+  - `isAssembled()`、`assemble()`、`disassemble()`
+- 角度服务端权威（`TargetAngle` + `CommandedAngle` + `LuaRotationSpeed` 入 NBT）；PD 伺服照常由 plate BE 每物理 tick 驱动；
+  推进参考角时每 tick `wakeUp` 两侧 sub-level
+- **待验证**：`setTargetAngle` 大角度时按最短路径（±180° 归一化）走，是否会与「累计多圈」需求冲突
 - **Create 护目镜 tooltip**（`addToGoggleTooltip`，同 transmission_peripheral 结构）：当前角度
-  （`getCurrentAngleDegrees()`，从从动物理体实时朝向计算，同 swivel 337-355 公式）+ 目标角度 + 应力统计
-  （模式行已移除：只有一种模式）；lang 键 `tooltip.ccpe.aero_bearing.{header,current_angle,target_angle}`
-- **角度传感器**（可选）：通过现有 `SableCompat.getAngularVelocity` 读从动物理体角速度
-- **无动力锁定**：`speed==0` 时用 `setMotor(axis, target, kP_high, kD, false, 0)` 锁在当前角（可选）
+  （`getCurrentAngleDegrees()`，从从动物理体实时朝向计算，同 swivel 337-355 公式）+ 命令终点角 +
+  **输入转速** + **旋转速度**（`getEffectiveRotationSpeedRpm()`；自动时值后只跟 `auto` 标签）+ 应力统计；lang 键
+  `tooltip.ccpe.aero_bearing.{header,current_angle,target_angle,input_speed,plate_speed,plate_speed_auto}`
+- **待验证**：动力门控手感——输入转速为 0 时顶盘应完全不动（Lua 命令只在有动力时才被消化）
 
 ## 已知风险与注意点
 
