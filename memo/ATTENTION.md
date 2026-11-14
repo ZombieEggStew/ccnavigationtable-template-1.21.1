@@ -1,7 +1,7 @@
 # 🚨 ATTENTION — 踩坑与注意事项
 
 > 只记录踩过的坑与要注意的地方（不记实施总结）。改相关代码前先核对对应小节。
-> 各功能的实施总结见 `memo/WORK RECORD.md`。
+> 各功能的实施总结见对应主题文档（索引见 `.agents/skills/memo-lookup/SKILL.md`，如 `engine-module.md` / `thrust-nozzle.md` / `my_bearing.md` / `my_aero_sensor.md` / `screen-render-rework.md`）。
 
 ## 通用
 
@@ -42,20 +42,25 @@
 
 ## Monitor 变换（facing + offset + yaw + pitch）
 
+- **模型层级**：底座（固定）→ bearing（偏航支架）→ case（头部，含屏幕/棋盘）；facing 只作用于底座朝向，offset/yaw 作用于 bearing+case，pitch 只作用于 case。
 - **变换顺序**（PoseStack 后调为内层、先作用于顶点）：`facing(方块中心,Y) → offset(前后平移,Z) → yaw(颈部,Y) → pitch(铰链,X)`；facing 作用于整体；offset/yaw 作用于 bearing+case；pitch 只作用于 case。
 - **枢轴静态常量（定义在 `PitchMonitorTestBlock`，单位=模型像素，微调只改这里）**：`HINGE_Y=9`、`HINGE_Z=8`（俯仰铰链，case 侧轴承中心）；`NECK_X=8`、`NECK_Z=8`（偏航颈部，bearing 水平中心）；铰链与颈部同 z=8，构成单点万向（gimbal），yaw 时铰链不画弧。
 - **offset 语义**：正值向前（朝屏幕 -Z），相对 facing 前后平移 case+bearing；单位 1/16 方块（1px）。
 - **yaw 语义**：相对 facing（yaw=0 即当前朝向）。
 - **命中检测**：世界/plot → 模型空间逆序 `facing逆 → offset逆 → yaw逆 → pitch逆`（正向的逆序、旋转取负、平移取反）。
 
+## Create 渲染（Flywheel Visual / 半轴）
+
+- **Flywheel `orientationFor(face).rotateZ(angle)` 绕的是 `face` 轴向，而 BER `kineticRotationTransform` 恒绕轴正方向**：半轴模型局部 +Z 被 `orientationFor` 转到 `face`（多数是轴的负方向），局部 `rotateZ` 于是等价绕负向转 ⇒ 背面半轴视觉反转。修法 = `float spin = face.getAxisDirection() == POSITIVE ? angle : -angle`（`MyBearingVisual` 与 `TransmissionPeripheralVisual` 双端半轴均已按此修，`EngineCoreVisual` 用 Create 的 `RotatingInstance.setup(...)` 内部按正方向，无此问题）。
+
 ## 引擎（P7）
 
 - **气道门控修订（P7 → 后续再修订）**：经济系数/油耗/过冷**不以气道为门控**（无气道同样生效；过冷惩罚、经济区无气道可达）；Goggle 油耗行不显示「未装气道」。**现行门控**：冷却气道（`cooling_air_duct`，原整合气道改名）= 纯散热模块，风门值（`setCooling`）**无门控**、只在装风道时被 K_DUCT 分量消费；`setMixture` **无门控**（纯存值，仅流体引擎消费；非流体引擎存了不生效）。
 - **燃料体系分家**：蒸汽引擎 = 纯原版燃料解析（`EngineFuels.vanillaBucketBurnTicks`：桶物品原版熔炉燃烧时长，熔岩桶 20000tick；添加蒸汽燃料 = 按原版为熔炉加燃料）；流体燃烧室 = 纯 datapack（`engine_fuel/*.json` 唯一途径）；**已删除 `burn_ticks_per_bucket` 字段**（lava.json 同步清理），消耗速率仍随油门（定距桨）。
 - **自动富油只降温不进油耗**（m_eff = 杆×autoRichness 只进 heatFactor 与 eco 窗口）。高空不拉稀 = ×1.0 无惩罚（原 ×1.25 效率税移除）。
-- **温度阈值全部引擎固定**：经济目标 `ENGINE_T_OPT=155`、过冷 `ENGINE_MIN_WORK_TEMP=100`、过热 200——均不随燃料/油门（真实 = 引擎设计点/节温器恒定；油门只决定实际温度与冷却压力）。
+- **温度阈值全部引擎固定**：经济目标 `ENGINE_T_OPT=155`、过冷 `ENGINE_MIN_WORK_TEMP=100`、过热 `OVERHEAT_TEMP=220`（滞回解锁 `OVERHEAT_RESUME=200`）、过冷系数 `COLD_K=1.0`（20°C ≈×1.8，只乘油耗）——均不随燃料/油门（真实 = 引擎设计点/节温器恒定；油门只决定实际温度与冷却压力）。
 - **Goggle tooltip 改每 tick 同步（20Hz）**：P7 新增字段持续变化，差量发包下显示滞后；`reActivateSource` 仍只在运行态/容量变化时置位（不每 tick 触发网络重激活）。**P7+ 已优化（方案 A+B+D）**：事件差量 + 温度 ≥1°C 门控 + 慢字段 1Hz 心跳；经济/过冷/油耗系数客户端现算（`economyFactor()/coldFactor()/fuelFactor()`），蒸汽倒计时客户端线性外推（`steamBurnTicksDisplay()`，运行中才外推）；`setChanged` 仍每 tick 保温度持久化。
-- **过热滞回解锁 T≤180°C**（原 160）。
+- **过热滞回解锁 T≤200°C**（`OVERHEAT_RESUME`，随 P8 过热阈值 220 同提；早期是 160→180）。
 
 ## 惯性导航系统（ccpe:ins）
 

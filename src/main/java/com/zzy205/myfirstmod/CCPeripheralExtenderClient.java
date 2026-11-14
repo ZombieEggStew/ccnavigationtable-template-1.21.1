@@ -5,6 +5,7 @@ import com.zzy205.myfirstmod.block.MyModBlocks;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralRenderer;
 import com.zzy205.myfirstmod.block.TransmissionPeripheralVisual;
 import com.zzy205.myfirstmod.block.MyBearingRenderer;
+import com.zzy205.myfirstmod.block.MyBearingPlateRenderer;
 import com.zzy205.myfirstmod.block.MyBearingVisual;
 import com.zzy205.myfirstmod.block.ServoBearingRenderer;
 import com.zzy205.myfirstmod.block.ServoBearingVisual;
@@ -244,6 +245,11 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.aero_bearing_entity.get(),
                 MyBearingRenderer::new);
+        // 顶盘（aero_bearing_plate）的输出半传动杆：只在 BER 路径渲染，故不注册 Flywheel Visual
+        // （顶盘 BE 在 sub-level plot 内由 Sable 用原版 BE 分发器渲染，见 MyBearingPlateRenderer 注释）。
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.aero_bearing_plate_entity.get(),
+                MyBearingPlateRenderer::new);
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.servo_bearing_entity.get(),
                 ServoBearingRenderer::new);

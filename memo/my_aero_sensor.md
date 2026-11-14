@@ -140,5 +140,13 @@ compass  = Y·Z·X          (applyCompass→applyPrimary→applySecondary, euler
       ⚠️ **0.05 死区已从 axisSpeed / getAxisVelocity 删除**（用户要求：速度源干净后死区只会掩盖
       真实小速度）；调试诊断列与 `getVelocityDebug()`、`SableCompat.debugVelocity` 及
       裸读版 `getVelocity/getAirVelocity/getLinearVelocity/getAngularVelocity` 已删除。
+- [x] `getBodyPosition()` 已实现（2026-08）：**物理体原点**世界坐标 {x, y, z}
+      （`SableCompat.getSubLevelWorldPos`，门控同 getAngles）。注意它 ≠ `getPosition()`（最后放置的 INS 世界坐标），
+      两者通常接近但不相等（INS 一般装在偏离原点处）。
+- [x] 不门控物理数据（只要电脑在物理体上就有值，2026-08）：`getPhysicsCenterOfMassRel()`
+      （**重心相对最后放置的 FMC 的方块中心**，机体局部系 plot 帧差值）、`getPhysicsMass()` /
+      `getPhysicsChainMass()`（kg）、`getPhysicsGravityForce()` / `getPhysicsChainGravityForce()`
+      （pN = 质量×11）。这些属于 `ccpe.sensor_system` 的物理读数族（门控 = 机体上有 ≥1 FMC），
+      详见 `memo/code-map.md`（`SensorSystemAPI` 行）与 `wiki/docs/sensor-system/fmc.zh.md`。
 - Create 护目镜 tooltip 显示俯仰/滚转/航向读数。
 - 非自然维度指北行为开关（当前随机乱转）。

@@ -6,12 +6,8 @@ import com.simibubi.create.content.kinetics.base.RotatedPillarKineticBlock;
 import com.simibubi.create.foundation.block.IBE;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
-import net.minecraft.world.item.context.UseOnContext;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -19,6 +15,19 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import org.jetbrains.annotations.NotNull;
 
+/**
+ * 电子变速箱（传动外设）方块。
+ * <p>
+ * <b>扳手逻辑与 aero_bearing 对齐</b>：完全使用 {@link IWrenchable} 默认实现，不自定义：
+ * <ul>
+ *   <li>右键扳手 = Create 标准旋转：{@code getRotatedBlockState}（立柱方块改 AXIS）→
+ *       {@code canSurvive} 失败则 PASS → {@code KineticBlockEntity.switchToBlockState} →
+ *       {@link IWrenchable#playRotateSound}；</li>
+ *   <li>蹲下右键扳手 = {@code onSneakWrenched} 默认实现：走 {@code BlockEvent.BreakEvent} 保护判定、
+ *       按战利品表 {@code Block.getDrops} 直接进背包、{@link IWrenchable#playRemoveSound}。</li>
+ * </ul>
+ * 放置音效 = {@code SoundType.NETHERITE_BLOCK}（同 aero_bearing / swivel_bearing）。
+ */
 public class TransmissionPeripheralBlock extends AbstractEncasedShaftBlock
         implements IBE<TransmissionPeripheralBlockEntity>, IWrenchable {
 
@@ -41,16 +50,11 @@ public class TransmissionPeripheralBlock extends AbstractEncasedShaftBlock
         return new TransmissionPeripheralBlockEntity(pos, state);
     }
 
-    // ═══════════════ 放置与旋转 ═══════════════
+    // ═══════════════ 放置朝向 ═══════════════
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         super.createBlockStateDefinition(builder);  // 注册 AXIS 属性
-    }
-
-    @Override
-    public BlockState getRotatedBlockState(BlockState originalState, Direction targetedFace) {
-        return super.getRotatedBlockState(originalState, targetedFace);
     }
 
     @Override
@@ -72,20 +76,6 @@ public class TransmissionPeripheralBlock extends AbstractEncasedShaftBlock
         return this.defaultBlockState().setValue(AXIS, axis);
     }
 
-    // ═══════════════ 扳手快速拆除 ═══════════════
-
-    @Override
-    public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
-        Level level = context.getLevel();
-        BlockPos pos = context.getClickedPos();
-        Player player = context.getPlayer();
-        if (!level.isClientSide) {
-            ItemStack stack = new ItemStack(this);
-            level.destroyBlock(pos, false, player);
-            if (player == null || !player.getInventory().add(stack)) {
-                net.minecraft.world.level.block.Block.popResource(level, pos, stack);
-            }
-        }
-        return InteractionResult.sidedSuccess(level.isClientSide);
-    }
+    // 扳手：不覆写 onWrenched / onSneakWrenched / getRotatedBlockState —— 沿用 IWrenchable 默认实现
+    // （与 aero_bearing 的扳手行为一致：旋转走标准流程 + 扳手音效，蹲下扳手按战利品表拆除进背包）。
 }

@@ -43,7 +43,6 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 | `code-map.md` | Java 源码职责、核心数据流、修改入口和已知边界 | 需要定位或修改 Java 文件时（首要入口，先查它） |
 | `api-code-map.md` | **api/ 依赖源码代码地图**（全部为 Java 源码 `-sources`）：Sable Companion / Flywheel / Catnip（核心三件套，项目根基）与 Create / CC:Tweaked / Ponder 的包级地图、import 前缀→路径对照、项目内使用文件清单；JEI / Registrate 未提取（标注为不在 api/） | 需要查外部依赖 API 的包路径/类位置/签名（先查它，再进 api/ 搜索）；涉及渲染、物理、子次元、Outliner、GUI 控件时尤其有用 |
 | `ATTENTION.md` | **踩坑与注意事项合集**（Sable 坐标/变换互逆/枢轴/GridState re-key/屏幕破坏性变更/引擎门控/INS randomNudge 等） | 改任何代码前先核对对应模块小节，避免重踩已知坑 |
-| `WORK RECORD.md` | 各功能**实施总结/工作记录**（引擎 P7、INS、FMC 应力、屏幕渲染重构、测试 Monitor 变换方案） | 了解某功能怎么做的、后续计划、待验证项 |
 | `record_screen_module.md` | 可变尺寸屏幕实现记录 | 修改屏幕数据、渲染、放置或拆卸行为时 |
 | `record_screen_text.md` | 屏幕字符/矩形渲染实现记录（位图字体、UV 环绕、镜像/深度坑） | 修改屏幕文本/图形渲染或 `ScreenTextRenderer` 时 |
 | `knob-interaction.md` | 旋钮交互数据流 | 修改旋钮拖拽、角度同步或音效时 |
@@ -52,8 +51,10 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 | `control-desk-grid-slot.md` | controlDesk 桌顶棋盘网格自由放置系统（joystick_2 完整接入；常量/数据流/变换链/添加新模块 checklist） | 修改或新增 controlDesk 自由放置模块（throttle / monitor_2 / 新控件）的预览、放置、占用、拆除时 |
 | `create-schematic-nbt.md` | Create 蓝图 NBT 经验记录（保存/部署中的配置丢失问题） | 排查 PeripheralExtender / RedstoneTransceiver 在 Create 蓝图中的行为时 |
 | `servo-mode.md` | 传动外设舵机模式实现记录（TiltAdapter 段式状态机 + 段内同向重瞄 re-aim + flicker 门控） | 修改舵机角度定位、段推进、flicker 门控或 Lua 舵机 API 时 |
-| `my_bearing.md` | 自研风帆轴承方案设计（轴向应力输入 + RotaryConstraint 物理驱动，不贯通应力） | 实现/修改 my_bearing 方块时，先读方案再动手 |
-| `my_aero_sensor.md` | 惯性导航系统（ccpe:ins）实现记录（部件层级 test(Y)→gimbal(Z)→compass(X)、重力摆动画、逆变换链一致性、randomNudge 坑、PIVOT_DROP） | 修改 ccpe:ins 的动画/层级/渲染/扰动时，先读本文 |
+| `my_bearing.md` | 自研风帆轴承方案设计 + 实施记录（轴向应力输入 + RotaryConstraint 物理驱动；阶段 4 限速到位/动力门控、阶段 5b 应力网络贯通、阶段 6 Lua 外设；含锁定模式和 transmission_peripheral 一致性对齐） | 实现/修改 my_bearing 或 transmission_peripheral 方块时，先读方案再动手 |
+| `my_aero_sensor.md` | 惯性导航系统（ccpe:ins）实现记录（部件层级 test(Y)→gimbal(Z)→compass(X)、重力摆动画、逆变换链一致性、randomNudge 坑、PIVOT_DROP；Lua API getAngles/getPosition/getBodyPosition/getOrientation/getAngularVelocity/getVelocity 现状） | 修改 ccpe:ins 的动画/层级/渲染/扰动时，先读本文 |
+| `my_sensor_system.md` | `ccpe.sensor_system` 方案蓝图 + **实施补充记录**（FMC 附着方块应力网络 getStressRemaining/getStressCapacity、CreateStressReadout 反射读数） | 修改传感器 Lua API、门控或应力读数时 |
+| `screen-render-rework.md` | 屏幕渲染重构需求分析与方案决策 + **「实施状态」**（方案三格子模型已落地清单、与计划差异、待游戏内验证 13 项） | 修改屏幕数据模型/同步/渲染平面或 API 时 |
 | `short-range link.md` | 短程信号链接器（ccpe:short_range_linker）实现方案（物理体作用域频道注册表、链上共享加载开关、Lua API ccpe.link、频道唯一性语义） | 实现/修改短程信号链接器时，先读本文 |
 | `engine-module.md` | 引擎模块（engine_core 排排坐组网 + 零缓存抽储罐 + 燃烧室并入 + 冷却过热约束 + 末段 Lua 控制）方案设计（CDG modular + Create ConnectivityHandler/SteamEngine 参考） | 实现/修改 engine_core / 燃烧室 / cooling_duct 的组网、燃料消耗、冷却、Lua 控制时，先读本文 |
 | `thrust-nozzle.md` | 定向喷管（`ccpe:thrust_nozzle`）工作记录：无 mixin 的 Sable 点力推力器、纯轴向恒定推力标定（800 pN/管 @256RPM、REVERSE_SIGN 实测值）、六向碰撞盒生成、粒子三次迭代（`create:air` vs `air_flow` + `fan_transparent` 标签的坑）与遮挡射线 | 修改喷管出力/符号/粒子/碰撞盒，或要参考"自研方块 + Sable 力组"的最短路径时 |
@@ -63,7 +64,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 
 ## 最小上下文原则
 
-- 不要在每次任务开始时读取 `ATTENTION.md`、`WORK RECORD.md` 或全部 memo。
+- 不要在每次任务开始时读取 `ATTENTION.md` 或全部 memo。
 - 只读取与当前请求直接对应的一份 memo；仅当它引用了另一个必须的文档时再读取下一份。
 - 与项目进度或设计取舍没有直接关系时，不加载 memo。
 - 需要定位 Java 文件职责、模块边界或修改入口时，查阅 `code-map.md`；需要定位外部依赖 API 时查阅 `api-code-map.md`。不要因此读取全部其他 memo。
@@ -99,5 +100,5 @@ memo 文档提供了关键 API 速查和代码模板，结合项目现有代码�
 
 ## 注意事项
 
-- `ATTENTION.md` 是踩坑与注意事项的首选入口；`WORK RECORD.md` 记录实施总结与后续计划
+- `ATTENTION.md` 是踩坑与注意事项的首选入口；各功能的**实施总结与后续计划写在各主题文档里**（引擎 → `engine-module.md` §17；喷管/排气粒子 → `thrust-nozzle.md`；航空轴承 → `my_bearing.md`；屏幕格子模型 → `screen-render-rework.md`「实施状态」；传感器物理读数 → `my_sensor_system.md`「实施补充记录」；INS → `my_aero_sensor.md`）
 - 如果 memo 和相关 skill 都无法回答当前 API 问题，再回退到 `minecraft-research` skill。

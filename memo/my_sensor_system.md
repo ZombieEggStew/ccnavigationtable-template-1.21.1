@@ -173,3 +173,21 @@ ss.hasPressureSensor()   -- boolean
 - [ ] 刚体线速度原语方法名（实现时 javap 确认）
 - [ ] 电脑在 sub-level 的 getPosition 行为（进游戏验证）
 - [ ] 物理体移动时电脑位置同步（进游戏验证）
+
+## 实施补充记录（2026-08）：FMC 附着方块应力网络读数
+
+> 落地在现有 `SensorSystemAPI` 上（**与上文蓝图里的「speed_sensor / pressure_sensor 方块」无关**——实际由
+> 静压孔（PRESSURE）与皮托管（SPEED）承担，见 `memo/code-map.md`「`BodySensorRegistry`」行）。
+> 相关 wiki：`wiki/docs/sensor-system/fmc.zh.md`；踩坑见 `memo/ATTENTION.md`「FMC 应力网络」。
+
+- **Lua 方法**：`ss.getStressRemaining()`（**剩余应力** su = 网络总容量 − 当前总应力，**过载时为负**）、
+  `ss.getStressCapacity()`（**网络总容量** su）。两方法门控相同，不可读返回 `nil`。
+- **参考点 / 门控**：读**最后放置的 FMC（含 AIC，AIC 等同 FMC）的附着面方块**所在的 Create 应力网络；
+  门控 = 机体（含约束链）上有 ≥1 FMC **且**附着面方块是 Create 动力方块（`KineticBlockEntity`，
+  如齿轮箱 / 传动轴 / 螺旋桨轴承）**且**读数成功。附着面 = FMC 的 `FACE/FACING` 支撑方向 /
+  AIC 的 `FACING` 背面——该方向由 `FmcBlock.supportDirectionOf(BlockState)` 公共静态方法抽出（`FmcBlock.java` 126 行定义）。
+- **读数来源**：Create 6.x 的 `KineticBlockEntity.stress/capacity` 是 **protected 字段、无公开 getter**
+  （仅 `StressGaugeBlockEntity` 等子类可见）→ 新建 `compat/create/CreateStressReadout.java`（反射读这两个
+  稳定缓存字段，`stressOf(be)` 返回 `StressInfo(stress, capacity)`；字段缺失/反射被拒返回 `null`，不抛异常）。
+  读的是网络**缓存值**，零 tick 开销、无 Mixin。
+- **待进游戏验证**：FMC 贴在动力方块上读剩余应力（已实测原表形式输出正常，改名后待复测）。
