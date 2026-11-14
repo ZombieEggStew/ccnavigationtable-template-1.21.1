@@ -792,6 +792,28 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         return facing.getAxisDirection().getStep();
     }
 
+    /**
+     * 喷嘴实际轴向（<b>plot / 方块局部系</b>，单位向量）——推力与全部粒子链路的<b>唯一方向来源</b>。
+     * <p>
+     * 默认 = {@code FACING} 的法线（定向喷管）。矢量喷管
+     * （{@link AdvancedThrustNozzleBlockEntity}）覆盖它返回倾斜后的轴，于是
+     * {@link #sable$physicsTick}（推力）与 {@link #tickClient}（喷口位置 / 粒子基向量 / 遮挡射线 /
+     * 进气漏斗 / 尾迹锚点）<b>一处改、全链路生效</b>。
+     */
+    protected Vec3 nozzleAxis(final BlockState state) {
+        final Vec3i normal = state.getValue(ThrustNozzleBlock.FACING).getNormal();
+        return new Vec3(normal.getX(), normal.getY(), normal.getZ());
+    }
+
+    /**
+     * 额外出力系数（1.0 = 满出力）：由子类覆盖（矢量喷管的 Lua {@code setThrustScale}）。
+     * <p>
+     * 乘在「转速 × 气压」之上，0 = 完全不出力。默认 1.0，所以定向喷管行为不变。
+     */
+    protected double thrustScale() {
+        return 1.0D;
+    }
+
     @Override
     public void sable$physicsTick(final ServerSubLevel subLevel, final RigidBodyHandle handle, final double timeStep) {
         final float speed = this.getFanSpeed();
@@ -805,18 +827,19 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         }
 
         final Direction facing = this.getBlockState().getValue(ThrustNozzleBlock.FACING);
-        final Vec3i normal = facing.getNormal();
+        // 轴向从钩子取（矢量喷管会返回倾斜后的轴）；magnitude 里的 axisStep 仍按 FACING 定符号
+        final Vec3 axis = this.nozzleAxis(this.getBlockState());
         // 冲量 = 推力 × 气压 × substep 时长；rpm 带符号，所以 magnitude 也带符号。
         // axisStep(facing) 是让"喷管的轴向语义"与电扇自身推力完全一致的关键一项（见 axisStep 的注释）：
         // 少了它，facing=DOWN 的喷管推力会整体反向（step = -1），水平/UP 则看不出问题。
         final double pressure = this.airPressureAt(subLevel);
         final double magnitude = (REVERSE_SIGN ? -1.0D : 1.0D) * this.axisStep(facing)
-                * THRUST_PER_RPM * speed * pressure * timeStep;
+                * THRUST_PER_RPM * speed * pressure * timeStep * this.thrustScale();
 
         // 力向量与作用点都必须每次新建：QueuedForceGroup.applyImpulseAtPoint 会就地改写传入的
         // position（减去质心求力臂），且 recordPointForce 保留引用（FlightDataRecorder 遥测会读），
         // 复用临时向量会污染已记录的点力。
-        final Vector3d impulse = new Vector3d(-normal.getX(), -normal.getY(), -normal.getZ()).mul(magnitude);
+        final Vector3d impulse = new Vector3d(-axis.x, -axis.y, -axis.z).mul(magnitude);
         group.applyAndRecordPointForce(JOMLConversion.atCenterOf(this.worldPosition), impulse);
     }
 
@@ -887,8 +910,8 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         }
 
         final Direction facing = this.getBlockState().getValue(ThrustNozzleBlock.FACING);
-        final Vec3i normal = facing.getNormal();
-        final Vec3 axis = new Vec3(normal.getX(), normal.getY(), normal.getZ());
+        // 轴向从钩子取：矢量喷管倾斜后，喷口位置/粒子方向/遮挡射线全部自动跟着倾斜轴走
+        final Vec3 axis = this.nozzleAxis(this.getBlockState());
 
         // 排气方向 = 机体受力方向的反向：
         // 受力 = -FACING · (REVERSE_SIGN ? -1 : 1) · axisStep · 转速 ⇒ 排气 = +FACING · 同一个符号。

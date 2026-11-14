@@ -3,7 +3,6 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
-import net.createmod.catnip.animation.AnimationTickHolder;
 import net.createmod.catnip.math.AngleHelper;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBuffer;
@@ -11,7 +10,6 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.Direction;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -50,11 +48,9 @@ import org.joml.Vector3f;
  * ⚠️ 与参考实现的差别：{@code aeronautics:gyroscopic_propeller_bearing} 是"头顶在转盘上、杆朝下插进固定体"，
  * 我们的模型是"头在固定底板上、杆朝上接可动体"，所以活塞朝上、且头必须是固定件。
  *
- * <h3>阶段一的测试姿态</h3>
- * 还没有角度控制逻辑：倾斜姿态由"绕锥面进动"的时间函数生成（极角 {@link #TEST_TILT_DEG} 固定、
- * 方位角匀速转），方便一次进游戏就能看出四个活塞是否随动、六向 facing 是否都对、以及倾角大了会不会
- * 穿进底板。阶段二把 {@link #currentTilt(AdvancedThrustNozzleBlockEntity, float)} 换成读 BE 的
- * 服务端权威方向即可，渲染链本身不用改。
+ * <h3>倾斜姿态</h3>
+ * 由 {@link AdvancedThrustNozzleBlockEntity#getTiltQuaternion()} 提供（当前恒为<b>直出</b>的恒等旋转，
+ * 用户定稿先关闭测试进动动画）；下一步的角度控制只改 BE 的 {@code tiltDir}，渲染链不用动。
  *
  * <p>参考来源（只读）：{@code references/Simulated-Project-main/aeronautics/.../gyroscopic_propeller_bearing/}
  * 的 {@code GyroscopicPropellerBearingRenderer}（枢轴倾斜 + 四活塞位置/朝向手法）、
@@ -85,19 +81,6 @@ public class AdvancedThrustNozzleRenderer extends SafeBlockEntityRenderer<Advanc
     /** 活塞组数（四方位，i = 0..3 → 绕 Y 依次 −90°） */
     private static final int PISTON_COUNT = 4;
 
-    // ═══════════════ 阶段一测试姿态（进游戏可直接改这两个数） ═══════════════
-
-    /**
-     * 测试倾角（度）：喷口轴向偏离法线的角度。
-     * <p>
-     * 15° 是保守值：枢轴在 {@code y=1px}（底板中部），倾角再大裙边/下沿就会切进底板板面
-     * （{@code 6px × sin θ}，20° 起可见，30° 明显）。阶段二做锥角钳位时以它为上界参考。
-     */
-    public static final float TEST_TILT_DEG = 15f;
-
-    /** 方位角进动速度（度/tick）：60°/秒绕法线一圈需要 6 秒，纪要看四个活塞依次升降 */
-    public static final float TEST_PRECESSION_DEG_PER_TICK = 6f;
-
     public AdvancedThrustNozzleRenderer(final BlockEntityRendererProvider.Context context) {
         // SafeBlockEntityRenderer 无参构造；保留 Context 参数以匹配 BlockEntityRendererProvider 工厂
     }
@@ -109,7 +92,9 @@ public class AdvancedThrustNozzleRenderer extends SafeBlockEntityRenderer<Advanc
         final BlockState state = be.getBlockState();
         final Direction facing = state.getValue(ThrustNozzleBlock.FACING);
         final VertexConsumer vb = buffer.getBuffer(RenderType.cutout());
-        final Quaternionf tilt = currentTilt(be, partialTicks);
+        // 倾斜姿态：读方块实体（当前恒为直出 = 恒等旋转，用户定稿关闭了测试进动动画；
+        // 下一步的角度控制改 BE 里的 tiltDir 即可，渲染链不用动）
+        final Quaternionf tilt = be.getTiltQuaternion();
 
         // ── 1. 可动 block 部分（筒身 + 十字臂 + 顶环 + 裙边），绕枢轴倾斜 ──
         final SuperByteBuffer blockPart =
@@ -163,28 +148,5 @@ public class AdvancedThrustNozzleRenderer extends SafeBlockEntityRenderer<Advanc
             buf.rotateCentered(AngleHelper.rad(AngleHelper.horizontalAngle(facing.getOpposite())), Direction.UP);
         }
         buf.rotateCentered(AngleHelper.rad(-90 - AngleHelper.verticalAngle(facing)), Direction.EAST);
-    }
-
-    /**
-     * 当前倾斜姿态：把模型空间 +Y 转到目标轴向的<b>最小弧</b>四元数。
-     * <p>
-     * 阶段一 = 纯客户端测试姿态（绕锥面进动）；阶段二改成读 {@link AdvancedThrustNozzleBlockEntity}
-     * 的目标方向（previous/current 帧间插值）即可，调用点不用变。
-     */
-    private static Quaternionf currentTilt(final AdvancedThrustNozzleBlockEntity be, final float partialTicks) {
-        // 用 Catnip 的渲染时间（自带 partialTicks，帧间平滑）而不是每次新建计数值：
-        // 与 MyBearingPlateRenderer 里给传动杆取角度是同一个来源。
-        final Level level = be.getLevel();
-        final double time = level == null ? 0.0D : (double) AnimationTickHolder.getRenderTime(level);
-        final float azimuthDeg = (float) ((time * TEST_PRECESSION_DEG_PER_TICK) % 360.0D);
-        final float polarRad = (float) Math.toRadians(TEST_TILT_DEG);
-        final float azimuthRad = (float) Math.toRadians(azimuthDeg);
-
-        // 目标轴向（模型空间，y 向上 = 喷口原朝向）
-        final Vector3f axis = new Vector3f(
-                (float) (Math.sin(polarRad) * Math.cos(azimuthRad)),
-                (float) Math.cos(polarRad),
-                (float) (Math.sin(polarRad) * Math.sin(azimuthRad)));
-        return new Quaternionf().rotationTo(0f, 1f, 0f, axis.x, axis.y, axis.z);
     }
 }

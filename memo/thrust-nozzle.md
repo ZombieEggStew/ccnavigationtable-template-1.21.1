@@ -766,4 +766,153 @@ protected void setLocationFromBoundingbox() {
 
 - ✅ `block` 部分绕 (8,1,8)px 转、六向 FACING 都对（用户确认"转动正常"）；
 - ✅ 选择框/碰撞箱改为整块正方形；
-- ✅ 活塞自由度已按用户反馈改正（头 0 自由度固定在底座、杆只沿自身轴滑动），**待再次验证观感**。
+- ✅ **活塞机构最终定稿并经用户确认"动画效果没问题了"**：头 0 自由度（固定在底座）、
+  杆底面一点钉死在铰点上、只允许绕铰点转动（见 §18.5 的最终表；两版错误的推导也记在那一节）；
+- ✅ 模型定位约定「局部原点 = 铰点」已落地（`piston_pole.json` / `piston_head.json` 的 `from`/`to` 已按此改）。
+
+## 19. 矢量喷管：频道 + 右键 GUI（2026-11，阶段二之前的一步）
+
+> **状态**：代码完成、`gradlew classes` 通过；**待用户进游戏验证**（清单见 §19.5）。
+> 本步**只做"频道寻址的准备"**：频道注册 + GUI；**未加 Lua 外设方法**（用户定稿：这一步不需要
+> `getChannel` / `isOnPhysicsBody`），也**没有**「加载物理体」开关（喷嘴不持有 ticket）。
+
+### 19.1 需求（用户定稿的三条）
+
+1. **关闭持续旋转**：去掉阶段一的"绕锥面进动"测试动画；
+2. **右键菜单**：复用/照抄 `short_range_linker` 的那套（频道滚轮 + 非物理体提示 + 保存回写）；
+3. **放置时自动分配频道，只在物理体上生效**，供后续用 `ccpe.sensor_system.getPeripheral(ch)` 寻址喷嘴。
+
+### 19.2 复用而不新造：直接进 `ShortRangeLinkerRegistry`
+
+**关键发现**：这个注册表本来就是"物理体作用域频道表"——`子次元UUID → (频道 → BlockEntity)`，
+而且**控制台（ControlDesk）早就和链接器共用它**。所以喷嘴不需要任何新注册表：
+
+| 能力 | 现成实现（直接调） |
+|---|---|
+| 自动分配（链内最小空闲） | `ShortRangeLinkerRegistry.register(desired<0, be)` |
+| 同链冲突顺延 | 同上（返回实际频道） |
+| **非物理体不注册** | 同上（返回 `-1`）→ 正好实现"只在物理体上生效" |
+| 按链查询 | `get(chainUuids, ch)` / `occupiedChannels(chainUuids)` |
+| 注销 | `unregisterAll(be)` |
+
+频道号语义 = **喷嘴在物理体内的地址**（同链 1:1，冲突顺延），与链接器/控制台共享同一频道空间，
+所以一个频道号在同一物理体里不会既指喷嘴又指链接器。
+
+### 19.3 文件
+
+| 文件 | 内容 |
+|---|---|
+| `block/AdvancedThrustNozzleBlockEntity.java` | 频道状态机：`onLoad` 注册 / `setRemoved` 注销 / **`serverTick` 每 20 tick 复核**（轴承连断后链变化 → 冲突顺延）；`applyChannel(desired)` 供 payload 用；`refreshOccupiedChannels()` 快照；`getTiltQuaternion()` = 倾斜 seam（当前恒等 = 直出）；NBT 存 `Channel`，`getUpdateTag` 带 `Channel` + `OccupiedChannels` |
+| `block/AdvancedThrustNozzleBlock.java` | `getTicker` 拆成两路：客户端走父类（粒子）、服务端走 `SERVER_TICKER`（频道复核）；`useWithoutItem` 空手右键开 GUI（潜行放行给扳手；染料仍走父类 `useItemOn`） |
+| `block/AdvancedThrustNozzleRenderer.java` | 删掉测试进动 + `TEST_TILT_DEG` / `TEST_PRECESSION_DEG_PER_TICK` / `currentTilt()` / `AnimationTickHolder`，改成 `be.getTiltQuaternion()` |
+| `screen/AdvancedThrustNozzleMenu.java` | 照 `ShortRangeLinkerMenu`，**去掉 bodyLoad**：pos / onPhysicsBody / channel / occupiedChannels |
+| `screen/AdvancedThrustNozzleScreen.java` | 照 `ShortRangeLinkerScreen`，**只有频道滚轮** + 非物理体提示 + tooltip 前景层 + 完成按钮；背景**复用** `textures/gui/gui_link.png`（`gui.ccpe.advanced_thrust_nozzle.require_body` 为新增语言键） |
+| `network/AdvancedThrustNozzleConfigPayload.java` / `…PacketHandlers.java` | pos + channel；服务端二次校验"非物理体忽略"→ `applyChannel`（顺延回写）→ 刷新占用快照 |
+| `screen/MyModMenus.java` / `network/ModPackets.java` / `CCPeripheralExtenderClient.java` | 各加一条注册（菜单 / payload / Screen） |
+
+数据流：
+
+```mermaid
+flowchart LR
+    Place["放置 / onLoad"] -->|"register(-1, be)"| Reg[ShortRangeLinkerRegistry]
+    Reg -->|"链内最小空闲号"| BE[NozzleBE.channel]
+    Tick["serverTick 每 20t"] -->|"复核：链变化→顺延"| Reg
+    GUI["GUI 频道滚轮"] --> Payload[ConfigPayload] -->|"applyChannel"| Reg
+    Reg -->|"get(chain, ch)（下一步）"| Lua["ccpe.sensor_system.getPeripheral(ch)"]
+```
+
+### 19.4 状态与坑
+
+- `onPhysicsBody` **不落盘**、也不进 update tag：客户端以 `channel >= 0` 推断（GUI 只需要它决定显示控件区还是提示）。
+- 离开物理体（拆到地上）时 `registerChannel` 会把 `channel` 复位成 `-1`，重新装到物理体上再自动分配。
+- **蓝图兼容本轮未做**：`ThrustNozzleBlockEntity` 没有实现 `SafeNbt.writeSafe`，所以蓝图部署后频道会**重新自动分配**
+  （喷嘴的频道是"地址"，重分配可接受）。要持久化时给 BE 补 `writeSafe`/`readSafe` 即可。
+- 频率：`serverTick` 只在 `tickCount % 20 == 0` 时注册一次，开销可忽略。
+
+### 19.5 进游戏验证清单
+
+1. 物理体上放一个矢量喷管 → 空手右键开 GUI，显示一个小频道号（同体第一个 = **0**）。
+2. 同体再放第二个 → 自动 **1**（不冲突）；GUI 滚轮会**跳过**已占用号，Shift 加速 ×10。
+3. 改频道后关 GUI → 重开显示的是**服务端生效值**（被占用则顺延）。
+4. **地面静态放置**（非物理体）→ GUI 显示「需放置在物理体上」、无滚轮、不发包；`ShortRangeLinkerRegistry` 无条目。
+5. **两架飞机各放一个** → 各自都是 0（互不干扰，作用域 = 各自的约束链）。
+6. 同体已有链接器占频道 0 → 新放的喷嘴自动拿 1（共享同一频道空间）。
+7. **倾斜确认**：现在应该完全**不转**（直出），活塞保持静止（头不动、杆竖直）。
+8. 染料右键（染尾迹）与扳手潜行拆除仍然正常。
+
+## 20. 矢量喷管：CC:T 外设（偏转 + 出力，2026-11）
+
+> **状态**：代码完成、`gradlew classes` 通过；**待进游戏验证**（清单见 §20.6）。
+> 用户定稿：`setDeflection(方位角, 锥角)`、锥角钳位 **15°**、`setThrustScale(0..1)` 默认 **1.0**。
+
+### 20.1 Lua API（type = `advanced_thrust_nozzle`）
+
+| 方法 | 语义 |
+|---|---|
+| `setDeflection(azimuthDeg, tiltDeg)` → bool | 方位角绕 FACING 轴（0..360，负值自动归正）、锥角自动钳到 `0..15`；非有限值返回 false。**推力方向 + 排气/进气/尾迹粒子 + 渲染同时变** |
+| `getDeflection()` → `{azimuth=, tilt=}` | 当前偏转 |
+| `getMaxTilt()` → `15` | 钳位上限（脚本归一化用） |
+| `setThrustScale(scale)` → bool | 出力系数 0..1（越界钳位），乘在「风扇转速 × 气压」之上；**只影响推力，不影响粒子** |
+| `getThrustScale()` → 0..1 | 当前出力系数 |
+| `getChannel()` → int | 本喷嘴在物理体内的频道（-1 = 不在物理体上），配合 `ccpe.sensor_system.getPeripheral(ch)` |
+
+寻址（同 §19）：`local ss = require("ccpe.sensor_system")` → `ss.getPeripheral(1)` 拿到频道 1 的喷嘴外设。
+
+### 20.2 实现要点
+
+1. **父类两个钩子**（`ThrustNozzleBlockEntity`，定向喷管行为不变）：
+   - `protected Vec3 nozzleAxis(BlockState)` —— 推力与**全部粒子链路**的唯一方向来源
+     （`sable$physicsTick` 的冲量、`tickClient` 的喷口位置/粒子基向量/遮挡射线/进气漏斗/尾迹锚点）；
+   - `protected double thrustScale()` —— 乘在「转速 × 气压」上的额外出力系数，默认 1.0。
+2. **矢量喷管覆盖**：`nozzleAxis` = 倾斜轴（模型空间 `tiltDirModel()` 再按 blockstate 的模型旋转转到
+   plot 系），`thrustScale` = Lua 设的值。
+3. **模型空间 → plot 系的旋转**（关键，容易搞错）：vanilla blockstate 的模型旋转是
+   **`R = Ry(−y) · Rx(−x)`**（即 `new Quaternionf().rotationYXZ(rad(−y), rad(−x), 0)`），
+   六个朝向的 (x,y) 与 `blockstates/advanced_thrust_nozzle.json` 逐条对应：
+   up (0,0)、down (180,0)、north (90,0)、east (90,90)、south (90,180)、west (90,270)。
+   *用错顺序会表现为"倾斜方向对、但推力朝反方向/转 90°"*。
+4. 渲染仍读 `getTiltQuaternion()`（模型空间最小弧旋转），与物理同源 ⇒ 视觉与推力方向必然一致。
+5. 状态持久化 + 同步：`azimuthDeg`/`tiltDeg`/`thrustScale` 进 `saveAdditional`；
+   `azimuthDeg`/`tiltDeg` 还要进 `getUpdateTag`（客户端 BER 与粒子要读）；每次 setter 都 `sendBlockUpdated(..., 3)`。
+6. 注册：`CCPeripheralCapabilities` 加一条 capability；`SensorSystemAPI.getPeripheral(ch)` 加喷嘴分支
+   （链接器 → 控制台 → **喷嘴**，三者共用同一物理体作用域频道空间）。
+
+### 20.3 为什么锥角钳 15°
+
+枢轴在 `y=1px`（底板中部），裙边下沿在半径 ~5-6px ⇒ 下垂量 `6px × sinθ`：15° ≈ 1.6px（刚好）、
+20° ≈ 2.1px（可见地切进底板）、30° ≈ 3px（明显）。活塞杆摆幅同理
+（`7px × sinθ`，15° 时 1.8px，正好仍在十字臂带 y6..10px 内被挡住）。
+
+### 20.4 已知边界
+
+- **瞬间生效**，没有渐变/限速（脚本自己插值即可）；若要平滑，在 BE 加 previous/current + 每 tick 逼近。
+- 推力方向**不做遮挡判定**（与定向喷管一致）。
+- 蓝图部署后频道重分配（父类无 `writeSafe`），偏转/出力有 NBT 所以会保留。
+- `getThrustScale` 之外没有"实际出力 pN"读数；需要调试读数时再加 `getThrust()`。
+
+### 20.5 参考
+
+`ServoBearingBlockEntity` 的内嵌 `Peripheral`（type/equals/`@LuaFunction(mainThread=true)`、
+`getPeripheral()` 懒加载）+ `CCPeripheralCapabilities` 的注册写法。
+
+### 20.6 进游戏验证清单
+
+```lua
+local ss = require("ccpe.sensor_system")
+local n  = ss.getPeripheral(0)          -- 频道 0 的喷嘴（物理体内自动分配的号）
+print(n.getChannel())                   -- 0
+print(n.getDeflection().tilt, n.getMaxTilt())
+n.setDeflection(0, 15)                  -- 朝方位角 0 倾 15°
+n.setDeflection(90, 15)                 -- 绕轴转 90° 换一侧
+n.setThrustScale(0.5)                   -- 出力减半
+print(n.getThrustScale())
+```
+
+1. 外设能被 `peripheral.find("advanced_thrust_nozzle")` 与 `ss.getPeripheral(频道)` 两种方式拿到；
+2. `setDeflection` 后**模型转向、排气粒子方向、实际推力方向三者一致**（这是最容易出错的一项，
+   若"模型朝北、推力朝南"就是 §20.2 第 3 条的旋转顺序问题，报我即修）；
+3. `tilt > 15` / 负数会被钳位；`azimuth = -30` 等价 `330`；
+4. `setThrustScale(0)` ⇒ 完全不出力但粒子照旧；`(1)` 恢复；越界（1.5 / -1）被钳；
+5. 六个 FACING 朝向各试一次（尤其 `facing=down` 的翻转）；
+6. 重进存档：偏转与出力系数保留；频道重分配（预期）。
+

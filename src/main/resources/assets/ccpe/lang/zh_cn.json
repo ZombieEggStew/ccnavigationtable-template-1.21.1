@@ -69,6 +69,7 @@
   "block.ccpe.advanced_thrust_nozzle.tooltip.behaviour2": "推力沿倾斜后的轴向输出，可以在一个圆锥范围里任意指向",
   "block.ccpe.advanced_thrust_nozzle.tooltip.condition3": "手持染料右键点击时",
   "block.ccpe.advanced_thrust_nozzle.tooltip.behaviour3": "同样只把尾迹粒子染成该染料的颜色",
+  "gui.ccpe.advanced_thrust_nozzle.require_body": "需放置在物理体上",
 
   "block.ccpe.auto_packager": "自动打包机",
   "block.ccpe.auto_packager.tooltip.summary": "把连接容器里的物品自动打成包的打包机，不需要红石信号，只要贴着容器放置就会持续工作。",

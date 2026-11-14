@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.compat.cc;
 
 import com.zzy205.myfirstmod.RegistrateBlocks;
+import com.zzy205.myfirstmod.block.AdvancedThrustNozzleBlockEntity;
 import com.zzy205.myfirstmod.block.AicBlock;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.FmcBlock;
@@ -1746,6 +1747,11 @@ public class SensorSystemAPI implements ILuaAPI {
         // 控制台：返回控制台自身外设（与链接器共用同一物理体作用域频道空间）
         ControlDeskBlockEntity desk = ControlDeskRegistry.get(chainUuids, channel);
         if (desk != null) return desk.getPeripheral();
+        // 矢量喷管（advanced_thrust_nozzle）：返回喷嘴自身外设（同样共用同一频道空间；
+        // 频道号见喷嘴外设的 getChannel()，Lua 侧用 ss.getPeripheral(ch).setDeflection(...) 控制）
+        if (ShortRangeLinkerRegistry.get(chainUuids, channel) instanceof AdvancedThrustNozzleBlockEntity nozzle) {
+            return nozzle.getPeripheral();
+        }
         return null;
     }
 

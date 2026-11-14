@@ -69,6 +69,7 @@
   "block.ccpe.advanced_thrust_nozzle.tooltip.behaviour2": "Thrust follows the tilted axis, so it can point anywhere inside a cone",
   "block.ccpe.advanced_thrust_nozzle.tooltip.condition3": "Right-clicked with a dye",
   "block.ccpe.advanced_thrust_nozzle.tooltip.behaviour3": "Likewise only recolors the contrail particles",
+  "gui.ccpe.advanced_thrust_nozzle.require_body": "Must be placed on a physics body",
 
   "block.ccpe.auto_packager": "Auto-Packager",
   "block.ccpe.auto_packager.tooltip.summary": "A Packager that turns items from the attached inventory into packages on its own - no redstone needed. Place it against a container and it keeps working.",

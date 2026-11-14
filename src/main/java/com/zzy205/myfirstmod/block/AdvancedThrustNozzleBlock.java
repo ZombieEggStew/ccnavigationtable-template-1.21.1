@@ -1,12 +1,21 @@
 package com.zzy205.myfirstmod.block;
 
 import com.mojang.serialization.MapCodec;
+import com.zzy205.myfirstmod.screen.AdvancedThrustNozzleMenu;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.DirectionalBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.NotNull;
@@ -61,5 +70,75 @@ public class AdvancedThrustNozzleBlock extends ThrustNozzleBlock {
     @Override
     protected BlockEntityType<?> entityType() {
         return MyModBlockEntities.advanced_thrust_nozzle_entity.get();
+    }
+
+    // ═══════════════ ticker：客户端粒子（继承父类）+ 服务端频道复核 ═══════════════
+
+    private static final BlockEntityTicker<AdvancedThrustNozzleBlockEntity> SERVER_TICKER =
+            AdvancedThrustNozzleBlockEntity::serverTick;
+
+    /**
+     * 客户端照父类走（喷排气/进气/尾迹粒子）；服务端挂频道复核 ticker（每 20 tick 重注册频道，
+     * 轴承连/断后约束链变化时同链频道冲突要顺延，照 {@code short_range_linker}）。
+     */
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(final Level level, final BlockState state,
+            final BlockEntityType<T> type) {
+        if (type != this.entityType()) {
+            return null;
+        }
+
+        if (level.isClientSide) {
+            return super.getTicker(level, state, type);
+        }
+
+        @SuppressWarnings("unchecked")
+        final BlockEntityTicker<T> ticker = (BlockEntityTicker<T>) (BlockEntityTicker<?>) SERVER_TICKER;
+        return ticker;
+    }
+
+    // ═══════════════ 右键菜单：频道选择 ═══════════════
+
+    private static final Component GUI_TITLE =
+            Component.translatable("block.ccpe.advanced_thrust_nozzle");
+
+    /**
+     * 空手右键打开频道 GUI（潜行右键放行，留给扳手拆除）。
+     * <p>
+     * 手持染料右键仍然优先走父类的 {@code useItemOn}（染尾迹），两者互不影响。
+     */
+    @Override
+    protected InteractionResult useWithoutItem(final BlockState state, final Level level, final BlockPos pos,
+            final Player player, final BlockHitResult hitResult) {
+        if (player.isCrouching()) {
+            return InteractionResult.PASS;
+        }
+
+        if (!level.isClientSide && player instanceof final ServerPlayer serverPlayer
+                && level.getBlockEntity(pos) instanceof final AdvancedThrustNozzleBlockEntity nozzle) {
+            // 打开 GUI 前刷新同链占用快照，保证滚轮「跳过同链占用」用的是最新数据
+            nozzle.refreshOccupiedChannels();
+            final boolean onPhysicsBody = nozzle.isOnPhysicsBody();
+            final int channel = nozzle.getChannel();
+            final int[] occupiedChannels = nozzle.getOccupiedChannels();
+
+            serverPlayer.openMenu(
+                    new SimpleMenuProvider(
+                            (containerId, inv, p) -> new AdvancedThrustNozzleMenu(containerId, pos, inv, onPhysicsBody),
+                            GUI_TITLE
+                    ),
+                    buf -> {
+                        buf.writeBlockPos(pos);
+                        buf.writeBoolean(onPhysicsBody);
+                        buf.writeVarInt(channel);
+                        buf.writeVarInt(occupiedChannels.length);
+                        for (final int ch : occupiedChannels) {
+                            buf.writeVarInt(ch);
+                        }
+                    }
+            );
+        }
+
+        return InteractionResult.sidedSuccess(level.isClientSide);
     }
 }

@@ -21,6 +21,10 @@ public class MyModMenus {
     public static final DeferredHolder<MenuType<?>, MenuType<ShortRangeLinkerMenu>> SHORT_RANGE_LINKER_MENU =
             MENUS.register("short_range_linker_menu", () -> IMenuTypeExtension.create(ShortRangeLinkerMenu::new));
 
+    /** 矢量喷管（advanced_thrust_nozzle）频道 GUI */
+    public static final DeferredHolder<MenuType<?>, MenuType<AdvancedThrustNozzleMenu>> ADVANCED_THRUST_NOZZLE_MENU =
+            MENUS.register("advanced_thrust_nozzle_menu", () -> IMenuTypeExtension.create(AdvancedThrustNozzleMenu::new));
+
     public static void register(IEventBus bus) {
         MENUS.register(bus);
     }
