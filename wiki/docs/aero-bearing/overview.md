@@ -10,7 +10,7 @@ The **Aero Bearing** is a Create kinetic block paired with a Sable physics body.
 | Item | Behaviour |
 |---|---|
 | **Power (back-face input RPM)** | Charges stress at impact **4.0** (same as `simulated:swivel_bearing`); passes the speed/stress through the plate to the machinery inside the sub-level; and is the **only** prerequisite for the plate to move. With zero input RPM the plate does **not** move, even if Lua commanded an angle. |
-| **Angle command** | Set only by Lua `setTargetAngle()`. The plate does **not** teleport: it walks to the commanded angle at the "plate rotation speed" and then holds there (aerodynamic loads cannot move it). |
+| **Angle command** | Set only by Lua `setTargetAngle()`. The plate does **not** teleport: it walks to the commanded angle at the "plate rotation speed" and then holds there. |
 | **Lock mode** | **Locked** by default (as described above). Lua `setLocked(false)` switches to **unlocked**: the joint keeps only passive friction damping (`swivelBearingFriction`), so the plate can be moved freely by aerodynamic loads / collisions, and angle commands are not advanced. Re-locking starts from the current orientation, without a snap. |
 | **Plate rotation speed** | Defaults to the **input RPM**, capped at **96 RPM** (a 256 RPM input still walks the plate at 96 RPM). Lua `setRotationSpeed(rpm)` pins it to any 0~96 RPM; once set to a non-zero value it stays pinned, pass `0` to go back to auto. |
 

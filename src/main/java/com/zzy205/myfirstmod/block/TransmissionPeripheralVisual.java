@@ -90,7 +90,11 @@ public class TransmissionPeripheralVisual extends KineticBlockEntityVisual<Trans
     }
 
     private void applyRotation(OrientedInstance instance, Direction direction, float angleRad) {
-        rotation.set(orientationFor(direction)).rotateZ(angleRad);
+        // 转向约定：Create 的 BER（kineticRotationTransform）恒绕「轴正方向」旋转；
+        // 而 orientationFor 把半轴的局部 +Z 转到 direction，局部 rotateZ 于是等于绕 direction 转。
+        // 因此朝轴负方向的半轴必须把角度取反，否则两端半轴视觉转向相反（同 MyBearingVisual）。
+        float spin = direction.getAxisDirection() == Direction.AxisDirection.POSITIVE ? angleRad : -angleRad;
+        rotation.set(orientationFor(direction)).rotateZ(spin);
         instance.rotation(rotation).setChanged();
     }
 

@@ -37,9 +37,10 @@ public class MyModBlocks {
                     noOcclusion()
             ));
 
+    /** 电子变速箱（传动外设）：音效与 aero_bearing / swivel_bearing 对齐（SoundType.NETHERITE_BLOCK） */
     public static final DeferredBlock<TransmissionPeripheralBlock> transmission_peripheral =
             registerBlocks("transmission_peripheral", () -> new TransmissionPeripheralBlock(BlockBehaviour.Properties.of().
-                    sound(SoundType.METAL).
+                    sound(SoundType.NETHERITE_BLOCK).
                     strength(1.0f, 6.0f).
                     noOcclusion()
             ));
