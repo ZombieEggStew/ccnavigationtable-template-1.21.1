@@ -6,6 +6,7 @@ import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRender
 import net.createmod.catnip.math.AngleHelper;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBuffer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
@@ -49,8 +50,10 @@ import org.joml.Vector3f;
  * 我们的模型是"头在固定底板上、杆朝上接可动体"，所以活塞朝上、且头必须是固定件。
  *
  * <h3>倾斜姿态</h3>
- * 由 {@link AdvancedThrustNozzleBlockEntity#getTiltQuaternion()} 提供（当前恒为<b>直出</b>的恒等旋转，
- * 用户定稿先关闭测试进动动画）；下一步的角度控制只改 BE 的 {@code tiltDir}，渲染链不用动。
+ * 由 {@link AdvancedThrustNozzleBlockEntity#getRenderTiltQuaternion(float)} 提供：
+ * <b>服务端</b>恒速线性推进角度（每 tick 广播），<b>客户端</b>再用
+ * {@link JoystickTilt#approach} 指数逼近（按帧时间修正）把步进抹成连续动画——与 {@code joystick} 的分层完全一致。
+ * 倾斜姿态（方位角 + 锥角）在 BE 内部合成同一个四元数，活塞杆吃同一个四元数 ⇒ 机构不会散架。
  *
  * <p>参考来源（只读）：{@code references/Simulated-Project-main/aeronautics/.../gyroscopic_propeller_bearing/}
  * 的 {@code GyroscopicPropellerBearingRenderer}（枢轴倾斜 + 四活塞位置/朝向手法）、
@@ -92,9 +95,10 @@ public class AdvancedThrustNozzleRenderer extends SafeBlockEntityRenderer<Advanc
         final BlockState state = be.getBlockState();
         final Direction facing = state.getValue(ThrustNozzleBlock.FACING);
         final VertexConsumer vb = buffer.getBuffer(RenderType.cutout());
-        // 倾斜姿态：读方块实体（当前恒为直出 = 恒等旋转，用户定稿关闭了测试进动动画；
-        // 下一步的角度控制改 BE 里的 tiltDir 即可，渲染链不用动）
-        final Quaternionf tilt = be.getTiltQuaternion();
+        // 倾斜姿态：服务端恒速推进（每 tick 广播一次），这里再经一层**本地指数逼近**
+        // （JoystickTilt.approach，与操纵杆同一套算法、按帧时间修正）把 20Hz 步进抹成连续动画
+        final Quaternionf tilt = be.getRenderTiltQuaternion(
+                Minecraft.getInstance().getTimer().getGameTimeDeltaTicks());
 
         // ── 1. 可动 block 部分（筒身 + 十字臂 + 顶环 + 裙边），绕枢轴倾斜 ──
         final SuperByteBuffer blockPart =
