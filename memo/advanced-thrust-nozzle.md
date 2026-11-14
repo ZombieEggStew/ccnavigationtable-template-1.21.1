@@ -35,7 +35,7 @@
 | 外设方法 | 本阶段提供偏转 + 出力 + `getChannel`（早期一版曾定"暂不给 getChannel"，最终按外设形态给回） |
 | 偏转是否瞬间到位 | **否**：Lua 只写目标，服务端**恒速**推进（§6.5），客户端用同一速度的墙钟纯函数画 |
 | 渐变参数 | **写死在代码里**（方位 120°/s = 6°/tick、锥角 40°/s = 2°/tick、出力 0.25/tick），Lua 不提供速度/时长参数 |
-| 平滑算法 | 视觉角 = **墙钟纯函数**（`System.nanoTime`，§6.5 v6）；**不要**改回"每 tick 累加"或"按渲染调用频率推进" |
+| 平滑算法 | 视觉角 = **一个朝 target 走的数**，每次渲染用 `System.nanoTime` **差值**推进一步（§6.5 v8）；**不要**改回"每 tick 累加 / 按调用频率推进 / (起点,终点,起始时刻) 三元组" |
 | 方位角跨 0/360 | 走**最短路径**（350°→10° 走 −20°） |
 | `getDeflection` 返回 | **实际角 + 目标角都给**，另加 `isMoving()` |
 | 出力系数是否渐变 | **是**，与角度同一套曲线（数值单位改成"系数/秒"） |
@@ -244,7 +244,9 @@ print(n.getDeflection().azimuth, n.getDeflection().targetAzimuth) -- 两个相�
 
 ### 6.5 渐变到位：视觉角 = **一个朝 target 走的数**（每次渲染用墙钟差值推进一步）
 
-**七版演进（别再走回头路）**
+> 状态：**v8 落地并经用户实测确认（"偏转动画平滑了"）**。
+
+**八版演进（别再走回头路）**
 
 | 版本 | 动画时钟 / 做法 | 结果 |
 |---|---|---|
@@ -253,36 +255,50 @@ print(n.getDeflection().azimuth, n.getDeflection().targetAzimuth) -- 两个相�
 | v3 | 渲染里按**帧时间**追目标角 | ❌ 仍"卡卡的" |
 | v4 | 客户端 **BE tick** 推 prev/current + `Mth.lerp(partialTicks, …)`（照 `create-propulsion-simulated`） | ❌ "完全没有动画，直接瞬移" |
 | v5 | `AnimationTickHolder.getRenderTime` 当纯函数时钟 | ❌ 仍"瞬间到达" |
-| v6 | `System.nanoTime` 墙钟当纯函数时钟 + `(from, to, start)` 三元组 | ❌ **实测 `out` 恒为 `(90,15)`**：包正常到、`target` 正常在变，但 `animTo` 自第一包后不再更新 ⇒ `from == to` ⇒ 永远不动 |
-| v7 ⏳ | **视觉角只是一个数**：`visual += sign(target−visual) × 速度 × Δt`（Δt 来自 `nanoTime` 差值） | 待实测 |
+| v6 | `System.nanoTime` 墙钟当纯函数时钟 + `(from, to, start)` 三元组 | ❌ 实测 `out` 恒为 `(90,15)`：包正常到、`target` 正常在变，但 `animTo` 自第一包后不再更新 ⇒ `from == to` ⇒ 永远不动 |
+| v7 | **视觉角只是一个数**：`visual += sign(target−visual) × 速度 × Δt` | ⚠️ 动起来了，但仍"瞬间跳到目标" |
+| v8 ✅ | v7 + **`loadAdditional` 不再重置视觉状态** + **目标角也进 NBT** | ✅ 用户实测"偏转动画平滑了" |
 
-**教训（每一版都死在"时钟"或"存下来的状态"上）**
+**v7 为什么还是瞬间跳（真正的根因，最值得记住的一条）**
+物理体（Sable 子次元）会**周期性重载方块实体数据**（`loadAdditional` 反复跑，不是每 tick 但很频繁）。v7 在
+`loadAdditional` 末尾写了 `visualInit = false` ⇒ **每次重载后第一帧都把视觉角吸附到服务端当前角**，
+"渐变"当场退化成"跳转"；同时因为只存了当前角、没存目标角，重载后 `target` 被重置成 `value`
+（`Axis.reset`），客户端连"终点"都丢了 ⇒ 只能一格一格跟服务端的 20Hz 步进。
+
+⇒ **两条铁律**：
+1. **不要在任何"重载/同步"路径里重置动画状态**（`loadAdditional` / `handleUpdateTag` 都不许碰）；
+2. **动画需要的两个端都要能持久化**（`value` + `target` 一起进 NBT），否则重载后只剩"半步"信息。
+
+**教训合集（每一版都死在"时钟"或"存下来的状态"上）**
 1. 不能用同步包频率（v2）；
 2. 不能用渲染调用频率（v3）；
 3. 不能用客户端 BE 的 tick 计数（v4，物理体/子次元上不可靠 —— 用户提示"monitor 的 knob/joystick 也踩过"）；
 4. 也不能在渲染路径上用 `level.isClientSide` 做提前返回（v5：物理体/子次元上的侧标记不可靠，
    一旦判成服务端就返回真值 ⇒ 直接在视觉上"瞬移"到目标）；
 5. **不要存 `(起点, 终点, 起始时刻)` 三元组**（v6）：一旦其中一步没更新就永久卡死，且**没有自愈路径**；
-   视觉角只保留"一个数 + 直接读 target"，就没有可失效的中间状态。
+   视觉角只保留"一个数 + 直接读 target"，就没有可失效的中间状态；
+6. **Sable 物理体会重载 BE**（v7→v8）：重载路径不得重置动画状态，且 `value`/`target` 都要落盘。
 
-**v7 的状态与算法**
+**v8 的状态与算法**
 
 | 项 | 做法 |
 |---|---|
 | 状态 | `visualAzimuthDeg` / `visualTiltDeg` / `visualLastNanos` / `visualInit`（**仅此四个**） |
 | 推进 | `advanceVisualAnimation()`：`Δt = nanoTime − visualLastNanos`（单次上限 0.25s），`visual = stepToward(visual, target, 速度×Δt)` |
 | 频率无关 | `Δt` 是**差值** ⇒ 一帧内渲染被调用两次（多 pass）、或帧率高低，积分都正确 |
-| 首次 | `visualInit`：第一次渲染直接落在同步来的当前角（不从 0 追） |
-| 同步包 | `handleUpdateTag` 只 `setSynced(value, target)`，**完全不碰视觉角** —— target 变了视觉角自然追过去 |
-| 调试 | `DEBUG_ANIM_LOG`（默认 `false`）：打开后每 4 次渲染打印 `visual / target / value / dt` |
+| 首次 | `visualInit`：只有**真正的新实例**第一次渲染时落在同步来的当前角（重载不重置） |
+| 同步包 | `handleUpdateTag` 只 `setSynced(value, target)`，**完全不碰视觉角** |
+| 落盘 | `value` **和** `target` 都进 `saveAdditional`（重载/读档后动画不会丢终点） |
+| 调试 | `DEBUG_ANIM_LOG`（默认 `false`，`static final` ⇒ printf 被 javac 消除、零开销）：打开后打印 `[ATN-anim]`（每 20 次渲染）/`[ATN-pkt ]`/`[ATN-load]`，均带 `inst=` 实例哈希 |
 
-| 参数 | 当前值（排查用，放慢） | 耗时 |
+| 参数 | 当前值（实测确认的观感） | 耗时 |
 |---|---|---|
 | `AZIMUTH_DEG_PER_SECOND` | 120°/s | 方位 90° = 0.75s、180° = 1.5s |
 | `TILT_DEG_PER_SECOND` | 40°/s | 锥角满行程 15° = 0.38s |
 | `THRUST_SCALE_PER_TICK` | 0.25/tick | 出力 0→1 = 0.2s |
 
-> 确认观感后可把两个常数改快（最初想要的手感约 400°/s / 100°/s ⇒ 90° 0.22s、15° 0.15s）。
+> 想要更快的手感：改 `AZIMUTH_DEG_PER_SECOND` / `TILT_DEG_PER_SECOND`（当初想要的"快"约 400°/s / 100°/s
+> ⇒ 90° 0.22s、15° 0.15s；服务端每 tick 步长由 `/20` 自动跟着变）。
 
 **要点**
 
@@ -290,7 +306,7 @@ print(n.getDeflection().azimuth, n.getDeflection().targetAzimuth) -- 两个相�
 |---|---|
 | 三条轴 | `Axis` 只有 `value`（服务端真值 / 客户端同步值）+ `target` |
 | Lua 写什么 | `requestDeflection/requestThrustScale` **只写 target**（方位先经 `shortestTargetAzimuth` 换成最短路径的连续目标，可能落在 0..360 之外） |
-| 落盘 | 只存当前角（+ 出力系数）；目标不落盘 ⇒ 中途退出游戏，读档停在当时的角度，不会自己动 |
+| 中途保存 | `value` + `target` 都落盘 ⇒ 读档会**继续转完**剩余行程（不是停在半路） |
 | 调试日志 | 渲染线程上的同步 stdout 会掉帧 ⇒ `DEBUG_ANIM_LOG` 默认关闭，只在排查时临时打开 |
 
 ---
@@ -321,8 +337,8 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 
 ## 8. 已知边界 / 未做
 
-- **偏转速度写死**（方位 20°/tick、锥角 5°/tick、出力 0.25/tick，**无加减速**），Lua 不可配（用户定稿）。
-- 渐变中**中途保存只落盘当前角**：目标不存 ⇒ 读档停在当时角度（不会续着转）。
+- **偏转速度写死**（方位 120°/s、锥角 40°/s、出力 0.25/tick，**无加减速**），Lua 不可配（用户定稿）。
+- 渐变中**中途保存会连目标一起落盘** ⇒ 读档后会继续转完剩余行程（不是停在半路）。
 - 推力**不做遮挡判定**（与定向喷管一致：喷口被堵照样出力）。
 - 蓝图部署后**频道重分配**（父类无 `writeSafe`）；偏转/出力有 NBT 会保留。
 - 没有"实际出力 pN"读数（需要调试时加 `getThrust()`）。
@@ -341,7 +357,7 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 | 整块选择框 / 碰撞箱 | ✅ |
 | 频道自动分配 / 只在物理体 / GUI | ✅ 用户实测"这一步没问题" |
 | CC:T 外设偏转 + 出力 | ✅ 用户实测"没问题" |
-| 偏转渐变（视觉角 = `System.nanoTime()` 墙钟纯函数） | ⏳ v7 代码完成、`classes` 通过：**删掉**渲染路径的 `System.out.printf`、**只在目标变化时**重启视觉动画（原来无条件重启会被重复 BE 更新包采样成 20Hz 抖动）；待用户实测观感 |
+| 偏转渐变（视觉角 = 朝 target 走的数，`nanoTime` 差值推进） | ✅ **用户实测"偏转动画平滑了"**（v8：`loadAdditional` 不再重置视觉状态 + 目标角落盘） |
 
 ---
 
@@ -350,7 +366,7 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 | 参考 | 借鉴点 |
 |---|---|
 | `references/Simulated-Project-main/aeronautics/.../gyroscopic_propeller_bearing/{GyroscopicPropellerBearingRenderer,GyroscopicPropellerBearingVisual,GyroscopicPropellerBearingBlockEntity}.java` | 枢轴倾斜手法（`translate(+pivot) → rotateCentered → translate(−pivot)`）、四活塞位置/朝向、`tiltQuat` + previous/插值、锥角钳位思路 |
-| `references/create-propulsion-simulated-main/.../vector_thruster/{VectorThrusterBlockEntity.java,VectorThrusterRenderer.java}` | **偏转动画的运行时骨架**：客户端自己 tick 推 `prev/current`、渲染 `Mth.lerp(partialTick, …)`、只在命令时 `notifyUpdate`（§6.5 v4） |
+| `references/create-propulsion-simulated-main/.../vector_thruster/{VectorThrusterBlockEntity.java,VectorThrusterRenderer.java}` | 偏转动画的 prev/current + `Mth.lerp(partialTick, …)` 骨架、只在命令时 `notifyUpdate`（**但客户端 tick 驱动在 Sable 物理体上不可靠，最终没采用，见 §6.5**） |
 | 同目录 `piston_head.json` / `piston_pole.json` | 与本方块这两个 partial 模型几何逐位相同（**但活塞自由度是镜像的，只能参考变换链手法**） |
 | `block/ServoBearingBlockEntity.java` 内嵌 `Peripheral` + `block/ServoBearingRenderer.java` | CC:T 外设写法（`getType`/`equals`/`@LuaFunction(mainThread=true)`/懒加载）与六向 FACING 渲染链 |
 | `block/ShortRangeLinkerBlock.java` / `…BlockEntity.java` / `screen/ShortRangeLinker*` / `network/ShortRangeLinker*` | 频道注册生命周期、GUI（滚轮 + 非物理体提示 + tooltip 前景层）、payload 处理器 |
