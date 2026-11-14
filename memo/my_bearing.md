@@ -113,6 +113,18 @@
 - **动力门控**：`getSpeed() == 0`（背面没有输入转速）时直接 return —— 没动力顶盘不转
   （修掉「不接应力也能被 Lua 转到」的 bug）；动力恢复后继续朝终点走
 
+**锁定模式（`setLocked`，行为同 swivel）**：
+
+- `locked` 字段（NBT `Locked`，默认 `true`）：
+  - 锁定：`updateServoCoefficients()` 走 PD 伺服分支，把从动物理体锁在目标角；
+  - 未锁定：`setMotor(DEFAULT_AXIS, 0.0, 0.0, swivelBearingFriction, false, 0.0)`（被动摩擦阻尼，
+    swivel 365-369 行），从动物理体可被气流/碰撞等外力自由带动；`advanceTowardsCommandedAngle()` 直接跳过
+- 切回锁定：`setTargetAngleFromCurrentOrientation()`（参考角 + 命令终点都取当前物理朝向），
+  不会强扭跳变（同 swivel 189-203 行）；Lua 之后再下新命令
+- 未锁定不受「无动力不转」约束：那是 Lua 驱动分支的门控，自由模式的角度由物理外力决定
+- 未调 `reattachConstraint`（swivel 在 POWERED 变化时会调）：本项目每物理 tick 都重设 motor 参数，
+  且 `setLocked` 自带 `wakeUpSubLevels()`，无需重建约束
+
 PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 
 - `kP`/`kD` 用 `SimConfigService` 的 `swivelBearingStiffness`（1600）/ `swivelBearingDamping`（40），**按两侧 sub-level 惯性张量沿旋转轴的投影缩放**（`totalInertia`，下限 10）
@@ -161,13 +173,14 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
   - `getRotationSpeed()`（配置值，0 = 自动）、`getInputSpeed()`（输入转速 RPM）
   - `isControlMode()`（恒 true）、`setControlMode(bool)`（空实现，兼容旧脚本）
   - `isAssembled()`、`assemble()`、`disassemble()`
+  - `setLocked(bool)`（锁定 / 未锁定模式，行为同 swivel；返回切换后的状态）、`isLocked()`
 - 角度服务端权威（`TargetAngle` + `CommandedAngle` + `LuaRotationSpeed` 入 NBT）；PD 伺服照常由 plate BE 每物理 tick 驱动；
   推进参考角时每 tick `wakeUp` 两侧 sub-level
 - **待验证**：`setTargetAngle` 大角度时按最短路径（±180° 归一化）走，是否会与「累计多圈」需求冲突
 - **Create 护目镜 tooltip**（`addToGoggleTooltip`，同 transmission_peripheral 结构）：当前角度
   （`getCurrentAngleDegrees()`，从从动物理体实时朝向计算，同 swivel 337-355 公式）+ 命令终点角 +
-  **输入转速** + **旋转速度**（`getEffectiveRotationSpeedRpm()`；自动时值后只跟 `auto` 标签）+ 应力统计；lang 键
-  `tooltip.ccpe.aero_bearing.{header,current_angle,target_angle,input_speed,plate_speed,plate_speed_auto}`
+  **输入转速** + **旋转速度**（`getEffectiveRotationSpeedRpm()`；自动时值后只跟 `auto` 标签）+ **锁定状态** + 应力统计；lang 键
+  `tooltip.ccpe.aero_bearing.{header,current_angle,target_angle,input_speed,plate_speed,plate_speed_auto,locked,locked_yes,locked_no}`
 - **待验证**：动力门控手感——输入转速为 0 时顶盘应完全不动（Lua 命令只在有动力时才被消化）
 
 ## 已知风险与注意点
