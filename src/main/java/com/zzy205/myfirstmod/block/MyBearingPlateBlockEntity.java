@@ -135,9 +135,9 @@ public class MyBearingPlateBlockEntity extends KineticBlockEntity implements Blo
 
     @Override
     public void sable$physicsTick(final ServerSubLevel subLevel, final RigidBodyHandle handle, final double timeStep) {
-        // 阶段 4 驱动：每物理 tick 通知父轴承更新伺服系数（同 swivel 122-130 行）
-        // 阶段 1-2 锁定：父 BE 的 updateServoCoefficients() 已每 tick 由约束锁定当前角度，
-        // 此处保留调用入口，避免阶段 4 遗漏。
+        // 每物理 tick 通知父轴承更新伺服系数（同 swivel 122-130 行）：
+        // 父 BE 的 updateServoCoefficients() 用 PD 伺服把本物理体锁在 targetAngleDegrees
+        // （该目标角只由 Lua setTargetAngle 改变；输入动力不驱动物理角）。
         if (this.parent != null) {
             final BlockEntity parentBE = this.level.getBlockEntity(this.parent);
 

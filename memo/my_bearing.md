@@ -27,7 +27,7 @@
         从动物理体（sub-level，被约束旋转；应力经 plate 贯通进内部机械）
 ```
 
-**核心思想**：动力输入走 Create 应力网络（轴向），驱动走 Sable 物理约束（RotaryConstraint + PD 伺服），中间用"输入转速 → 目标角度"桥接。**从动物理体在物理引擎里旋转**，同时应力网络经 plate 贯通进 sub-level（输入转速 = 输出转速），sub-level 内机械的真实应力算进同一网络（轴承本体自身 impact 4.0 照旧计费）。
+**核心思想**：动力输入走 Create 应力网络（轴向），驱动走 Sable 物理约束（RotaryConstraint + PD 伺服）。**输入转速不驱动物理角**——它只用于计费应力（impact 4.0）并经 plate 贯通把转速传给 sub-level 内部机械（输入转速 = 输出转速）；定盘/从动物理体的物理角**只由 Lua `setTargetAngle` 设定**，PD 伺服把从动物理体锁在该目标角（防风帆被气流吹动）。
 
 ## 为什么这样能解决需求
 
@@ -74,7 +74,7 @@
   - `@Nullable UUID subLevelID`（从动物理体）
   - `@Nullable BlockPos platePos`（plate 方块位置）
   - `@Nullable RotaryConstraintHandle handle`（约束句柄）
-  - `double targetAngleDegrees`（目标角，每 tick 由转速推进）
+  - `double targetAngleDegrees`（目标角，只由 Lua `setTargetAngle` 改变）
   - `boolean assembleNextTick` / `boolean assembling` / `AssemblyException lastException`
 - NBT 持久化：`subLevelID`、`platePos`（键 `SwivelPlate`）、`targetAngleDegrees`（参照 swivel 第 598-665 行）
 - 装配/拆卸：`assemble()` / `disassemble()` / `reattachConstraint()` / `checkPersistence()`（重载重连）
@@ -90,17 +90,19 @@
 - `disassemble()`：移除约束 + 拆回世界（`SimAssemblyHelper.disassembleSubLevel`）
 - **待验证**：重载重连（`checkPersistence` → `reattachConstraint`）与 plate 装配流程需进游戏实测
 
-### 阶段 4：驱动（输入转速 → 物理旋转）（已实现，同 swivel 逻辑）
+### 阶段 4：驱动（物理角只由 Lua 控制）（已实现）
 
-每 tick（服务端，`tick()`）——**完全移植 swivel 218-259 行的驱动**：
+`tick()` 每 tick **只做** `lastTargetAngleDegrees = targetAngleDegrees`（供伺服插值），**不再推进目标角**：
 
-1. 从 Create 应力网络取输入转速 `getSpeed()`（RPM），钳制到 `maxSwivelBearingSpeed`（默认 96，同 swivel `limitCogSpeed`）
-2. 转速 → 目标角推进：`targetAngleDegrees += convertToAngular(speed)`；**FACING 指向负轴时转速取反**（同 swivel 236-239 行）
-3. **序列化角度输入**（sequenced gearshift / 曲柄等，TURN_ANGLE）：`onSpeedChanged` 把网络传播来的
-   `sequenceContext` 换算成 `sequencedAngleLimit`（剩余可转角度，`getEffectiveValue`，同 swivel cogwheel 895-899 行），
-   tick 里按剩余角度钳制每 tick 推进量、转完即停 → **精确到位**（同 swivel 224-226 行）；`SequencedAngleLimit` 入 NBT
-4. 非序列化且物理暂停（`SubLevelPhysicsSystem.getPaused()`）时不推进目标角（同 swivel 228-232 行）
-5. 有转速时 `pipeline.wakeUp` 两侧 sub-level（同 swivel 244-258 行）
+1. ~~输入转速 → 目标角推进~~（已移除：`convertToAngular` 累计、`limitSpeed`/`maxSwivelBearingSpeed` 钳制、
+   FACING 负轴取反、`pipeline.wakeUp` 唤醒——由输入动力触发物理旋转的整段逻辑都删掉了）
+2. ~~序列化角度输入~~（已移除：`sequencedAngleLimit`、`onSpeedChanged` 覆写、NBT `SequencedAngleLimit`；
+   `create:sequenced_gearshift` 不再能直接转动定盘）
+3. `controlMode` 字段已移除：`isControlMode()` 恒返回 `true`，`setControlMode(bool)` 是返回 `true` 的空实现（兼容旧脚本）
+4. 装配后输入动力的作用只剩两条：按 `calculateStressApplied()`（4.0）计费应力；经 plate 贯通把转速传给
+   sub-level 内部机械（见阶段 5b）
+
+定盘 / 从动物理体角度的唯一来源：Lua `setTargetAngle()`（内部 `wakeUpSubLevels()` 唤醒两侧物理体让伺服跟上）
 
 PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 
@@ -137,22 +139,20 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 - 风险点（需实测）：sub-level plot chunk 未加载时 `findConnectedNeighbour` 的 `level.getBlockState(platePos)` 取不到 plate；
   Sable 靠两边 `sable$getConnectionDependencies` 维持 sub-level 常驻加载
 
-### 阶段 6：CC 外设（Lua 控制模式）（已实现）
+### 阶段 6：CC 外设（Lua 控制）（已实现）
 
 - 外设类型 `ccpe:aero_bearing`，注册见 `compat/cc/CCPeripheralCapabilities.java`
-- **控制模式**（`setControlMode(true)`，`setTargetAngle` 自动进入）：tick 不再按应力网络转速推进目标角
-  （应力网络仅保留应力消耗），旋转角度由 Lua 直接控制——**跳过「转速 × 时间 = 角度」的累计过程**；
-  进入/退出控制模式时用 `setTargetAngleFromCurrentOrientation` 保持当前朝向（不跳变）
+- **角度恒由 Lua 控制**：输入动力不驱动定盘/从动物理体（见阶段 4），`setTargetAngle` 是唯一角度来源
 - Lua API：`setTargetAngle(deg)`（绝对定位，需先装配，未装配返回 false）、`getTargetAngle()`（度）、
-  `getTargetAngleRad()`（弧度，同 swivel 官方外设）、`isControlMode()`、`setControlMode(bool)`、
+  `getTargetAngleRad()`（弧度，同 swivel 官方外设）、`isControlMode()`（恒 true）、`setControlMode(bool)`（空实现，兼容旧脚本）、
   `isAssembled()`（是否已装配）、`assemble()`（装配 FACING 方向结构，返回是否成功）、
   `disassemble()`（拆回世界，返回是否成功）
-- 角度服务端权威（`targetAngleDegrees` + `ControlMode` 入 NBT）；PD 伺服照常由 plate BE 每物理 tick 驱动；
+- 角度服务端权威（`targetAngleDegrees` 入 NBT）；PD 伺服照常由 plate BE 每物理 tick 驱动；
   `setTargetAngle` 后 `wakeUp` 两侧 sub-level
 - **待验证**：`setTargetAngle` 大角度（>360°）时物理走最短路径还是累计多圈
-- **Create 护目镜 tooltip**（`addToGoggleTooltip`，同 transmission_peripheral 结构）：显示模式
-  （Lua 控制 / 应力驱动）、当前角度（`getCurrentAngleDegrees()`，从从动物理体实时朝向计算，同
-  swivel 337-355 公式）、目标角度、应力统计；lang 键 `tooltip.ccpe.aero_bearing.*`
+- **Create 护目镜 tooltip**（`addToGoggleTooltip`，同 transmission_peripheral 结构）：当前角度
+  （`getCurrentAngleDegrees()`，从从动物理体实时朝向计算，同 swivel 337-355 公式）+ 目标角度 + 应力统计
+  （模式行已移除：只有一种模式）；lang 键 `tooltip.ccpe.aero_bearing.{header,current_angle,target_angle}`
 - **角度传感器**（可选）：通过现有 `SableCompat.getAngularVelocity` 读从动物理体角速度
 - **无动力锁定**：`speed==0` 时用 `setMotor(axis, target, kP_high, kD, false, 0)` 锁在当前角（可选）
 
@@ -160,8 +160,10 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 
 1. **装配复杂**：sub-level 装配是重操作，注意 `assembling` 标志防重入（swivel 第 676-678 行）、装配失败回滚（`AssemblyException`）
 2. **卸载/重载**：sub-level 重载后约束句柄失效，需要 `validateConstraintHandle` + 按 `subLevelID` 重连（swivel 第 533-539 行）
-3. **flicker 安全**：本设计从动物理体不走 Create 网络，理论上无 flicker；但轴承本体作为 Create 动能方块仍受应力/转速上限约束
-4. **转速上限**：建议钳制（同 swivel `MAX_SERVO_RPM=96`），过高转速 PD 追不上或抖动
+3. **flicker 安全**：从动物理体不是 Create 网络成员，但顶盘（plate）经自定义连接进了轴承的网络；
+   轴承本体作为 Create 动能方块仍受应力/转速上限约束
+4. **转速上限**：轴承本体不再用转速推角度，故无需 `MAX_SERVO_RPM=96` 钳制（该钳制已随驱动逻辑删除）；
+   贯通转速受 Create 全局 `maxRotationSpeed` 约束
 5. **约束锚点**：`RotaryConstraintConfiguration` 的 pos1/pos2 必须是各自 plot 内坐标（世界空间），normal 需归一化（源码 validate 第 19-28 行）
 
 ## 参考来源
@@ -182,7 +184,7 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlock.java` | 轴承方块（轴向输入、ASSEMBLED、空手右键装配、扳手先拆卸、放置朝向=点击面、扳手旋转 Create 标准（同 swivel，无 ROTATION）、装配后基座选择框 y 0-11.9、Sable 装配移动回调） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlock.java` | plate 方块（同 swivel link block，无物品、拾取给主轴承；模型对称无 ROTATION；选中框 y 12.1-16 / 碰撞框 y 12-16 xz 3-13） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingShapes.java` | 基座/plate 选择框与碰撞框（数值对齐 SimBlockShapes：BEARING_ASSEMBLED / PLATE / PLATE_COLLISION） |
-| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlockEntity.java` | 轴承 BE：装配/拆卸/重连/约束/NBT + 驱动（swivel 式：转速→目标角推进、惯性缩放 PD 伺服、装配时当前朝向初始化防晃动；plate 继承 FACING）+ 应力消耗（impact 4.0，同 swivel 注册值）+ CC 外设（Lua 控制模式：setTargetAngle 直接控制角度，跳过应力网络角度累计）+ 护目镜 tooltip（模式/当前角度/目标角度） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlockEntity.java` | 轴承 BE：装配/拆卸/重连/约束/NBT + PD 伺服（惯性缩放、装配时当前朝向初始化防晃动、目标角只由 Lua 设定）+ 应力消耗（impact 4.0）+ 应力网络贯通（addPropagationLocations / propagateRotationTo / isCustomConnection）+ CC 外设（setTargetAngle 绝对定位；isControlMode 恒 true）+ 护目镜 tooltip（当前/目标角度 + 应力） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingVisual.java` | Flywheel 渲染：背面半个传动杆（SHAFT_HALF，OrientedInstance） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingRenderer.java` | BER 回退渲染：背面半个传动杆（SHAFT_HALF，kineticRotationTransform） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateRenderer.java` | 顶盘输出半传动杆 BER（FACING 侧 SHAFT_HALF；override renderSafe、不套 Flywheel 早退） |

@@ -5,7 +5,6 @@ import com.simibubi.create.content.contraptions.IDisplayAssemblyExceptions;
 import com.simibubi.create.content.kinetics.base.DirectionalKineticBlock;
 import com.simibubi.create.content.kinetics.base.IRotate;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
-import com.simibubi.create.content.kinetics.transmission.sequencer.SequencerInstructions;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.SubLevelAssemblyHelper;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
@@ -35,7 +34,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -57,7 +55,7 @@ import java.util.UUID;
 /**
  * 自研风帆轴承（aero_bearing）方块实体。
  * <p>
- * 阶段 1-2 骨架（对照 {@code SwivelBearingBlockEntity}，去掉 cogwheel / ExtraKinetics）：
+ * 对照 {@code SwivelBearingBlockEntity}，去掉 cogwheel / ExtraKinetics：
  * <ul>
  *   <li>字段：{@code subLevelID}（从动物理体）、{@code platePos}（plate 方块）、{@code handle}（约束句柄）、
  *       {@code targetAngleDegrees}、{@code assembleNextTick}、{@code assembling}、{@code lastException}；</li>
@@ -65,7 +63,10 @@ import java.util.UUID;
  *   <li>空手右键 → {@code assembleNextTick} → {@link #assemble()} / {@link #disassemble()}；
  *       plate 方块在装配时自动放置到 sub-level plot 内（{@code aero_bearing_plate}）；</li>
  *   <li>约束：{@code RotaryConstraintConfiguration}（pos1/pos2 各自 plot 内坐标，normal 归一化）；</li>
- *   <li>驱动（转速 → 目标角 → PD 伺服）留待阶段 4，当前 {@link #updateServoCoefficients()} 简单锁定。</li>
+ *   <li><b>驱动策略</b>：定盘 / 从动物理体的物理角<b>只能</b>由 Lua {@code setTargetAngle} 改变
+ *       （PD 伺服把从动物理体锁在 {@code targetAngleDegrees}）；装配后输入动力<b>不驱动</b>物理角，
+ *       只按 {@link #calculateStressApplied()} 计费应力，并经 plate 贯通把转速传进 sub-level 内部机械
+ *       （见 {@link #propagateRotationTo} 等三个网络连接覆写）。</li>
  * </ul>
  * 参考来源：{@code references/Simulated-Project-main/.../swivel_bearing/SwivelBearingBlockEntity.java}、
  * {@code references/sable-main/.../RotaryConstraintConfiguration.java}。
@@ -85,16 +86,8 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
      * 当前目标角（度）
      */
     private double targetAngleDegrees = 0;
-    /**
-     * 序列化角度输入（sequenced gearshift 等）的剩余可转角度（度）；-1 = 非序列化（连续旋转）。
-     * 由 {@link #onSpeedChanged} 从网络传播来的 {@code sequenceContext} 换算，tick 里按此钳制推进量。
-     */
-    private double sequencedAngleLimit = -1;
-    /**
-     * Lua 控制模式（CC:T 外设）：开启后不再按应力网络转速推进目标角
-     * （应力网络仅保留应力消耗），旋转角度由 {@code setTargetAngle} 直接控制。
-     */
-    private boolean controlMode = false;
+    // 注：原 sequencedAngleLimit（sequenced gearshift 剩余角）与 controlMode 两个字段已移除——
+    // 输入动力只做应力计费与贯通传输，定盘角度恒由 Lua 控制（CC 外设见下）。
     /**
      * CC:T 外设实例（懒加载）
      */
@@ -149,53 +142,14 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
             this.checkPersistence(this.getSubLevelID());
         }
 
-        // ── 驱动：输入转速 → 目标角推进（同 swivel 218-259 行；动力来自 Create 应力网络 getSpeed()） ──
+        // ── 驱动策略：输入转速<b>不驱动</b>定盘 / 从动物理体 ──
+        // 装配后应力网络只做两件事：
+        //   1. 按 {@link #calculateStressApplied()} 计费应力（输入有转速即消耗，与是否转动无关）；
+        //   2. 经 plate 贯通（{@link #propagateRotationTo}）把转速原样传给 sub-level 内部机械。
+        // 定盘与从动物理体的物理角<b>只由 Lua {@code setTargetAngle} 改变</b>，
+        // PD 伺服（{@link #updateServoCoefficients()}）把从动物理体锁在 {@code targetAngleDegrees}。
+        // lastTargetAngleDegrees 仅用于物理 tick 间的角度插值（AngleHelper.angleLerp），不再参与推进。
         this.lastTargetAngleDegrees = this.targetAngleDegrees;
-        float angularSpeed = convertToAngular(this.limitSpeed(this.getSpeed()));
-
-        boolean shouldUpdateAngle = this.isAssembled();
-
-        if (this.controlMode) {
-            // Lua 控制模式：角度由 setTargetAngle 直接控制，不再按应力转速累计（应力网络仅保留应力消耗）
-            shouldUpdateAngle = false;
-        } else if (this.sequencedAngleLimit >= 0) {
-            // 序列化角度输入（sequenced gearshift 等）：每 tick 最多转剩余角度，转完即停 → 精确到位（同 swivel 224-226 行）
-            angularSpeed = (float) Mth.clamp(angularSpeed, -this.sequencedAngleLimit, this.sequencedAngleLimit);
-            this.sequencedAngleLimit = Math.max(0, this.sequencedAngleLimit - Math.abs(angularSpeed));
-        } else {
-            final SubLevelPhysicsSystem physicsSystem = SubLevelPhysicsSystem.get(this.level);
-            // 非序列化且物理暂停时不推进目标角（同 swivel 228-232 行）
-            if (physicsSystem == null || physicsSystem.getPaused()) {
-                shouldUpdateAngle = false;
-            }
-        }
-
-        if (shouldUpdateAngle) {
-            // 负方向 FACING（旋转轴指向负轴）时转速取反（同 swivel 236-239 行）
-            if (this.getBlockState().getValue(MyBearingBlock.FACING).getAxisDirection() == Direction.AxisDirection.NEGATIVE) {
-                angularSpeed *= -1.0f;
-            }
-
-            this.targetAngleDegrees += angularSpeed;
-            this.targetAngleDegrees %= 360;
-
-            final SubLevel attached = this.getAttachedSubLevel();
-            if (attached != null && this.handle != null) {
-                final SubLevel containing = this.getContainingSubLevel();
-
-                if (angularSpeed != 0.0) {
-                    final PhysicsPipeline pipeline = ((ServerSubLevelContainer) SubLevelContainer.getContainer(this.level)).physicsSystem().getPipeline();
-
-                    if (containing instanceof final ServerSubLevel serverSubLevel) {
-                        pipeline.wakeUp(serverSubLevel);
-                    }
-
-                    if (attached instanceof final ServerSubLevel serverSubLevel) {
-                        pipeline.wakeUp(serverSubLevel);
-                    }
-                }
-            }
-        }
 
         this.assembleNextTick = false;
     }
@@ -404,10 +358,10 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     /**
      * 内嵌外设类（同 TransmissionPeripheralBlockEntity 模式）：
      * <ul>
-     *   <li>控制模式开启后，tick 不再按应力网络转速推进目标角（应力网络仅保留应力消耗），
-     *       旋转角度由 {@code setTargetAngle} 直接控制——跳过「转速 × 时间 = 角度」的累计过程；</li>
+     *   <li><b>角度唯一来源</b>：定盘 / 从动物理体的物理角只能由 {@code setTargetAngle} 设定；
+     *       输入动力的转速不推进角度（只计费应力并经 plate 贯通传给 sub-level 内部）；</li>
      *   <li>角度为<b>服务端权威</b>（{@code targetAngleDegrees}，NBT 持久化），
-     *       PD 伺服（plate BE 每物理 tick 调用 {@link #updateServoCoefficients()}）把从动物理体追到目标角。</li>
+     *       PD 伺服（plate BE 每物理 tick 调用 {@link #updateServoCoefficients()}）把从动物理体锁在该目标角。</li>
      * </ul>
      */
     private class Peripheral implements IPeripheral {
@@ -428,32 +382,25 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
 
         // ═══════════════ Lua API ═══════════════
 
-        /** 是否处于 Lua 控制模式 */
+        /**
+         * 是否处于 Lua 控制模式。
+         * <p>
+         * 恒为 {@code true}：本轴承的定盘 / 从动物理体物理角<b>只能</b>由 Lua {@code setTargetAngle} 改变，
+         * 输入动力的转速不再推进角度（只做应力计费与贯通传输）。
+         */
         @LuaFunction
         public final boolean isControlMode() {
-            return controlMode;
+            return true;
         }
 
         /**
-         * 进入/退出 Lua 控制模式。
+         * 兼容旧脚本的空实现：无论 {@code enabled} 为何都返回 {@code true}。
          * <p>
-         * 进入：目标角 = 当前物理朝向（不产生转动），此后旋转由 {@code setTargetAngle} 控制，
-         * 应力网络转速不再推进角度（仅消耗应力）；
-         * 退出：恢复「转速 → 目标角推进」驱动，从当前朝向继续累计。
+         * 「应力驱动模式」（输入转速直接推角度）已取消——输入动力装配后只消耗并传输应力，
+         * 定盘不跟着转；要转动请用 {@code setTargetAngle}。
          */
         @LuaFunction(mainThread = true)
         public final boolean setControlMode(boolean enabled) {
-            if (enabled) {
-                if (controlMode) return true;
-                controlMode = true;
-                initializeTargetAngleFromOrientation();
-            } else {
-                if (!controlMode) return true;
-                controlMode = false;
-                initializeTargetAngleFromOrientation();
-            }
-            setChanged();
-            sendData();
             return true;
         }
 
@@ -470,18 +417,13 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
         }
 
         /**
-         * 绝对定位从动物理体到指定角度（度）；自动进入控制模式。
+         * 绝对定位从动物理体到指定角度（度）——定盘 / 从动物理体唯一的角度来源。
          * 需要先装配（右键装配生成从动物理体）；未装配返回 false。
          */
         @LuaFunction(mainThread = true)
         public final boolean setTargetAngle(double degrees) {
             if (!Double.isFinite(degrees)) return false;
             if (!isAssembled()) return false;
-
-            if (!controlMode) {
-                controlMode = true;
-                initializeTargetAngleFromOrientation();
-            }
 
             targetAngleDegrees = degrees;
             wakeUpSubLevels();
@@ -514,14 +456,9 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     }
 
     /**
-     * 把目标角初始化为当前物理朝向（进入控制模式 / 退出控制模式时调用，避免跳变或强扭）。
-     */
-    private void initializeTargetAngleFromOrientation() {
-        this.setTargetAngleFromCurrentOrientation();
-    }
-
-    /**
      * 唤醒两侧 sub-level，让 PD 伺服立即驱动到新目标角（同 swivel tick 244-258 行）。
+     * <p>
+     * 仅在 Lua 下新目标角时调用；输入动力不再驱动物理角，故 {@link #tick()} 里不需要唤醒。
      */
     private void wakeUpSubLevels() {
         final SubLevel attached = this.getAttachedSubLevel();
@@ -579,13 +516,13 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     }
 
     /**
-     * PD 伺服把从动物理体追到目标角（同 swivel 357-401 行）：
+     * PD 伺服把从动物理体锁在目标角（同 swivel 357-401 行）：
      * <ul>
      *   <li>kP/kD 按两侧 sub-level 惯性张量沿旋转轴的投影缩放（{@code swivelBearingStiffness/Damping}）；</li>
      *   <li>目标角用 {@code angleLerp} 在物理 tick 间插值（平滑）；</li>
-     *   <li>aero_bearing 无 POWERED 锁定开关（swivel 的红石锁定），当前阶段恒为锁定态
+     *   <li>aero_bearing 无 POWERED 锁定开关（swivel 的红石锁定），恒为锁定态
      *       （防风帆被气流吹动），直接走 swivel 的锁定分支；</li>
-     *   <li>目标角由 {@link #tick()} 按转速推进。</li>
+     *   <li><b>目标角只由 Lua {@code setTargetAngle} 改变</b>（{@link #tick()} 不再按转速推进）。</li>
      * </ul>
      */
     public void updateServoCoefficients() {
@@ -628,31 +565,6 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
         this.handle.setContactsEnabled(false);
     }
 
-    /**
-     * 转速钳制（同 swivel {@code limitCogSpeed}）：过高转速 PD 追不上或抖动，
-     * 上限用 simulated 的 {@code maxSwivelBearingSpeed}（默认 96 RPM）。
-     */
-    private float limitSpeed(final float speed) {
-        final float maxSwivelRPM = SimConfigService.INSTANCE.server().blocks.maxSwivelBearingSpeed.getF();
-        return Mth.clamp(speed, -maxSwivelRPM, maxSwivelRPM);
-    }
-
-    /**
-     * 转速变化时更新序列化角度输入（同 swivel cogwheel 895-899 行）：
-     * 网络传播来的 {@code sequenceContext}（TURN_ANGLE，如 sequenced gearshift / 曲柄）
-     * 换算成「本段剩余可转角度」（{@code getEffectiveValue}），tick 里按此钳制推进量；
-     * 非序列化输入（普通连续旋转）重置为 -1。
-     */
-    @Override
-    public void onSpeedChanged(final float previousSpeed) {
-        super.onSpeedChanged(previousSpeed);
-
-        this.sequencedAngleLimit = -1;
-        if (this.sequenceContext != null && this.sequenceContext.instruction() == SequencerInstructions.TURN_ANGLE) {
-            this.sequencedAngleLimit = this.sequenceContext.getEffectiveValue(this.getTheoreticalSpeed());
-        }
-    }
-
     private void validateConstraintHandle() {
         if (this.handle != null && !this.handle.isValid()) {
             this.handle = null;
@@ -665,10 +577,6 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     protected void write(final CompoundTag compound, final HolderLookup.Provider registries, final boolean clientPacket) {
         super.write(compound, registries, clientPacket);
         compound.putDouble("TargetAngle", this.targetAngleDegrees);
-        compound.putBoolean("ControlMode", this.controlMode);
-
-        if (this.sequencedAngleLimit >= 0)
-            compound.putDouble("SequencedAngleLimit", this.sequencedAngleLimit);
 
         final UUID id = this.getSubLevelID();
         if (id != null) {
@@ -687,8 +595,7 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     protected void read(final CompoundTag compound, final HolderLookup.Provider registries, final boolean clientPacket) {
         super.read(compound, registries, clientPacket);
         this.targetAngleDegrees = compound.getDouble("TargetAngle");
-        this.controlMode = compound.getBoolean("ControlMode");
-        this.sequencedAngleLimit = compound.contains("SequencedAngleLimit") ? compound.getDouble("SequencedAngleLimit") : -1;
+        this.lastTargetAngleDegrees = this.targetAngleDegrees;
 
         if (compound.hasUUID("SubLevelID")) {
             this.setSubLevelID(compound.getUUID("SubLevelID"));
@@ -862,19 +769,9 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
                 .append(Component.translatable("tooltip.ccpe.aero_bearing.header")
                         .withStyle(ChatFormatting.WHITE)));
 
-        tooltip.add(Component.literal("     ")
-                .append(Component.translatable("tooltip.ccpe.aero_bearing.mode")
-                        .withStyle(ChatFormatting.GRAY))
-                .append(Component.translatable(controlMode
-                                ? "tooltip.ccpe.aero_bearing.mode_control"
-                                : "tooltip.ccpe.aero_bearing.mode_stress")
-                        .withStyle(controlMode ? ChatFormatting.GOLD : ChatFormatting.AQUA)));
-
-        // 仅 Lua 控制模式显示角度（应力驱动模式下角度由转速累计，无意义）
-        if (controlMode) {
-            tooltip.add(angleLine("tooltip.ccpe.aero_bearing.current_angle", this.getCurrentAngleDegrees()));
-            tooltip.add(angleLine("tooltip.ccpe.aero_bearing.target_angle", this.getTargetAngleDegrees()));
-        }
+        // 角度恒由 Lua 控制（输入转速不再推进角度），故总是显示当前/目标角
+        tooltip.add(angleLine("tooltip.ccpe.aero_bearing.current_angle", this.getCurrentAngleDegrees()));
+        tooltip.add(angleLine("tooltip.ccpe.aero_bearing.target_angle", this.getTargetAngleDegrees()));
 
         tooltip.add(Component.empty());
         addStressImpactStats(tooltip, calculateStressApplied());

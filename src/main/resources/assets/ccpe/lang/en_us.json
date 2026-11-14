@@ -95,9 +95,6 @@
   "tooltip.ccpe.transmission_peripheral.servo_reaim_off": "Off",
 
   "tooltip.ccpe.aero_bearing.header": "Aero Bearing",
-  "tooltip.ccpe.aero_bearing.mode": "Mode:",
-  "tooltip.ccpe.aero_bearing.mode_control": "Lua Control",
-  "tooltip.ccpe.aero_bearing.mode_stress": "Stress Driven",
   "tooltip.ccpe.aero_bearing.current_angle": "Current Angle:",
   "tooltip.ccpe.aero_bearing.target_angle": "Target Angle:",
   "tooltip.ccpe.servo_bearing.header": "Servo Bearing",

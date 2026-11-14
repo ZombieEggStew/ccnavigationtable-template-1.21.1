@@ -95,9 +95,6 @@
   "tooltip.ccpe.transmission_peripheral.servo_reaim_off": "关",
 
   "tooltip.ccpe.aero_bearing.header": "航空轴承",
-  "tooltip.ccpe.aero_bearing.mode": "模式：",
-  "tooltip.ccpe.aero_bearing.mode_control": "Lua 控制",
-  "tooltip.ccpe.aero_bearing.mode_stress": "应力驱动",
   "tooltip.ccpe.aero_bearing.current_angle": "当前角度：",
   "tooltip.ccpe.aero_bearing.target_angle": "目标角度：",
   "tooltip.ccpe.servo_bearing.header": "舵机轴承",
