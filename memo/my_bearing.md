@@ -1,6 +1,7 @@
 # My Bearing（航空轴承）— 方案设计
 
-> 状态：**阶段 1-6 已实现**（方块/注册/BE/装配/拆卸/驱动/渲染/CC 外设控制模式），已进游戏验证通过（旋转精准、半轴渲染、Lua 控制）。
+> 状态：**阶段 1-6 已实现**（方块/注册/BE/装配/拆卸/伺服驱动/渲染/CC 外设），已进游戏验证通过（旋转精准、半轴渲染、Lua 控制、选择框与碰撞框）。
+> 后续叠加：**应力网络贯通**（阶段 5b）、**Lua 限速到位 + 动力门控**、**0~96 RPM 转速配置**、**锁定/未锁定模式**、**顶盘输出半轴渲染**（2026-11 实施，详见下文「阶段 4」「阶段 5」「阶段 5b」「阶段 6」与「一致性对齐」）。
 > 实现前先读参考源码（见文末「参考来源」）。
 
 ## 需求（与 simulated:swivel_bearing 的差异）
@@ -31,7 +32,7 @@
 
 ## 为什么这样能解决需求
 
-1. **不贯通应力**：从动物理体是 sub-level（物理体），由 Rapier 约束驱动，不是 Create 动能方块 → 应力网络到轴承本体为止。
+1. **贯通应力（同 swivel）**：顶盘（plate）是 Create 动能方块，经「自定义连接」与轴承同属一个网络 → 输入转速原样传进 sub-level 内部机械（见阶段 5b）；轴承本体自身仍按 impact 4.0 计费应力。
 2. **轴向输入**：方块继承 `DirectionalKineticBlock`，`hasShaftTowards` 返回轴向，传动轴直接接上（同 `BearingBlock`，Create 源码 `BearingBlock.java` 第 14-26 行）。
 3. **与 swivel_bearing 的齿轮输入不同**：swivel 用 `ExtraKinetics` + cogwheel 副 BE 从侧面啮合；本项目直接用主 BE 的 `getSpeed()` 作动力源，无副 BE。
 
@@ -129,7 +130,8 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 
 - `kP`/`kD` 用 `SimConfigService` 的 `swivelBearingStiffness`（1600）/ `swivelBearingDamping`（40），**按两侧 sub-level 惯性张量沿旋转轴的投影缩放**（`totalInertia`，下限 10）
 - 目标角用 `AngleHelper.angleLerp(partialPhysicsTick, last, target)` 在物理 tick 间插值（平滑）
-- aero_bearing 无 POWERED 锁定开关（swivel 的红石锁定），恒走锁定分支（防风帆被吹动）
+- aero_bearing 无 POWERED 红石锁定：锁定状态改由 Lua `setLocked` 切换（默认锁定 = 锁定分支，
+  防风帆被气流吹动；未锁定 = 摩擦阻尼分支，见上「锁定模式」）
 
 **防晃动关键**：装配成功后调用 `setTargetAngleFromCurrentOrientation(plateState, subLevel)`（同 swivel 337-355 行），
 把目标角初始化为当前物理朝向——否则 PD 伺服把从动物理体强扭到 0° 会导致顶部持续晃动。
@@ -145,6 +147,11 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
   **只在 BER 路径渲染、不注册 Flywheel Visual**（顶盘 BE 在 sub-level plot 内由 Sable 走原版 BE 分发器，
   若沿用 `KineticBlockEntityRenderer#renderSafe` 的 Flywheel 早退，装 Flywheel 时这根轴会消失），
   故需 override `renderSafe` 不调父类实现
+- **⚠️ Flywheel 半轴转向坑（2026-11 修）**：Flywheel 侧 `orientationFor(face).rotateZ(angle)` 绕的是
+  **`face` 轴向**，而 BER `kineticRotationTransform` 恒绕**轴正方向** → 背面半轴（多为轴负向）
+  视觉反向。修法：`float spin = shaftFace.getAxisDirection() == POSITIVE ? angle : -angle`
+  （`MyBearingVisual` 76 行）；同源 bug 已一并修掉 `TransmissionPeripheralVisual` 双端半轴
+  （96 行）。详见 `memo/ATTENTION.md`「Create 渲染（Flywheel Visual / 半轴）」。
 - 从动物理体由 Sable 自己渲染（sub-level），不需要额外渲染代码
 
 ### 阶段 5b：应力网络贯通（已实现，同 swivel）
@@ -182,6 +189,20 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
   **输入转速** + **旋转速度**（`getEffectiveRotationSpeedRpm()`；自动时值后只跟 `auto` 标签）+ **锁定状态** + 应力统计；lang 键
   `tooltip.ccpe.aero_bearing.{header,current_angle,target_angle,input_speed,plate_speed,plate_speed_auto,locked,locked_yes,locked_no}`
 - **待验证**：动力门控手感——输入转速为 0 时顶盘应完全不动（Lua 命令只在有动力时才被消化）
+- **待验证**：未锁定模式的摩擦手感（被动摩擦取 simulated 服务端 `swivel_friction`，默认 0.3，可能太黏或太空）
+- **待验证**：贯通网络在 sub-level plot chunk 未加载时是否断链（靠两边 `sable$getConnectionDependencies` 常驻加载，存档重载后需复测，见阶段 5b 风险点）
+
+## 一致性对齐（transmission_peripheral，2026-11）
+
+aero_bearing 定型后顺手把 `TransmissionPeripheral*` 一起对齐（代码内注释已同步）：
+
+- `SoundType.METAL → NETHERITE_BLOCK`（同 aero_bearing / swivel_bearing）。
+- 扳手改回 `IWrenchable` **默认实现**：删掉自定义 `onSneakWrenched`（原本 `new ItemStack(this)` + `inventory.add`，
+  **不播扳手移除音效、不走 `BlockEvent.BreakEvent` 保护判定、创造模式也产出物品**）。现在走
+  `Block.getDrops` 按战利品表进背包 + `playRemoveSound` + 保护判定。
+- 顺带删掉纯转调用的 `getRotatedBlockState` 覆写（`IWrenchable` 默认已按立柱方块改 AXIS）。
+
+> 教训：方块实现自定义 `onSneakWrenched` 时，四个默认行为（音效、保护判定、战利品表、创造模式掉落）都得自己补齐，否则静默缺失。
 
 ## 已知风险与注意点
 
@@ -210,7 +231,7 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 |---|---|
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlock.java` | 轴承方块（轴向输入、ASSEMBLED、空手右键装配、扳手先拆卸、放置朝向=点击面、扳手旋转 Create 标准（同 swivel，无 ROTATION）、装配后基座选择框 y 0-11.9、Sable 装配移动回调） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlock.java` | plate 方块（同 swivel link block，无物品、拾取给主轴承；模型对称无 ROTATION；选中框 y 12.1-16 / 碰撞框 y 12-16 xz 3-13） |
-| `src/main/java/com/zzy205/myfirstmod/block/MyBearingShapes.java` | 选择框 = 碰撞框（`BEARING` 三盒并集新形状 / `BEARING_ASSEMBLED` 两盒十字 / `PLATE` 顶部满块；均以 UP 为基准 `forDirectional`） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingShapes.java` | 选择框 = 碰撞框（`BEARING` 三盒并集新形状 `[5,0,0,11,12,16]`+`[0,0,5,16,12,11]`+`[0,12,0,16,16,16]` / `BEARING_ASSEMBLED` 两盒十字（y 0-12）/ `PLATE` 顶部满块（y 12-16）；均以 UP 为基准 `forDirectional`，多盒并集靠 `rotatedCopy` 的 `forAllBoxes`；旧的 y11.9/12.1 错位与 plate 内缩碰撞框（xz 3-13）已删；`getCollisionShape` 与 `getShape` 完全一致，未装配也新增了覆写） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlockEntity.java` | 轴承 BE：装配/拆卸/重连/约束/NBT + PD 伺服（惯性缩放、装配时当前朝向初始化防晃动、目标角只由 Lua 设定）+ 应力消耗（impact 4.0）+ 应力网络贯通（addPropagationLocations / propagateRotationTo / isCustomConnection）+ CC 外设（setTargetAngle 绝对定位；isControlMode 恒 true）+ 护目镜 tooltip（当前/目标角度 + 应力） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingVisual.java` | Flywheel 渲染：背面半个传动杆（SHAFT_HALF，OrientedInstance） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingRenderer.java` | BER 回退渲染：背面半个传动杆（SHAFT_HALF，kineticRotationTransform） |
