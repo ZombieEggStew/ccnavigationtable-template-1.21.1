@@ -6,7 +6,6 @@ import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRender
 import net.createmod.catnip.math.AngleHelper;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBuffer;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
@@ -95,10 +94,9 @@ public class AdvancedThrustNozzleRenderer extends SafeBlockEntityRenderer<Advanc
         final BlockState state = be.getBlockState();
         final Direction facing = state.getValue(ThrustNozzleBlock.FACING);
         final VertexConsumer vb = buffer.getBuffer(RenderType.cutout());
-        // 倾斜姿态：服务端恒速推进（每 tick 广播一次），这里再经一层**本地指数逼近**
-        // （JoystickTilt.approach，与操纵杆同一套算法、按帧时间修正）把 20Hz 步进抹成连续动画
-        final Quaternionf tilt = be.getRenderTiltQuaternion(
-                Minecraft.getInstance().getTimer().getGameTimeDeltaTicks());
+        // 倾斜姿态：客户端每 tick 推进视觉角，这里按 partialTicks 插值上一 tick → 当前 tick
+        // （照 create-propulsion-simulated 的 VectorThrusterRenderer：Mth.lerp(partialTick, prev, current)）
+        final Quaternionf tilt = be.getRenderTiltQuaternion(partialTicks);
 
         // ── 1. 可动 block 部分（筒身 + 十字臂 + 顶环 + 裙边），绕枢轴倾斜 ──
         final SuperByteBuffer blockPart =

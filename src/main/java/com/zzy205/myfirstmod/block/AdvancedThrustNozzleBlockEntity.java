@@ -27,11 +27,9 @@ import java.util.Map;
  *     {@link ShortRangeLinkerRegistry} 的频道空间）：放置时自动分配、只在 Sable 物理体
  *     （含约束链）上生效、同链冲突顺延、每 20 tick 复核（轴承连/断后频道空间会自动合并/拆分）。
  *     频道号是<b>喷嘴在物理体内的地址</b>，后续用 {@code ccpe.sensor_system.getPeripheral(ch)} 寻址；</li>
- * <li><b>倾斜姿态 + 渐变到位</b>（{@link #getTiltQuaternion}）：Lua 只写<b>目标</b>角度，
- *     服务端每 tick 按<b>梯形速度曲线</b>（最大角速度 / 加减速度写死在代码里）把
- *     <b>当前</b>角度推过去，行程短时自动退化成三角形曲线（短行程耗时更短）；
- *     渲染再按 {@code partialTicks} 在上一 tick 与当前 tick 之间插值。
- *     推力 / 粒子 / 渲染都读"当前"角度，所以三者必然一致地跟着渐变。</li>
+ * <li><b>倾斜姿态 + 渐变到位</b>（{@link #getRenderTiltQuaternion}）：Lua 只写<b>目标</b>角度；
+ *     服务端按<b>恒速</b>（度/秒，无加减速）推进真实角度给推力用；客户端把视觉姿态写成
+ *     <b>墙钟（{@link System#nanoTime()}）的纯函数</b>，因此与 tick / 渲染 / 同步包频率全都无关。</li>
  * </ol>
  */
 public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
@@ -201,17 +199,31 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
     public static final float MAX_TILT_DEG = 15f;
 
     /**
-     * <b>偏转速度恒定</b>（用户定稿：<b>不要加速度/减速度</b>）：每 tick 走固定步长，到点落位。
-     * 单位是「度/tick」（1 tick = 0.05s ⇒ ×20 就是度/秒）。
+     * <b>偏转速度恒定</b>（用户定稿：<b>不要加速度/减速度</b>）。
      * <p>
-     * 耗时：锥角满行程 15° = 3 tick(0.15s)、方位 90° = 4.5 tick(0.23s)、方位 180° = 9 tick(0.45s)。
-     * 渲染端再叠一层本地指数逼近（{@link #getRenderTiltQuaternion}）。
+     * 权威单位是「度/秒」：服务端按 tick 换算成步长推进（{@code /20}），
+     * 客户端视觉动画直接用墙钟（{@link System#nanoTime()}）算 —— 两者速度完全一致。
+     * <p>
+     * 耗时（当前值，为了排查刻意放慢到肉眼可见）：方位 90° = 0.75s、180° = 1.5s；锥角满行程 15° = 0.38s。
      */
-    private static final float AZIMUTH_DEG_PER_TICK = 20f;
-    private static final float TILT_DEG_PER_TICK = 5f;
+    private static final float AZIMUTH_DEG_PER_SECOND = 120f;
+    private static final float TILT_DEG_PER_SECOND = 40f;
+
+    /** 服务端每 tick 的步长（与上面的度/秒严格对应） */
+    private static final float AZIMUTH_DEG_PER_TICK = AZIMUTH_DEG_PER_SECOND / 20f;
+    private static final float TILT_DEG_PER_TICK = TILT_DEG_PER_SECOND / 20f;
 
     /** 出力系数步长（0→1 用 4 tick = 0.2s），与偏转同一套"恒速"语义 */
     private static final float THRUST_SCALE_PER_TICK = 0.25f;
+
+    /**
+     * 调试开关（**默认关闭**）：打开后打印 `[ATN-anim]`（每 20 次渲染）、`[ATN-pkt ]`、`[ATN-load]`，
+     * 都带 `inst=` 实例哈希，可用来验证"渲染的实例 == 收包的实例"以及视觉角有没有在追 target。
+     * <p>
+     * ⚠️ 渲染线程上的同步 stdout 会掉帧，只在排查时临时打开。
+     * `static final false` ⇒ 里面几处 printf 会被 javac 整段消除，运行时零开销。
+     */
+    private static final boolean DEBUG_ANIM_LOG = false;
 
     /** 方位角（度，绕 FACING 轴）。内部可超出 0..360（便于走最短路径 / 连续追踪），对外一律归正 */
     private final Axis azimuth = new Axis(0f);
@@ -222,10 +234,26 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
     /** 额外出力系数（0..1，默认 1 = 满出力）：乘在「风扇转速 × 气压」之上 */
     private final Axis thrustScaleAxis = new Axis(1f);
 
-    /** 渲染端本地动画状态（只在客户端用）：指数逼近后的实际绘制角 */
-    private float renderAzimuthDeg;
-    private float renderTiltDeg;
-    private boolean renderAnglesInit;
+    /**
+     * 视觉角（**只在客户端**，本地动画状态）：一个会自己朝 {@link Axis#target} 走的数。
+     * <p>
+     * 推进方式 = <b>每次渲染用墙钟差值走一步</b>：
+     * <pre>visual += sign(target − visual) × 速度(度/秒) × Δt</pre>
+     * 这样做的三个好处（也是前几版翻车的点）：
+     * <ul>
+     * <li>Δt 来自 {@link System#nanoTime()} 的<b>差值</b>，所以无论渲染一帧被调用几次、
+     *     帧率多少，积分都是对的（"每次调用走固定步长"才会被调用频率放大）；</li>
+     * <li><b>没有 (起点, 终点, 起始时刻) 三元组</b>可以失效 —— 以前那套一旦 `animTo` 没更新，
+     *     `from == to` 就永远不动（实测日志里正是如此）；</li>
+     * <li>只依赖同步来的 <b>target</b>（日志已证明它稳定到达），与当前角、包频率无关。</li>
+     * </ul>
+     */
+    private float visualAzimuthDeg;
+    private float visualTiltDeg;
+    private long visualLastNanos;
+    private boolean visualInit;
+    /** 渲染调用计数（仅调试日志用） */
+    private int debugAnimFrames;
 
     /**
      * 请求偏转（Lua 入口）：<b>只写目标</b>，实际角度由 {@link #tickMotion()} 逐 tick <b>恒速</b>逼近。
@@ -236,7 +264,10 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
     public void requestDeflection(final float azimuthDeg, final float tiltDeg) {
         this.azimuth.setTarget(shortestTargetAzimuth(this.azimuth.value, normalizeDeg(azimuthDeg)));
         this.tilt.setTarget(Mth.clamp(tiltDeg, 0f, MAX_TILT_DEG));
-        this.setChanged();
+        // **一次命令只发一次包**（照 VectorThrusterBlockEntity#onVectorSignalChanged 的 notifyUpdate）：
+        // 客户端只需知道目标，动画由它自己的 ticker 推进；每 tick 广播会触发光照/块更新，
+        // 正是画面"卡卡的"的另一个来源。
+        this.syncToClient();
     }
 
     /** 请求出力系数（0..1，越界钳位）：同样只写目标，恒速逼近 */
@@ -248,19 +279,17 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
     /**
      * 服务端每 tick 推进偏转 / 出力（由 {@link #serverTick} 驱动）——<b>恒速</b>，没有加减速。
      * <p>
-     * 只有<b>真的动了</b>才广播（照 {@code ControlDeskBlockEntity#simulateJoystick} 的 {@code notifyChange}），
-     * 静止时零发包。渲染端的平滑不在这里做，而在 {@link #getRenderTiltQuaternion}（本地指数逼近）。
+     * 这里<b>不</b>广播：客户端有自己的一份恒速动画（{@link #getRenderTiltQuaternion}，渲染时钟纯函数），
+     * 只靠"目标值"驱动。
+     * 服务端的推进只为产出一个真实的当前角给推力与服务器侧逻辑用。
      */
     private void tickMotion() {
         final boolean azimuthMoving = this.azimuth.stepToward(AZIMUTH_DEG_PER_TICK);
         final boolean tiltMoving = this.tilt.stepToward(TILT_DEG_PER_TICK);
         final boolean scaleMoving = this.thrustScaleAxis.stepToward(THRUST_SCALE_PER_TICK);
 
-        if (azimuthMoving || tiltMoving) {
-            // 倾斜姿态是客户端渲染（BER + 粒子）的输入，动的时候每 tick 推一次
-            this.syncToClient();
-        } else if (scaleMoving) {
-            // 出力系数客户端不读，只需落盘
+        if (azimuthMoving || tiltMoving || scaleMoving) {
+            // 只为落盘（不推客户端）
             this.setChanged();
         }
     }
@@ -316,40 +345,62 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
     }
 
     /**
-     * <b>渲染用</b>倾斜四元数：客户端拿<b>目标角</b>在本地按<b>帧时间</b>恒速推进
-     * （{@link #renderAzimuthDeg}/{@link #renderTiltDeg}），再合成四元数。
+     * <b>渲染用</b>倾斜四元数：先把视觉角朝 {@link Axis#target} 推进一步（墙钟差值），再合成四元数。
      * <p>
-     * 与"追服务端同步来的当前角"的写法差别很关键：追同步值会让动画质量取决于<b>同步包频率</b>
-     * （服务端 20Hz 广播 ⇒ 客户端每 50ms 才收到一个新值，中间没有新信息，看起来就是一格一格跳）。
-     * 这里客户端只把同步值当<b>目标</b>，自己按帧时间匀速走完，因此同步频率再低也不影响平滑度；
-     * 服务端那套恒速 tick 推进依旧负责推力真值（两边速度相同，最终角必然一致）。
-     * <p>
-     * 为什么不用 {@link JoystickTilt#approach}：操纵杆是"慢轴值 + 指数跟手"，而喷口要求<b>速度恒定</b>，
-     * 指数逼近会变成"起步快、末尾拖"。这里是恒速线性推进，只是把时间单位从 tick 换成帧时间。
+     * ⚠️ 这里**故意不判断 {@code level.isClientSide}**：本方法只由 BER（客户端渲染）调用，
+     * 而"物理体/子次元里的 level 侧标记"不可靠 —— 之前一版正是在这里提前返回了服务端真值，
+     * 表现为"偏转瞬间到达目标"。
      *
-     * @param frameTicks 本帧经过的游戏刻数（{@code Minecraft#getTimer().getGameTimeDeltaTicks()}）
+     * @param partialTicks 渲染插值系数（墙钟差值已连续，不需要它）
      */
-    public Quaternionf getRenderTiltQuaternion(final float frameTicks) {
-        if (!this.renderAnglesInit) {
-            // 首次渲染（区块刚加载 / 蓝图放下去）直接落位，不要从 0 追过来
-            this.renderAzimuthDeg = this.azimuth.value;
-            this.renderTiltDeg = this.tilt.value;
-            this.renderAnglesInit = true;
-        }
-
-        this.renderAzimuthDeg = advanceVisual(this.renderAzimuthDeg, this.azimuth.target,
-                AZIMUTH_DEG_PER_TICK * frameTicks);
-        this.renderTiltDeg = advanceVisual(this.renderTiltDeg, this.tilt.target,
-                TILT_DEG_PER_TICK * frameTicks);
-
-        return tiltQuaternion(tiltDirModel(this.renderAzimuthDeg, this.renderTiltDeg));
+    public Quaternionf getRenderTiltQuaternion(final float partialTicks) {
+        this.advanceVisualAnimation();
+        return tiltQuaternion(tiltDirModel(this.visualAzimuthDeg, this.visualTiltDeg));
     }
 
-    /** 恒速逼近一小步（帧时间步长）：剩余不足一步就落位，绝不过冲 */
-    private static float advanceVisual(final float current, final float target, final float step) {
+    /**
+     * 视觉角推进一步（每次渲染调用一次；用墙钟差值，与调用频率无关）。
+     * <p>
+     * 首次调用直接落在同步来的当前角上（不从 0 追）；单次 Δt 上限 0.25s，避免卡顿后一次跳完。
+     */
+    private void advanceVisualAnimation() {
+        final long now = System.nanoTime();
+
+        if (!this.visualInit) {
+            this.visualAzimuthDeg = this.azimuth.value;
+            this.visualTiltDeg = this.tilt.value;
+            this.visualLastNanos = now;
+            this.visualInit = true;
+            return;
+        }
+
+        final float dt = Math.min(0.25f, (now - this.visualLastNanos) / 1.0e9f);
+        this.visualLastNanos = now;
+
+        if (dt <= 0f) {
+            return;
+        }
+
+        this.visualAzimuthDeg = stepToward(this.visualAzimuthDeg, this.azimuth.target,
+                AZIMUTH_DEG_PER_SECOND * dt);
+        this.visualTiltDeg = stepToward(this.visualTiltDeg, this.tilt.target,
+                TILT_DEG_PER_SECOND * dt);
+
+        if (DEBUG_ANIM_LOG && this.debugAnimFrames++ % 20 == 0) {
+            System.out.printf("[ATN-anim] inst=%d pos=%s visual=(%.2f,%.2f) target=(%.2f,%.2f)"
+                            + " value=(%.2f,%.2f) dt=%.4f%n",
+                    System.identityHashCode(this), this.worldPosition,
+                    this.visualAzimuthDeg, this.visualTiltDeg,
+                    this.azimuth.target, this.tilt.target,
+                    this.azimuth.value, this.tilt.value, dt);
+        }
+    }
+
+    /** 恒速逼近：走够 {@code step} 就够了，剩余不足一步就落位，绝不过冲 */
+    private static float stepToward(final float current, final float target, final float step) {
         final float remaining = target - current;
 
-        if (remaining == 0f || step <= 0f) {
+        if (remaining == 0f) {
             return current;
         }
 
@@ -372,16 +423,15 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
      * 顺序与 vanilla 一致：{@code R = Ry(−y) · Rx(−x)}（{@code Quaternionf#rotationYXZ}），
      * 六个朝向的 (x,y) 与 {@code blockstates/advanced_thrust_nozzle.json} 逐条对应。
      * <p>
-     * <b>客户端读"视觉角"</b>（{@link #renderAzimuthDeg}/{@link #renderTiltDeg}）而不是服务端当前角：
+     * <b>客户端读"视觉角"</b>（渲染时钟纯函数，与 BER 画出来的模型同源）而不是服务端当前角：
      * 客户端这条链只喂粒子（喷口位置 / 粒子基向量 / 遮挡射线 / 进气漏斗 / 尾迹锚点），
-     * 必须和<b>画出来的模型</b>对齐，否则喷口在平滑转动时粒子会一格格跳。
-     * 服务端才是推力真值的来源，读 {@link Axis#value}。
+     * 必须和<b>画出来的模型</b>对齐。服务端才是推力真值的来源，读 {@link Axis#value}。
      */
     @Override
     protected Vec3 nozzleAxis(final BlockState state) {
-        final boolean client = this.level != null && this.level.isClientSide;
-        final Vector3f dir = client
-                ? tiltDirModel(this.renderAzimuthDeg, this.renderTiltDeg)
+        // 客户端（粒子链）用视觉角，与 BER 画出来的模型同源
+        final Vector3f dir = this.level != null && this.level.isClientSide
+                ? tiltDirModel(this.visualAzimuthDeg, this.visualTiltDeg)
                 : tiltDirModel();
         final Direction facing = state.getValue(ThrustNozzleBlock.FACING);
 
@@ -579,6 +629,10 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
 
         tag.putFloat(TAG_AZIMUTH, this.azimuth.value);
         tag.putFloat(TAG_TILT, this.tilt.value);
+        // 目标也落盘：物理体（Sable 子次元）会周期性重载 BE 数据，只存当前角会让客户端的
+        // 视觉动画丢掉"终点"，退化成一格一格跟服务端当前角
+        tag.putFloat(TAG_TARGET_AZIMUTH, this.azimuth.target);
+        tag.putFloat(TAG_TARGET_TILT, this.tilt.target);
         tag.putFloat(TAG_THRUST_SCALE, this.thrustScaleAxis.value);
     }
 
@@ -586,12 +640,26 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
     protected void loadAdditional(final CompoundTag tag, final HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         this.channel = tag.contains(TAG_CHANNEL) ? tag.getInt(TAG_CHANNEL) : CHANNEL_UNASSIGNED;
-        // 只存"当前角"：读档后直接落位（没有目标、不会自己动起来）
+        // 当前角 + 目标角一起恢复（没存过目标的老存档 ⇒ 目标 = 当前，等效"原地不动"）
         this.azimuth.reset(tag.contains(TAG_AZIMUTH) ? tag.getFloat(TAG_AZIMUTH) : 0f);
         this.tilt.reset(Mth.clamp(tag.contains(TAG_TILT) ? tag.getFloat(TAG_TILT) : 0f, 0f, MAX_TILT_DEG));
+        if (tag.contains(TAG_TARGET_AZIMUTH)) {
+            this.azimuth.setTarget(tag.getFloat(TAG_TARGET_AZIMUTH));
+        }
+        if (tag.contains(TAG_TARGET_TILT)) {
+            this.tilt.setTarget(Mth.clamp(tag.getFloat(TAG_TARGET_TILT), 0f, MAX_TILT_DEG));
+        }
         this.thrustScaleAxis.reset(tag.contains(TAG_THRUST_SCALE) ? tag.getFloat(TAG_THRUST_SCALE) : 1f);
-        // 渲染端平滑状态重新落位
-        this.renderAnglesInit = false;
+        // ⚠️ 这里**不要**重置视觉角动画状态（曾写成 visualInit = false）：
+        // 物理体（Sable 子次元）会周期性重发/重载方块实体数据，一旦重载就把视觉角吸附到
+        // 服务端当前角，"渐变"直接退化成"瞬间跳转"（实测症状）。
+        // 视觉角只在**真正的新实例**（字段默认 false，首次渲染）时落位一次。
+        if (DEBUG_ANIM_LOG && this.level != null && this.level.isClientSide) {
+            System.out.printf("[ATN-load] inst=%d pos=%s value=(%.2f,%.2f) visual=(%.2f,%.2f) visualInit=%b%n",
+                    System.identityHashCode(this), this.worldPosition,
+                    this.azimuth.value, this.tilt.value,
+                    this.visualAzimuthDeg, this.visualTiltDeg, this.visualInit);
+        }
     }
 
     @Override
@@ -613,8 +681,8 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
         this.channel = tag.contains(TAG_CHANNEL) ? tag.getInt(TAG_CHANNEL) : CHANNEL_UNASSIGNED;
         this.occupiedChannels = tag.contains(TAG_OCCUPIED) ? tag.getIntArray(TAG_OCCUPIED) : new int[0];
 
-        // 客户端照抄"当前角 + 目标角"，**不动 renderAzimuthDeg/renderTiltDeg**：
-        // 本地动画由 getRenderTiltQuaternion 按帧时间推进，收到包就改写会把它打断（这正是"卡卡的"的根源）
+        // 客户端照抄"当前角 + 目标角"。视觉动画**不需要**在这里做任何事：
+        // 它只是"每次渲染朝 target 走一步"，target 变了自然就会转过去（没有会失效的中间状态）。
         final float newAzimuth = tag.contains(TAG_AZIMUTH) ? tag.getFloat(TAG_AZIMUTH) : 0f;
         final float newTilt = tag.contains(TAG_TILT) ? tag.getFloat(TAG_TILT) : 0f;
         this.azimuth.setSynced(newAzimuth,
@@ -622,6 +690,15 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
         this.tilt.setSynced(Mth.clamp(newTilt, 0f, MAX_TILT_DEG),
                 Mth.clamp(tag.contains(TAG_TARGET_TILT) ? tag.getFloat(TAG_TARGET_TILT) : newTilt,
                         0f, MAX_TILT_DEG));
+
+        if (DEBUG_ANIM_LOG) {
+            System.out.printf("[ATN-pkt ] inst=%d pos=%s value=(%.2f,%.2f) target=(%.2f,%.2f)"
+                            + " visual=(%.2f,%.2f) visualInit=%b%n",
+                    System.identityHashCode(this), this.worldPosition,
+                    this.azimuth.value, this.tilt.value,
+                    this.azimuth.target, this.tilt.target,
+                    this.visualAzimuthDeg, this.visualTiltDeg, this.visualInit);
+        }
 
         // onPhysicsBody 不落盘也不进 update tag：客户端以「频道号是否有效」推断
         this.onPhysicsBody = this.channel >= 0;
@@ -632,8 +709,8 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
     /**
      * 一条轴的运动状态（当前值 / 目标），逐 tick <b>恒速</b>逼近目标（用户定稿：不要加减速）。
      * <p>
-     * 服务端 tick 推进 {@link #value}；客户端只收同步值，动画平滑在
-     * {@link AdvancedThrustNozzleBlockEntity#getRenderTiltQuaternion}（照 {@code joystick} 的分层）。
+     * 服务端 tick 推进 {@link #value}（推力的真值）；客户端在 {@link #getRenderTiltQuaternion} 里
+     * 用同一个速度把视觉角算成渲染时钟的纯函数，两边最终角相同。
      */
     private static final class Axis {
 
