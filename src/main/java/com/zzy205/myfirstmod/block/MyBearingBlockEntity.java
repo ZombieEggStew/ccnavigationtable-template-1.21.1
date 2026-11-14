@@ -3,6 +3,7 @@ package com.zzy205.myfirstmod.block;
 import com.simibubi.create.content.contraptions.AssemblyException;
 import com.simibubi.create.content.contraptions.IDisplayAssemblyExceptions;
 import com.simibubi.create.content.kinetics.base.DirectionalKineticBlock;
+import com.simibubi.create.content.kinetics.base.IRotate;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.transmission.sequencer.SequencerInstructions;
 import dev.ryanhcode.sable.Sable;
@@ -810,6 +811,47 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     @Override
     public float calculateStressApplied() {
         return 4.0f;
+    }
+
+    // ═══════════════ Create 应力网络：贯通传动（同 swivel 753-770 行） ═══════════════
+
+    /**
+     * 把 plate（顶盘）位置交给应力网络扫描。
+     * <p>
+     * plate 位于本轴承的 sub-level plot 内，与轴承在级别坐标上相距很远，
+     * Create 默认只扫 6 邻居 + 对角位置，永远找不到它；不显式补上 {@code platePos}，
+     * 网络从轴承出发就断在这里，顶盘与结构内部传动拿不到转速。
+     * 同 {@code SwivelBearingBlockEntity#addPropagationLocations}。
+     */
+    @Override
+    public List<BlockPos> addPropagationLocations(final IRotate block, final BlockState state, final List<BlockPos> neighbours) {
+        if (this.getPlatePos() != null) {
+            neighbours.add(this.getPlatePos());
+        }
+
+        return super.addPropagationLocations(block, state, neighbours);
+    }
+
+    /**
+     * 轴承 → 顶盘：传动比 1（同速同向），即<b>输入转速 = 输出转速</b>（贯穿传动杆）。
+     * <p>
+     * 返回非 0 会短路 {@code RotationPropagator.getAxisModifier}，因此不受两侧朝向/轴方向修正影响。
+     * 同 {@code SwivelBearingBlockEntity#propagateRotationTo}。
+     */
+    @Override
+    public float propagateRotationTo(final KineticBlockEntity target, final BlockState stateFrom, final BlockState stateTo, final BlockPos diff, final boolean connectedViaAxes, final boolean connectedViaCogs) {
+        return this.getPlatePos() != null && stateTo.getBlock() instanceof MyBearingPlateBlock
+                ? 1
+                : super.propagateRotationTo(target, stateFrom, stateTo, diff, connectedViaAxes, connectedViaCogs);
+    }
+
+    /**
+     * {@code RotationPropagator.isConnected} 的自定义连接兜底（plate 侧同样有镜像实现）。
+     * 同 {@code SwivelBearingBlockEntity#isCustomConnection}。
+     */
+    @Override
+    public boolean isCustomConnection(final KineticBlockEntity other, final BlockState state, final BlockState otherState) {
+        return this.getPlatePos() != null && otherState.getBlock() instanceof MyBearingPlateBlock;
     }
 
     // ═══════════════ Create 护目镜 tooltip ═══════════════

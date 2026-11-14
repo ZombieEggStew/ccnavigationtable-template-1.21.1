@@ -7,7 +7,7 @@
 
 | 维度 | swivel_bearing（参考） | 本项目轴承（aero_bearing） |
 |---|---|---|
-| 应力网络 | **贯通传动杆**：一侧物理体 → 轴承 → 另一侧物理体，应力沿杆传递 | **不贯通**：轴承从一侧物理体（或世界方块）取动力，从动物理体只被带动旋转 |
+| 应力网络 | **贯通传动杆**：一侧物理体 → 轴承 → 另一侧物理体，应力沿杆传递 | **同 swivel 贯通**：轴承 `addPropagationLocations` 补 `platePos` + `propagateRotationTo` 返回 1，plate 侧有镜像覆写；输入转速 = 输出转速，sub-level 内机械的应力算进同一网络 |
 | 动力输入 | 中间**齿轮**，须从侧面用 Create 齿轮啮合传入 | **直接轴向输入**：像 Create `mechanical_bearing` 那样，传动轴/应力网络直接接在轴承轴上 |
 | 连接对象 | 两侧都是物理体（sub-level） | 一端接应力源（轴），另一端接**从动物理体**（sub-level） |
 | 用途 | 通用旋转关节 | 驱动飞机风帆/舵面 |
@@ -24,10 +24,10 @@
       └──────────┬───────────┘
                  │ RotaryConstraint（Rapier 物理约束，单旋转自由度）
                  ▼
-        从动物理体（sub-level，只转动，不传应力）
+        从动物理体（sub-level，被约束旋转；应力经 plate 贯通进内部机械）
 ```
 
-**核心思想**：动力输入走 Create 应力网络（轴向），驱动走 Sable 物理约束（RotaryConstraint + PD 伺服），中间用"输入转速 → 目标角度"桥接。**从动物理体完全在物理引擎里旋转**，与 Create 应力网络无关——所以不贯通应力，也没有 flicker 风险（不 attach/detach 动力学网络）。
+**核心思想**：动力输入走 Create 应力网络（轴向），驱动走 Sable 物理约束（RotaryConstraint + PD 伺服），中间用"输入转速 → 目标角度"桥接。**从动物理体在物理引擎里旋转**，同时应力网络经 plate 贯通进 sub-level（输入转速 = 输出转速），sub-level 内机械的真实应力算进同一网络（轴承本体自身 impact 4.0 照旧计费）。
 
 ## 为什么这样能解决需求
 
@@ -62,9 +62,10 @@
   模型 = 方形板（绕旋转轴对称，同 swivel，无 ROTATION）
 - 注册：`block/MyModBlocks.java` + `block/MyModBlockEntities.java`（沿用现有 `registerBlocks` 模式；
   plate 用 `BLOCKS.register` 直注册，不走 `registerBlockItems`）
-- 资源：`blockstates/aero_bearing.json`（assembled × facing = 12 变体，无 rotation；未装配用 `aero_bearing_item` 模型、
-  装配后用 `aero_bearing_assembled` 模型）、`blockstates/aero_bearing_plate.json`（6 变体）、`models/item/aero_bearing.json`
-  （parent → `block/aero_bearing/aero_bearing_item`）、loot table ×2、lang（en_us/zh_cn）、创造模式物品栏
+- 资源：`blockstates/aero_bearing.json`（assembled × facing = 12 变体，无 rotation；未装配用 `block` 模型、
+  装配后用 `block_assembled` 模型）、`blockstates/aero_bearing_plate.json`（6 变体 → `bearing_plate` 模型）、
+  `models/item/aero_bearing.json`（parent → `block/aero_bearing/item`，物品栏渲染模型）、
+  loot table ×2、lang（en_us/zh_cn）、创造模式物品栏
 
 ### 阶段 2：方块实体骨架（已实现）
 
@@ -84,7 +85,7 @@
 - 空手右键 → `assemble()`：
   - 用 **SimAssemblyHelper.assembleFromSingleBlock(level, pos, facing 对面方块, false, false)**（swivel 第 415 行）把风帆结构组装成 sub-level；或 Sable 自带 `SubLevelAssemblyHelper.assembleBlocks` + `gatherConnectedBlocks`（`SubLevelAssemblyHelper.java` 第 69/191 行）——二选一，优先 Simulated 的（与 swivel 行为一致）
   - 记录 `subLevelID`
-  - 装配时在 sub-level plot 内自动放置 plate 方块（`aero_bearing_plate`，模型 = `aero_bearing_plate.json`，随从动物理体旋转）
+  - 装配时在 sub-level plot 内自动放置 plate 方块（`aero_bearing_plate`，模型 = `bearing_plate.json`，随从动物理体旋转）
   - 创建约束：`pipeline.addConstraint(containingSubLevel, plateSubLevel, new RotaryConstraintConfiguration(anchorPos, platePos, facingVec, plateFacingVec))`（参照 swivel `attachConstraints` 第 571-596 行）
 - `disassemble()`：移除约束 + 拆回世界（`SimAssemblyHelper.disassembleSubLevel`）
 - **待验证**：重载重连（`checkPersistence` → `reattachConstraint`）与 plate 装配流程需进游戏实测
@@ -112,11 +113,29 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 
 ### 阶段 5：渲染（已实现）
 
-- 轴承本体用 blockstate 模型（`aero_bearing_item` / `aero_bearing_assembled`）
+- 轴承本体用 blockstate 模型（未装配 `block` / 装配后 `block_assembled`）；装配后的顶盘是独立 plate 方块（`bearing_plate`）
 - **背面半个传动杆**（`SHAFT_HALF`，轴向输入口）：
   - Flywheel：`MyBearingVisual`（OrientedInstance，每帧按当前 FACING 动态定向 + 绕 FACING 轴以 `转速 × 时间` 旋转，同 TransmissionPeripheralVisual 手法）
   - BER 回退：`MyBearingRenderer`（`CachedBuffers.partialFacing(SHAFT_HALF, state, facing.getOpposite())` + `kineticRotationTransform`）
-  - 从动物理体由 Sable 自己渲染（sub-level），不需要额外渲染代码
+- **顶盘输出半传动杆**（同 swivel `SwivelBearingPlateBlockRenderer`）：`MyBearingPlateRenderer`
+  （`partialFacing(SHAFT_HALF, state, plateFACING)`，朝向结构内部），与背面半轴合成贯穿传动杆；
+  **只在 BER 路径渲染、不注册 Flywheel Visual**（顶盘 BE 在 sub-level plot 内由 Sable 走原版 BE 分发器，
+  若沿用 `KineticBlockEntityRenderer#renderSafe` 的 Flywheel 早退，装 Flywheel 时这根轴会消失），
+  故需 override `renderSafe` 不调父类实现
+- 从动物理体由 Sable 自己渲染（sub-level），不需要额外渲染代码
+
+### 阶段 5b：应力网络贯通（已实现，同 swivel）
+
+- `MyBearingBlockEntity` 三个覆写（照抄 `SwivelBearingBlockEntity` 753-770 行）：
+  - `addPropagationLocations`：把 `platePos` 加入传播位置（plate 在 plot 坐标，默认 6 邻居扫不到）
+  - `propagateRotationTo`：目标是 `MyBearingPlateBlock` → 返回 1（同速同向，短路 `getAxisModifier`）
+  - `isCustomConnection`：目标是 plate → true（`RotationPropagator.isConnected` 兜底）
+- `MyBearingPlateBlockEntity` 已有镜像三件套（71-88 行）+ `hasShaftTowards(face == FACING)`，
+  故 sub-level 内在顶盘正面接上的传动杆/机械拿到的转速 = 轴承输入转速
+- 生效时机：plate BE 新建时 `updateSpeed = true`（`KineticBlockEntity` 82 行）→ 首 tick `attachKinetics()`
+  → `RotationPropagator.handleAdded` 扫到轴承；轴承侧 `calculateStressApplied()` 保持 4.0（用户要求保留）
+- 风险点（需实测）：sub-level plot chunk 未加载时 `findConnectedNeighbour` 的 `level.getBlockState(platePos)` 取不到 plate；
+  Sable 靠两边 `sable$getConnectionDependencies` 维持 sub-level 常驻加载
 
 ### 阶段 6：CC 外设（Lua 控制模式）（已实现）
 
@@ -166,13 +185,15 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingBlockEntity.java` | 轴承 BE：装配/拆卸/重连/约束/NBT + 驱动（swivel 式：转速→目标角推进、惯性缩放 PD 伺服、装配时当前朝向初始化防晃动；plate 继承 FACING）+ 应力消耗（impact 4.0，同 swivel 注册值）+ CC 外设（Lua 控制模式：setTargetAngle 直接控制角度，跳过应力网络角度累计）+ 护目镜 tooltip（模式/当前角度/目标角度） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingVisual.java` | Flywheel 渲染：背面半个传动杆（SHAFT_HALF，OrientedInstance） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingRenderer.java` | BER 回退渲染：背面半个传动杆（SHAFT_HALF，kineticRotationTransform） |
+| `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateRenderer.java` | 顶盘输出半传动杆 BER（FACING 侧 SHAFT_HALF；override renderSafe、不套 Flywheel 早退） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyBearingPlateBlockEntity.java` | plate BE：parent 关联、被破坏连锁破坏父轴承 |
 | `src/main/java/com/zzy205/myfirstmod/block/MyModBlocks.java` | 注册 aero_bearing + aero_bearing_plate（plate 不注册物品） |
 | `src/main/java/com/zzy205/myfirstmod/block/MyModBlockEntities.java` | 注册两个 BE 类型 |
 | `src/main/java/com/zzy205/myfirstmod/item/MyModCreativeModeTabs.java` | 物品栏加 aero_bearing |
-| `src/main/resources/assets/ccpe/blockstates/aero_bearing.json` | 未装配 `aero_bearing_item` / 装配后 `aero_bearing_assembled` × facing（12 变体，无 rotation） |
-| `src/main/resources/assets/ccpe/blockstates/aero_bearing_plate.json` | plate 模型 × facing（6 变体） |
-| `src/main/resources/assets/ccpe/models/item/aero_bearing.json` | 物品模型 → `block/aero_bearing/aero_bearing_item` |
+| `src/main/resources/assets/ccpe/blockstates/aero_bearing.json` | 未装配 `block` / 装配后 `block_assembled` × facing（12 变体，无 rotation） |
+| `src/main/resources/assets/ccpe/blockstates/aero_bearing_plate.json` | `bearing_plate` 模型 × facing（6 变体） |
+| `src/main/resources/assets/ccpe/models/item/aero_bearing.json` | 物品模型 → `block/aero_bearing/item`（物品栏渲染模型） |
+| `src/main/resources/assets/ccpe/models/block/aero_bearing/` | `item.json`（物品栏）/ `block.json`（未装配）/ `block_assembled.json`（装配后底座）/ `bearing_plate.json`（装配后顶盘） |
 | `src/main/resources/data/ccpe/loot_table/blocks/aero_bearing.json` | 掉自己 |
 | `src/main/resources/data/ccpe/loot_table/blocks/aero_bearing_plate.json` | 掉主轴承（同 swivel dropOther） |
 | `src/main/resources/assets/ccpe/lang/en_us.json` / `zh_cn.json` | `block.ccpe.aero_bearing` |

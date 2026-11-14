@@ -27,6 +27,12 @@ import java.util.UUID;
  * 记录父轴承位置；被玩家破坏时连锁破坏父轴承；装配/拆卸时置
  * {@code beforeAssembly} 标志防止连锁。
  * <p>
+ * <b>应力网络贯通</b>：本 BE 是 {@link KineticBlockEntity}，与父轴承通过「自定义连接」同属一个
+ * Create 应力网络（本类的 {@code propagateRotationTo} / {@code isCustomConnection} /
+ * {@code addPropagationLocations} 是 plate → 轴承这一侧；轴承侧的镜像三件套在
+ * {@link MyBearingBlockEntity}）。因此顶盘正面（{@code FACING}）接上的 sub-level 内部传动杆
+ * 拿到的转速 = 轴承输入转速，内部机械的应力也计进同一网络。
+ * <p>
  * 参考来源：{@code references/Simulated-Project-main/.../swivel_bearing/link_block/SwivelBearingPlateBlockEntity.java}。
  */
 public class MyBearingPlateBlockEntity extends KineticBlockEntity implements BlockEntitySubLevelActor {
