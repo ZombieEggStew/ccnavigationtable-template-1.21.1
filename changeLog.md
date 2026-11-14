@@ -144,3 +144,10 @@
 
 - Added `getLoad`, `getStressUsed` and `getStressCapacity` Lua methods to the engine peripheral. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/lua-api/
 
+
+1.2.2
+- **IMPORTANT!!!** Reworked the Aero Bearing:
+  - Its shaft now runs **through** the block, so rotation and stress continue straight into the assembled structure (input speed = output speed).
+  - Power no longer turns the plate on its own — it only costs stress and drives the machines inside the assembled structure. The plate's angle is set from Lua with `setTargetAngle` only, and it **cannot move while there is no input rotation**. (`setControlMode` is now a no-op, kept so old scripts still run.)
+  - Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/aero-bearing/overview/
+
