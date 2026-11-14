@@ -46,6 +46,9 @@ public final class MyModBlockEntities {
     /** 定向喷管 BE：Sable BlockEntitySubLevelActor（每 physics substep 沿喷口轴向施加恒定推力，无表面依赖） */
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ThrustNozzleBlockEntity>> thrust_nozzle_entity = BLOCK_ENTITY_TYPES.register("thrust_nozzle", () -> BlockEntityType.Builder.of(ThrustNozzleBlockEntity::new, MyModBlocks.thrust_nozzle.get()).build(null));
 
+    /** 矢量喷管 BE：继承 ThrustNozzleBlockEntity（推力/气压/粒子全同款），只换了类型，倾斜状态后续加在这里 */
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AdvancedThrustNozzleBlockEntity>> advanced_thrust_nozzle_entity = BLOCK_ENTITY_TYPES.register("advanced_thrust_nozzle", () -> BlockEntityType.Builder.of(AdvancedThrustNozzleBlockEntity::new, MyModBlocks.advanced_thrust_nozzle.get()).build(null));
+
     /** 自动打包机 BE：继承 Create 的 PackagerBlockEntity（打包链照用），把红石触发换成按间隔自动触发，见 AutoPackagerBlockEntity */
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AutoPackagerBlockEntity>> auto_packager_entity = BLOCK_ENTITY_TYPES.register("auto_packager", () -> BlockEntityType.Builder.of(AutoPackagerBlockEntity::new, MyModBlocks.auto_packager.get()).build(null));
 

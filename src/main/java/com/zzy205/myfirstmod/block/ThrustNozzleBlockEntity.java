@@ -39,6 +39,7 @@ import net.minecraft.world.item.DyeItem;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -747,7 +748,17 @@ public class ThrustNozzleBlockEntity extends BlockEntity
     }
 
     public ThrustNozzleBlockEntity(BlockPos pos, BlockState state) {
-        super(MyModBlockEntities.thrust_nozzle_entity.get(), pos, state);
+        this(MyModBlockEntities.thrust_nozzle_entity.get(), pos, state);
+    }
+
+    /**
+     * 子类专用构造器：让 {@link AdvancedThrustNozzleBlockEntity} 注册成自己的方块实体类型。
+     * <p>
+     * 除类型以外的一切（推力 / 气压 / 排气·进气·尾迹粒子 / 遮挡射线 / 染料同步 / goggle tooltip）
+     * 都由父类提供，子类不需要重写。
+     */
+    protected ThrustNozzleBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
+        super(type, pos, state);
     }
 
     // ── Sable 物理：每 substep 沿喷口轴向施加恒定推力 ──

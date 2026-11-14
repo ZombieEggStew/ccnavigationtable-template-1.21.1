@@ -28,6 +28,7 @@ import com.zzy205.myfirstmod.block.MonitorRenderer;
 import com.zzy205.myfirstmod.block.MonitorSlabRenderer;
 import com.zzy205.myfirstmod.block.AutoPackagerRenderer;
 import com.zzy205.myfirstmod.block.AutoPackagerVisual;
+import com.zzy205.myfirstmod.block.AdvancedThrustNozzleRenderer;
 import com.zzy205.myfirstmod.block.MyModPartialModels;
 import com.zzy205.myfirstmod.client.MonitorGridOverlay;
 import com.zzy205.myfirstmod.client.Monitor2GridOverlay;
@@ -283,6 +284,12 @@ public class CCPeripheralExtenderClient {
         event.registerBlockEntityRenderer(
                 MyModBlockEntities.auto_packager_entity.get(),
                 AutoPackagerRenderer::new);
+        // 矢量喷管（advanced_thrust_nozzle）：固定底板由 blockstate 静态模型渲染，可倾斜的 block 部分
+        // + 四组活塞由 BER 画。**故意不注册 Flywheel Visual**（照 aero_bearing_plate 的先例）：没有 Visual 时
+        // Flywheel 不跳过原版 BE 渲染，BER 就是唯一渲染来源，不会重复绘制。
+        event.registerBlockEntityRenderer(
+                MyModBlockEntities.advanced_thrust_nozzle_entity.get(),
+                AdvancedThrustNozzleRenderer::new);
     }
 
     /**

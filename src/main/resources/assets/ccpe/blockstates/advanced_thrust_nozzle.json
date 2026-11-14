@@ -1,0 +1,30 @@
+{
+  "variants": {
+    "facing=down": {
+      "model": "ccpe:block/advanced_thrust_nozzle/base",
+      "x": 180
+    },
+    "facing=east": {
+      "model": "ccpe:block/advanced_thrust_nozzle/base",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north": {
+      "model": "ccpe:block/advanced_thrust_nozzle/base",
+      "x": 90
+    },
+    "facing=south": {
+      "model": "ccpe:block/advanced_thrust_nozzle/base",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up": {
+      "model": "ccpe:block/advanced_thrust_nozzle/base"
+    },
+    "facing=west": {
+      "model": "ccpe:block/advanced_thrust_nozzle/base",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

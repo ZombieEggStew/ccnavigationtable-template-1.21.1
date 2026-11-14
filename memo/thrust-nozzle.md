@@ -2,6 +2,10 @@
 
 > 状态（2026-08 末）：**推力 / 排气（含轻微重力）/ 高空尾迹 / 染料染色 / 配置化 / tooltip / 扳手拆除 全部完成，
 > `gradlew classes` 通过；斜喷穿墙已修复并经用户多角度实测确认**。
+>
+> **另见 §18**：矢量喷管 `ccpe:advanced_thrust_nozzle`（加强版，固定底板 + 可在锥角内倾斜的喷口本体 +
+> 四个随动小活塞，参考 `aeronautics:gyroscopic_propeller_bearing`）。**阶段一（可转动模型）待进游戏验证**，
+> 阶段二（锥角控制 / 推力改用倾斜轴 / Lua 外设）尚未开始。
 > **交接速览见 §13**（文件清单、玩家可见行为、参数在哪、待办）；**穿墙修复 + 重力的完整记录见 §14**，
 > **扳手快速拆除见 §15**。
 > 缺合成配方；模型/贴图由用户完成。
@@ -653,3 +657,86 @@ protected void setLocationFromBoundingbox() {
 | 5 | 粒子太大 | `EXHAUST_SCALE` 2.0 → 0.3（用户调） | ✅ |
 | 6 | 撞墙后继续下坠、无反弹 | 法向改真反弹（`BOUNCE`），确认无重力 | ✅ |
 | 7 | 撞地后想变大 / 分裂 | `GROW_ON_IMPACT` / `SPLIT_ON_IMPACT`（§3.6） | 变大保留，**分裂已关闭** |
+
+## 18. 矢量喷管 `ccpe:advanced_thrust_nozzle`（阶段一：可转动模型，2026-11）
+
+> **状态**：阶段一（**只做能转动的模型**）代码完成、`gradlew classes` 通过，**待用户进游戏验证渲染**。
+> 阶段二（锥角控制 + 推力/粒子改用倾斜轴 + Lua 外设 + 同步）**尚未开始**。
+
+### 18.1 需求（用户定稿）
+
+参考 `aeronautics:gyroscopic_propeller_bearing` 的"固定体 + 在一定角度内自由转动的顶盘 + 四个随动小活塞"。
+本模组版本区别：**固定部分只剩底板**（`base.json`，y0..2），喷口本体（`block.json`：裙边 y1..5 + 筒身 y4..13 +
+四条伸到方块边的十字臂 y6..10 + 顶环 y13..16）**绕枢轴 (8,1,8)px 转**，四个小活塞随动。
+推力方向 = 倾斜后的轴向，可在一个锥内任意指向（阶段二才做）。
+
+### 18.2 文件
+
+| 文件 | 内容 |
+|---|---|
+| `block/AdvancedThrustNozzleBlock.java` | `extends ThrustNozzleBlock`：只覆盖 3 个钩子（`shapeFor` / `createBlockEntity` / `entityType`）+ 自己的 `codec()`；六向选择框由 `ThrustNozzleBlock.rotateX/rotateY`（已从 private 改 protected static）生成 |
+| `block/AdvancedThrustNozzleBlockEntity.java` | `extends ThrustNozzleBlockEntity`：阶段一只是把类型换成自己的，推力/气压/粒子/同步全继承 |
+| `block/AdvancedThrustNozzleRenderer.java` | **只走 BER、不注册 Flywheel Visual**（照 `MyBearingPlateRenderer` 先例）：画 block 部分 + 4×头 + 4×杆 |
+| `ThrustNozzleBlock` | 微改：抽出 `createBlockEntity` / `entityType()` / `shapeFor(Direction)` 三个钩子；`getTicker` 改用 `entityType()`（行为零变化） |
+| `ThrustNozzleBlockEntity` | 微改：加 `protected ThrustNozzleBlockEntity(BlockEntityType<?>, BlockPos, BlockState)` |
+| `MyModPartialModels` | +3：`ADVANCED_THRUST_NOZZLE_{BLOCK,PISTON_HEAD,PISTON_POLE}`（Flywheel 的 `PartialModelEventHandler` 自动 `RegisterAdditional`，靠现有 `init()` 触发） |
+| 注册 | `MyModBlocks` / `MyModBlockEntities` / `MyModCreativeModeTabs` / `CCPeripheralExtenderClient#registerRenderers` 各 1~2 行 |
+| 资源 | `blockstates/advanced_thrust_nozzle.json`（**只指到 `base`**，六变体同 thrust_nozzle）、`models/item/advanced_thrust_nozzle.json`（→ `block/advanced_thrust_nozzle/item`）、loot_table、physics_block_properties（mass/volume 暂同 thrust_nozzle = 0.5/0.5）、recipe、lang |
+
+### 18.3 几何常量（`AdvancedThrustNozzleRenderer` 顶部）
+
+| 常量 | 值 | 依据 |
+|---|---|---|
+| `PIVOT` | `(8,1,8)px` = `(0.5, 1/16, 0.5)` | 用户定稿的转轴 |
+| `PISTON_RADIUS` | `6/16` | `item.json` 的 groups：头占半径 6..8px、杆占 6..7px |
+| `POLE_UP_SHIFT` | `9/16` | 杆模型占 y −8..−1px，上移 9px 后落在 y2..9px（与 `item.json` 逐位一致） |
+| `TEST_TILT_DEG` | 15 | 阶段一测试倾角；枢轴在 y=1px（底板中部），倾角越大裙边越会切进底板（`6px × sinθ`，20° 起可见） |
+| `TEST_PRECESSION_DEG_PER_TICK` | 6 | 绕法线 60°/秒，6 秒一圈 |
+
+### 18.4 变换链（**必须记牢的两条**）
+
+1. **`SuperByteBuffer` 的变换是"先调用 = 外层"**（`DefaultSuperByteBuffer` 用内部 `PoseStack` + `M·A` 累乘，
+   `renderInto` 末尾自动 `reset()`，所以同一个 partial 在一个循环里画 4 次也不会累积变换）。
+   ⇒ 外层（FACING）必须**先**调用，部件的平移到**最后**调用。
+2. 层级：`FACING 旋转`（**照抄已验证的 `ServoBearingRenderer`**：水平朝向先
+   `rotateCentered(rad(horizontalAngle(反朝向)), UP)`，再 `rotateCentered(rad(-90 - verticalAngle), EAST)`，
+   与 `blockstates/*.json` 的 x/y 旋转严格一致）→ `rotateAround(tilt, PIVOT)`
+   （= 参考实现的 `translate(+pivot) → rotateCentered(tilt) → translate(−pivot)`）→ 部件自身平移/方位。
+
+### 18.5 活塞随动的三个要点（与参考实现的差别，别照抄参考）
+
+- **头贴在倾斜面上**：挂点 = `PIVOT + R_tilt·(半径向量)`。参考用的是"半径向量投影到倾斜面再沿轴推"
+  且**符号是反的**（12° 下只差 0.3px 所以看不出来），这里直接用旋转后的挂点，几何精确。
+- **头随 block 一起倾斜**：`T(headPos)·R_tilt·R_azimuth`。
+- **杆保持竖直**（不吃 tilt），水平位置固定在自己方位、**高度跟着头走** —— 所以视觉上是"头在杆上滑动"，
+  杆顶一直缩在十字臂里不会穿出去。⚠️ **杆朝上**（参考是朝下，因为它的固定体在下、可动体在上）。
+- 活塞方位：`new Vector3f(PISTON_RADIUS,0,0).rotateY(-90°·i)`，`i=0` 指向 +X，四个依次绕 Y −90°
+  （参考用 `VecHelper.rotate(..., -90*i, Y)`，等价）。
+
+### 18.6 阶段一验证方式 & 阶段二 TODO
+
+**阶段一**：倾斜姿态由 `currentTilt()` 的客户端时间函数驱动（`AnimationTickHolder.getRenderTime` +
+`Quaternionf.rotationTo(Ŷ, 目标轴)`），**没有控制逻辑、没有同步**；进游戏就能看绕锥面进动。
+
+**阶段二**（按用户先前定稿的顺序）：
+1. BE 持有服务端权威的目标方向 + 当前方向（锥角钳位，`MAX_TILT_DEG` 进配置）+ 逐 tick 限速逼近 +
+   `previous` 帧插值（对齐 `GyroscopicPropellerBearingBlockEntity` 的 `tiltQuat`/`previousTiltQuat`）；
+2. NBT + `getUpdateTag`/`handleUpdateTag` 各加 3 个 float（父类管道已在，覆盖时调 `super`）；
+3. Lua 外设：`setDirection(x,y,z)` / `setAngles(yaw,pitch)` / `getDirection()` / `getMaxTilt()`；
+4. **推力与粒子改用倾斜轴**：在 `ThrustNozzleBlockEntity` 加 `protected Vec3 nozzleAxis(BlockState)` 钩子
+   （默认返回 FACING 法线），子类返回倾斜轴 ⇒ `sable$physicsTick` 与 `tickClient` 里所有用到 `axis`
+   的地方（喷口位置 / 粒子基向量 / 遮挡射线 / 进气漏斗 / 尾迹锚点）**一处改、全链路生效**；
+5. 推力倍率常量（"加强版"是否更强，阶段二再标定）；
+6. 选择框：现为未倾斜静态包（底板 + 筒身 + 十字臂带整宽 + 顶环），需要的话改成最大倾角包络。
+
+### 18.7 本阶段的坑 / 注意
+
+- **BER 里不能加 `VisualizationManager.supportsVisualization` 提前返回**：本方块没有 Flywheel Visual，
+  BER 是唯一渲染来源（照 `MyBearingPlateRenderer` 的注释，否则装了 Flywheel 就整个消失）。
+- `TextureAtlas`/partial 模型加载：`SmartThrustNozzle` 的 `piston_head.json` / `piston_pole.json` 带
+  `"format_version": "26.3"` —— 已确认本版 `BlockModel` 反序列化**不读这个字段**（无影响）。
+- 选择框 `Shapes.or(...)` 里十字臂带给的是**整宽一圈**（`0..16`），即在这个高度上选择框是满块，属预期。
+- 参考来源（只读）：`references/Simulated-Project-main/aeronautics/.../gyroscopic_propeller_bearing/`
+  的 `GyroscopicPropellerBearingRenderer` / `GyroscopicPropellerBearingVisual` /
+  `GyroscopicPropellerBearingBlockEntity`，以及同目录的 `piston_head.json` / `piston_pole.json`
+  （与本项目这两个 partial 模型几何逐位相同）。

@@ -53,6 +53,14 @@ public class MyModPartialModels {
     public static final PartialModel STEAM_POWER_CHAMBER_PISTON = block("aero_engine/steam_power_chamber/piston");
     /** Lua 舵机轴承（servo_bearing）：顶部转盘（动态部件，随角度绕 FACING 轴旋转；底座由 blockstate 模型渲染） */
     public static final PartialModel SERVO_BEARING_TOP = block("servo_bearing/top");
+    /**
+     * 矢量喷管（advanced_thrust_nozzle）：可绕枢轴倾斜的 block 部分 + 4×活塞头/活塞杆。
+     * 固定底板由 blockstate 静态模型渲染（{@code block/advanced_thrust_nozzle/base}），见
+     * {@link AdvancedThrustNozzleRenderer}。
+     */
+    public static final PartialModel ADVANCED_THRUST_NOZZLE_BLOCK = block("advanced_thrust_nozzle/block");
+    public static final PartialModel ADVANCED_THRUST_NOZZLE_PISTON_HEAD = block("advanced_thrust_nozzle/piston_head");
+    public static final PartialModel ADVANCED_THRUST_NOZZLE_PISTON_POLE = block("advanced_thrust_nozzle/piston_pole");
 
     private static PartialModel block(String path) {
         return PartialModel.of(ResourceLocation.fromNamespaceAndPath(CCPeripheralExtender.MOD_ID, "block/" + path));
