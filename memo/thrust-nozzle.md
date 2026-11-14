@@ -689,7 +689,8 @@ protected void setLocationFromBoundingbox() {
 |---|---|---|
 | `PIVOT` | `(8,1,8)px` = `(0.5, 1/16, 0.5)` | 用户定稿的转轴 |
 | `PISTON_RADIUS` | `6/16` | `item.json` 的 groups：头占半径 6..8px、杆占 6..7px |
-| `POLE_UP_SHIFT` | `9/16` | 杆模型占 y −8..−1px，上移 9px 后落在 y2..9px（与 `item.json` 逐位一致） |
+| `POLE_BELOW_ORIGIN` | `8/16` | 杆模型占 y −8..−1px，局部原点在下端上方 8px |
+| `PISTON_LOWER_END_HEIGHT` | `0` | 未倾斜时杆下端正好在枢轴高度（杆占 y1..8px、插进 y0..2px 的活塞头里 1px）。**原按 `item.json` 取 1px，用户实测后下调 1px**：否则倾角大时杆顶会从臂带上缘（y10px）探出去 |
 | `TEST_TILT_DEG` | 15 | 阶段一测试倾角；枢轴在 y=1px（底板中部），倾角越大裙边越会切进底板（`6px × sinθ`，20° 起可见） |
 | `TEST_PRECESSION_DEG_PER_TICK` | 6 | 绕法线 60°/秒，6 秒一圈 |
 
@@ -703,15 +704,33 @@ protected void setLocationFromBoundingbox() {
    与 `blockstates/*.json` 的 x/y 旋转严格一致）→ `rotateAround(tilt, PIVOT)`
    （= 参考实现的 `translate(+pivot) → rotateCentered(tilt) → translate(−pivot)`）→ 部件自身平移/方位。
 
-### 18.5 活塞随动的三个要点（与参考实现的差别，别照抄参考）
+### 18.5 活塞自由度（**用户实测后定稿，第一版写反了**）
 
-- **头贴在倾斜面上**：挂点 = `PIVOT + R_tilt·(半径向量)`。参考用的是"半径向量投影到倾斜面再沿轴推"
-  且**符号是反的**（12° 下只差 0.3px 所以看不出来），这里直接用旋转后的挂点，几何精确。
-- **头随 block 一起倾斜**：`T(headPos)·R_tilt·R_azimuth`。
-- **杆保持竖直**（不吃 tilt），水平位置固定在自己方位、**高度跟着头走** —— 所以视觉上是"头在杆上滑动"，
-  杆顶一直缩在十字臂里不会穿出去。⚠️ **杆朝上**（参考是朝下，因为它的固定体在下、可动体在上）。
-- 活塞方位：`new Vector3f(PISTON_RADIUS,0,0).rotateY(-90°·i)`，`i=0` 指向 +X，四个依次绕 Y −90°
-  （参考用 `VecHelper.rotate(..., -90*i, Y)`，等价）。
+**两个 partial 模型的定位约定（关键，改模型只按这个摆就不用动代码）**：`piston_head.json` 与
+`piston_pole.json` 的**局部原点都放在同一个"铰点"上** = 活塞杆底面中心 = 距枢轴半径 **6.5px**、高度 **0**（枢轴高度）。
+因此代码里每个活塞只有一句 `translate(铰点) + rotate(...)`，**没有任何偏移常量**（`PISTON_HINGE_RADIUS` 是唯一常量）。
+
+| 模型 | 目标坐标 | 含义 |
+|---|---|---|
+| `piston_pole.json` | `from [-0.5, 0, -1] to [0.5, 7, 1]` | 底面中心 = 原点，杆沿 **+Y** 向上 7px，径向 1px(X)、切向 2px(Z)、**局部 +X = 径向朝外** |
+| `piston_head.json` | `from [-0.5, -1, -3] to [1.5, 1, 3]` | 原点落在头内部（X −0.5..+1.5 = 距轴 6..8px、Y −1..+1 = y0..2px、Z −3..+3 = 切向 6px） |
+
+与 `item.json`（静止姿态基准）核对：杆 半径 6..7px / y1..8px、头 半径 6..8px / y0..2px —— 逐位吻合。
+
+| 部件 | 隶属 | 自由度 | 实现（`AdvancedThrustNozzleRenderer`） |
+|---|---|---|---|
+| 活塞头 | **底座（固定件）** | **0** | `translate(hinge) + rotateY(azimuth)` —— 不吃 tilt、不上下移动 |
+| 活塞杆 | **block（可动件）** | **1（绕铰点的转动）** | `translate(hinge) + rotate(tilt) + rotateY(azimuth)` —— **底面中心钉死在铰点**，随 block 倾斜 ⇒ 顶端相对 body 就是上下滑动 |
+
+视觉 = **固定的头 + 绕铰点转动的杆 + 上下滑过杆顶的 block**；杆顶一直在十字臂带（y6..10px）里被挡住
+（15° 时杆顶摆动 ≈ 7px·sin15° ≈ 1.8px，臂带竖向余量够）。
+
+⚠️ **两版为什么都错 / 怎么定的**：
+- 第 1 版照参考实现的直觉"头贴倾斜面升降、杆保持竖直"——但参考是"头顶在转盘上、杆朝下插进固定体"，
+  我们恰好上下镜像（**头在固定底板上、杆朝上接可动体**），所以头必须是固定件；
+- 第 2 版"头固定 + 杆沿自身轴滑动（s = r·(N·d)）"方向对了一半，但漏了用户明确要求的
+  **"底面一点钉死、只许绕它转"** —— 真正的一自由度是**转动**，不是棱柱滑动，
+  棱柱滑动会让底面离开铰点。最终机构见上表。
 
 ### 18.6 阶段一验证方式 & 阶段二 TODO
 
@@ -727,7 +746,8 @@ protected void setLocationFromBoundingbox() {
    （默认返回 FACING 法线），子类返回倾斜轴 ⇒ `sable$physicsTick` 与 `tickClient` 里所有用到 `axis`
    的地方（喷口位置 / 粒子基向量 / 遮挡射线 / 进气漏斗 / 尾迹锚点）**一处改、全链路生效**；
 5. 推力倍率常量（"加强版"是否更强，阶段二再标定）；
-6. 选择框：现为未倾斜静态包（底板 + 筒身 + 十字臂带整宽 + 顶环），需要的话改成最大倾角包络。
+6. 选择框：**现状 = 整块正方形**（用户定稿，阶段一；正方体旋转仍是自己 ⇒ 六向共用一个 `Shapes.block()`，
+   不加 `rotateX/rotateY`）。注意这意味着喷管是满块碰撞。要贴合模型时再做"最大倾角包络"。
 
 ### 18.7 本阶段的坑 / 注意
 
@@ -739,4 +759,11 @@ protected void setLocationFromBoundingbox() {
 - 参考来源（只读）：`references/Simulated-Project-main/aeronautics/.../gyroscopic_propeller_bearing/`
   的 `GyroscopicPropellerBearingRenderer` / `GyroscopicPropellerBearingVisual` /
   `GyroscopicPropellerBearingBlockEntity`，以及同目录的 `piston_head.json` / `piston_pole.json`
-  （与本项目这两个 partial 模型几何逐位相同）。
+  （与本项目这两个 partial 模型几何逐位相同）。**但活塞自由度是镜像的，只能参考它的变换链手法，
+  不能参考它的"头随盘动"语义。**
+
+### 18.8 阶段一验证结论（用户实测）
+
+- ✅ `block` 部分绕 (8,1,8)px 转、六向 FACING 都对（用户确认"转动正常"）；
+- ✅ 选择框/碰撞箱改为整块正方形；
+- ✅ 活塞自由度已按用户反馈改正（头 0 自由度固定在底座、杆只沿自身轴滑动），**待再次验证观感**。

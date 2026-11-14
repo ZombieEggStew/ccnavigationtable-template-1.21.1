@@ -35,17 +35,20 @@ import org.joml.Vector3f;
  * </ol>
  * 固定底板由 blockstate 静态模型渲染（{@code models/block/advanced_thrust_nozzle/base}），这里不画。
  *
- * <h3>活塞随动的三个要点</h3>
+ * <h3>活塞的机构（用户定稿，别照抄参考实现的自由度）</h3>
  * <ul>
- * <li>活塞头<b>贴在倾斜面上</b>：挂点 = {@code PIVOT + R_tilt·(半径向量)}（头的局部原点在半径 6px，
- *     头自身占 6..8px、杆占 6..7px —— 与 {@code item.json} 里 groups 的静态摆位一致）。
- *     ⚠️ 参考实现用的是"半径向量投影到倾斜面再沿轴推"的写法，而且符号是反的（12° 下只差 0.3px 看不出来），
- *     这里直接用旋转后的挂点，几何上精确；</li>
- * <li>活塞头<b>朝向随 block 一起倾斜</b>（{@code T(headPos) · R_tilt · R_azimuth}）；</li>
- * <li>活塞杆<b>保持竖直</b>（不随倾斜），水平位置固定在自己的方位，高度跟着头走 —— 所以看起来是
- *     "头在杆上滑动"，杆顶部一直缩在十字臂里不会穿出去。杆模型占 y −8..−1px，上移 9px 后正好落在
- *     头的上方 y2..9px；参考实现是杆朝下（它的固定体在下面），我们的固定体在下、可动体在上，所以朝上。</li>
+ * <li><b>活塞头 = 底座的固定件（0 自由度）</b>：位置/朝向只跟本方位有关，<b>不吃 tilt、也不上下移动</b>。
+ *     未倾斜时头占 x/z 半径 6..8px、y 0..2px（正好贴着底板外缘，与 {@code item.json} 一致）；</li>
+ * <li><b>活塞杆 = 装在 block 上的棱柱副（1 自由度）</b>：朝向随 block 一起倾斜，只允许沿自身轴滑动。
+ *     滑动量取"让杆的下端一直贴住固定的活塞头"：
+ *     <code>s = r·(N·d) + h0·(cosθ − 1)</code>（N = 倾斜后的轴向，d = 本方位半径单位向量，
+ *     h0 = {@link #PISTON_LOWER_END_HEIGHT} = 0）。未倾斜 s = 0（杆占 y1..8px、下端插在活塞头里 1px），
+ *     倾斜 15° 时 |s| ≈ 1.5px；</li>
+ * <li>于是视觉是<b>"固定的头 + 在头里伸缩的杆 + 上下滑过杆顶的 block"</b>：倾角越大杆伸出越长，
+ *     杆顶一直在十字臂带里（被挡住），不会穿出方块。</li>
  * </ul>
+ * ⚠️ 与参考实现的差别：{@code aeronautics:gyroscopic_propeller_bearing} 是"头顶在转盘上、杆朝下插进固定体"，
+ * 我们的模型是"头在固定底板上、杆朝上接可动体"，所以活塞朝上、且头必须是固定件。
  *
  * <h3>阶段一的测试姿态</h3>
  * 还没有角度控制逻辑：倾斜姿态由"绕锥面进动"的时间函数生成（极角 {@link #TEST_TILT_DEG} 固定、
@@ -64,11 +67,20 @@ public class AdvancedThrustNozzleRenderer extends SafeBlockEntityRenderer<Advanc
     /** 倾斜枢轴（px (8,1,8)）：block 部分绕它转 */
     public static final Vector3f PIVOT = new Vector3f(8f / 16f, 1f / 16f, 8f / 16f);
 
-    /** 活塞所在半径（px 6）：头的局部原点落在这里，头自身占半径 6..8px、杆占 6..7px */
-    public static final float PISTON_RADIUS = 6f / 16f;
-
-    /** 活塞杆相对自身局部原点沿 +Y 的上移量（px 9）：杆模型 y −8..−1 ⇒ 上移后 y 2..9（与 item.json 一致） */
-    public static final float POLE_UP_SHIFT = 9f / 16f;
+    /**
+     * 铰点离枢轴的半径（px 6.5）—— 活塞头上那个"不动点"。
+     * <p>
+     * 依据 {@code item.json} 的静态姿态：杆占半径 6..7px（1px 径向）⇒ 其<b>底面中心</b>在半径 6.5px、
+     * 高度 y=1px（= 枢轴高度）。两个 partial 模型都按"局部原点 = 这个铰点"建模：
+     * <ul>
+     * <li>{@code piston_pole.json}：{@code from [-0.5, 0, -1] to [0.5, 7, 1]}（底面对齐 y=0，杆沿 +Y，
+     *     局部 +X = 径向朝外）；</li>
+     * <li>{@code piston_head.json}：{@code from [-0.5, -1, -3] to [1.5, 1, 3]}（铰点落在头的内部，
+     *     X −0.5..+1.5 即距轴 6..8px、Y −1..+1 即 y0..2px、Z −3..+3 即切向 6px）。</li>
+     * </ul>
+     * 这样渲染时两个部件都<b>不需要任何偏移常量</b>，铰点即模型原点。
+     */
+    public static final float PISTON_HINGE_RADIUS = 6.5f / 16f;
 
     /** 活塞组数（四方位，i = 0..3 → 绕 Y 依次 −90°） */
     private static final int PISTON_COUNT = 4;
@@ -106,32 +118,34 @@ public class AdvancedThrustNozzleRenderer extends SafeBlockEntityRenderer<Advanc
         blockPart.rotateAround(tilt, PIVOT.x, PIVOT.y, PIVOT.z);
         blockPart.light(light).renderInto(ms, vb);
 
-        // ── 2. 四个随动活塞（头贴倾斜面 + 杆保持竖直） ──
+        // ── 2. 四个随动活塞 ──
+        // 机构的两个关节（用户定稿）：
+        //   · 活塞头 = 底座的固定部件 → **0 自由度**（不倾斜、不上下移动，只按方位取向）；
+        //   · 活塞杆 = 底面中心那个点**钉死在活塞头上**（无相对移动），但**可以绕该点转动**：
+        //     它随 block 一起倾斜 ⇒ 顶端相对 body 就是上下滑动（body 的十字臂带 y6..10px 把这点滑动藏住）。
+        // 两个 partial 模型都按"局部原点 = 这个铰点"建模，所以这里每个部件只要一句 translate + rotate，
+        // 没有任何偏移常量（改模型定位不需要动代码）。
         for (int i = 0; i < PISTON_COUNT; i++) {
             final float azimuth = (float) (-Math.PI / 2.0D * i);
 
-            // 本方位的半径向量（模型空间）：i=0 指向 +X，依次绕 Y 转 −90°
-            final Vector3f radial = new Vector3f(PISTON_RADIUS, 0f, 0f).rotateY(azimuth);
-            // 倾斜后 block 上的挂点方向（高度分量自动等于"贴倾斜面"所需的抬升量）
-            final Vector3f lifted = new Vector3f(radial).rotate(tilt);
-            final Vector3f headPos = new Vector3f(PIVOT).add(lifted);
+            // 铰点（模型空间，随方位绕 Y 旋转；**不吃 tilt** —— 它固定在底座上）
+            final Vector3f hinge = new Vector3f(PIVOT)
+                    .add(new Vector3f(PISTON_HINGE_RADIUS, 0f, 0f).rotateY(azimuth));
 
-            // 活塞头：位置在倾斜面上，朝向 = 倾斜 + 本方位（Local +X 朝外 = 半径方向）
+            // 活塞头（0 自由度）：位置/朝向只跟本方位有关
             final SuperByteBuffer head =
                     CachedBuffers.partial(MyModPartialModels.ADVANCED_THRUST_NOZZLE_PISTON_HEAD, state);
             applyFacing(head, facing);
-            head.translate(headPos.x, headPos.y, headPos.z)
-                    .rotate(tilt)
-                    .rotateY(azimuth);
+            head.translate(hinge.x, hinge.y, hinge.z).rotateY(azimuth);
             head.light(light).renderInto(ms, vb);
 
-            // 活塞杆：不吃 tilt（保持竖直）；水平位置固定在本方位、高度跟着头走（= 头在杆上滑动）
-            final Vector3f polePos = new Vector3f(PIVOT.x + radial.x, headPos.y, PIVOT.z + radial.z);
+            // 活塞杆（1 个转动自由度）：绕铰点倾斜 —— 底面永远钉在铰点上，
+            // 顶端随 tilt 相对 body 上下滑动（正是用户要的机构）
             final SuperByteBuffer pole =
                     CachedBuffers.partial(MyModPartialModels.ADVANCED_THRUST_NOZZLE_PISTON_POLE, state);
             applyFacing(pole, facing);
-            pole.translate(polePos.x, polePos.y, polePos.z)
-                    .translate(0f, POLE_UP_SHIFT, 0f)
+            pole.translate(hinge.x, hinge.y, hinge.z)
+                    .rotate(tilt)
                     .rotateY(azimuth);
             pole.light(light).renderInto(ms, vb);
         }

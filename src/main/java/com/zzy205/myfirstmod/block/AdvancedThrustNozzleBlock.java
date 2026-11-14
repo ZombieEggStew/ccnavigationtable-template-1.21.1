@@ -3,7 +3,6 @@ package com.zzy205.myfirstmod.block;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.DirectionalBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -11,9 +10,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.EnumMap;
-import java.util.Map;
 
 /**
  * 矢量喷管（{@code ccpe:advanced_thrust_nozzle}）—— 定向喷管 {@link ThrustNozzleBlock} 的加强版。
@@ -32,38 +28,15 @@ public class AdvancedThrustNozzleBlock extends ThrustNozzleBlock {
     public static final MapCodec<AdvancedThrustNozzleBlock> CODEC = simpleCodec(AdvancedThrustNozzleBlock::new);
 
     /**
-     * 选择框 / 碰撞箱基准（{@code facing=up} 未旋转模型帧，单位 = 1/16 格）。
+     * 选择框 / 碰撞箱：**先用整块正方形**（用户定稿，阶段一）。
      * <p>
-     * 按未倾斜姿态取一个包住整机的静态包：底板 + 筒身/裙边 + 十字臂带（整宽）+ 顶环。
-     * 阶段一先固定；阶段二若要跟倾斜，再改成"最大倾角包络"或按 BE 状态动态生成。
-     * 六个朝向由父类 {@link #rotateX}/{@link #rotateY} 按 blockstate 的 x/y 旋转生成。
+     * 用整块而不是按模型抠形的原因：喷口本体会在锥角内连续倾斜，VoxelShape 表达不了连续旋转；
+     * 整块盒既简单又保证"任何倾角都挡得住"。正方体绕任何轴 90° 旋转还是自己，所以六个朝向共用同一个盒，
+     * 不需要按 blockstate 的 x/y 再生成六份（父类的 {@code rotateX}/{@code rotateY} 仍留给需要精确形的子类）。
+     * <p>
+     * 阶段二若想贴合模型，可以再做"最大倾角包络"。
      */
-    private static final VoxelShape BASE_SHAPE = Shapes.or(
-            // 固定底板（base.json：x2..14, y0..2, z2..14）
-            Block.box(2.0D, 0.0D, 2.0D, 14.0D, 2.0D, 14.0D),
-            // 裙边 + 筒身（skirt y1..5 在 x3..13 内，筒身 y4..13 到 x2..14）
-            Block.box(2.0D, 2.0D, 2.0D, 14.0D, 13.0D, 14.0D),
-            // 四条十字臂（block.json 里 y6..10 伸到方块四边 ⇒ 整宽一圈）
-            Block.box(0.0D, 6.0D, 0.0D, 16.0D, 10.0D, 16.0D),
-            // 顶环（y13..16 的内缩方框，取整块包围）
-            Block.box(1.0D, 13.0D, 1.0D, 15.0D, 16.0D, 15.0D)
-    );
-
-    private static final Map<Direction, VoxelShape> SHAPES = buildShapes();
-
-    /** 六向盒：up = 原样；down = x180；north = x90；east/south/west = north 再绕 Y 转 90/180/270（同 {@link ThrustNozzleBlock}） */
-    private static Map<Direction, VoxelShape> buildShapes() {
-        final Map<Direction, VoxelShape> shapes = new EnumMap<>(Direction.class);
-        final VoxelShape north = rotateX(BASE_SHAPE, 1);
-
-        shapes.put(Direction.UP, BASE_SHAPE);
-        shapes.put(Direction.DOWN, rotateX(BASE_SHAPE, 2));
-        shapes.put(Direction.NORTH, north);
-        shapes.put(Direction.EAST, rotateY(north, 1));
-        shapes.put(Direction.SOUTH, rotateY(north, 2));
-        shapes.put(Direction.WEST, rotateY(north, 3));
-        return shapes;
-    }
+    private static final VoxelShape FULL_CUBE_SHAPE = Shapes.block();
 
     public AdvancedThrustNozzleBlock(final Properties properties) {
         super(properties);
@@ -76,7 +49,8 @@ public class AdvancedThrustNozzleBlock extends ThrustNozzleBlock {
 
     @Override
     protected VoxelShape shapeFor(final Direction facing) {
-        return SHAPES.get(facing);
+        // 正方体旋转仍是自己 ⇒ 六向共用一个盒
+        return FULL_CUBE_SHAPE;
     }
 
     @Override
