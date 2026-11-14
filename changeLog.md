@@ -144,3 +144,5 @@
 
 - Added `getLoad`, `getStressUsed` and `getStressCapacity` Lua methods to the engine peripheral. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/lua-api/
 
+
+1.2.2
