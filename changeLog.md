@@ -155,8 +155,18 @@
 1.2.3
 - **NEW!** Added the Advanced Thrust Nozzle: Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/actuators/advanced-thrust-nozzle/
 
+- **IMPORTANT!!!** Cooling rebalanced: passive cooling is weaker and air cooling is stronger, so a small engine at low load can finally reach the economy band (1 fluid chamber + 2 core segments at 25% load used to sit at ~112°C forever and now settles at ~157°C). The core's own dissipation dropped from `0.02` to `0.01` per segment and chambers' ambient convection from `0.05` to `0.04`, while each cooling air duct now dissipates `0.09` (was `0.05`). An engine **with** ducts feels about the same, but an engine **without** radiators overheats much sooner at high load. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/temperature/
+
+- Reworked where airflow and altitude apply to cooling:
+  - **Ram air now only boosts the cooling air duct** — bare core / chamber surfaces cool by natural convection and no longer get a free ×2 for flying fast (real radiators are what care about the airstream).
+  - **Standing still halves the duct's dissipation** (×0.5 at 0 m/s, back to ×1.0 by 10 m/s, up to ×2.0 at 30 m/s), so holding high power on the ground now overheats — just like a real engine. Add water cooling or lower the load for sustained full power while parked.
+  - The **water cooling module** gets a small share of both the airflow bonus and the altitude pressure penalty (25% each) and is **not penalised when standing still**, so it stays the answer for ground / low-speed / high-altitude operation.
+
+- The water cooling module dissipates a bit more per module: `0.37` (was `0.33`). Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/water-cooling-module/
+
 - **NEW!** The fluid engine now comes with **built-in automatic control** — no Lua script needed. It holds the actual mixture at ~0.9 (comfortably inside the economy window), drives the cooling air duct with a PI+D loop, runs the water cooling loop from a heat / cooling **model feedforward**. It is **on by default**, including in existing saves. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/engine-core/
 
 - Added `isReversed` / `setReversed(bool)` Lua methods to the engine peripheral: reverses the **output rotation direction** (`e.setReversed(true)`). 
 
 - Added an in-world **hold-right-click panel** on the engine core to pick the output direction (Forward / Reversed). **Hold a Wrench** to open it — with an empty hand or any other item the core side shows no panel and right-click stays normal block placement / item interaction (such as attaching chambers). Works on any core segment and shares its state with the Lua method above.
+
