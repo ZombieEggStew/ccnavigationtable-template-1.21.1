@@ -1,10 +1,10 @@
-﻿# Water Cooling Module
+# Water Cooling Module
 
 ![water_cooling_module](../img/water_cooling_module.png)
 
 The **Water Cooling Module** (`ccpe:water_cooling_module`) is the [Engine System](overview.md)'s **liquid cooling module**: it carries an 8000 mB coolant tank and adds a fixed dissipation component (`K_WATER`) to the engine's Newton cooling.
 
-The key difference from the [Cooling Air Duct](cooling-air-duct.md): water cooling is **not affected by ram air (airspeed) or ambient pressure (altitude)** — a liquid loop does not care about the air. So it is the answer for the three situations where ducts are weakest: **static, low speed and high altitude**. The price is **coolant consumption**, which accelerates while the engine runs hot, and it is also heavy.
+The key difference from the [Cooling Air Duct](cooling-air-duct.md): water cooling **ignores ambient pressure (altitude) entirely** and takes only a **small ram-air share** (25% of the ram bonus) — a liquid loop does not care about the air itself. So it is the answer for the three situations where ducts are weakest: **static, low speed and high altitude**. The price is **coolant consumption**, which accelerates while the engine runs hot, and it is also heavy.
 
 
 ## Coolant
@@ -22,12 +22,13 @@ The key difference from the [Cooling Air Duct](cooling-air-duct.md): water cooli
 ## Cooling contribution
 
 ```
-k_water = K_WATER × Σ_modules [ min(amount / 4000, 1) × coolant efficiency ] × loop opening
-K_WATER = 0.33 (per module at full effect)
+k_water = K_WATER × Σ_modules [ min(amount / 4000, 1) × coolant efficiency ] × loop opening × waterRam
+K_WATER = 0.37 (per module at full effect)
+waterRam = 1 + (ram(speed) − 1) × 0.25     <- only 25% of the ram bonus (ram 2.0 → ×1.25)
 ```
 
-- **Added outside the brackets**: `K_total = (K_CORE×length + K_AMB×running chambers + K_DUCT×ducts×shutter) × ram(speed) × f(pressure) + k_water`
-  — hence water cooling is **completely independent of airspeed and pressure/altitude** (full model on the [Temperature & Cooling](temperature.md) page).
+- **Added outside the brackets**: `K_total = (K_CORE×length + K_AMB×running chambers)×f(pressure) + K_DUCT×ducts×shutter×ram×f(pressure) + k_water×waterRam`
+  — hence water cooling **ignores pressure/altitude entirely** and takes only a **small ram-air share** (its radiator surface still sits in the airstream). Full model on the [Temperature & Cooling](temperature.md) page.
 - **Amount curve**: full effect at **≥ 4000 mB**; **linear falloff** below 4000 mB; 0 at 0 mB (smooth, no flicker at the threshold).
 - **Coolant efficiency**: datapack field `efficiency` (water = 1.0, `aeronautics:levitite_blend` = 1.5), multiplied directly into the dissipation.
 - **Loop opening**: Lua `setWaterCooling(0..1)` (default 1.0 = fully open); 0 = loop closed (neither cools nor evaporates).
@@ -48,7 +49,7 @@ EVAP_LATENT_GAIN = BOIL_COOLING_PER_DEGREE ÷ COOLANT_BOIL_MB_PER_DEGREE_SEC = 1
 - **You only get the cooling if you really burn coolant**: the evaporation rate and the drain rate are the same number, so it can never "cool more while burning less".
 - Steam engines / closed loop → 0 (those configurations do not drain coolant either).
 
-**Calibration baseline** (fuel `heat=1.0`, **4 full-load fluid chambers + 1 full water module**, 1 core segment, static, sea level → `heat=120`, `k_total≈0.55`):
+**Calibration baseline** (fuel `heat=1.0`, **4 full-load fluid chambers + 1 full water module**, 1 core segment, static, sea level → `heat=120`, `k_total≈0.54`):
 
 | | Equilibrium | Boiling drain | Runtime per 8000 mB |
 |---|---|---|---|
@@ -62,25 +63,25 @@ EVAP_LATENT_GAIN = BOIL_COOLING_PER_DEGREE ÷ COOLANT_BOIL_MB_PER_DEGREE_SEC = 1
     - **Design ruling**: boiling-driven high-temperature operation is an **emergency measure, never a long-term mode**. Adjust the drain rate to change the runtime; the plateau will not drift.
     - Hotter fuels (diesel, `heat=1.25`) still push the plateau to ≈225°C and overheat — add another water module or run rich in that case.
 
-### Where `K_WATER = 0.33` comes from: "one full module holds two full-load fluid chambers at ~150°C"
+### Where `K_WATER = 0.37` comes from: "one full module holds two full-load fluid chambers at ~150°C"
 
 ```
 Q       = 2 chambers × full load(1.0) × fuel heat(1.0) × BASE_HEAT_FLUID(30) = 60 °C/s
 need k  = Q / (150 − 20) ≈ 0.462
-k_air   = K_CORE×length + K_AMB×2 ≈ 0.12 (1 core segment) ~ 0.14 (2 core segments)
-K_WATER = 0.462 − 0.13 ≈ 0.33
+k_air   = K_CORE×length + K_AMB×2 ≈ 0.09 (1 core segment) ~ 0.10 (2 core segments)
+K_WATER = 0.462 − 0.10 ≈ 0.36 → shipped as 0.37
 ```
 
-Equilibrium temperatures at sea level, static, 2 chambers, fuel `heat = 1.0`, no ducts, **2 core segments** (`k_air = 0.04 + 0.05×2 = 0.14`) — `T_eq = 20 + Q/k` with `Q = 2 × 30 × load` (temperature is clamped at 264°C):
+Equilibrium temperatures at sea level, static, 2 chambers, fuel `heat = 1.0`, no ducts, **2 core segments** (`k_air = 0.01×2 + 0.04×2 = 0.10`) — `T_eq = 20 + Q/k` with `Q = 2 × 30 × load` (temperature is clamped at 264°C):
 
 | Coolant | k_water | Full load 100% | 63% | 43% | 20% (idle) |
 |---|---|---|---|---|---|
-| No module / no coolant | 0 | 448 → clamped 264 (**overheat**) | 290 → clamped 264 (**overheat**) | ≈204°C (about to overheat) | ≈106°C |
-| 2000 mB water (50% fill) | 0.165 | ≈217°C (about to overheat) | ≈144°C | ≈105°C | ≈59°C |
-| **4000 mB+ water (full effect)** | **0.33** | **≈148°C** ✅ | ≈100°C | ≈75°C | ≈46°C |
-| 8000 mB levitite (×1.5) | 0.495 | ≈115°C | ≈80°C | ≈61°C | ≈39°C |
+| No module / no coolant | 0 | clamped 264 (**overheat**) | clamped 264 (**overheat**) | clamped 264 (**overheat**) | ≈140°C |
+| 2000 mB water (50% fill) | 0.185 | ≈231°C (**overheat**) | ≈153°C | ≈111°C | ≈62°C |
+| **4000 mB+ water (full effect)** | **0.37** | **≈148°C** ✅ | ≈100°C | ≈75°C | ≈46°C |
+| 8000 mB levitite (×1.5) | 0.555 | ≈112°C | ≈78°C | ≈59°C | ≈38°C |
 
-(On a 1-segment engine `k_air = 0.12`, and a full water module at full load lands at ≈ **153°C** — so "two chambers at ~150°C" holds for both 1- and 2-segment cores.)
+(On a 1-segment engine `k_air = 0.09`, and a full water module at full load lands at ≈ **150°C** — so "two chambers at ~150°C" holds for both 1- and 2-segment cores. Note: the 2026-09 retune moved `K_WATER` 0.33→0.37 and passive `k_air` 0.14→0.10; they still add up to 0.47, so the "≈148°C" result is unchanged.)
 
 !!! warning "Water cooling is strong: low load overcools"
     An engine with a big water-cooling module drops below 100°C at low load, which triggers the **overcooling** fuel penalty. Either raise the load or close the loop with `setWaterCooling` to keep the heat in (0.5 ≈ half the dissipation).
@@ -109,8 +110,8 @@ Water cooling has **no effect on steam engines**: it does not participate in the
 
 | | Water Cooling Module | Cooling Air Duct |
 |---|---|---|
-| Dissipation per block (full effect) | **0.33** (≈ 6.6 ducts) | 0.05 |
-| Ram-air (airspeed) bonus | **none** | yes (up to ×2 at 30 m/s) |
+| Dissipation per block (full effect) | **0.37** (≈ 4.1 ducts) | 0.09 |
+| Ram-air (airspeed) bonus | **small** (25% of the ram bonus, ×1.25 at MAX) | yes (up to ×2 at 30 m/s, **full**) |
 | Pressure (altitude) penalty | **none** | yes (`pressure^0.8`) |
 | Running cost | coolant (1 mB / 8 s per module) | none |
 | Overheat penalty | accelerated coolant evaporation | none |
@@ -143,7 +144,7 @@ The coolant table lives in `data/<namespace>/coolant/*.json`, hot-reloaded with 
 Fluid Container
   Water 8000 mB / 8000 mB
 Coolant Efficiency: ×1.00
-Cooling: +0.33
+Cooling: +0.37
 ```
 
 - Below 4000 mB the "Cooling" line appends "(low coolant, 4000 mB for full effect)".
@@ -155,7 +156,7 @@ Cooling: +0.33
 Engine Status
 …
 Load: 43%
-Coolant Cooling: +0.33        ← none when out of coolant / loop closed / steam engine (grey)
+Coolant Cooling: +0.37        ← none when out of coolant / loop closed / steam engine (grey)
 Connected Modules:
 - Fluid Combustion Chamber x2
 - Water Cooling Module x1
@@ -178,7 +179,7 @@ New methods (see [Engine Lua API](lua-api.md)):
 
 ```lua
 local e = peripheral.find("ccpe:engine")
-print(e.getWaterCoolingPower())   --> 0.33
+print(e.getWaterCoolingPower())   --> 0.37
 print(e.getCoolantAmount())       --> 8000.0
 -- keep the heat in at low load: close half of the loop
 e.setWaterCooling(0.5)

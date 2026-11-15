@@ -256,9 +256,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * 实测校验（海平面静止，2 室，燃料 heat=1.0，无风道）：k_total ≈ 0.45~0.47 → T_eq ≈ 148~153°C。
      * 注意两个前提：燃料 heat 倍率（柴油 1.25 → 平衡温度升到 ~180°C）、以及引擎长度/风道数量都会移动平衡点。
      * <p>
-     * <b>与风道的本质区别</b>：水冷<b>不吃冲压（ramFactor）也不吃气压（pressureFactor）</b>——
-     * 液体回路不看空气，所以它同时是最低速 / 静止 / 高空场景的解（风道在这三种场景最弱）。
-     * 实际贡献 = K_WATER × min(液量 / {@link #COOLANT_FULL}, 1) × 冷却液效率 × 回路开度，见 {@link #waterCoolingPower}。
+     * <b>与风道的本质区别</b>：水冷<b>不吃气压（pressureFactor）</b>、<b>只吃少量冲压</b>（{@link #WATER_RAM_FRACTION}＝25%，
+     * ram 2.0 → ×1.25）——液体回路本身不看空气，但散热器表面仍受迎风气流影响，所以它依旧是最低速 / 静止 / 高空场景的解
+     * （风道在这三种场景最弱，其中静止/低速时冲压大家都吃不到）。
+     * 实际贡献 = K_WATER × min(液量 / {@link #COOLANT_FULL}, 1) × 冷却液效率 × 回路开度 × waterRamFactor，见 {@link #waterCoolingPower}。
      */
     public static final float K_WATER = 0.37f;
 
@@ -325,12 +326,20 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * 相对 8000mb 罐容也只是 0.2% 的步进，观感无差别。详见 memo 的 P7+ 同步优化原则。
      */
     public static final int COOLANT_DRAIN_CHUNK_MB = 16;
-    /** 冲压冷却满增益（×）：运动 ≥RAM_FULL 时总散热 ×2.0（eff100% + 1风道/室 + 冲压 ⇒ 足够） */
+    /** 冲压冷却满增益（×）：运动 ≥RAM_FULL 时**风道分量** ×2.0（自然散热不吃冲压，见 {@link #WATER_RAM_FRACTION} 注释） */
     public static final float RAM_MAX = 2.0f;
     /** 冲压起始速度（m/s）：低于此无增益 */
     public static final float RAM_START = 10f;
     /** 冲压满速（m/s）：达到此速度增益 = RAM_MAX */
     public static final float RAM_FULL = 30f;
+    /**
+     * 冲压增益的分配（2026-09 定稿）：<b>自然散热（K_CORE/K_AMB）吃 0</b>、<b>冷却气道吃满 ram</b>、
+     * <b>水冷模块只吃本份额</b>（0.25 → ram 2.0 时水冷 ×1.25）。
+     * <p>依据：迎面气流真正提升换热的是「有迎风面的散热器」（风道鳍片、水冷散热器表面）；
+     * 光秃秃的核心/燃烧室外表面对流靠的是自然对流，速度增益极小。气压因子仍然对所有项生效
+     * （空气稀薄 = 对流本身变差），水冷是液体回路，不吃气压。</p>
+     */
+    public static final float WATER_RAM_FRACTION = 0.25f;
     /** 热容基数（°C 变化速率分母；×length：模块越大热得越慢） */
     public static final float C_TH_BASE = 1.0f;
     /** 气压因子下限（防大气顶气压→0 导致冷却归零） */
@@ -536,7 +545,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /**
      * 水冷回路开度（0~1，默认 1.0 = 全开；Lua {@code setWaterCooling}）。语义与风门 {@link #coolingStrength} 对称：
-     * <b>只缩放水冷散热分量</b>，冲压/气压/风道/环境全不动；0 = 关闭回路（既不散热，也不沸腾失液）。
+     * <b>只缩放水冷散热分量</b>（水冷自身那点冲压增益照常保留），风道/环境/气压全不动；
+     * 0 = 关闭回路（既不散热，也不沸腾失液）。
      * 纯存值无门控（没装水冷模块时存了不生效）。NBT 持久化 + 同步客户端。
      */
     protected float waterCoolingStrength = 1f;
@@ -914,7 +924,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 temperature += (-kCool * (temperature - tAmb)) / thermalCapacity() / 20f;
             }
         } else {
-            // 流体引擎：牛顿冷却（发热 − 散热），气压/冲压/风道/风门全部生效
+            // 流体引擎：牛顿冷却（发热 − 散热）——气压对各项都生效，冲压只作用于风道分量（2026-09）
             float heat = 0;
             // P8：发热 ∝ 负载（替换原「∝ 油门」）——注意<b>只换这一项</b>：lever/eco/cold 绝不乘进发热
             //   （否则「经济只省油」「富油花油买冷」两条设计张力立刻崩塌，memo §7.6 地基）
@@ -924,13 +934,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             // 不随温差变化，所以<b>不进 kTotal</b>（也因此不吃冲压/气压/风道）；T ≤ 200°C 时 evapCooling 恒 0，
             // 200 以下的既有平衡（风道/水冷/经济区/过冷惩罚）一个数都不动。
             heat -= evapCooling;
-            // P6 风门：冷却强度只缩放冷却气道散热分量（冲压/气压/环境不动）；无气道时 D=0 无影响
+            // P6 风门：冷却强度只缩放冷却气道散热分量；无气道时 D=0 无影响
             // P3 修正：K_AMBIENT 只计「运行中」的室——停机（油门 0）时 runningFluid 仍计有储备的室，
             // 储备≠在消耗，不加门控会导致「有剩燃料冷得更快」（踩坑 13 原则；冷却按运行中室数计，memo §15）
-            float kTotal = (K_CORE * length + K_AMBIENT * (running ? runningTotal : 0)
-                    + K_DUCT * scan.coolingDucts * (hasAirDuct ? coolingStrength : 1f))
-                    * ramFactor() * pressureFactor()
-                    // P9：水冷模块加在括号外——不吃冲压、不吃气压（液体回路不看空气；这是它相对风道的卖点）
+            // 2026-09 冲压分配：<b>只有冷却气道分量吃满冲压</b>（有迎风面的散热器）；
+            // 自然散热（K_CORE/K_AMB，裸方块表面的自然对流）<b>不吃冲压</b>；两者都吃气压（空气稀薄 → 对流变差）。
+            float kNat = K_CORE * length + K_AMBIENT * (running ? runningTotal : 0);
+            float kDuct = K_DUCT * scan.coolingDucts * (hasAirDuct ? coolingStrength : 1f);
+            float pFactor = pressureFactor();
+            float kTotal = (kNat + kDuct * ramFactor()) * pFactor
+                    // P9：水冷模块加在括号外——<b>不吃气压</b>（液体回路不看空气）；
+                    // 2026-09 起吃「少量冲压」（只拿冲压增益的 WATER_RAM_FRACTION 份额，已含在 waterCoolingPower 里）
                     + waterCoolingPower;
             temperature += (heat - kTotal * (temperature - tAmb)) / thermalCapacity() / 20f;
         }
@@ -1461,7 +1475,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     // ================= P3：温度/冷却辅助 =================
 
-    /** 冲压冷却因子：运动体速度 10→30 m/s 线性爬升 1.0→RAM_MAX（<10 无增益，≥30 满增益；静态方块 = 1.0） */
+    /**
+     * 冲压冷却因子：运动体速度 10→30 m/s 线性爬升 1.0→RAM_MAX（&lt;10 无增益，≥30 满增益；静态方块 = 1.0）。
+     * <p>消费方：<b>冷却气道分量吃满</b>（{@code K_DUCT×风道数×风门×ram}）、<b>水冷吃 WATER_RAM_FRACTION 份额</b>
+     * （见 {@link #waterRamFactor()}）、<b>自然散热（K_CORE/K_AMB）不吃</b>——裸方块表面的自然对流几乎不随速度提升。</p>
+     */
     protected float ramFactor() {
         SubLevel sub = SableCompat.getContainingSubLevel(this);
         if (sub == null)
@@ -1476,6 +1494,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return RAM_MAX;
         float t = (speed - RAM_START) / (RAM_FULL - RAM_START);
         return 1f + (RAM_MAX - 1f) * t;
+    }
+
+    /** 水冷冲压因子：1 + (ram − 1) × {@link #WATER_RAM_FRACTION}（只吃少量冲压、完全不吃气压） */
+    protected float waterRamFactor() {
+        return 1f + (ramFactor() - 1f) * WATER_RAM_FRACTION;
     }
 
     /** 引擎当前世界高度 Y：运动体上取物理体原点 Y，静态取方块自身 Y */
@@ -1563,7 +1586,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // ---- 水冷（风道饱和后的第二级；0 开度 = 免费待命，不耗冷却液） ----
         // 模型前馈：引擎内部有发热 Q 与散热的每一项，可直接解出「到 155°C 还差多少 k 由水冷补」：
         //   kNeed   = Q / (155 − T_amb)                                                （达到目标所需的整机 k）
-        //   kAirMax = (K_CORE×节数 + K_AMB×运行室数 + K_DUCT×风道数) × 冲压 × 气压        （风道全开时的 k）
+        //   kAirMax = (K_CORE×节数 + K_AMB×运行室数)×气压 + K_DUCT×风道数×冲压×气压        （风道全开时的 k；
+        //             2026-09 冲压分配后：自然散热不吃冲压，只有风道分量吃满冲压）
         //   waterFF = (kNeed − kAirMax) / waterCoolingCapacity                          （风道够用时 = 0）
         // 纯比例在 155°C 输出为 0，而水冷往往是唯一/主要执行器 → 稳态必偏离目标（实测 164°C/90% 即此原因）。
         // 前馈把工作点直接放到位；比例项只做小修正（±0.5°C 级），并保留「风道饱和才介入」门控省冷却液。
@@ -1576,8 +1600,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                         * fluidFuel.heat() * BASE_HEAT_FLUID * heatFactor(targetEff);
             float tGap = ENGINE_T_OPT - ambientTemp();
             float kNeed = heat > 1e-4f ? (tGap > 1f ? heat / tGap : 1e6f) : 0f;
-            float kAirMax = (K_CORE * length + K_AMBIENT * runChambers + K_DUCT * scan.coolingDucts)
-                    * ramFactor() * pressureFactor();
+            // 2026-09 冲压分配：自然散热（K_CORE/K_AMB）只吃气压，风道分量吃满冲压（与温度段口径必须一致）
+            float pFactor = pressureFactor();
+            float kAirMax = (K_CORE * length + K_AMBIENT * runChambers) * pFactor
+                    + K_DUCT * scan.coolingDucts * ramFactor() * pFactor;
             float waterFF = (waterCoolingCapacity > 1e-4f && kNeed > kAirMax)
                     ? Mth.clamp((kNeed - kAirMax) / waterCoolingCapacity, 0f, 1f) : 0f;
 
@@ -1629,13 +1655,15 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * {@code FluidHandler} capability（零缓存、不落盘）读「液量 + 流体 id」，按表算出：
      * <pre>
      * 模块贡献_i = K_WATER × min(液量_i / COOLANT_FULL, 1) × 冷却液效率_i
-     * waterCoolingPower  = Σ 模块贡献_i × waterCoolingStrength（回路开度；蒸汽引擎强制 0）
+     * waterCoolingCapacity  = Σ 模块贡献_i × waterRamFactor()（含少量冲压；开度 0 -> 0）
+     * waterCoolingPower  = waterCoolingCapacity × waterCoolingStrength（回路开度；蒸汽引擎强制 0）
      * coolantBoilWeight  = Σ boilMultiplier_i（过热沸腾的权重合计）
      * </pre>
      * <b>多模块并行</b>：每个模块各算各的贡献再<b>求和</b>（液量/效率/沸腾都按模块自己的罐与冷却液算），
      * 装 N 个满罐模块 = N 份散热；模块集合由 {@code scanModule} 的<b>链式扫描</b>给出
      * （贴核心成员 ∪ 贴燃烧室的是种子，贴着另一个水冷模块的也计入）。
-     * <b>不吃冲压/气压</b>（与风道相反）：所以在 kTotal 里加在 ram/pressure 括号<b>之外</b>。
+     * <b>不吃气压</b>（与风道相反）：所以在 kTotal 里加在 ram/pressure 括号<b>之外</b>；
+     * <b>吃少量冲压</b>（{@link #WATER_RAM_FRACTION} 份额，ram 2.0 → ×1.25）：散热器表面仍受迎风气流影响。
      * <strong>蒸汽引擎完全忽略水冷模块</strong>（闭式锅炉温度自调节，散热项不参与）——温度不管，也不消耗冷却液。
      * 客户端 tick 同样会跑，但这里直接 return——客户端一律读同步值（踩坑 10）。
      */
@@ -1691,10 +1719,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         coolantAmount = amount;
         coolantBoilWeight = boilWeight;
         workingCoolantModules = workingList;
-        // P10：水冷散热能力（Σ贡献，不含开度）——自动控制前馈用（开度 1 时能提供的 k 上限）
-        waterCoolingCapacity = power;
+        // 2026-09：水冷吃「少量冲压」（只拿冲压增益的 WATER_RAM_FRACTION = 25%，ram 2.0 → ×1.25）、不吃气压——
+        // 液体回路本身不看空气，但散热器表面仍受迎风气流影响，所以给小幅增益。
+        float ramBoost = waterRamFactor();
+        // P10：水冷散热能力（Σ贡献，不含开度；含少量冲压）——自动控制前馈用（开度 1 时能提供的 k 上限）
+        waterCoolingCapacity = power * ramBoost;
         // 蒸汽引擎：水冷不参与温度（玩家定稿），所以贡献强制 0；模块数/液量仍如实记录（Lua 信息用）
-        waterCoolingPower = steamEngine ? 0f : power * waterCoolingStrength;
+        waterCoolingPower = steamEngine ? 0f : waterCoolingCapacity * waterCoolingStrength;
         // 蒸发潜热散热：T>200°C 时把沸腾带走的热量从净发热里扣；蒸汽引擎 / 回路关闭 → 0（这两种也都不烧液）
         evapCooling = steamEngine || waterCoolingStrength <= 0f
                 ? 0f : EVAP_LATENT_GAIN * 20f * (float) boilPerTick;
@@ -2349,8 +2380,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
 
         /**
-         * P9：当前有效水冷散热贡献（k_water，0~；{@code K_WATER × min(液量/4000,1) × 冷却液效率 × 回路开度} 的模块合计）。
-         * 服务端每 tick 计算，读缓存 ≤1 tick 滞后；<b>不含冲压/气压</b>（水冷与空气密度无关）。
+         * P9：当前有效水冷散热贡献（k_water，0~；{@code K_WATER × min(液量/4000,1) × 冷却液效率 × 回路开度 × 少量冲压} 的模块合计）。
+         * 服务端每 tick 计算，读缓存 ≤1 tick 滞后；<b>不含气压</b>（水冷与空气密度无关），
+         * 但<b>含少量冲压</b>（{@link #WATER_RAM_FRACTION}＝25%，ram 2.0 → ×1.25）。
          */
         @LuaFunction
         public final double getWaterCoolingPower() {

@@ -11,7 +11,7 @@ The **Cooling Air Duct** (`ccpe:cooling_air_duct`) is a pure cooling module for 
 
 ## What it does
 
-- **Cooling fins**: each duct adds a fixed dissipation component to the engine's Newton cooling (`K_DUCT = 0.05` per duct), so more ducts = faster cooling.
+- **Cooling fins**: each duct adds a fixed dissipation component to the engine's Newton cooling (`K_DUCT = 0.09` per duct), so more ducts = faster cooling. **One duct per chamber** (`K_AMB 0.04 + K_DUCT 0.09 = 0.13` per chamber) is the design baseline; **the duct is the only component that gets the full ram-air bonus** (natural cooling gets none, water cooling gets 25%), so ducts get more valuable the faster you fly. For a one-chamber engine (2 core segments) at Y≈256 and 43 m/s the cooling cap is **≈68% load with 1 duct and ≈119% with 2 ducts** — add ducts to drive more machines, drop them if you have too much headroom.
 - **Cooling shutter**: `setCooling(0..1)` (default 1.0 = fully open) only scales the duct dissipation component — closing the shutter reduces the duct's cooling (real cowl-flap behaviour, "keep the heat in"). It **cannot increase** cooling beyond the ducts you have: to cool more, add more ducts.
 - It is **purely a cooling module**: it does not gate the economy factor, mixture or fuel cost.
 - **Cooling capacity is the cap on how many machines you can drive**: the engine's heat is ∝ the **stress-network load**, so cooling directly decides how much machinery the engine can sustain (the real "maximum continuous power < maximum power" rule). Static placement, altitude, few ducts and a closed shutter all shrink that cap.

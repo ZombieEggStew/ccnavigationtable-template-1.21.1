@@ -1,4 +1,4 @@
-﻿# Temperature, Altitude & Cooling Model
+# Temperature, Altitude & Cooling Model
 
 The engine temperature is a continuous value computed **every tick on the server** by the engine controller using a **Newton cooling model**, then persisted in the controller's NBT. This page explains exactly how heat is generated and how it is dissipated — including the **altitude → temperature** and **altitude → pressure** relationships that drive it.
 
@@ -11,8 +11,9 @@ heat gain      Q_heat = Σ running chambers × heat load × fuel.heat × BASE_HE
                heat load = max(actual network load, idle floor 0.2)
 boil cooling   Q_evap = 1.5 × (T − 200)          <- non-zero only above 200°C; subtracted from the net gain, never inside K_total
 heat loss      P_loss = K_total × (T − T_amb)
-                 K_total = (K_CORE×length + K_AMB×running chambers + K_DUCT×ducts×shutter) × ram(speed) × f(pressure)
-                                + k_water        <- water cooling module: no ram air, no pressure
+                 K_total = (K_CORE×length + K_AMB×running chambers) × f(pressure)
+                         + K_DUCT×ducts×shutter × ram(speed) × f(pressure)
+                         + k_water × waterRam     <- water cooling: no pressure, a little ram air
 
 integration    T += (Q_heat − Q_evap − P_loss) / C_th / 20      (per tick; C_th = C_TH_BASE × length)
 clamp          T in [T_amb, OVERHEAT_TEMP × 1.2]
@@ -67,33 +68,40 @@ Example: sea level, static, **4 fluid chambers + 2 cooling air ducts** (`k_total
 | 63% | ≈219°C | overheat threshold 220 |
 | 100% | ≈336°C (clamped to 264) | full load while static inevitably overheats |
 
-With the same 4+2 setup: at **30 m/s airspeed (ram ×2)** full load only reaches ≈178°C; at **Y≈260 (pressure factor ≈0.53, roughly half the heat transfer)** a 25% load already reaches ≈169°C and a 34% load hits the 220°C overheat line — at altitude you must lower the speed or attach fewer machines.
+With the same 4+2 setup: at **30 m/s airspeed** (only the duct component gets the full ×2 — `k` rises from 0.38 to 0.56) full load reaches **≈234°C (still overheats)** and 63% load lands at ≈155°C; at **Y≈260 (pressure factor ≈0.53, roughly half the heat transfer)** a 25% load already reaches ≈169°C and a 34% load hits the 220°C overheat line — at altitude you must lower the speed, attach fewer machines or add water cooling.
 
 Formula: `T_eq = T_amb + running chambers × 30 × heat load / k_total`.
 
 ## Heat dissipation (K_total)
 
 ```
-K_total = (K_CORE×length + K_AMB×running chambers + K_DUCT×ducts×shutter) × ram(speed) × f(pressure) + k_water
+K_total = (K_CORE×length + K_AMB×running chambers) × f(pressure)
+        + K_DUCT×ducts×shutter × ram(speed) × f(pressure) + k_water×waterRam
 ```
 
 | Term | Meaning |
 |---|---|
-| `K_CORE` | **0.02 per core segment** — the engine's own passive cooling. **Always active, even when stopped** (that is why a stopped engine slowly cools down). |
-| `K_AMB` | **0.05 per running chamber** — ambient convection over the running chambers. Stopped chambers do not count (a stopped engine only cools via `K_CORE`). |
-| `K_DUCT` | **0.05 per cooling air duct** — the duct fins. Scaled by the cooling **shutter** (`setCooling`, see [Cooling Air Duct](cooling-air-duct.md)). |
+| `K_CORE` | **0.01 per core segment** — the engine's own passive cooling. **Always active, even when stopped** (that is why a stopped engine slowly cools down). No ram bonus. |
+| `K_AMB` | **0.04 per running chamber** — ambient convection over the running chambers. Stopped chambers do not count (a stopped engine only cools via `K_CORE`). No ram bonus. |
+| `K_DUCT` | **0.09 per cooling air duct** — the duct fins. Scaled by the cooling **shutter** (`setCooling`, see [Cooling Air Duct](cooling-air-duct.md)). **The only term that gets the full ram bonus.** One duct per chamber gives `0.04 + 0.09 = 0.13` of effective cooling per chamber. |
 | `shutter` | `coolingStrength` (0..1, default 1.0) — only shrinks the duct component (real cowl flaps). |
-| `ram(speed)` | **Ram-air cooling**: 1.0 below 10 m/s, linear ramp to **×2.0 at 30 m/s** — flying fast cools the engine for free. Static (non-physics) blocks = 1.0. |
-| `f(pressure)` | **Pressure factor**: `pressure^0.8` (clamped to a floor of 0.25). At altitude the air is thin → heat transfer is worse → **cooling is worse at altitude**. |
+| `ram(speed)` | **Ram-air cooling**: 1.0 below 10 m/s, linear ramp to **×2.0 at 30 m/s**. Static (non-physics) blocks = 1.0. It **only multiplies the duct component** — bare core/chamber surfaces transfer heat by natural convection, which barely changes with airspeed (water cooling gets `waterRam`, a 25% share). |
+| `f(pressure)` | **Pressure factor**: `pressure^0.8` (clamped to a floor of 0.25). At altitude the air is thin → heat transfer is worse → **cooling is worse at altitude**. Applies to natural cooling and ducts; water cooling ignores it. |
 | `k_water` | **Water cooling module contribution** (below), **added outside the brackets** — immune to ram air and pressure. |
+
+!!! note "2026-09 cooling retune: why the example tables on this page did not change"
+    Three coefficients moved at once: `K_CORE 0.02→0.01`, `K_AMB 0.05→0.04`, `K_DUCT 0.05→0.09`. For the **4 chambers + 4 core segments + 2 ducts** setup the total `k_total` is unchanged (`0.01×4 + 0.04×4 + 0.09×2 = 0.38`, identical to the old value), so every example equilibrium temperature here still holds.
+    What did change is a **small engine without ducts**: 1 fluid chamber + 2 core segments at 25% load, no radiator — passive cooling drops from `k=0.09` to `k=0.06`, so the equilibrium temperature goes **112°C → 157°C** (it finally reaches the economy band).
+    The price: **engines without radiators overheat more easily** (for that setup the no-duct overheat load threshold drops ≈55% → ≈36%) — "cooling decides how many machines you can hang" got sharper.
 
 ### Water cooling module (liquid cooling)
 
 ```
-k_water = K_WATER(0.33) × Σ_modules [ min(amount / 4000, 1) × coolant efficiency ] × loop opening
+k_water = K_WATER(0.37) × Σ_modules [ min(amount / 4000, 1) × coolant efficiency ] × loop opening × waterRam
+waterRam = 1 + (ram(speed) − 1) × 0.25        <- only 25% of the ram bonus (ram 2.0 → ×1.25)
 ```
 
-- **Immune to ram air and pressure**: a liquid loop does not care about the air — so it backs up exactly the three cases where ducts are weakest (static, low speed, high altitude).
+- **No pressure penalty, a little ram air**: a liquid loop does not care about air density, but the radiator surface still sits in the airstream, so it takes a small ram share. It therefore remains the answer for the three cases where ducts are weakest (static, low speed, high altitude).
 - **Amount curve**: full effect at ≥ 4000 mB; linear falloff below 4000 mB; 0 at 0 mB (smooth, no threshold flicker).
 - **Loop opening**: Lua `setWaterCooling(0..1)` (default 1.0) only scales `k_water`; 0 = closed loop (and no evaporation either).
 - **Boiling adds extra cooling** (above 200°C): `Q_evap = 1.5 × (T − 200)` — the latent heat carried away by vapour is subtracted from the net gain and **never enters `K_total`**, so it ignores ram air and pressure too. It buys **emergency** operation at high load, not a permanent mode: one full tank plus 4 full-load fluid chambers settles at ≈210°C and lasts **≈2.6 minutes** (the plateau is locked by that slope, the runtime by the drain rate).
