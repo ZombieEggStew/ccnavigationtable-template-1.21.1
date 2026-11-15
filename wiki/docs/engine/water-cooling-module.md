@@ -4,7 +4,7 @@
 
 The **Water Cooling Module** (`ccpe:water_cooling_module`) is the [Engine System](overview.md)'s **liquid cooling module**: it carries an 8000 mB coolant tank and adds a fixed dissipation component (`K_WATER`) to the engine's Newton cooling.
 
-The key difference from the [Cooling Air Duct](cooling-air-duct.md): water cooling **ignores ambient pressure (altitude) entirely** and takes only a **small ram-air share** (25% of the ram bonus) — a liquid loop does not care about the air itself. So it is the answer for the three situations where ducts are weakest: **static, low speed and high altitude**. The price is **coolant consumption**, which accelerates while the engine runs hot, and it is also heavy.
+The key difference from the [Cooling Air Duct](cooling-air-duct.md): water cooling takes **small shares of both ram air and ambient pressure** (25% each) — a liquid loop does not care about the air itself. So it is the answer for the three situations where ducts are weakest: **static, low speed and high altitude**. The price is **coolant consumption**, which accelerates while the engine runs hot, and it is also heavy.
 
 
 ## Coolant
@@ -22,13 +22,14 @@ The key difference from the [Cooling Air Duct](cooling-air-duct.md): water cooli
 ## Cooling contribution
 
 ```
-k_water = K_WATER × Σ_modules [ min(amount / 4000, 1) × coolant efficiency ] × loop opening × waterRam
+k_water = K_WATER × Σ_modules [ min(amount / 4000, 1) × coolant efficiency ] × loop opening × waterRam × waterPressure
 K_WATER = 0.37 (per module at full effect)
-waterRam = 1 + (ram(speed) − 1) × 0.25     <- only 25% of the ram bonus (ram 2.0 → ×1.25)
+waterRam = 1 + (ram(speed) − 1) × 0.25          <- only 25% of the ram bonus (ram 2.0 → ×1.25)
+waterPressure = 1 − (1 − f(pressure)) × 0.25     <- only 25% of the pressure loss (f 0.54 → ×0.885)
 ```
 
-- **Added outside the brackets**: `K_total = (K_CORE×length + K_AMB×running chambers)×f(pressure) + K_DUCT×ducts×shutter×ram×f(pressure) + k_water×waterRam`
-  — hence water cooling **ignores pressure/altitude entirely** and takes only a **small ram-air share** (its radiator surface still sits in the airstream). Full model on the [Temperature & Cooling](temperature.md) page.
+- **Added outside the brackets**: `K_total = (K_CORE×length + K_AMB×running chambers)×f(pressure) + K_DUCT×ducts×shutter×ram×f(pressure) + k_water×waterRam×waterPressure`
+  — water cooling takes **small shares of both ram air and pressure** (25% each), so it loses far less dissipation at altitude than ducts do. Full model on the [Temperature & Cooling](temperature.md) page.
 - **Amount curve**: full effect at **≥ 4000 mB**; **linear falloff** below 4000 mB; 0 at 0 mB (smooth, no flicker at the threshold).
 - **Coolant efficiency**: datapack field `efficiency` (water = 1.0, `aeronautics:levitite_blend` = 1.5), multiplied directly into the dissipation.
 - **Loop opening**: Lua `setWaterCooling(0..1)` (default 1.0 = fully open); 0 = loop closed (neither cools nor evaporates).
@@ -112,7 +113,7 @@ Water cooling has **no effect on steam engines**: it does not participate in the
 |---|---|---|
 | Dissipation per block (full effect) | **0.37** (≈ 4.1 ducts) | 0.09 |
 | Ram-air (airspeed) bonus | **small** (25% of the ram bonus, ×1.25 at MAX) | yes (up to ×2 at 30 m/s, **full**) |
-| Pressure (altitude) penalty | **none** | yes (`pressure^0.8`) |
+| Pressure (altitude) penalty | **small** (25% of the pressure loss, f 0.54 → ×0.885) | yes (`pressure^0.8`, **full**) |
 | Running cost | coolant (1 mB / 8 s per module) | none |
 | Overheat penalty | accelerated coolant evaporation | none |
 | Fluid tank | 8000 mB (coolants only) | none |
