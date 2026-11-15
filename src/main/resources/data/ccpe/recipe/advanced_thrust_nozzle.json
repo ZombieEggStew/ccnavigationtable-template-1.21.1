@@ -9,7 +9,7 @@
       "item": "ccpe:thrust_nozzle"
     },
     "P": {
-      "item": "minecraft:piston"
+      "item": "create:mechanical_piston"
     },
     "L": {
       "item": "ccpe:short_range_linker"

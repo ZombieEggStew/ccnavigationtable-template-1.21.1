@@ -153,5 +153,6 @@
 
 
 1.2.3
+- **NEW!** Added the Advanced Thrust Nozzle: Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/actuators/advanced-thrust-nozzle/
 - Added `isReversed` / `setReversed(bool)` Lua methods to the engine peripheral: reverses the **output rotation direction** (`e.setReversed(true)`). 
 - Added an in-world **hold-right-click panel** on the engine core to pick the output direction (Forward / Reversed) — the same radial menu the Aeronautics propeller bearing uses. Works on any core segment and shares its state with the Lua method above.
