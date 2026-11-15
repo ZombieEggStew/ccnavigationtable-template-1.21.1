@@ -26,6 +26,7 @@ local e = peripheral.wrap("front")
 | `getStressUsed()` | false | number | 所在网络的已用应力（SU，整网总量：Σ 机器应力影响 × 转速；停机/脱网 → 0） |
 | `getStressCapacity()` | false | number | 所在网络的可提供容量（SU，整网总量；本引擎自身贡献恒定 = 8192×流体室 / 4096×蒸汽室） |
 | `setThrottle(0~1)` | true | boolean | 设置油门（越界钳制；非法参数返回 false）。**只改转速**，不改应力容量；油耗随负载变化 |
+| `isReversed()` / `setReversed(bool)` | false/true | boolean | **输出转向**：`false` = 正转（默认）、`true` = 反转。**只翻转向**——转速绝对值、应力容量、负载、油耗、发热全部不变（整条传动网络被反向驱动，下游机器朝相反方向转）；纯存值 + NBT 持久化（拆装/重进世界保持），核心 Goggle「目前转速」反转时显示负值 |
 | `getMixture()` | false | number | 混合比杆 0.6..1.4（仅流体引擎；蒸汽恒 1.0）。只影响**给定负载下**的油耗与发热 |
 | `setMixture(x)` | true | boolean | 混合比：油耗 × 杆值、温度 × 热因子；**无门控**（纯存值，非流体引擎不生效） |
 | `getEffectiveMixture()` | false | number | 实际混合比 = 杆 × 高空自动富油（经济窗口与发热反馈用；高空 > 杆值） |

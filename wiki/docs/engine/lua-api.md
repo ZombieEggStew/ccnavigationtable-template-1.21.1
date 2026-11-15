@@ -26,6 +26,7 @@ local e = peripheral.wrap("front")
 | `getStressUsed()` | false | number | Stress used by the network (SU, whole network: Σ machine impact × speed; stopped/unattached → 0) |
 | `getStressCapacity()` | false | number | Capacity available on the network (SU, whole network; this engine's own contribution is constant = 8192 per fluid chamber / 4096 per steam chamber) |
 | `setThrottle(0..1)` | true | boolean | Set throttle (clamped; returns `false` on invalid input). **Changes speed only**, never the stress capacity; fuel consumption follows the load |
+| `isReversed()` / `setReversed(bool)` | false/true | boolean | **Output direction**: `false` = forward (default), `true` = reversed. **Only the direction flips** — speed magnitude, stress capacity, load, fuel burn and heat are all unchanged (the whole kinetic network is driven the other way, so downstream machines spin backwards); pure stored value, NBT-persisted (survives rebuild/reload). The engine core's **Current Speed** goggle line shows a negative value while reversed |
 | `getMixture()` | false | number | Mixture lever 0.6..1.4 (fluid engines only; steam is always 1.0). Affects fuel cost and heat **at a given load** |
 | `setMixture(x)` | true | boolean | Mixture: fuel × lever, temperature × heat factor; **no gating** (pure storage — no effect on non-fluid engines) |
 | `getEffectiveMixture()` | false | number | Actual mixture = lever × altitude auto-rich (used by the economy window and heat feedback; > lever at altitude) |

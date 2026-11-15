@@ -6,6 +6,11 @@ import com.simibubi.create.api.connectivity.ConnectivityHandler;
 import com.simibubi.create.content.fluids.tank.SoundPool;
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.IMultiBlockEntityContainer;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import com.simibubi.create.foundation.blockEntity.behaviour.CenteredSideValueBoxTransform;
+import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.INamedIconOptions;
+import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollOptionBehaviour;
+import com.simibubi.create.foundation.gui.AllIcons;
 import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.compat.cc.SensorSystemAPI;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
@@ -337,6 +342,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** P9：水冷散热贡献的同步容差（k_water 变化 ≥ 该值才发包；粗量变化，防止每 tick 发包） */
     public static final float SYNC_WATER_POWER_DELTA = 0.01f;
     protected String lastSyncedSteamFuelType = "none", lastSyncedSteamFuelKey = "", lastSyncedSteamSolidFuelKey = "";
+    /** 上次对齐径向面板（{@link #directionOption}）时的输出转向：变化即抄到全部节（读档/重组/Lua 改方向都靠它自愈） */
+    protected boolean lastSyncedReversedRotation;
     /** 慢字段心跳计数器：每次 sendData 归零，≥SYNC_HEARTBEAT_INTERVAL 强制补发一次 */
     protected int syncHeartbeat;
     /** 客户端：蒸汽倒计时外推基线时刻（最近一次 SteamBurnTicks 包到达时的 gameTime，方案 D：burnTicks 每 tick −效率 精确线性）。
@@ -348,6 +355,45 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected float temperature = T_AMB_SEA;
     /** 效率（= 油门：P8 起<b>只决定输出转速</b>——应力容量恒定、燃料消耗 ∝ 网络负载；默认 0.25 → 64rpm，由 Lua setThrottle 控制） */
     protected float efficiency = 0.25f;
+    /**
+     * 输出旋转方向（false = 正转/默认，true = 反转；Lua {@code setReversed} 控制，默认正转）。
+     * <p>实现方式 = {@link #getGeneratedSpeed()} 取负：<b>转速绝对值不变</b>，所以应力容量（Create
+     * {@code KineticNetwork#getActualCapacityOf} 的乘子是 {@code abs(自身生成转速)}）、负载、油耗、发热全部不受影响，
+     * 只是把整条传动网络反向驱动。</p>
+     * <p>NBT 持久化 + 同步客户端（核心 tooltip「目前转速」显示负值，见 {@link #addCoreTooltip}）。</p>
+     */
+    protected boolean reversedRotation = false;
+    /**
+     * 输出转向面板（{@link ScrollOptionBehaviour}，长按右键弹出的径向菜单）——照 {@code aeronautics:propeller_bearing}
+     * 的 {@code ScrollOptionBehaviour<ThrustDirection>}；值 = {@link OutputDirection} 的序号（0 正转 / 1 反转），
+     * 只用于<b>显示</b>：权威状态在 controller 的 {@link #reversedRotation}（面板回调写它，再由
+     * {@link #syncDirectionOptionToSegments()} 抄回各节）。
+     */
+    protected ScrollOptionBehaviour<OutputDirection> directionOption;
+
+    /** 输出转向面板选项（图标照 propeller bearing：正转 I_REFRESH / 反转 I_ROTATE_CCW） */
+    public enum OutputDirection implements INamedIconOptions {
+        FORWARD(AllIcons.I_REFRESH, "tooltip.ccpe.engine.direction.forward"),
+        REVERSED(AllIcons.I_ROTATE_CCW, "tooltip.ccpe.engine.direction.reversed");
+
+        private final AllIcons icon;
+        private final String translationKey;
+
+        OutputDirection(AllIcons icon, String translationKey) {
+            this.icon = icon;
+            this.translationKey = translationKey;
+        }
+
+        @Override
+        public AllIcons getIcon() {
+            return icon;
+        }
+
+        @Override
+        public String getTranslationKey() {
+            return translationKey;
+        }
+    }
     /** 过热锁定（滞回：T≥OVERHEAT_TEMP 置位，T≤OVERHEAT_RESUME 复位） */
     protected boolean overheated = false;
     /** 上次同步给客户端的温度（差量发包用） */
@@ -516,6 +562,75 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     public EngineCoreBlockEntity(BlockPos pos, BlockState state) {
         super(MyModBlockEntities.engine_core_entity.get(), pos, state);
+    }
+
+    /**
+     * 行为注册（父类构造器里调用——此时实例字段初始化器还没执行，所以必须在方法内创建/赋值）：
+     * <b>输出转向径向菜单</b>，与 {@code aeronautics:propeller_bearing} 同款
+     * （{@link ScrollOptionBehaviour} = Create 全局"长按右键打开面板"机制，见 {@code ValueSettingsInputHandler}）；
+     * 项目内同机制先例 = {@code AutoPackagerScrollValueBehaviour}。
+     * <p>槽位：4 个<b>非轴端面</b>的正中（轴的两端是传动轴，不放数值框）。任意核心节都能打开菜单，
+     * 选择后由 {@link #onDirectionSelected(int)} 写到整条引擎的 controller 再抄回各节。</p>
+     */
+    @Override
+    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+        super.addBehaviours(behaviours);
+        directionOption = new ScrollOptionBehaviour<>(OutputDirection.class,
+                Component.translatable("tooltip.ccpe.engine.direction.title"), this,
+                new CenteredSideValueBoxTransform((state, side) -> side.getAxis() != state.getValue(EngineCoreBlock.AXIS)));
+        directionOption.withCallback(this::onDirectionSelected);
+        behaviours.add(directionOption);
+    }
+
+    /** 面板选择回调（服务端：{@code ValueSettingsPacket} 在服务端调 {@code setValue}）：写 controller 再同步全引擎 */
+    private void onDirectionSelected(int value) {
+        if (level == null || level.isClientSide)
+            return;
+        EngineCoreBlockEntity controllerBE = getControllerBE();
+        if (controllerBE == null)
+            return;
+        controllerBE.setReversedRotation(value == OutputDirection.REVERSED.ordinal());
+        controllerBE.syncDirectionOptionToSegments();
+    }
+
+    /**
+     * 设置输出转向（服务端权威）：写字段 + 置 {@code reActivateSource}（Create 传动网络不会自己发现源转速变号）
+     * + {@code sendData}（客户端 tooltip「目前转速」按 signed 转速显示负值）。
+     * 由 Lua {@code setReversed} 与径向菜单共用。
+     */
+    public void setReversedRotation(boolean reversed) {
+        if (reversedRotation == reversed)
+            return;
+        reversedRotation = reversed;
+        reActivateSource = true;
+        setChanged();
+        sendData();
+    }
+
+    /**
+     * 把控制器的转向状态抄到整条引擎每一节的面板上（服务端）。
+     * 面板值存在各节自己的 NBT（{@code ScrollValue}），所以非 controller 节必须显式对齐，
+     * 否则新增/重组出来的节会显示"正转"而引擎实际已反转。只在值变化与 1Hz 心跳时调用。
+     */
+    private void syncDirectionOptionToSegments() {
+        if (level == null || level.isClientSide || !isController())
+            return;
+        int target = reversedRotation ? OutputDirection.REVERSED.ordinal() : OutputDirection.FORWARD.ordinal();
+        applyDirectionOption(target);
+        Direction axisDir = Direction.get(Direction.AxisDirection.POSITIVE, getMainConnectionAxis());
+        for (int i = 1; i < length; i++) {
+            if (level.getBlockEntity(worldPosition.relative(axisDir, i)) instanceof EngineCoreBlockEntity segment)
+                segment.applyDirectionOption(target);
+        }
+    }
+
+    /** 单节面板值对齐（直接写 {@code value} 字段，绕开 {@code setValue} 的回调，避免回调递归） */
+    private void applyDirectionOption(int target) {
+        if (directionOption == null || directionOption.getValue() == target)
+            return;
+        directionOption.value = target;
+        setChanged();
+        sendData();
     }
 
     @Override
@@ -807,6 +922,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 || !Objects.equals(steamSolidFuelKey, lastSyncedSteamSolidFuelKey);
         boolean tempChanged = Math.abs(temperature - lastSyncedTemp) >= SYNC_TEMP_DELTA;
         boolean heartbeat = ++syncHeartbeat >= SYNC_HEARTBEAT_INTERVAL;
+        // 输出转向变化（Lua setReversed / 读档 / 重组后）→ 把面板选项抄到每节；1Hz 心跳时也校一次（自愈：
+        // 新加的核心节、拆中段重组出来的节、旧存档缺 ScrollValue 的节都会在这里对齐）
+        boolean directionChanged = reversedRotation != lastSyncedReversedRotation;
+        if (directionChanged)
+            lastSyncedReversedRotation = reversedRotation;
         setChanged();
         if (discreteChanged || tempChanged || heartbeat) {
             syncHeartbeat = 0;
@@ -824,6 +944,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             lastSyncedSteamSolidFuelKey = steamSolidFuelKey;
             sendData();
         }
+        // 转向变了立刻抄面板；否则每 1Hz 心跳校一次（只对不一致的节发包，见 applyDirectionOption）
+        if (directionChanged || heartbeat)
+            syncDirectionOptionToSegments();
 
         if (DEBUG) {
             if (running != prevRunning) {
@@ -1706,6 +1829,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * e.setThrottle(0.5)                     -- 油门（0..1）：<b>只改转速</b>（50% = 128rpm），应力容量恒定；0 = 停机
      * e.getLoad()                            -- 负载（0..1）：应力网络利用率，驱动油耗与发热
      * e.getStressUsed() / e.getStressCapacity() -- 网络已用应力 / 可提供容量（SU）
+     * e.setReversed(true) / e.isReversed()    -- 反转输出转向（转速取负；容量/负载/油耗/发热不变）
      * e.setMixture(0.8)                      -- 混合比（0.6~1.4；只影响油耗与温度：稀=省油但更热，浓=费油但降温）
      * e.getEffectiveMixture()                -- 实际混合比（杆 × 高空自动富油，气压驱动；高空 > 杆值）
      * }</pre>
@@ -1831,6 +1955,29 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             reActivateSource = true;
             setChanged();
             sendData();
+            return true;
+        }
+
+        /** 当前输出转向：false = 正转（默认），true = 反转（{@link #setReversed(boolean)} 控制） */
+        @LuaFunction
+        public final boolean isReversed() {
+            return reversedRotation;
+        }
+
+        /**
+         * 设置输出旋转方向：false = 正转（默认），true = 反转。
+         * <p><b>只翻转输出轴转向</b>，其它一切不变：转速<b>绝对值</b>、应力容量（SU）、负载计算、油耗、发热、
+         * 经济系数全部不受影响（容量公式 {@code moduleCapacity / abs(转速)}，反转后 abs 不变）——
+         * 效果 = 整条传动网络被反向驱动（下游机器朝相反方向转）。
+         * 油门 0（停机）时方向无意义、存了不生效。</p>
+         * <p>与 {@link #setThrottle(double)} 一样是纯存值控制：NBT 持久化（拆装/重进世界保持），
+         * 置 {@code reActivateSource} 让 Create 传动网络重新激活（网络不会自己发现源转速变号）。
+         * 与平台右键径向面板（{@link #directionOption}）是同一个状态，两边互相同步。</p>
+         */
+        @LuaFunction(mainThread = true)
+        public final boolean setReversed(boolean value) {
+            setReversedRotation(value);
+            syncDirectionOptionToSegments(); // 面板显示跟随（否则 Lua 改了方向、径向面板还停在旧选项）
             return true;
         }
 
@@ -2080,6 +2227,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     private void adoptStateFrom(EngineCoreBlockEntity donor) {
         temperature = donor.temperature;
         efficiency = donor.efficiency;
+        reversedRotation = donor.reversedRotation;
         mixture = donor.mixture;
         coolingStrength = donor.coolingStrength;
         ecoProgress = donor.ecoProgress;
@@ -2308,6 +2456,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             temperature = compound.getFloat("Temperature");
         if (compound.contains("Efficiency"))
             efficiency = compound.getFloat("Efficiency");
+        // 输出转向（Lua setReversed）：旧存档/旧包无字段 → 默认正转
+        reversedRotation = compound.getBoolean("ReversedRotation");
+        // 径向面板选项以转向字段为准（旧存档只有字段、没有 ScrollValue；直接写 value 绕开回调）
+        if (isController() && directionOption != null)
+            directionOption.value = reversedRotation ? OutputDirection.REVERSED.ordinal()
+                    : OutputDirection.FORWARD.ordinal();
         // P5：旧存档无 Mixture 字段 → 默认 1.0（海平面杆 1.0 = 现状）
         mixture = compound.contains("Mixture") ? compound.getFloat("Mixture") : 1f;
         // P5：实际混合比（服务端同步；旧存档/首个 tick 前 → 1.0）
@@ -2381,6 +2535,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putFloat("Load", loadFactor);
         compound.putFloat("Temperature", temperature);
         compound.putFloat("Efficiency", efficiency);
+        // 输出转向（Lua setReversed）：落盘 + 同步客户端（核心 tooltip「目前转速」按 signed 转速显示负值）
+        compound.putBoolean("ReversedRotation", reversedRotation);
         compound.putFloat("Mixture", mixture);
         // 实际混合比（含高空自动富油）服务端权威值，同步给客户端 Goggle 显示
         compound.putFloat("EffectiveMixture", lastEffectiveMixture);
@@ -2738,7 +2894,10 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return 0;
         // 定距桨模型（P4 定稿）：转速 = 油门 × 最大转速（0~256 线性；0 油门 = 停机）
         // P8：油门<b>只</b>影响转速——应力容量恒定（见 calculateAddedStressCapacity）
-        return GENERATED_SPEED * efficiency;
+        // 输出方向反转（Lua setReversed）：直接取负——绝对值不变，容量/负载/油耗/发热全部不受影响
+        // （Create 的容量乘子 KineticNetwork#getStressMultiplierForSpeed 取 abs）
+        float speed = GENERATED_SPEED * efficiency;
+        return reversedRotation ? -speed : speed;
     }
 
     /**
