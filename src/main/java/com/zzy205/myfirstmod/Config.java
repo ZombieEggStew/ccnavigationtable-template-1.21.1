@@ -50,6 +50,14 @@ public class Config {
                     + "Higher = fewer refills/availability checks but larger single drains. Cached once when entering a world.")
             .defineInRange("engineSourceBatchMultiplier", 1.0, 0.25, 64.0);
 
+    // ── 引擎水冷模块应力消耗（每工作模块恒定 SU，进游戏时缓存一次）──
+    public static final ModConfigSpec.DoubleValue ENGINE_WATER_COOLING_STRESS = BUILDER
+            .comment("Stress (SU) each water cooling module takes from the engine's kinetic network. "
+                    + "Constant per working module (tank holds coolant, loop opening > 0), independent of RPM / coolant amount / efficiency. "
+                    + "Applies to fluid engines only (water cooling has no effect on steam engines). 0 = water cooling is free. "
+                    + "Cached once when entering a world.")
+            .defineInRange("engineWaterCoolingStress", 512.0, 0.0, 65536.0);
+
     // ── 调试：飞行数据记录器（方案 B）──
     public static final ModConfigSpec.BooleanValue FLIGHT_RECORDER_ENABLED = BUILDER
             .comment("Flight data recorder (debug): log per-tick body data for every FMC/AIC/INS-registered aircraft into <gameDir>/flight_logs/*.csv "

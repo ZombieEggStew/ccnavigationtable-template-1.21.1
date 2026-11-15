@@ -136,11 +136,18 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      *  照 {@code TransmissionPeripheralBlockEntity#updateStressImpact} 的每 tick 对账手法：容量恒定后，
      *  变转速只改 capacityPerRPM，网络不会自己发现，必须主动刷新。 */
     private float lastNotifiedCapacityPerRPM = Float.NaN;
+    /** 上次上报给应力网络的「水冷应力 per RPM」（每 tick 对账用；NaN = 下 tick 必通知）。
+     *  与 {@link #lastNotifiedCapacityPerRPM} 同一手法：网络只在成员增删时重算，本核心的应力贡献变了必须主动刷。 */
+    private float lastNotifiedStressPerRPM = Float.NaN;
 
     // ---- P2.5：源列表 + 储备（transient，事件化重建；方案见 memo/engine-module.md 关键机制 7.3） ----
     /** 引擎源抽取批次倍数（K，进游戏缓存一次）：批次 = 引擎数量 × K（水/流体燃料 mb、固体燃料 个）。
      *  配置见 {@code Config.ENGINE_SOURCE_BATCH_MULTIPLIER}，由 {@code CCPeripheralExtender#onServerStarting} 写入。 */
     public static float SOURCE_BATCH_MULTIPLIER = 1f;
+
+    /** 每个水冷模块向应力网络借的应力（SU，<b>恒定</b>：与转速/液量/冷却液效率都无关，只看「工作模块数」）。
+     *  配置见 {@code Config.ENGINE_WATER_COOLING_STRESS}（默认 512），由 {@code CCPeripheralExtender#onServerStarting} 写入。 */
+    public static float WATER_COOLING_STRESS = 512f;
 
     /** 水源罐列表（含原版水的流体罐；查找序 = scanModule 邻居枚举序） */
     protected List<BlockPos> waterSources = List.of();
@@ -369,6 +376,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected boolean lastSyncedWaterModule;
     protected int lastSyncedWaterModules;
     protected float lastSyncedWaterPower;
+    /** P11：上次同步的水冷耗应力（SU；变化 ≥ 1 SU 才发包，另有 1Hz 心跳兜底） */
+    protected float lastSyncedWaterStress;
     /** P9：水冷散热贡献的同步容差（k_water 变化 ≥ 该值才发包；粗量变化，防止每 tick 发包） */
     public static final float SYNC_WATER_POWER_DELTA = 0.01f;
     protected String lastSyncedSteamFuelType = "none", lastSyncedSteamFuelKey = "", lastSyncedSteamSolidFuelKey = "";
@@ -584,6 +593,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * transient，不落盘。
      */
     protected float waterCoolingCapacity = 0f;
+
+    /**
+     * 水冷模块向应力网络借走的应力（SU，<b>恒定 / 每工作模块</b>：{@code 工作模块数 × WATER_COOLING_STRESS}）。
+     * <p>实现方式：本核心既是网络的 source 也是 member——覆写 {@link #calculateStressApplied()} 返回
+     * {@code 本值 / |自身理论转速|}（Create 语义是「SU per RPM」，网络再乘回转速 → 实际应力恒等于本值），
+     * 并在 tick 里每 tick 与网络对账 {@code updateStressFor}（网络不会自己发现，同容量对账，见踩坑 31）。
+     * <p>免费条件（玩家定稿）：只要模块罐里<b>一点冷却液都没有</b>、或<b>回路开度 = 0</b>、或是<b>蒸汽引擎</b>
+     * （水冷对它零作用）→ 本值 0。<b>液量不足 4000mb 仍按满额收取</b>（不看液量比例/效率）。
+     * <p>服务端每 tick 计算，随包同步（Goggle 水冷耗应力行 / Lua {@code getWaterCoolingStress}）。
+     */
+    protected float waterStressSU = 0f;
 
     /** 冷却液总量（mb，工作模块合计；同步 Goggle/Lua） */
     protected float coolantAmount = 0f;
@@ -908,6 +928,19 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         } else {
             lastNotifiedCapacityPerRPM = Float.NaN; // 脱网（油门 0/停机）→ 重挂时重新通知
         }
+        // ①b P11：水冷应力对账（与容量对账同一手法）。本核心既是 source 也是 member：覆写的
+        //    calculateStressApplied() 返回「水冷 SU / 自身理论转速」，网络再乘回转速 → 实际应力恒 = waterStressSU。
+        //    模块增删 / 回路开关 / 转速变化都只改这个「per RPM 值」，网络不会自己发现 → 变了就 updateStressFor。
+        //    脱网（油门 0）时 Create 会走 applyNewSpeed(0) 用 calculateStressApplied() 把贡献清 0（见 GeneratingKineticBlockEntity）。
+        if (hasNetwork() && getGeneratedSpeed() != 0f) {
+            float stressPerRPM = calculateStressApplied();
+            if (!Mth.equal(stressPerRPM, lastNotifiedStressPerRPM)) {
+                getOrCreateNetwork().updateStressFor(this, stressPerRPM);
+                lastNotifiedStressPerRPM = stressPerRPM;
+            }
+        } else {
+            lastNotifiedStressPerRPM = Float.NaN;
+        }
         // ② 负载 = 网络应力 / 网络容量（Create 的 stress/capacity 字段是整网总量；引擎脱网时会被清 0 → 除零保护）。
         //    loadFactor 存的是<b>实际利用率</b>（钳 [0, LOAD_MAX]，空载可以是 0）→ Goggle / Lua 直接读它，不做任何修饰；
         //    怠速下限 IDLE_LOAD_FLOOR 只在「消耗 / 发热」计算时叠加（见 combustionIntensity() / heatLoad()）。
@@ -1013,6 +1046,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 || hasWaterCooling != lastSyncedWaterModule
                 || waterCoolingModules != lastSyncedWaterModules
                 || Math.abs(waterCoolingPower - lastSyncedWaterPower) >= SYNC_WATER_POWER_DELTA
+                // P11：水冷耗应力（SU，整数量级；≥1 SU 才发包，另有心跳兜底）
+                || Math.abs(waterStressSU - lastSyncedWaterStress) >= 1f
                 || !Objects.equals(steamFuelType, lastSyncedSteamFuelType)
                 || !Objects.equals(steamFuelKey, lastSyncedSteamFuelKey)
                 || !Objects.equals(steamSolidFuelKey, lastSyncedSteamSolidFuelKey);
@@ -1036,6 +1071,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             lastSyncedWaterModule = hasWaterCooling;
             lastSyncedWaterModules = waterCoolingModules;
             lastSyncedWaterPower = waterCoolingPower;
+            lastSyncedWaterStress = waterStressSU;
             lastSyncedSteamFuelType = steamFuelType;
             lastSyncedSteamFuelKey = steamFuelKey;
             lastSyncedSteamSolidFuelKey = steamSolidFuelKey;
@@ -1700,6 +1736,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             coolantBoilWeight = 0f;
             workingCoolantModules = List.of();
             evapCooling = 0f;
+            waterStressSU = 0f;
             return;
         }
 
@@ -1739,6 +1776,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         coolantAmount = amount;
         coolantBoilWeight = boilWeight;
         workingCoolantModules = workingList;
+        // P11：水冷应力消耗 —— <b>每工作模块恒定 WATER_COOLING_STRESS SU</b>（与转速、液量多少、冷却液效率都无关；
+        // 100mb 也照收满额，只有「罐里一滴都没了」才免）。回路开度 0 = 水泵停转 → 不借应力；
+        // 蒸汽引擎 → 0（水冷对它零作用，见下方 waterCoolingPower 的门控同理）。
+        // 实际怎么进网络：见 calculateStressApplied()（本核心把自己上报成网络的 member 应力）。
+        waterStressSU = (steamEngine || waterCoolingStrength <= 0f) ? 0f : working * WATER_COOLING_STRESS;
         // 2026-09：水冷吃「少量冲压」（只拿冲压增益的 WATER_RAM_FRACTION = 25%，ram 2.0 → ×1.25）
         // 和「少量气压损失」（只吃气压损失的 WATER_PRESSURE_FRACTION = 25%，f 0.54 → ×0.885）——
         // 液体回路本身不看空气，但散热器表面仍受迎风气流与空气密度影响，所以两者都给小幅份额。
@@ -2421,6 +2463,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         public final double getCoolantAmount() {
             return coolantAmount;
         }
+
+        /**
+         * P11：当前水冷模块向应力网络借走的应力（SU，{@code 工作模块数 × 每模块配置值}）。
+         * <b>进网络的方式</b>：引擎核心作为网络 member 上报自己的 stress（{@code calculateStressApplied}）——
+         * 所以它<b>真实占掉</b>下游机器可用的 SU、会让整网真过载（Create 红字），而不是只做显示。
+         * 回路开度 0 / 罐里没冷却液 / 蒸汽引擎 → 0（免费）。
+         */
+        @LuaFunction
+        public final double getWaterCoolingStress() {
+            return waterStressSU;
+        }
     }
 
     /** 重新组网：只有 controller 触发 formMulti（服务端执行，客户端直接跳过） */
@@ -2798,6 +2851,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         coolantAmount = compound.getFloat("CoolantAmount");
         waterCoolingStrength = compound.contains("WaterCoolingStrength")
                 ? compound.getFloat("WaterCoolingStrength") : 1f;
+        // P11：水冷耗应力（SU；旧存档/旧包无字段 → 0，服务端下一 tick 重算）
+        waterStressSU = compound.contains("WaterStress") ? compound.getFloat("WaterStress") : 0f;
         // P10：自动控制开关（旧存档/旧包无字段 → 默认开，与「装模组即用」一致）
         autoControl = compound.contains("AutoControl") ? compound.getBoolean("AutoControl") : AUTO_ENABLED_DEFAULT;
         // P7：经济解锁进度（服务端权威，客户端据此推导经济系数）；P7+ 方案 B 起 EconomyFactor/OptimalTemp/
@@ -2871,6 +2926,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putFloat("WaterPower", waterCoolingPower);
         compound.putFloat("CoolantAmount", coolantAmount);
         compound.putFloat("WaterCoolingStrength", waterCoolingStrength);
+        // P11：水冷耗应力（SU；随「工作模块数 × 配置值」变化，Goggle「水冷耗应力」行读它，客户端不重算）
+        compound.putFloat("WaterStress", waterStressSU);
         // P10：自动控制开关（Goggle「自动控制」行；同步客户端 + 落盘）
         compound.putBoolean("AutoControl", autoControl);
         // P7+ 方案 B：经济解锁进度（服务端权威，同步客户端 Goggle）——经济系数/过冷系数/油耗系数均为其
@@ -2964,6 +3021,17 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                     .append(waterCoolingPower > 0f
                             ? Component.literal(String.format(Locale.ROOT, "+%.2f", waterCoolingPower))
                                     .withStyle(ChatFormatting.AQUA)
+                            : Component.translatable("tooltip.ccpe.engine.water_cooling_none")
+                                    .withStyle(ChatFormatting.DARK_GRAY)));
+        }
+        // P11：水冷耗应力行（水冷模块存在时显示；占用引擎出力，实际进网见 calculateStressApplied——
+        // 开度关闭/空罐/蒸汽引擎 → 灰「无」）
+        if (hasWaterCooling) {
+            tooltip.add(Component.literal("     ")
+                    .append(Component.translatable("tooltip.ccpe.engine.water_stress").withStyle(ChatFormatting.GRAY))
+                    .append(waterStressSU > 0f
+                            ? Component.literal("-" + Math.round(waterStressSU) + " SU")
+                                    .withStyle(ChatFormatting.GOLD)
                             : Component.translatable("tooltip.ccpe.engine.water_cooling_none")
                                     .withStyle(ChatFormatting.DARK_GRAY)));
         }
@@ -3250,5 +3318,26 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         float capacityPerRPM = speed == 0 ? 0f : moduleCapacity / speed;
         this.lastCapacityProvided = capacityPerRPM;
         return capacityPerRPM;
+    }
+
+    /**
+     * 水冷模块的应力消耗（SU per RPM，Create 语义）：网络实际应力 = 本返回值 × |<b>网络施加给本核心的转速</b>|
+     * = {@link #waterStressSU}（恒定 SU）。
+     * <p><b>为什么这样就能「不接传动轴也吃应力」</b>：引擎核心本身既在 {@code KineticNetwork#sources}（发电），
+     * 也在 {@code KineticNetwork#members}（耗应力，见 {@code KineticNetwork#add}）——Create 允许同一个 BE 两头都记。
+     * 所以只要覆写本方法返回非 0，并把值主动推给网络（{@code updateStressFor}，见 tick 里的①b 对账），
+     * 整网的真实应力就少这么多 SU：下游机器变慢/红字过载全由 Create 自己判定，<b>不需要自己维护过载逻辑</b>。
+     * <p>除数用 {@link #getTheoreticalSpeed()} 而不是 {@link #getGeneratedSpeed()}：网络乘的正是理论转速
+     * （{@code KineticNetwork#getActualStressOf}），用同一个量做除数才能保证「每模块恒定 512 SU」——
+     * 多发电机共网/被更快的发电机压速时也照样恒定（容量那侧反过来用自身生成转速，是为了防作弊，见 {@link #calculateAddedStressCapacity()}）。
+     * <p>同时写入 {@code lastStressApplied}：Create 读档 {@code initialize → addSilently} 要拿它减去旧量，
+     * 漏写会造成短暂**重复计应力**（与 {@code lastCapacityProvided} 同理）。
+     */
+    @Override
+    public float calculateStressApplied() {
+        float speed = Math.abs(getTheoreticalSpeed());
+        float stressPerRPM = speed < LOAD_EPS ? 0f : waterStressSU / speed;
+        this.lastStressApplied = stressPerRPM;
+        return stressPerRPM;
     }
 }

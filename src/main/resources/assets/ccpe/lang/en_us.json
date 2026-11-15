@@ -134,6 +134,7 @@
   "tooltip.ccpe.engine.load": "Load:",
   "tooltip.ccpe.engine.water_cooling": "Coolant Cooling:",
   "tooltip.ccpe.engine.water_cooling_none": "none",
+  "tooltip.ccpe.engine.water_stress": "Coolant Stress:",
   "tooltip.ccpe.engine.auto_control": "Auto Control:",
   "tooltip.ccpe.engine.auto_control_on": "On",
   "tooltip.ccpe.engine.auto_control_off": "Off",

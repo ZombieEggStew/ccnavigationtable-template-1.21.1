@@ -134,6 +134,7 @@
   "tooltip.ccpe.engine.load": "负载：",
   "tooltip.ccpe.engine.water_cooling": "水冷散热：",
   "tooltip.ccpe.engine.water_cooling_none": "无",
+  "tooltip.ccpe.engine.water_stress": "水冷耗应力：",
   "tooltip.ccpe.engine.auto_control": "自动控制：",
   "tooltip.ccpe.engine.auto_control_on": "开",
   "tooltip.ccpe.engine.auto_control_off": "关",
