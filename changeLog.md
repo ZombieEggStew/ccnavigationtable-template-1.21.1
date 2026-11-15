@@ -158,4 +158,5 @@
 - **NEW!** The fluid engine now comes with **built-in automatic control** — no Lua script needed. It holds the actual mixture at ~0.9 (comfortably inside the economy window), drives the cooling air duct with a PI+D loop, runs the water cooling loop from a heat / cooling **model feedforward**. It is **on by default**, including in existing saves. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/engine-core/
 
 - Added `isReversed` / `setReversed(bool)` Lua methods to the engine peripheral: reverses the **output rotation direction** (`e.setReversed(true)`). 
-- Added an in-world **hold-right-click panel** on the engine core to pick the output direction (Forward / Reversed) — the same radial menu the Aeronautics propeller bearing uses. Works on any core segment and shares its state with the Lua method above.
+
+- Added an in-world **hold-right-click panel** on the engine core to pick the output direction (Forward / Reversed). **Hold a Wrench** to open it — with an empty hand or any other item the core side shows no panel and right-click stays normal block placement / item interaction (such as attaching chambers). Works on any core segment and shares its state with the Lua method above.

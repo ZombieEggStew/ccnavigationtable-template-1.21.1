@@ -363,7 +363,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      */
     protected boolean reversedRotation = false;
     /**
-     * 输出转向面板（{@link ScrollOptionBehaviour}，长按右键弹出的径向菜单）——照 {@code aeronautics:propeller_bearing}
+     * 输出转向面板（{@link ScrollOptionBehaviour}，<b>手持扳手</b>长按右键弹出的径向菜单）——照 {@code aeronautics:propeller_bearing}
      * 的 {@code ScrollOptionBehaviour<ThrustDirection>}；值 = {@link OutputDirection} 的序号（0 正转 / 1 反转），
      * 只用于<b>显示</b>：权威状态在 controller 的 {@link #reversedRotation}（面板回调写它，再由
      * {@link #syncDirectionOptionToSegments()} 抄回各节）。
@@ -618,6 +618,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * 项目内同机制先例 = {@code AutoPackagerScrollValueBehaviour}。
      * <p>槽位：4 个<b>非轴端面</b>的正中（轴的两端是传动轴，不放数值框）。任意核心节都能打开菜单，
      * 选择后由 {@link #onDirectionSelected(int)} 写到整条引擎的 controller 再抄回各节。</p>
+     * <p><b>需要手持扳手</b>（{@code ScrollValueBehaviour#requiresWrench()}，同 {@code create:chassis} 的 range）：
+     * 空手/其它物品手持时面板既不渲染也不拦截右键，右键照常走方块放置与物品交互。</p>
      */
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
@@ -625,6 +627,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         directionOption = new ScrollOptionBehaviour<>(OutputDirection.class,
                 Component.translatable("tooltip.ccpe.engine.direction.title"), this,
                 new CenteredSideValueBoxTransform((state, side) -> side.getAxis() != state.getValue(EngineCoreBlock.AXIS)));
+        // 必须手持扳手（{@code c:tools/wrench} tag，create:wrench 在内）才显示数值框 / 才能长按开面板：
+        // 不开这个开关时，面板命中区会先被 Create 的 ValueSettingsInputHandler 吃掉（cancel 右键事件），
+        // 导致手持燃烧室等方块贴核心时「放置/物品交互」失效。开了之后非扳手手持 → 面板整个不参与判定，
+        // 右键回落到方块的 useItemOn（放置、装配、扳手旋转各按原样）。
+        directionOption.requiresWrench();
         directionOption.withCallback(this::onDirectionSelected);
         behaviours.add(directionOption);
     }
