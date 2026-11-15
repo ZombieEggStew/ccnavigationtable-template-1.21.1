@@ -4,11 +4,13 @@
 > CC:T 外设（偏转 / 出力）✅、**偏转点直线插值 + `setDirection` 摇杆写法** ✅（用户实测"完全符合预期"）；
 > `./gradlew.bat classes` 通过。
 > 现行两个手感参数：**偏转平面线速度 160°/s**、**矢量喷管出力 2 pN/RPM**（定向喷管仍 1 pN/RPM）。
-> 本轮（2026-11）变更明细见 §11。
+> 本轮（2026-11）变更明细见 §11；**第二轮（用户重做模型 + 选择框改两盒）见 §12**，
+> 那轮的几何数字（枢轴 `y2`、铰点 `y5`、活塞头并进 `base.json`）**待用户进游戏实测确认**。
+> ⚠️ 换模型后若动画错位，先对 §12.4 那张"模型数字 ↔ 代码常量"表。
 >
 > 七个能力一句话版：
-> 1. **可倾斜喷口**：固定底板 + 绕枢轴 `(8,1,8)px` 在**锥角 15° 内**任意指向的喷口本体；
-> 2. **四活塞随动**：活塞头固定（0 自由度）、活塞杆绕铰点转动（1 自由度），见 §4；
+> 1. **可倾斜喷口**：固定底板 + 绕枢轴 `(8,2,8)px` 在**锥角 15° 内**任意指向的喷口本体；
+> 2. **四活塞随动**：活塞头固定（0 自由度，**已并进底座模型**）、活塞杆绕铰点转动（1 自由度），见 §4；
 > 3. **推力 = 倾斜轴**：`nozzleAxis()` 钩子让推力与**全部粒子链路**一起跟着倾斜轴走；
 > 4. **出力系数**：Lua `setThrustScale(0..1)` 乘在「风扇转速 × 气压」之上（默认 1.0）；**矢量喷管满出力 = 2 pN/RPM**；
 > 5. **物理体作用域频道**：放置自动分配、只在物理体上生效、与 `short_range_linker` / 控制台共享频道空间；
@@ -26,13 +28,13 @@
 |---|---|
 | 参考对象 | `aeronautics:gyroscopic_propeller_bearing`（固定体 + 可倾盘 + 四个动态小活塞） |
 | 与参考的差别 | 参考是"**固定体在下、可动盘在上**"；本方块是"**固定底板在下、可动 block 在上**"，**活塞上下镜像** ⇒ 自由度必须重算（§4） |
-| 固定/可动划分 | 固定 = 底板 `base.json`；可动 = `block.json`（裙边 + 筒身 + 十字臂 + 顶环），绕枢轴 `(8,1,8)px` |
+| 固定/可动划分 | 固定 = 底板 `base.json`（**含 4 个活塞头**）；可动 = `block.json`（裙边 + 筒身 + 十字臂 + 顶环），绕枢轴 `(8,2,8)px` |
 | 推力方向 | **倾斜后的轴向**（锥内任意方向，矢量引擎语义） |
 | 锥角钳位 | **15°**（几何依据见 §6.3） |
 | 角度 API 形态 | 两种写法并存：极坐标 `setDeflection(方位角, 锥角)` + 摇杆 `setDirection(x, y)`（`-1..1`，方向=方位、长度=锥角），另给 `getDeflection` / `getMaxTilt` |
 | 状态表示 | **偏转点 `(x, y)`**（长度=锥角、方向=方位）才是状态，方位/锥角只是它的极坐标读法；插值在偏转平面上做 ⇒ **走直线**（用户定稿） |
 | 出力 API | `setThrustScale(0..1)` 乘在「转速 × 气压」上，默认 **1.0**；**矢量喷管满出力 = 2 pN/RPM**（`THRUST_OUTPUT_MULTIPLIER = 2.0`，2026-11 用户定稿；定向喷管仍 1 pN/RPM） |
-| 选择框/碰撞箱 | **整块正方形**（阶段一用户定稿；倾斜无法用 VoxelShape 表达） |
+| 选择框/碰撞箱 | **底板 `(0,0,0,16,4,16)` + 喷口包络 `(2,4,2,14,16,14)`** 两个盒（2026-11 用户定稿；**不随倾斜/动画改变**，六向由模型旋转生成） |
 | GUI 内容 | **只有频道滚轮**，不做"加载物理体"开关（喷嘴不持有 force-load ticket） |
 | 频道作用域 | 物理体（含约束链）；非物理体**不注册** |
 | 外设方法 | 本阶段提供偏转 + 出力 + `getChannel`（早期一版曾定"暂不给 getChannel"，最终按外设形态给回） |
@@ -51,21 +53,26 @@
 
 | 文件 | 内容 | 用途 |
 |---|---|---|
-| `base.json` | `x2..14, y0..2, z2..14` | **固定底板**，走 blockstate 静态渲染 |
-| `block.json` | 裙边 `y1..5`、筒身 `y4..13`、四条十字臂 `y6..10`（伸到方块四边）、顶环 `y13..16` | **可动部分**，走 BER 动态渲染 |
-| `piston_head.json` | 2×2×6px 小方块 | 4 个活塞头（固定件） |
-| `piston_pole.json` | 1×7×2px 连杆 | 4 个活塞杆（可动件） |
+| `base.json` | 底板 `x0..16, y0..4, z0..16` + **4 个活塞头**（半径 6..8px、`y4..6`、切向 6px，坐在底板上表面） | **固定件**，走 blockstate 静态渲染 |
+| `block.json` | 裙边 `y2..6`、筒身 `y6..14`、四条十字臂 `y9..13`（伸到方块四边）、顶环 `y14..18` | **可动部分**，走 BER 动态渲染 |
+| ~~`piston_head.json`~~ | **已删除**（2026-11：头是固定件、与底座无相对移动 ⇒ 并进 `base.json`） | — |
+| `piston_pole.json` | 1×7×2px 连杆（`from [-0.5,0,-1] to [0.5,7,1]`，局部原点 = 铰点） | 4 个活塞杆（可动件） |
 | `item.json` | 上面全部 + `groups` 静态摆位 | 物品模型；**group 的摆位是几何基准的权威来源** |
 
-**几何基准（从 `item.json` 反推，单位 px）**
+**几何基准（从 `item.json` 反推，单位 px）**——2026-11 用户重做模型后：
 
 | 部件 | 距中轴 | 高度 | 切向宽 |
 |---|---|---|---|
-| 活塞头 | **6..8** | **0..2** | 6 |
-| 活塞杆 | **6..7** | **1..8** | 2 |
-| 枢轴 | — | **y=1**（底板中部）、x/z=8 | — |
+| 底板 | 0..8（整块） | **0..4** | 16 |
+| 活塞头 | **6..8** | **4..6** | 6 |
+| 活塞杆 | **6..7** | **5..12** | 2 |
+| 枢轴 | — | **y=2**（底板中面 = 裙边下沿）、x/z=8 | — |
 
-⇒ **铰点 = 杆底面中心 = 距中轴 6.5px、高度 y=1px**（§4.3 的模型定位约定就用这个点）。
+⇒ **铰点 = 杆底面中心 = 距中轴 6.5px、高度 y=5px**（§4.3 的模型定位约定就用这个点）。
+杆底面插进活塞头 1px（5 在 4..6 之间），绕铰点摆动时接缝始终被头挡住。
+
+> ⚠️ 旧版几何（底板 y0..2、头 y0..2、杆 y1..8、枢轴 y1）已被这一版取代；`piston_pole.json` 本身<b>没变</b>
+> （定位靠"局部原点 = 铰点"的约定，改高度只改代码里的 `PISTON_HINGE_HEIGHT`）。
 
 ---
 
@@ -90,7 +97,7 @@ FACING 旋转（与 blockstate 的 x/y 旋转严格一致）
   up/down(x180)/north(x90)/east·south·west(x90+y90·180·270) 六变体逐条对应。
 - ⚠️ **`SuperByteBuffer` 的变换是"先调用 = 外层"**（内部 `PoseStack` 累乘 + `renderInto` 末尾自动 `reset()`，
   所以同一个 partial 在一个循环里画 4 次也不会累积变换）。外层必须先调用，部件平移最后调用。
-- 枢轴 `PIVOT = (8,1,8)px = (0.5, 1/16, 0.5)`。
+- 枢轴 `PIVOT = (8,2,8)px = (0.5, 2/16, 0.5)`（底板 y0..4 的中面；裙边下沿 y2 也正好在这一层，倾斜时裙边下沉量 6px·sin15° ≈ 1.6px 刚好埋进底板，不露出方块底面）。
 
 ### 3.3 倾斜姿态来源
 
@@ -103,14 +110,14 @@ FACING 旋转（与 blockstate 的 x/y 旋转严格一致）
 
 ## 4. 活塞机构（自由度，**前后写错过两版，最终版在这里**）
 
-### 4.1 最终机构（用户实测确认"动画效果没问题"）
+### 4.1 最终机构（用户实测确认"动画效果没问题"；2026-11 活塞头并进底座后自由度不变）
 
-| 部件 | 隶属 | 自由度 | 实现（`AdvancedThrustNozzleRenderer`） |
+| 部件 | 隶属 | 自由度 | 实现 |
 |---|---|---|---|
-| 活塞头 | **底座（固定件）** | **0** | `translate(hinge) + rotateY(azimuth)` —— 不吃 tilt、不上下移动 |
-| 活塞杆 | **block（可动件）** | **1（绕铰点的转动）** | `translate(hinge) + rotate(tilt) + rotateY(azimuth)` —— **底面中心钉死在铰点**，随 block 倾斜 |
+| 活塞头 | **底座（固定件）** | **0** | **不写代码**：已并进 `base.json`，由 blockstate 静态模型渲染（`y4..6`、半径 6..8px） |
+| 活塞杆 | **block（可动件）** | **1（绕铰点的转动）** | `AdvancedThrustNozzleRenderer`：`translate(hinge) + rotate(tilt) + rotateY(azimuth)` —— **底面中心钉死在铰点**，随 block 倾斜 |
 
-视觉结果 = **固定的头 + 绕铰点转动的杆 + 上下滑过杆顶的 block**；杆顶始终在十字臂带（y6..10px）里被挡住
+视觉结果 = **固定的头 + 绕铰点转动的杆 + 上下滑过杆顶的 block**；杆顶始终在十字臂带（`y9..13px`、宽 6px）里被挡住
 （15° 时杆顶摆幅 ≈ `7px·sin15°` ≈ 1.8px，臂带竖向余量足够）。
 
 ### 4.2 两版错误（别再犯）
@@ -120,19 +127,21 @@ FACING 旋转（与 blockstate 的 x/y 旋转严格一致）
 | v1 | 照参考"头贴倾斜面升降、杆保持竖直" | 参考是"头顶在转盘上、杆朝下插进固定体"，本方块**上下镜像**，头在那个高度只能是固定件 |
 | v2 | 头固定 + 杆沿自身轴**滑动**（`s = r·(N·d) + h0·(cosθ−1)`） | 方向对了一半，但用户要的是**"底面一点钉死、只许绕它转"**——真正的一自由度是**转动**，棱柱滑动会让底面离开铰点 |
 | v3 ✅ | 头 0 自由度 + 杆绕铰点转动 | 见 §4.1 |
+| v4 ✅ | 头并进 `base.json`（连渲染都不用了） | 头本来就钉在底板上、与底座没有相对移动 ⇒ 单独一个 partial 纯属多余；`piston_head.json` 已删 |
 
 ### 4.3 模型定位约定：**局部原点 = 铰点**（关键约定）
 
-两个 partial 模型的局部原点都放在同一个铰点上，于是代码里每个活塞只要
-`translate(铰点)` + `rotate(...)`，**零偏移常量**（唯一常量 `PISTON_HINGE_RADIUS = 6.5/16`）：
+`piston_pole.json` 的局部原点就放在铰点上，于是代码里每个活塞杆只要
+`translate(铰点)` + `rotate(...)`，**零偏移常量**（常量只有 `PISTON_HINGE_RADIUS = 6.5/16` 与
+`PISTON_HINGE_HEIGHT = 5/16`）：
 
 | 模型 | 目标坐标 | 含义 |
 |---|---|---|
 | `piston_pole.json` | `from [-0.5, 0, -1] to [0.5, 7, 1]` | 底面中心 = 原点，杆沿 **+Y** 向上 7px；径向 1px(X)、切向 2px(Z)；**局部 +X = 径向朝外** |
-| `piston_head.json` | `from [-0.5, -1, -3] to [1.5, 1, 3]` | 原点落在头内部（X −0.5..+1.5 = 距轴 6..8px、Y −1..+1 = y0..2px、Z −3..+3 = 切向 6px） |
 
-> 改动模型时**只改 `from`/`to`**，UV 与尺寸不变；若在 Blockbench 里重新导出，必须保持这两个坐标，
-> 否则会退回旧定位（游戏读的是导出的 json）。
+> 改动模型时**只改 `from`/`to`**，UV 与尺寸不变；若在 Blockbench 里重新导出，必须保持这个坐标，
+> 否则会退回旧定位（游戏读的是导出的 json）。**换位置时改代码里的两个常量**（杆底面高度 → `PISTON_HINGE_HEIGHT`、
+> 径向中心 → `PISTON_HINGE_RADIUS`），不要给模型加偏移。
 
 ---
 
@@ -341,14 +350,14 @@ n.setDirection(0, 0)                  -- 回直出
 
 | 文件 | 职责 |
 |---|---|
-| `block/AdvancedThrustNozzleBlock.java` | `extends ThrustNozzleBlock`：整块选择框、自己的 BE 类型、`getTicker`（客户端粒子 / 服务端频道复核）、空手右键开 GUI |
+| `block/AdvancedThrustNozzleBlock.java` | `extends ThrustNozzleBlock`：**两个盒的选择框/碰撞箱（六向由模型旋转生成）**、自己的 BE 类型、`getTicker`（客户端粒子 / 服务端频道复核）、空手右键开 GUI |
 | `block/AdvancedThrustNozzleBlockEntity.java` | 频道状态机 + 图标 NBT/同步 + 偏转点 / 出力系数 + 内嵌 CC:T `Peripheral` + `nozzleAxis`/`thrustScale` 覆盖（含 2× 出力倍率） |
-| `block/AdvancedThrustNozzleRenderer.java` | 只走 BER：block 部分（绕枢轴倾斜）+ 4 活塞头 + 4 活塞杆 |
+| `block/AdvancedThrustNozzleRenderer.java` | 只走 BER：block 部分（绕枢轴倾斜）+ 4 活塞杆（头并进 `base.json`，这里不画） |
 | `screen/AdvancedThrustNozzleMenu.java` / `…Screen.java` | 频道 GUI |
 | `network/AdvancedThrustNozzleConfigPayload.java` / `…PacketHandlers.java` | 频道保存 |
 | `block/ThrustNozzleBlock.java`（微改） | 抽 `createBlockEntity` / `entityType()` / `shapeFor(Direction)` 三个钩子 |
 | `block/ThrustNozzleBlockEntity.java`（微改） | 加 `protected (BlockEntityType, BlockPos, BlockState)` 构造器 + `nozzleAxis` / `thrustScale` 钩子 |
-| `block/MyModPartialModels.java` | +3 PartialModel：`ADVANCED_THRUST_NOZZLE_{BLOCK,PISTON_HEAD,PISTON_POLE}` |
+| `block/MyModPartialModels.java` | +2 PartialModel：`ADVANCED_THRUST_NOZZLE_{BLOCK,PISTON_POLE}`（`PISTON_HEAD` 已随 `piston_head.json` 删除，**别再注册**：缺模型会在烘焙时报错） |
 | 注册 | `MyModBlocks` / `MyModBlockEntities` / `MyModCreativeModeTabs` / `MyModMenus` / `ModPackets` / `CCPeripheralExtenderClient`（BER + Screen）/ `CCPeripheralCapabilities` / `SensorSystemAPI` |
 
 ### 资源
@@ -371,7 +380,9 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 - `getDeflection` 给角度 + 偏转点分量，但**不给世界系方向向量**（需要时可以加）。
 - 偏转点走直线时，**穿过中心那一刻方位角瞬间反向**（中心处方位无意义、报 0）；脚本若用方位角做反馈要避开这种中途采样。
 - 摇杆 `setDirection` 的**长度**不含死区/曲线映射，线性映射到锥角（要遥杆手感曲线就在 Lua 侧处理）。
-- 选择框是整块正方形；要贴合模型需做"最大倾角包络"。
+- 选择框 / 碰撞箱是**静止姿态的最大包络**（`(0,0,0,16,4,16)` + `(2,4,2,14,16,14)`），**不跟倾斜/活塞动画变**：
+  15° 锥角下喷口横向只偏 ≈1.5px，包络能盖住；要严格贴合得做逐帧形状（不划算）。
+- 顶环在模型空间到 `y=18px`（伸出方块上表面 2px，用户模型如此），碰撞箱仍封顶在 16px ⇒ 视觉顶端会略微超出碰撞体。
 - 活塞机构只有 4 个方位（`rotateY(-90°·i)`），不支持任意角度的活塞数量。
 
 ---
@@ -380,9 +391,11 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 
 | 项 | 结论 |
 |---|---|
-| block 部分绕 (8,1,8)px 转、六向 FACING 都对 | ✅ 用户实测"转动正常" |
-| 活塞机构（头固定 + 杆绕铰点转） | ✅ 用户实测"动画效果没问题了" |
-| 整块选择框 / 碰撞箱 | ✅ |
+| block 部分绕枢轴转、六向 FACING 都对 | ✅ 用户实测"转动正常"（旧枢轴 `(8,1,8)`；2026-11 模型重做后改为 `(8,2,8)`，见下） |
+| 活塞机构（头固定 + 杆绕铰点转） | ✅ 用户实测"动画效果没问题了"（旧几何：头 `y0..2`、杆 `y1..8`、枢轴 `y1`） |
+| 模型重做：头并进 `base.json`、杆上移到 `y5..12`、枢轴 `y2`、铰点 `y5` | ⏳ **待用户进游戏验证**（2026-11；`./gradlew.bat classes` 已通过） |
+| 选择框/碰撞箱 `(0,0,0,16,4,16)` + `(2,4,2,14,16,14)` | ⏳ **待用户验证**（六向按模型旋转生成，见 §7 的 `AdvancedThrustNozzleBlock`） |
+| 整块选择框 / 碰撞箱 | 📜 历史：阶段一用整块正方形，2026-11 已换成上面两个盒 |
 | 频道自动分配 / 只在物理体 / GUI | ✅ 用户实测"这一步没问题" |
 | CC:T 外设偏转 + 出力 | ✅ 用户实测"没问题" |
 | 偏转渐变（视觉偏转点 = 朝 target 走的点，`nanoTime` 差值推进） | ✅ **用户实测"偏转动画平滑了"**（v8：`loadAdditional` 不再重置视觉状态 + 目标角落盘） |
@@ -400,7 +413,7 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 |---|---|
 | `references/Simulated-Project-main/aeronautics/.../gyroscopic_propeller_bearing/{GyroscopicPropellerBearingRenderer,GyroscopicPropellerBearingVisual,GyroscopicPropellerBearingBlockEntity}.java` | 枢轴倾斜手法（`translate(+pivot) → rotateCentered → translate(−pivot)`）、四活塞位置/朝向、`tiltQuat` + previous/插值、锥角钳位思路 |
 | `references/create-propulsion-simulated-main/.../vector_thruster/{VectorThrusterBlockEntity.java,VectorThrusterRenderer.java}` | 偏转动画的 prev/current + `Mth.lerp(partialTick, …)` 骨架、只在命令时 `notifyUpdate`（**但客户端 tick 驱动在 Sable 物理体上不可靠，最终没采用，见 §6.5**） |
-| 同目录 `piston_head.json` / `piston_pole.json` | 与本方块这两个 partial 模型几何逐位相同（**但活塞自由度是镜像的，只能参考变换链手法**） |
+| 同目录 `piston_head.json` / `piston_pole.json` | 与本方块的活塞杆 partial 几何逐位相同（**但活塞自由度是镜像的，只能参考变换链手法**；本方块已删掉 `piston_head.json`，头并进 `base.json`，见 §4.1） |
 | `block/ServoBearingBlockEntity.java` 内嵌 `Peripheral` + `block/ServoBearingRenderer.java` | CC:T 外设写法（`getType`/`equals`/`@LuaFunction(mainThread=true)`/懒加载）与六向 FACING 渲染链 |
 | `block/ShortRangeLinkerBlock.java` / `…BlockEntity.java` / `screen/ShortRangeLinker*` / `network/ShortRangeLinker*` | 频道注册生命周期、GUI（滚轮 + 非物理体提示 + tooltip 前景层）、payload 处理器 |
 | `compat/cc/ShortRangeLinkerRegistry.java` | **物理体作用域频道表**（自动分配 / 顺延 / 链聚合 / 非物理体返回 -1） |
@@ -443,3 +456,42 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 
 ⚠️ 不要改回去的坑（都在 §6.5 有记录）：别用同步包/tick 计数/渲染调用频率当动画时钟；别在
 `loadAdditional` / `handleUpdateTag` 里重置视觉状态；`value` 与 `target` 必须一起落盘。
+
+---
+
+## 12. 变更记录（2026-11 第二轮：用户重做模型）
+
+### 12.1 用户诉求
+
+> 「我重新制作了模型……去掉了 `piston_head`，整合进了 base 中，因为活塞头本来就是固定在底座上的，
+> 与底座没有相对移动；而且我调整了活塞杆的初始位置（`item.json` 中）；并且选择框/碰撞箱需要改为
+> `[0,0,0,16,4,16]` + `[2,4,2,14,16,14]`（不需要随着动画改变）。」
+
+### 12.2 模型的新坐标（从 `item.json` 读出来的）
+
+| 部件 | 旧 | 新 |
+|---|---|---|
+| 底板（`base.json`） | `x2..14, y0..2, z2..14` | **`x0..16, y0..4, z0..16`** |
+| 活塞头 | 独立 `piston_head.json`，半径 6..8、`y0..2` | **并进 `base.json`**，半径 6..8、**`y4..6`** |
+| 活塞杆 | `y1..8` | **`y5..12`**（`piston_pole.json` 本身没变） |
+| 可动 block | 裙边 `y1..5`、筒身 `y4..13`、臂 `y6..10`、顶环 `y13..16` | 裙边 `y2..6`、筒身 `y6..14`、臂 `y9..13`、顶环 `y14..18` |
+| 枢轴 | `(8,1,8)` | **`(8,2,8)`**（底板中面 = 裙边下沿） |
+| 铰点 | 半径 6.5、`y=1` | 半径 6.5、**`y=5`** |
+
+### 12.3 代码改动
+
+| 文件 | 改了什么 |
+|---|---|
+| `block/AdvancedThrustNozzleBlock.java` | 选择框/碰撞箱：整块正方形 → **`(0,0,0,16,4,16)` + `(2,4,2,14,16,14)`**；盒子不再对称 ⇒ 新增 `buildShapes()`（复用父类 `rotateX`/`rotateY`）生成六向盒，`shapeFor` 查表（与 blockstate 的 x/y 旋转严格对应） |
+| `block/AdvancedThrustNozzleRenderer.java` | `PIVOT` y `1/16`→**`2/16`**；新增 `PISTON_HINGE_HEIGHT = 5/16`（铰点高度与枢轴解耦，铰点不再用 `PIVOT.y`）；**删掉活塞头的渲染**（头在 `base.json` 里，由 blockstate 静态画） |
+| `block/MyModPartialModels.java` | 删掉 `ADVANCED_THRUST_NOZZLE_PISTON_HEAD`（`piston_head.json` 已删，注册了会在模型烘焙时报缺文件） |
+| `assets/ccpe/models/block/advanced_thrust_nozzle/piston_head.json` | （用户删除） |
+
+### 12.4 以后调模型时要同步的三个数字
+
+| 模型里的东西 | 代码常量 |
+|---|---|
+| 杆底面高度（px） | `AdvancedThrustNozzleRenderer.PISTON_HINGE_HEIGHT`（现 5/16） |
+| 杆的径向中心（px） | `AdvancedThrustNozzleRenderer.PISTON_HINGE_RADIUS`（现 6.5/16） |
+| 倾斜枢轴（px） | `AdvancedThrustNozzleRenderer.PIVOT`（现 (8,2,8)/16） |
+| 底板/喷口包络（px） | `AdvancedThrustNozzleBlock.BASE_SHAPE`（现 `(0,0,0,16,4,16)` + `(2,4,2,14,16,14)`） |

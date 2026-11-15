@@ -234,8 +234,8 @@ public class MyModBlocks {
     /**
      * 矢量喷管（advanced_thrust_nozzle）：定向喷管（{@link #thrust_nozzle}）的加强版。
      * <p>
-     * 结构差别：固定部分只剩底板，喷口本体（筒身 + 十字臂 + 顶环）可在锥角范围内绕枢轴
-     * {@code (8,1,8)px} 转动，四个小活塞随动（参考 {@code aeronautics:gyroscopic_propeller_bearing}）。
+     * 结构差别：固定部分只剩底板（含 4 个活塞头），喷口本体（筒身 + 十字臂 + 顶环）可在锥角范围内绕枢轴
+     * {@code (8,2,8)px} 转动，四个活塞杆随动（参考 {@code aeronautics:gyroscopic_propeller_bearing}）。
      * 模型见 {@code assets/ccpe/models/block/advanced_thrust_nozzle/}，动态渲染见
      * {@link AdvancedThrustNozzleRenderer}（只走 BER，不注册 Flywheel Visual）。
      * <p>
