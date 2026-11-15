@@ -13,15 +13,12 @@
     },
     "L": {
       "item": "ccpe:short_range_linker"
-    },
-    "A": {
-      "item": "create:andesite_alloy"
     }
   },
   "pattern": [
     " # ",
-    "PXP",
-    "ALA"
+    " X ",
+    "PLP"
   ],
   "result": {
     "count": 1,
