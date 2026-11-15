@@ -92,9 +92,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    /** 调试日志开关：定位"引擎没反应"问题时置 true，定位后改回 false */
-    public static boolean DEBUG = true;
-
     /** 最大发电转速（RPM，油门 100% 时输出）；转速 = 油门 × GENERATED_SPEED（0~256 线性，定距桨模型） */
     public static final float GENERATED_SPEED = 256;
 
@@ -947,21 +944,6 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         // 转向变了立刻抄面板；否则每 1Hz 心跳校一次（只对不一致的节发包，见 applyDirectionOption）
         if (directionChanged || heartbeat)
             syncDirectionOptionToSegments();
-
-        if (DEBUG) {
-            if (running != prevRunning) {
-                LOGGER.info("[EngineCore] {} running {} -> {} | fluid={} steam={} fuel={} water={} steamFuel={} solid={} T={}℃ overheated={} capacity={}",
-                        worldPosition, prevRunning, running, runningFluid, runningSteam,
-                        fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterReserve, steamFuelType,
-                        solidFuelSources.size(), temperature, overheated, moduleCapacity);
-            } else if (!running && level.getGameTime() % 40 == 0) {
-                LOGGER.info("[EngineCore] {} idle | fluid={} steam={} fuel={} water={} steamFuel={} solid={} T={}℃ overheated={} ducts={} len={} speed={}",
-                        worldPosition, fluidChambers.size(), steamChambers.size(),
-                        fluidFuel == null ? "NONE" : fluidFuel.fluid(), waterReserve, steamFuelType,
-                        solidFuelSources.size(), temperature, overheated,
-                        scan.coolingDucts, length, getSpeed());
-            }
-        }
     }
 
     /** 模块扫描结果：一次遍历收集两类燃烧室 + 冷却气道数 + 去重后的全部邻居（core 成员 6 邻居 ∪ 燃烧室 6 邻居） */

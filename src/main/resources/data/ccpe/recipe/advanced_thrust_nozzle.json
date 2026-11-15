@@ -3,19 +3,25 @@
   "category": "misc",
   "key": {
     "#": {
-      "item": "create:andesite_alloy"
+      "item": "create:brass_ingot"
     },
     "X": {
-      "item": "minecraft:copper_ingot"
+      "item": "ccpe:thrust_nozzle"
     },
     "P": {
       "item": "minecraft:piston"
+    },
+    "L": {
+      "item": "ccpe:short_range_linker"
+    },
+    "A": {
+      "item": "create:andesite_alloy"
     }
   },
   "pattern": [
     " # ",
     "PXP",
-    "###"
+    "ALA"
   ],
   "result": {
     "count": 1,
