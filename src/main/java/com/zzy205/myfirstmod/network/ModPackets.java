@@ -23,5 +23,6 @@ public final class ModPackets {
         ReceiverPacketHandlers.register(registrar);
         ControlDeskPacketHandlers.register(registrar);
         ShortRangeLinkerPacketHandlers.register(registrar);
+        AdvancedThrustNozzlePacketHandlers.register(registrar);
     }
 }

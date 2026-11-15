@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.compat.cc;
 
+import com.zzy205.myfirstmod.block.AdvancedThrustNozzleBlockEntity;
 import com.zzy205.myfirstmod.block.AutoPackagerBlockEntity;
 import com.zzy205.myfirstmod.block.ControlDeskBlockEntity;
 import com.zzy205.myfirstmod.block.EngineCoreBlockEntity;
@@ -85,6 +86,13 @@ public final class CCPeripheralCapabilities {
                 PeripheralCapability.get(),
                 MyModBlockEntities.auto_packager_entity.get(),
                 (be, side) -> ((AutoPackagerBlockEntity) be).computerBehaviour.getPeripheralCapability()
+        );
+        // 矢量喷管（advanced_thrust_nozzle）作为 CC:T 外设：
+        // setDeflection(方位角, 锥角) / getDeflection / getMaxTilt / setThrustScale(0..1) / getThrustScale / getChannel
+        event.registerBlockEntity(
+                PeripheralCapability.get(),
+                MyModBlockEntities.advanced_thrust_nozzle_entity.get(),
+                (be, side) -> ((AdvancedThrustNozzleBlockEntity) be).getPeripheral()
         );
     }
 }

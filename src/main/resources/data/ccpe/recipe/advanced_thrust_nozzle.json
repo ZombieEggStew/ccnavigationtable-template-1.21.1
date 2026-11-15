@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "#": {
+      "item": "create:brass_ingot"
+    },
+    "X": {
+      "item": "ccpe:thrust_nozzle"
+    },
+    "P": {
+      "item": "create:mechanical_piston"
+    },
+    "L": {
+      "item": "ccpe:short_range_linker"
+    }
+  },
+  "pattern": [
+    " # ",
+    " X ",
+    "PLP"
+  ],
+  "result": {
+    "count": 1,
+    "id": "ccpe:advanced_thrust_nozzle"
+  }
+}

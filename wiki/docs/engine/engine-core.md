@@ -48,9 +48,21 @@ Modules:
 ```
 
 - **Stress Output** = the total stress the engine can provide (server-synced, **constant and independent of throttle**).
-- **Throttle** = the current `setThrottle` value; **Current Speed** = throttle × 256.
+- **Throttle** = the current `setThrottle` value; **Current Speed** = throttle × 256 (**negative while reversed**, e.g. `-64 RPM`).
 - **Load** = the actual network utilization (0% when idle, 100% when saturated, red at ≥90%) — this is what drives fuel burn and temperature.
 - The module list shows which chambers / ducts are attached.
+
+## Output direction (hold right-click)
+
+Aim at one of the core's **four side faces** (the axis ends are the shaft, no button there) and **hold right-click** to open the direction panel with two icon options:
+
+| Option | Effect |
+|---|---|
+| **Forward** (default) | Output shaft spins forward |
+| **Reversed** | Output shaft spins backwards (speed magnitude, stress capacity, fuel burn and heat are all unchanged — the whole network is simply driven the other way) |
+
+- The panel works on **any core segment** and the choice is synced across the whole engine immediately. The same state is reachable from Lua with `setReversed(true)`.
+- Reversing changes no numbers: `getStressCapacity()`, `getLoad()`, fuel burn and temperature stay identical; the core's **Current Speed** goggle line turns negative.
 
 !!! note "Throttle and Load are only shown on the engine core"
     The module goggles (fluid combustion chamber / steam power chamber / cooling air duct) no longer repeat throttle and load — they only show their own status, temperature and fuel.

@@ -438,6 +438,20 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
         if (tag.contains("OccupiedChannels")) occupiedChannels = tag.getIntArray("OccupiedChannels");
         if (tag.contains("NbtCacheEnabled")) nbtCacheEnabled = tag.getBoolean("NbtCacheEnabled");
         if (tag.contains("NbtCacheInterval")) nbtCacheInterval = Math.max(1, tag.getInt("NbtCacheInterval"));
+
+        // ── 蓝图 / 结构部署的时序修正 ──
+        // Create 的 BlockHelper.placeSchematicBlock 顺序是 setBlock（建 BE ⇒ 立刻 onLoad）→
+        // 再 loadWithComponents（走到这里）。也就是说 onLoad 那一刻用的是**默认频道 0**，
+        // 蓝图里记的真实频道到这里才被读出来：若等到 20 tick 的例行 revalidate 才纠正，
+        // 期间①Lua 在旧号上能查到本链接器、在新号上查不到；②同链一次部署多个链接器时，
+        // 期间抢号的「顺延」结果会被回写进 scrolledValue（onLoad / revalidate 都会回写），
+        // 把蓝图里记的地址永久改掉。
+        // ⇒ 读到真实频道后立刻复核一次：每个方块在部署当 tick 就落回自己的地址，
+        //   下一个方块的 onLoad 也就不会踩到已经被占的号。
+        // 世界加载路径下 level 此时尚未就绪（null）⇒ 跳过，交给 onLoad 处理。
+        if (this.level instanceof ServerLevel serverLevel) {
+            this.revalidate(serverLevel);
+        }
     }
 
     @Override
@@ -453,7 +467,18 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
         tag.putInt("NbtCacheInterval", nbtCacheInterval);
     }
 
-    /** Create 原理图 / 装置搬运的「安全 NBT」：只存频道、共享加载开关与 NBT 缓存设置（蓝图兼容） */
+    /**
+     * Create 原理图 / 蓝图部署（以及 contraption 搬运）用的「安全 NBT」。
+     * <p>
+     * 只存「配置性质」的状态：频道、链上共享的加载开关、NBT 缓存设置。
+     * <ul>
+     *   <li>{@code OccupiedChannels} 是运行时快照（onLoad / refresh 重建）⇒ 不写，避免把陈旧快照带进 .nbt；</li>
+     *   <li>ticket 状态不写（重载后由 {@code tryRegisterSableTicket} 重挂）；</li>
+     *   <li>{@code RedstoneOutput} <b>故意不写</b>：部署后没有任何路径会去 apply 它，
+     *       若把它写进蓝图，就会出现「字段有值但方块没充能」的不一致；归零反而与真实信号一致
+     *       （与 {@code setRemoved} 里把输出清零的语义同源）。</li>
+     * </ul>
+     */
     @Override
     public void writeSafe(CompoundTag compound, HolderLookup.Provider registries) {
         compound.putInt("ScrolledValue", scrolledValue);

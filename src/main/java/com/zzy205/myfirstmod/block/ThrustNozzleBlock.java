@@ -89,7 +89,7 @@ public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock, 
     }
 
     /** 绕 X 轴 90° 的整数倍旋转：1 圈映射 (x,y,z) → (x, z, 1−y)（由 x=90 的模型旋转反推，同 {@link AicBlock}） */
-    private static VoxelShape rotateX(VoxelShape shape, int quarterTurns) {
+    protected static VoxelShape rotateX(VoxelShape shape, int quarterTurns) {
         final int turns = ((quarterTurns % 4) + 4) % 4;
 
         if (turns == 0) {
@@ -122,7 +122,7 @@ public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock, 
     }
 
     /** 绕 Y 轴 90° 的整数倍旋转：1 圈映射 (x,y,z) → (1−z, y, x)（照抄 {@link AicBlock#rotateShapeY}） */
-    private static VoxelShape rotateY(VoxelShape shape, int quarterTurns) {
+    protected static VoxelShape rotateY(VoxelShape shape, int quarterTurns) {
         final int turns = ((quarterTurns % 4) + 4) % 4;
 
         if (turns == 0) {
@@ -244,7 +244,15 @@ public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock, 
     @Override
     protected @NotNull VoxelShape getShape(@NotNull BlockState state, @NotNull BlockGetter level,
             @NotNull BlockPos pos, @NotNull CollisionContext context) {
-        return SHAPES.get(state.getValue(FACING));
+        return shapeFor(state.getValue(FACING));
+    }
+
+    /**
+     * 子类钩子：某个朝向的选择框 / 碰撞箱（默认 = 本方块那张六向表）。
+     * 矢量喷管（{@link AdvancedThrustNozzleBlock}）模型更大，覆盖这个即可。
+     */
+    protected VoxelShape shapeFor(Direction facing) {
+        return SHAPES.get(facing);
     }
 
     // ── 只允许贴装在电扇出风面（照抄 create:nozzle） ──
@@ -270,7 +278,20 @@ public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock, 
 
     @Override
     public @NotNull BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
+        return createBlockEntity(pos, state);
+    }
+
+    /** 子类钩子：本方块实例化的方块实体（默认 = {@link ThrustNozzleBlockEntity}） */
+    protected BlockEntity createBlockEntity(BlockPos pos, BlockState state) {
         return new ThrustNozzleBlockEntity(pos, state);
+    }
+
+    /**
+     * 子类钩子：本方块对应的方块实体类型（{@link #getTicker} 用它过滤，默认 = {@code thrust_nozzle}）。
+     * 子类换了自己的 BE 类型时必须一起覆盖，否则客户端 ticker 不会挂上（粒子不喷）。
+     */
+    protected BlockEntityType<?> entityType() {
+        return MyModBlockEntities.thrust_nozzle_entity.get();
     }
 
     // ── 客户端 ticker：只用来喷气流粒子（服务端物理走 Sable 的 sable$physicsTick） ──
@@ -281,7 +302,7 @@ public class ThrustNozzleBlock extends DirectionalBlock implements EntityBlock, 
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state,
             @NotNull BlockEntityType<T> type) {
-        if (!level.isClientSide || type != MyModBlockEntities.thrust_nozzle_entity.get()) {
+        if (!level.isClientSide || type != this.entityType()) {
             return null;
         }
 

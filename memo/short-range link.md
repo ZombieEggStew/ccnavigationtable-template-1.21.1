@@ -145,3 +145,60 @@ flowchart LR
 - **冗余 ticket**：链上所有开启的链接器各自持有 ticket（与 pe 多传感器同体行为一致，Sable 按 (ticketType, key=pos) 去重，无害）。
 - **Sable 坐标投影**：本轮 API 不含 NBT 读取，无坐标投影需求；将来若加 `getAll` 再复用 `PeripheralExtenderBlock.tryAddRealWorldPos`。
 - **作用域 = 调用电脑所在物理体**：电脑不在任何物理体上时 `ccpe.sensor_system` 查询一律 nil（严格语义，与「非物理体不链接」一致）。作用域解析由 `update()` 主线程缓存 `chainUuids`，Lua 侧最多滞后 1 tick。
+
+## 十一、蓝图兼容性审计（2026-11，用户要求复查）
+
+用户反馈「蓝图部署好像没什么问题，帮我检查一下」。审计结论：`writeSafe` 早就实现，功能可用；
+但**部署瞬间存在一个真实（虽然短暂）的时序缺陷**，已修。
+
+### 11.1 Create 的安全 NBT 与部署顺序（源码事实）
+
+- 写：`BlockHelper.prepareBlockEntityData` 只在 ①block 带 `create:safe_nbt` 标签 ②注册了 `SafeNbtWriter`
+  ③**BE 实现 `com.simibubi.create.api.schematic.nbt.PartialSafeNBT`** 时才把 BE 数据存进蓝图，
+  否则**一个字段都不存**。本链接器走 ③。
+- 读：`BlockHelper.placeSchematicBlock` 的顺序是
+  **`world.setBlock(...)`（建 BE ⇒ 立刻 `onLoad`）→ 之后才 `blockEntity.loadWithComponents(data)`（`loadAdditional`）**。
+
+### 11.2 缺陷（已修）
+
+`onLoad` 用的是**字段默认值**（`scrolledValue = 0`）去登记，蓝图里的真实频道要等紧随其后的
+`loadAdditional` 才读回来。于是部署那一刻：
+
+1. 它会先按 0 号登记 ⇒ 部署后最多 20 tick（下一次 `revalidate`）内，Lua 在**旧号**上能查到它、
+   在**新号**上查不到；
+2. 更麻烦的是 `onLoad` / `revalidate` 都会把「顺延结果」**回写进 `scrolledValue`**：
+   同链一次部署多个链接器时，后者的顺延可能把前者刚恢复的号改掉，**蓝图里记的地址被永久改写**。
+
+**修法**：`loadAdditional` 末尾（`this.level instanceof ServerLevel` 时）**立刻 `revalidate(serverLevel)`**。
+"setBlock → onLoad → loadWithComponents" 是逐方块串行执行的，所以每个链接器在**部署当 tick** 就落回
+自己的地址，下一个方块的 `onLoad` 也就不会踩到已被占用的号。
+世界加载路径下 `loadAdditional` 时 `level` 还是 null（BE 由 `BlockEntityType.create` 建好后再 `setLevel`）
+⇒ 这段被跳过，行为与以前完全一致。
+
+### 11.3 同源修正（同一个频道空间的另外两个设备）
+
+`ControlDeskBlockEntity`（控制台）与 `AdvancedThrustNozzleBlockEntity`（矢量喷管）都和链接器共用
+`ShortRangeLinkerRegistry` 的频道空间、都是「onLoad 登记 + 20 tick 复核」的同一套结构，
+所以同样存在上面的瞬时错位（一个控制台抢到 0 号，会连带把同链链接器的恢复弄歪）：
+
+| 文件 | 改动 |
+|---|---|
+| `block/ControlDeskBlockEntity.java` | `loadAdditional` 末尾（服务端 + level 就绪时）立即 `revalidateChain()` |
+| `block/AdvancedThrustNozzleBlockEntity.java` | `loadAdditional` 末尾立即 `registerChannel()`；**另外新实现 `PartialSafeNBT.writeSafe`**（原来根本没写，所以蓝图里喷管一个字段都没有 ⇒ 频道/偏转/出力全丢，见 `memo/advanced-thrust-nozzle.md` §5.4/§8） |
+
+### 11.4 审计过、**故意不改**的点
+
+- **`RedstoneOutput` 不进 `writeSafe`**：部署后没有任何路径会去 apply 它，写进蓝图会造成
+  「字段有值但方块没充能」的不一致；归零反而与真实信号一致。
+- **`OccupiedChannels` / ticket 状态 / AttachedNBT 快照不进 `writeSafe`**：运行时数据，部署后由
+  `onLoad` + 首个 tick 重建。
+- **`scrolledValue` 同时承载「用户意图」与「实际生效号」**：理论上仍可能被一次瞬时冲突永久改号，
+  上面的「部署当 tick 立即复核」已把窗口压到几乎为零；要彻底消除得把 desired / effective 拆成两个字段
+  （会牵动 GUI 滚轮、占用快照、Lua 寻址三处），暂不做，记为已知边界。
+
+### 11.5 验证清单（追加）
+
+1. 复制一架带 2 个链接器（频道 0 / 1）+ 1 台控制台（频道 2）+ 1 个矢量喷管（频道 3）的飞机，
+   打印到新位置：**部署后立刻**（1 tick 内）用电脑查 0/1/2/3，四个设备都应该已经在自己的号上。
+2. 部署到一条**已有设备占用 0 号**的飞机上：冲突的那个应当顺延（这是预期），其余保持原号。
+3. 部署后 `bodyLoad` 与 NBT 缓存开关/间隔与复制时一致；同链 OR 自愈仍生效。

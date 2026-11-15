@@ -2,6 +2,9 @@
 
 > 状态（2026-08 末）：**推力 / 排气（含轻微重力）/ 高空尾迹 / 染料染色 / 配置化 / tooltip / 扳手拆除 全部完成，
 > `gradlew classes` 通过；斜喷穿墙已修复并经用户多角度实测确认**。
+>
+> **矢量喷管 `ccpe:advanced_thrust_nozzle`（加强版）已独立成 `memo/advanced-thrust-nozzle.md`**（已实测通过）；
+> 本文只保留定向喷管本体，以及为子类加的那几个钩子（见 §8）。
 > **交接速览见 §13**（文件清单、玩家可见行为、参数在哪、待办）；**穿墙修复 + 重力的完整记录见 §14**，
 > **扳手快速拆除见 §15**。
 > 缺合成配方；模型/贴图由用户完成。
@@ -653,3 +656,24 @@ protected void setLocationFromBoundingbox() {
 | 5 | 粒子太大 | `EXHAUST_SCALE` 2.0 → 0.3（用户调） | ✅ |
 | 6 | 撞墙后继续下坠、无反弹 | 法向改真反弹（`BOUNCE`），确认无重力 | ✅ |
 | 7 | 撞地后想变大 / 分裂 | `GROW_ON_IMPACT` / `SPLIT_ON_IMPACT`（§3.6） | 变大保留，**分裂已关闭** |
+
+## 8. 矢量喷管（`ccpe:advanced_thrust_nozzle`）已独立成文档
+
+矢量喷管（加强版：可倾斜喷口 + 四活塞随动 + 物理体频道 + CC:T 外设）的全部记录见
+**`memo/advanced-thrust-nozzle.md`**，不在本文维护；本文只保留两个方块共用、以及为它加的钩子。
+
+关系：`AdvancedThrustNozzleBlock extends ThrustNozzleBlock`、`AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity`
+—— 推力 / 气压 / 排气·进气·尾迹粒子 / 遮挡射线 / 染料 / 扳手**全部继承本文的实现**。
+为此在本文两个类里各加了钩子（**定向喷管行为零变化**，已由用户实测确认）：
+
+| 钩子 | 默认 | 用途 |
+|---|---|---|
+| `ThrustNozzleBlock#createBlockEntity` / `entityType()` / `shapeFor(Direction)` | 本方块自身 | 子类换 BE 类型与选择框（`getTicker` 也改用 `entityType()` 过滤） |
+| `ThrustNozzleBlockEntity#(BlockEntityType, BlockPos, BlockState)` 构造器 | — | 子类注册成自己的 BE 类型 |
+| `ThrustNozzleBlockEntity#nozzleAxis(BlockState)` | `FACING` 法线 | 推力（`sable$physicsTick` 冲量）与**全部粒子链路**（喷口位置 / 粒子基向量 / 遮挡射线 / 进气漏斗 / 尾迹锚点）的唯一方向来源；矢量喷管覆盖它返回倾斜轴 ⇒ 一处改、全链路生效 |
+| `ThrustNozzleBlockEntity#thrustScale()` | `1.0` | 乘在「转速 × 气压」上的额外出力系数（矢量喷管的 Lua `setThrustScale`） |
+
+> ⚠️ **两种喷管的出力口径不同（2026-11 用户定稿）**：本文表格里的「1 RPM = 1 pN / 256 RPM = 256 pN」
+> 只针对**定向喷管** `ccpe:thrust_nozzle`；矢量喷管在 `thrustScale()` 里还乘了
+> `THRUST_OUTPUT_MULTIPLIER = 2.0` ⇒ **2 pN/RPM（256 RPM = 512 pN）**。
+> 同机混装时"同转速不同推力"是预期差异，详见 `memo/advanced-thrust-nozzle.md` §6.1 / §8。

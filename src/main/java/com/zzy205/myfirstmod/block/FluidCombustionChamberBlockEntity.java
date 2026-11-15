@@ -94,7 +94,9 @@ public class FluidCombustionChamberBlockEntity extends BlockEntity {
             return;
         }
         // 累积推进相位：转速变化只改推进速率，不产生相位跳变（修复快速变油门 → 相位跳变/回绕误判/动画高频重复）
-        float speed = controller.getSpeed();
+        // 取 abs：引擎可反转（Lua setReversed → 网络转速为负），负累加会让 (angle + 负数) % 2π 变负 →
+        // 回绕判定 prev > cur 每 tick 成立（"噗嗤"音效狂刷）+ 渲染插值反向扫掠；活塞是正弦往复，方向不可见
+        float speed = Math.abs(controller.getSpeed());
         pistonAngle = (pistonAngle + speed * PISTON_RAD_PER_RPM) % (float) (Math.PI * 2);
         // 相位回绕（累积角跨过 2π，每圈一次）→ 入队"噗嗤"音效池
         if (prevPistonAngle > pistonAngle && Config.ENGINE_FLUID_PUFF_VOLUME.get() > 0)
