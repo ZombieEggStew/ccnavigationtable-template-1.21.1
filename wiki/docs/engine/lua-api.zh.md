@@ -9,6 +9,8 @@ local e = peripheral.wrap("front")
 
 ## [示例——温度与混合比控制](../examples/trainer_aircraft_2.zh.md)
 
+> 引擎**默认自带**温度与混合比自动控制（不需要任何脚本），见[温度与混合比自动控制](auto-control.zh.md)。下面的方法用于**自己写**控制循环（先调 `setAutoControl(false)`）。
+
 ## 读与写
 
 - **读方法** `mainThread=false` 直读 controller 缓存状态——最多滞后 1 tick，高频轮询几乎零成本。
@@ -42,6 +44,9 @@ local e = peripheral.wrap("front")
 | `getWaterCoolingPower()` | false | number | 当前有效水冷散热 `k_water`（液量比例 × 冷却液效率 × 回路开度；不吃冲压/气压） |
 | `getWaterCoolingModules()` | false | number | 工作中的水冷模块数（冷却液量 > 0） |
 | `getCoolantAmount()` | false | number | 冷却液总量 mb（工作模块合计；服务端同步值） |
+| `getWaterCoolingStress()` | false | number | 水冷模块**占用的应力 SU**（= 工作模块数 × 512）——真实进网，见[水冷模块](water-cooling-module.zh.md) |
+| `getAutoControl()` | false | boolean | 内置**自动控制**是否开启（默认 **开**）：引擎自己把温度钉 155°C、实际混合比钉 0.9。见[温度与混合比自动控制](auto-control.zh.md) |
+| `setAutoControl(bool)` | true | boolean | 显式开关自动控制（开启时重置积分/富油档）。**调任一 `setMixture` / `setCooling` / `setWaterCooling` 会自动关闭它**并交还玩家 |
 | `isWarmingUp()` | false | boolean | 蒸汽暖机中（T<100°C 只烧不发电） |
 
 ## 状态档位（流体引擎，按 `getTemperature()`）

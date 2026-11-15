@@ -61,6 +61,7 @@
 - [冷却气道](cooling-air-duct.zh.md) — 散热鳍片与风门
 - [水冷模块](water-cooling-module.zh.md) — 8000mb 冷却液、静态/低速/高空散热、冷却液消耗
 - [温度与冷却模型](temperature.zh.md) — 发热与散热如何计算（高度→温度与气压）
+- [温度与混合比自动控制](auto-control.zh.md) — 内置自动控制器：混合比 / 风门 / 水冷 / 富油兜底
 - [燃料与燃料源](fuel.zh.md) — datapack 燃料、原版燃料、快速装填储罐/燃料箱
 - [Lua API](lua-api.zh.md) — `ccpe:engine` 外设参考
 - [示例](../examples/trainer_aircraft_2.zh.md) — 使用流体燃烧室，自动控制引擎温度与混合比的完整示例

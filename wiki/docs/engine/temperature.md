@@ -4,6 +4,9 @@ The engine temperature is a continuous value computed **every tick on the server
 
 > Applies to the **fluid engine**. The **steam engine** does not use this model — its closed boiler self-regulates (see [Steam Power Chamber](steam-power-chamber.md)).
 
+!!! note "Auto control is on by default"
+    This page documents the engine's **physical model** — which is also what you see with **manual** control. The engine ships with built-in [temperature & mixture auto control](auto-control.md) enabled: it rewrites the mixture lever / shutter / water opening every tick and moves the equilibrium toward 155°C, so the temperature you read in game is usually the steady state *after* the controller has stepped in, not the numbers in the example tables below (`m_eff=1.0`, fixed shutter). To reproduce those numbers by hand, call `setAutoControl(false)` first.
+
 ## The model at a glance
 
 ```

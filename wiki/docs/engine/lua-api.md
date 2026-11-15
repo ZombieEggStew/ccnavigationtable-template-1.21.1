@@ -9,6 +9,8 @@ local e = peripheral.wrap("front")
 
 ## [Example — Temperature and Mixture Control](../examples/trainer_aircraft_2.md)
 
+> The engine already ships with **built-in temperature & mixture auto control** (no script needed) — see [Auto Control](auto-control.md). The methods below are for writing your own control loop (call `setAutoControl(false)` first).
+
 ## Reading vs writing
 
 - **Read methods** run with `mainThread=false` and read the controller's cached state directly — at most 1 tick stale, and effectively free to poll at high frequency.
@@ -42,6 +44,9 @@ local e = peripheral.wrap("front")
 | `getWaterCoolingPower()` | false | number | Current effective water dissipation `k_water` (amount ratio × coolant efficiency × opening; immune to ram air and pressure) |
 | `getWaterCoolingModules()` | false | number | Number of working water cooling modules (coolant amount > 0) |
 | `getCoolantAmount()` | false | number | Total coolant in mB (sum over working modules; server-synced value) |
+| `getWaterCoolingStress()` | false | number | Stress **tied up** by the water modules (= working modules × 512) — really applied to the network, see [Water Cooling Module](water-cooling-module.md) |
+| `getAutoControl()` | false | boolean | Whether the built-in **auto control** is on (default **on**): the engine holds 155°C and an effective mixture of 0.9 by itself. See [Auto Control](auto-control.md) |
+| `setAutoControl(bool)` | true | boolean | Explicitly toggle auto control (resets the integral / enrichment state when enabling). **Calling any of `setMixture` / `setCooling` / `setWaterCooling` turns it off automatically** and hands control back to the player |
 | `isWarmingUp()` | false | boolean | Steam warm-up in progress (T<100°C burns without generating) |
 
 ## Status tiers (fluid engine, via `getTemperature()`)
