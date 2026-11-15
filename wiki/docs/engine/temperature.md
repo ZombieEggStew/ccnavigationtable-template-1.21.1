@@ -85,7 +85,7 @@ K_total = (K_CORE×length + K_AMB×running chambers) × f(pressure)
 | `K_AMB` | **0.04 per running chamber** — ambient convection over the running chambers. Stopped chambers do not count (a stopped engine only cools via `K_CORE`). No ram bonus. |
 | `K_DUCT` | **0.09 per cooling air duct** — the duct fins. Scaled by the cooling **shutter** (`setCooling`, see [Cooling Air Duct](cooling-air-duct.md)). **The only term that gets the full ram bonus.** One duct per chamber gives `0.04 + 0.09 = 0.13` of effective cooling per chamber. |
 | `shutter` | `coolingStrength` (0..1, default 1.0) — only shrinks the duct component (real cowl flaps). |
-| `ram(speed)` | **Ram-air cooling**: 1.0 below 10 m/s, linear ramp to **×2.0 at 30 m/s**. Static (non-physics) blocks = 1.0. It **only multiplies the duct component** — bare core/chamber surfaces transfer heat by natural convection, which barely changes with airspeed (water cooling gets `waterRam`, a 25% share). |
+| `ram(speed)` | **Ram/airflow cooling**: **at rest (0 m/s) ×0.5** (no headwind — a radiator only works at half effect) → 0→10 m/s back to ×1.0 → 10→30 m/s up to **×2.0** (static non-physics blocks use the at-rest value). It **only multiplies the duct component** — bare core/chamber surfaces transfer heat by natural convection, which barely changes with airspeed (water cooling takes only the `ram>1` bonus and is not penalised at rest). |
 | `f(pressure)` | **Pressure factor**: `pressure^0.8` (clamped to a floor of 0.25). At altitude the air is thin → heat transfer is worse → **cooling is worse at altitude**. Applies fully to natural cooling and ducts; water cooling takes a 25% share (`waterPressure`). |
 | `k_water` | **Water cooling module contribution** (below), **added outside the brackets** — it gets **small shares of both ram air and pressure** (`waterRam = 1+(ram−1)×0.25` ⇒ ram 2.0 → ×1.25; `waterPressure = 1−(1−f)×0.25` ⇒ f 0.54 → ×0.885). |
 
@@ -98,7 +98,7 @@ K_total = (K_CORE×length + K_AMB×running chambers) × f(pressure)
 
 ```
 k_water = K_WATER(0.37) × Σ_modules [ min(amount / 4000, 1) × coolant efficiency ] × loop opening × waterRam × waterPressure
-waterRam = 1 + (ram(speed) − 1) × 0.25        <- only 25% of the ram bonus (ram 2.0 → ×1.25)
+waterRam = 1 + max(0, ram(speed) − 1) × 0.25  <- only 25% of the ram **bonus** (×1.25 at full ram; no penalty at rest)
 waterPressure = 1 − (1 − f(pressure)) × 0.25   <- only 25% of the pressure loss (f 0.54 → ×0.885)
 ```
 

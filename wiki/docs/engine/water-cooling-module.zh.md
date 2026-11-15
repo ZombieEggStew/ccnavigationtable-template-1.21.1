@@ -24,7 +24,7 @@
 ```
 k_water = K_WATER × Σ_模块 [ min(液量 / 4000, 1) × 冷却液效率 ] × 回路开度 × waterRam × waterPressure
 K_WATER = 0.37（每个模块满效）
-waterRam = 1 + (ram(速度) − 1) × 0.25                ← 只吃冲压增益的 25%（ram 2.0 → ×1.25）
+waterRam = 1 + max(0, ram(速度) − 1) × 0.25     ← 只吃冲压**增益**的 25%（ram 2.0 → ×1.25；静止无惩罚）
 waterPressure = 1 − (1 − f(气压)) × 0.25              ← 只吃气压损失的 25%（f 0.54 → ×0.885）
 ```
 

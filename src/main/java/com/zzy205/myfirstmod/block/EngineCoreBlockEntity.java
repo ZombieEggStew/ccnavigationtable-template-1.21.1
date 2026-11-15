@@ -330,6 +330,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final int COOLANT_DRAIN_CHUNK_MB = 16;
     /** 冲压冷却满增益（×）：运动 ≥RAM_FULL 时**风道分量** ×2.0（自然散热不吃冲压，见 {@link #WATER_RAM_FRACTION} 注释） */
     public static final float RAM_MAX = 2.0f;
+    /**
+     * 静止/极低速时的风道散热因子（2026-09）：<b>0.5</b> —— 没有迎风气流时散热器只能发挥一半。
+     * <p>依据：真实地面静止大功率是最容易过热的工况（只剩螺旋桨滑流/风扇），飞行员必须开满整流罩风门且只能短时高功率。
+     * 曲线：速度 0 时 ×0.5 → 0→10 m/s 线性接回 ×1.0 → 10→30 m/s 继续升到 {@link #RAM_MAX}。
+     * 只作用于**风道分量**；水冷不吃这项惩罚（只吃 ram &gt; 1 时的增益份额，见 {@link #WATER_RAM_FRACTION}）。</p>
+     */
+    public static final float RAM_STATIC = 0.5f;
     /** 冲压起始速度（m/s）：低于此无增益 */
     public static final float RAM_START = 10f;
     /** 冲压满速（m/s）：达到此速度增益 = RAM_MAX */
@@ -1483,29 +1490,30 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     // ================= P3：温度/冷却辅助 =================
 
     /**
-     * 冲压冷却因子：运动体速度 10→30 m/s 线性爬升 1.0→RAM_MAX（&lt;10 无增益，≥30 满增益；静态方块 = 1.0）。
-     * <p>消费方：<b>冷却气道分量吃满</b>（{@code K_DUCT×风道数×风门×ram}）、<b>水冷吃 WATER_RAM_FRACTION 份额</b>
-     * （见 {@link #waterRamFactor()}）、<b>自然散热（K_CORE/K_AMB）不吃</b>——裸方块表面的自然对流几乎不随速度提升。</p>
+     * 冲压冷却因子（2026-09 三段）：速度 0 → {@link #RAM_STATIC}（0.5，静止没有迎风）；0→10 m/s 线性接回 1.0；
+     * 10→30 m/s 线性到 {@link #RAM_MAX}（2.0）；≥30 m/s 恒 2.0。静态（非物理体）方块 = {@link #RAM_STATIC}。
+     * <p>消费方：<b>冷却气道分量吃满</b>（{@code K_DUCT×风道数×风门×ram}）、<b>水冷只吃 ram &gt; 1 的增益份额</b>
+     * （见 {@link #waterRamFactor()}，静止不受惩罚）、<b>自然散热（K_CORE/K_AMB）不吃</b>——裸方块表面的自然对流几乎不随速度提升。</p>
      */
     protected float ramFactor() {
         SubLevel sub = SableCompat.getContainingSubLevel(this);
         if (sub == null)
-            return 1f;
+            return RAM_STATIC;
         Vec3 v = SableCompat.getWorldLinearVelocity(sub);
         if (v == null)
-            return 1f;
+            return RAM_STATIC;
         float speed = (float) v.length();
-        if (speed <= RAM_START)
-            return 1f;
         if (speed >= RAM_FULL)
             return RAM_MAX;
+        if (speed <= RAM_START)
+            return RAM_STATIC + (1f - RAM_STATIC) * Math.max(0f, speed) / RAM_START;
         float t = (speed - RAM_START) / (RAM_FULL - RAM_START);
         return 1f + (RAM_MAX - 1f) * t;
     }
 
-    /** 水冷冲压因子：1 + (ram − 1) × {@link #WATER_RAM_FRACTION}（只吃少量冲压） */
+    /** 水冷冲压因子：1 + max(0, ram − 1) × {@link #WATER_RAM_FRACTION}（只吃冲压**增益**份额；静止无惩罚，ram 2.0 → ×1.25） */
     protected float waterRamFactor() {
-        return 1f + (ramFactor() - 1f) * WATER_RAM_FRACTION;
+        return 1f + Math.max(0f, ramFactor() - 1f) * WATER_RAM_FRACTION;
     }
 
     /** 水冷气压因子：1 − (1 − f(气压)) × {@link #WATER_PRESSURE_FRACTION}（只吃少量气压损失：f=0.54 → ×0.885） */

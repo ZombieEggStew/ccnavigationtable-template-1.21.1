@@ -24,7 +24,7 @@ The key difference from the [Cooling Air Duct](cooling-air-duct.md): water cooli
 ```
 k_water = K_WATER × Σ_modules [ min(amount / 4000, 1) × coolant efficiency ] × loop opening × waterRam × waterPressure
 K_WATER = 0.37 (per module at full effect)
-waterRam = 1 + (ram(speed) − 1) × 0.25          <- only 25% of the ram bonus (ram 2.0 → ×1.25)
+waterRam = 1 + max(0, ram(speed) − 1) × 0.25     <- only 25% of the ram **bonus** (×1.25 at full ram; no penalty at rest)
 waterPressure = 1 − (1 − f(pressure)) × 0.25     <- only 25% of the pressure loss (f 0.54 → ×0.885)
 ```
 
