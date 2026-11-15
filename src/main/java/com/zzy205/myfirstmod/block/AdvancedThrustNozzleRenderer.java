@@ -26,7 +26,7 @@ import org.joml.Vector3f;
  * <li><b>FACING 旋转</b>：与 {@code blockstates/advanced_thrust_nozzle.json} 的 x/y 旋转
  *     <b>严格一致</b>（变换链照抄已验证的 {@link ServoBearingRenderer}：水平朝向先绕 Y 转
  *     {@code horizontalAngle(反朝向)}，再绕 X 转 {@code -90 - verticalAngle}）；</li>
- * <li><b>绕枢轴的倾斜</b>：枢轴 = 模型空间 {@code (8,2,8)px}（底板 y0..4 的中面、也是裙边下沿所在高度），
+ * <li><b>绕枢轴的倾斜</b>：枢轴 = 模型空间 {@code (8,5,8)px}（四活塞活塞头 y4..6px 的中面，理由见 {@link #PIVOT}），
  *     {@code rotateAround(tilt, PIVOT)} 等价于参考实现的
  *     {@code translate(+pivot) → rotateCentered(tilt) → translate(−pivot)} 手法；</li>
  * <li><b>各部件自身的平移 / 方位旋转</b>。</li>
@@ -68,8 +68,23 @@ public class AdvancedThrustNozzleRenderer extends SafeBlockEntityRenderer<Advanc
 
     // ═══════════════ 几何常量（模型空间，块单位；px 值见注释） ═══════════════
 
-    /** 倾斜枢轴（px (8,2,8)）：block 部分绕它转（底板 y0..4px 的中面，裙边 y2..6px 的下沿就在这一层） */
-    public static final Vector3f PIVOT = new Vector3f(8f / 16f, 2f / 16f, 8f / 16f);
+    /**
+     * 倾斜枢轴（px (8,5,8)）：block 部分绕它转 —— 正好是<b>四活塞活塞头（y4..6px）的中面</b>。
+     * <p>
+     * 为什么不是底板中面 y=2px（2026-11 第二轮曾用 2）：枢轴高度这一条同时影响两件事，实测（离线核算，tilt=15°）
+     * <list>
+     * <li><b>十字臂伸出方块四边的量</b>（臂的外端本来就顶在 x/z=0/16px 的方块面上，转多少就溢多少）：
+     *     y=2 ⇒ 2.57px、y=5 ⇒ **1.80px**、y=8 ⇒ 1.02px —— 抬得越高溢得越少；</li>
+     * <li><b>活塞杆底面在底座里漂移的量</b>（杆是 body 子件，杆底只能在活塞头里"蹭"）：
+     *     y=2 ⇒ 径向 5.93..7.31px、y=5 ⇒ **6.54..6.73px**（几乎钉死）、y=8 ⇒ 5.76..7.53px（反而变大）；</li>
+     * </list>
+     * ⇒ **y=5 是唯一同时讨好两边的点**：杆底漂移从 ±0.8px 收到 ±0.1px（看起来就是个铰点），
+     * 同时臂的侧向溢出减 30%。再往上抬虽然侧向溢出更小，杆底又开始乱蹭。
+     * <p>
+     * 副作用只有两个，都可接受：裙边最低点从 y0.17px 沉到 y0.27px（仍在 y&gt;0 且埋在底板 y0..4 里面，看不见）；
+     * 顶环顶上溢出从 3.28px 变 3.39px（本来静止时就已超出方块顶 2px，是模型本身的问题）。
+     */
+    public static final Vector3f PIVOT = new Vector3f(8f / 16f, 5f / 16f, 8f / 16f);
 
     /**
      * 活塞杆轴线离中轴的半径（px 6.5）—— 杆在 <b>body 坐标系</b>里的径向位置（= body 上那道臂槽的槽心）。
@@ -95,13 +110,14 @@ public class AdvancedThrustNozzleRenderer extends SafeBlockEntityRenderer<Advanc
     public static final float PISTON_LENGTH = 7f / 16f;
 
     /**
-     * 杆顶在 <b>body 坐标系</b>里的上限（px 13）—— 十字臂带（y9..13px）的上表面；超过就会从臂槽顶端露出一截。
+     * 杆顶在 <b>body 坐标系</b>里的上限（px 12.9 = 十字臂带上沿 13px 再留 0.1px）—— 超过就会从臂槽顶端露出一截。
      * <p>
-     * 滑移量在"朝本活塞方向满锥角"这一侧会达到 4.85px（= 6.5px·sin15° 被 raise 项顶起来），
-     * 那不光是杆顶冒出 0.85px，还会在臂槽外看见杆的端面。这里把它夹到 4px：
-     * 代价是那一侧的杆底只比夹持面低 0.8px（仍在活塞头 y4..6 里，看不见），换来任何倾角都不外露。
+     * 滑移量在"朝本活塞方向满锥角"这一侧会被 6.5px·sin15° 的 raise 项顶起来，不夹的话杆顶会冒出臂带上沿；
+     * 这里夹住，代价是该侧的杆底只比夹持面低一点点（仍在活塞头 y4..6 里，看不见）。
+     * <p>
+     * ⚠️ 留 0.1px 是为了避开**共面 z-fighting**：夹到正好 13px 时杆顶端面会与臂带上表面完全重合。
      */
-    public static final float PISTON_TOP_LIMIT = 13f / 16f;
+    public static final float PISTON_TOP_LIMIT = 12.9f / 16f;
 
     /** 活塞组数（四方位，i = 0..3 → 绕 Y 依次 −90°） */
     private static final int PISTON_COUNT = 4;

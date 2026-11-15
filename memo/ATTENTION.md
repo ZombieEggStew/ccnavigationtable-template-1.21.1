@@ -22,6 +22,9 @@
 - **不要用「忽略整个物理体」避免喷口自撞**：喷管所在物理体往往就是车体本身，跳过它等于车体结构挡不住粒子（粒子穿到墙后面）。用出生点保护半径（0.75 格）。
 - **暖色光图会把浅色粒子染黄**：火把/岩浆附近的白光烟团会被 lightmap 染成黄橙色。需要固定颜色就覆写 `getLightColor` 返回 `0xF000F0`。
 - `StreamCodec.composite` 最多 6 个组件；字段更多要手写 `StreamCodec.of(encoder, decoder)`。
+- **矢量喷管活塞杆是过约束机构**：活塞头固定在底座（0 自由度）＋要求"杆相对 body 只有上下位移"⇒ 两条几何约束不能同时严格成立（杆底必然在世界系里漂一点）。现行解法：杆做成 **body 的子件**（与 body 同一个 `tilt`、同一个枢轴）＋ 沿 body 轴滑移，滑移量由"杆底卡在活塞头夹持高度"反解（= 参考实现 `GyroscopicPropellerBearingRenderer` 第 77 行 `translateDistance` 的镜像）。⚠️ **别改回"杆绕铰点转"**：旋转中心与 body 不同 ⇒ 相对位移混进 `(I−R)(H−P)` ≈1px 的横向分量，而杆只有 1px 粗、臂槽每边只有 1px 余量 ⇒ 肉眼就是"杆在乱飘"。
+- **矢量喷管枢轴高度是双目标参数**（`AdvancedThrustNozzleRenderer.PIVOT`）：抬枢轴 ↓十字臂伸出方块四边的量，但 ↑活塞杆底面在底座里的漂移；**`y=5px`（= 活塞头 y4..6 的中面）是唯一双赢点**（杆底径向漂移 ±0.11px、15° 时臂侧向溢出 1.80px）。数据表见 `advanced-thrust-nozzle.md` §12.6，别凭直觉改。
+- **动态部件端面别与静态面共面**：杆顶夹取上限写 `12.9/16` 而不是臂带上沿的 `13/16`，否则两个面完全重合会 z-fighting 闪。
 ## Monitor / GridState
 
 - 测试 monitor 的 `getShape` 不要每帧动态重算（`VoxelShaper.forHorizontal` + 12 切片 `Shapes.or` 很贵，会造成视角对准时掉帧）；已改为按 (facing,pitch) 懒缓存，碰撞 `getCollisionShape` 只用底座。
