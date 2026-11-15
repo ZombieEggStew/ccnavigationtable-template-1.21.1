@@ -6,6 +6,8 @@ The **Water Cooling Module** (`ccpe:water_cooling_module`) is the [Engine System
 
 The key difference from the [Cooling Air Duct](cooling-air-duct.md): water cooling takes **small shares of both ram air and ambient pressure** (25% each) — a liquid loop does not care about the air itself. So it is the answer for the three situations where ducts are weakest: **static, low speed and high altitude**. The price is **coolant consumption**, which accelerates while the engine runs hot, and it is also heavy.
 
+On top of that it **draws on the engine's output**: every working module permanently ties up **512 SU of stress** — with **no shaft connection required** (the engine core reports the draw as its own network stress, see "Stress cost" below). Water cooling is not free dissipation; you pay stress for cooling.
+
 
 ## Coolant
 
@@ -88,6 +90,30 @@ Equilibrium temperatures at sea level, static, 2 chambers, fuel `heat = 1.0`, no
     An engine with a big water-cooling module drops below 100°C at low load, which triggers the **overcooling** fuel penalty. Either raise the load or close the loop with `setWaterCooling` to keep the heat in (0.5 ≈ half the dissipation).
     The equilibrium is also moved by the **fuel `heat` multiplier** (diesel 1.25 → hotter), the **engine length** and the **number of ducts**.
 
+## Stress cost (draws on the engine's output)
+
+Water cooling is not free: **every working module permanently takes `512 SU` of stress** from the engine. It needs **no shaft** and no kinetic connection at all — attach it to a core (or to another water module) and it applies.
+
+| Item | Rule |
+|---|---|
+| Draw | **512 SU per working module**, **constant** — independent of throttle, speed, coolant amount and coolant efficiency |
+| Configurable | Config key `engineWaterCoolingStress` (default `512`, range `0~65536`; `0` = water cooling is free). Changes apply when the world is loaded |
+| Free when | the tank is **empty** (0 mB) / the **loop is closed** (`setWaterCooling(0)`, pump stopped) / **steam engine** (where water cooling does nothing anyway) |
+| No discount | Below 4000 mB the **dissipation** scales down but the **stress cost does not**: any coolant costs the full 512 SU |
+| How it lands | The engine core registers itself as a stress-consuming member of the network, so the whole network **really has that much less SU** — this is not a display-only or fake deduction |
+
+**What it actually does**:
+
+- **Attached machines really lose `512 SU` of available capacity**: share of the engine's total = `512 / capacity`. One fluid chamber (8192 SU) → **6.25%**; two chambers (16384 SU) → 3.1%.
+- **It can genuinely overload the network**: once stress meets capacity the network goes overstressed (red text on goggles, machines stall). By design the engine **keeps running and burning fuel** — overload is a network state, not an engine state.
+- **⚠️ Load rises with it**: fuel burn and heat both follow the network load (`stress / capacity`), so adding water cooling nudges both up. Net effect = more dissipation *and* a little more heat — the equilibrium tables above do not include this term, so real temperatures sit slightly higher than listed. Keep that margin in mind when sizing radiators.
+
+```
+Example: 1 fluid chamber (8192 SU) + 1 full water module, 4096 SU of machines attached
+  before: load = 4096 / 8192 = 50%
+  after:  load = (4096 + 512) / 8192 = 56%   <- fuel burn / heat follow 56%
+```
+
 ## Coolant consumption
 
 Two consumptions exist side by side (computed server-side every tick, actually deducted only once 1 mB has accumulated):
@@ -101,11 +127,11 @@ Two consumptions exist side by side (computed server-side every tick, actually d
 - Boiling is **proportional to temperature**: the rate is 0 exactly at 200°C (no boundary flicker) and grows as it gets hotter.
 - **It keeps draining after the engine hard-stops**: reaching 220°C hard-stops the engine (no fuel burned), but as long as the temperature stays above 200°C the coolant keeps evaporating — and less coolant → weaker cooling → hotter → faster loss (positive feedback). A full tank lasts ≈ 14 minutes at 219°C and ≈ 27 minutes at 210°C.
 - **Stopped engines pay no running cost**: at throttle 0 only boiling drain applies (same semantics as "a stopped engine burns no fuel").
-- With the loop closed (`setWaterCooling(0)`) both consumptions stop — but so does the cooling.
+- With the loop closed (`setWaterCooling(0)`) both consumptions stop (**and the stress tie-up drops to 0**) — but so does the cooling.
 
 ## Steam engines
 
-Water cooling has **no effect on steam engines**: it does not participate in their temperature (closed boiler self-regulation, see [Steam Power Chamber](steam-power-chamber.md)) and **does not consume coolant**. Mounting one on a steam engine is purely decorative (the engine core's goggle shows "Coolant Cooling: none").
+Water cooling has **no effect on steam engines**: it does not participate in their temperature (closed boiler self-regulation, see [Steam Power Chamber](steam-power-chamber.md)), **does not consume coolant** and **does not draw stress**. Mounting one on a steam engine is purely decorative (the engine core's goggle shows "Coolant Cooling: none").
 
 ## Comparison with the cooling air duct
 
@@ -114,7 +140,7 @@ Water cooling has **no effect on steam engines**: it does not participate in the
 | Dissipation per block (full effect) | **0.37** (≈ 4.1 ducts) | 0.09 |
 | Ram-air (airspeed) bonus | **small** (25% of the ram bonus, ×1.25 at MAX) | yes (up to ×2 at 30 m/s, **full**) |
 | Pressure (altitude) penalty | **small** (25% of the pressure loss, f 0.54 → ×0.885) | yes (`pressure^0.8`, **full**) |
-| Running cost | coolant (1 mB / 8 s per module) | none |
+| Running cost | coolant (1 mB / 8 s per module) + **512 SU stress per module** | none |
 | Overheat penalty | accelerated coolant evaporation | none |
 | Fluid tank | 8000 mB (coolants only) | none |
 | Adjustable | `setWaterCooling` loop opening | `setCooling` shutter |
@@ -158,6 +184,7 @@ Engine Status
 …
 Load: 43%
 Coolant Cooling: +0.37        ← none when out of coolant / loop closed / steam engine (grey)
+Coolant Stress: -512 SU       ← draws on the engine's output; 0 shows grey "none" (empty tank / loop closed / steam engine)
 Connected Modules:
 - Fluid Combustion Chamber x2
 - Water Cooling Module x1
@@ -177,11 +204,13 @@ New methods (see [Engine Lua API](lua-api.md)):
 | `getWaterCoolingPower()` | Current effective water dissipation `k_water` (amount ratio / efficiency / opening) |
 | `getWaterCoolingModules()` | Number of working modules (amount > 0) |
 | `getCoolantAmount()` | Total coolant in mB (sum over working modules) |
+| `getWaterCoolingStress()` | Stress tie-up in SU (`working modules × 512`) — really applied to the network: attached machines lose that much capacity and it can cause a genuine overload |
 
 ```lua
 local e = peripheral.find("ccpe:engine")
 print(e.getWaterCoolingPower())   --> 0.37
 print(e.getCoolantAmount())       --> 8000.0
+print(e.getWaterCoolingStress())  --> 512.0
 -- keep the heat in at low load: close half of the loop
 e.setWaterCooling(0.5)
 ```

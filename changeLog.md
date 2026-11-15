@@ -170,3 +170,4 @@
 
 - Added an in-world **hold-right-click panel** on the engine core to pick the output direction (Forward / Reversed). **Hold a Wrench** to open it — with an empty hand or any other item the core side shows no panel and right-click stays normal block placement / item interaction (such as attaching chambers). Works on any core segment and shares its state with the Lua method above.
 
+- The water cooling module now **draws on the engine's output**: **512 SU per working module**, configurable with `engineWaterCoolingStress` (`0` = free). **No shaft connection is needed**. It is free when the tank is empty, when the loop is closed with `setWaterCooling(0)`, or on a steam engine (where water cooling does nothing anyway).
