@@ -225,12 +225,19 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /** 蒸汽机最低工作温度（°C）：低于此值锅炉压力不足，无法驱动（暖机阶段只烧不发电）；高于才「开始工作」。
      *  真实：饱和蒸汽 <100°C 无蒸汽压力（常压沸点） */
     public static final float STEAM_MIN_WORK_TEMP = 100f;
-    /** 环境散热系数（°C/s/°C/室）——静态 eff25% 不过热 ⇒ K_AMB ≥ 0.25×H0/ΔT_max */
-    public static final float K_AMBIENT = 0.05f;
-    /** 每个冷却气道散热系数（°C/s/°C）——静态 eff50% + 1风道/室 ⇒ K_AMB+K_DUCT ≥ 0.5×H0/ΔT_max */
-    public static final float K_DUCT = 0.05f;
-    /** 引擎核心自身散热系数（°C/s/°C/节）：停机时核心仍缓慢散热（不依赖冷却气道），τ ≈ 1/0.02 = 50s */
-    public static final float K_CORE = 0.02f;
+    /** 环境散热系数（°C/s/°C/室）：0.05 → 0.04（自然散热 −20%）。
+     *  动机：「小引擎 + 低负载」时自然散热压过发热，温度钉在 112°C 左右永远进不了经济带 145~165
+     *  （1 室 + 2 节 + 25% 负载、无风道：k_air = 0.09 → T_eq = 111.7°C）。削减自然散热后同配置 → ≈157°C。
+     *  代价：不装风道的引擎更容易过热（这台无风道过热负载从 ~55% 降到 ~36%）＝ 逼玩家装散热器。 */
+    public static final float K_AMBIENT = 0.04f;
+    /** 每个冷却气道散热系数（°C/s/°C）：0.05 → 0.09（风冷加强 +80%）。
+     *  配合自然散热削减，使老参考组「4 室 + 4 节 + 2 风道」的总 k 与旧值持平：
+     *  K_CORE×4 + K_AMB×4 + K_DUCT×2 = 0.01×4 + 0.04×4 + 0.09×2 = <b>0.38</b>（旧 0.02×4 + 0.05×4 + 0.05×2 = 0.38），
+     *  即「有风道的引擎手感不变」。每室配 1 风道的有效散热 = 0.04 + 0.09 = 0.13（旧 0.10，+30%）。 */
+    public static final float K_DUCT = 0.09f;
+    /** 引擎核心自身散热系数（°C/s/°C/节）：0.02 → 0.01（自然散热 −50%）。
+     *  停机时核心仍缓慢散热（不依赖冷却气道），τ ≈ 1/0.01 = 100s；长引擎受益最大（21 节：0.42 → 0.21）。 */
+    public static final float K_CORE = 0.01f;
 
     // ---- P9：水冷模块（water_cooling_module，冷却液 = data/<ns>/coolant/*.json 表内流体）----
 
@@ -241,9 +248,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * <pre>
      * Q      = 2 室 × 满载(1.0) × 燃料heat(1.0) × H0(30) = 60 °C/s
      * 需要 k = Q / (150 − 20) = 0.462
-     * k_air  = K_CORE×length + K_AMB×2 = 0.12（length=1）/ 0.14（length=2）
-     * → K_WATER ≈ 0.462 − 0.13 ≈ 0.33
+     * k_air  = K_CORE×length + K_AMB×2 = 0.09（length=1）/ 0.10（length=2）   ← 自然散热削减后
+     * → K_WATER ≈ 0.462 − 0.10 ≈ 0.36 → 取 0.37（2026-09 调参「略微加强」：0.33 → 0.37）
      * </pre>
+     * 调参不改变老结论：length=2 时 k_total = 0.10 + 0.37 = <b>0.47</b>（旧 0.14 + 0.33 = 0.47），
+     * 即「2 室满载 + 1 满罐模块 ≈ 150°C」的平衡点持平；只有「没装散热器」的工况变热。
      * 实测校验（海平面静止，2 室，燃料 heat=1.0，无风道）：k_total ≈ 0.45~0.47 → T_eq ≈ 148~153°C。
      * 注意两个前提：燃料 heat 倍率（柴油 1.25 → 平衡温度升到 ~180°C）、以及引擎长度/风道数量都会移动平衡点。
      * <p>
@@ -251,7 +260,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * 液体回路不看空气，所以它同时是最低速 / 静止 / 高空场景的解（风道在这三种场景最弱）。
      * 实际贡献 = K_WATER × min(液量 / {@link #COOLANT_FULL}, 1) × 冷却液效率 × 回路开度，见 {@link #waterCoolingPower}。
      */
-    public static final float K_WATER = 0.33f;
+    public static final float K_WATER = 0.37f;
 
     /** 冷却液「满效」量（mb）：≥ 该量满效；0~该量<b>线性衰减</b>，0 mb = 散热归零（玩家定稿：4000mb 满效、逐滴归零） */
     public static final float COOLANT_FULL = 4000f;
