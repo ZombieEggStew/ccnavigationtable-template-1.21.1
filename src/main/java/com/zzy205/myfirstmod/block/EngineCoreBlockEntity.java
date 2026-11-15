@@ -341,6 +341,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected String lastSyncedSteamFuelType = "none", lastSyncedSteamFuelKey = "", lastSyncedSteamSolidFuelKey = "";
     /** 上次对齐径向面板（{@link #directionOption}）时的输出转向：变化即抄到全部节（读档/重组/Lua 改方向都靠它自愈） */
     protected boolean lastSyncedReversedRotation;
+    /** P10：上次同步的自动控制开关（Goggle「自动控制」行；变化即发包） */
+    protected boolean lastSyncedAutoControl = AUTO_ENABLED_DEFAULT;
     /** 慢字段心跳计数器：每次 sendData 归零，≥SYNC_HEARTBEAT_INTERVAL 强制补发一次 */
     protected int syncHeartbeat;
     /** 客户端：蒸汽倒计时外推基线时刻（最近一次 SteamBurnTicks 包到达时的 gameTime，方案 D：burnTicks 每 tick −效率 精确线性）。
@@ -458,6 +460,46 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final float COLD_K = 1.0f;
     /** 蒸汽引擎固定最佳工作温度（°C，锅炉设计温度，不随燃料变——真实：蒸汽效率 ∝ 蒸汽温度/压力 [卡诺]） */
     public static final float BOILER_T_OPT = 155f;
+
+    // ---- P10：自动控制（Java 侧通用自动温度/混合比控制；玩家 Lua 写任一控制参数即关闭，特殊需求自行写 Lua） ----
+    /** 自动控制默认开关（NBT 无记录 → 开；旧存档同样默认开启）。玩家 Lua 调 setMixture/setCooling/setWaterCooling 任一即自动关闭 */
+    public static final boolean AUTO_ENABLED_DEFAULT = true;
+    /** 自动混合比目标：实际混合比 m_eff = 杆 × 自动富油 拉到本值附近（0.9 = eco 混合比窗口 0.8~1.1 的中偏稀，两侧留裕度） */
+    public static final float AUTO_MIX_EFF = 0.9f;
+    /** 风门自动控制 PI+D（沿用玩家 Lua v2 实飞验证的增益；每 tick 0.05s，物理量按秒计）：风门 = BASE + KP×误差 + KI×积分 + KD×温度变化率 */
+    public static final float AUTO_COOL_BASE = 0.3f;
+    public static final float AUTO_COOL_KP = 0.05f;
+    public static final float AUTO_COOL_KI = 0.005f;
+    public static final float AUTO_COOL_KD = 0.02f;
+    /** 风门积分限幅（°C·s）：最大修正 = 100 × KI = 0.5 风门（防 windup） */
+    public static final float AUTO_COOL_INT_MAX = 100f;
+    /** 保热：温度低于经济带下沿（155−10=145°C）→ 关闭全部散热（风门/水冷归零）；再保不住就不管（玩家自己调负载） */
+    public static final float AUTO_WARM_OFF_TEMP = ENGINE_T_OPT - ECO_FLAT;
+    /** 水冷自动控制（风道饱和后的第二级，0~1 比例开度）：开度 = KP×(T−155)（165°C 满开）；风道开度 ≥ GATE 才参与，
+     *  风道够用时保持 0（0 开度 = 免费待命，不耗冷却液）；每 tick 最多变化 RAMP（≈1/s 缓变） */
+    public static final float AUTO_WATER_KP = 0.1f;
+    public static final float AUTO_WATER_RAMP = 0.05f;
+    public static final float AUTO_WATER_GATE = 0.98f;
+    /** 富油兜底（渐进）：风道+水冷都全开仍 T ≥ 165 → m_eff 从 1.05（仍在 eco 窗口内）起步，每超 1°C 加 RATE，
+     *  到 1.4（≈175°C 封顶）；T ≤ 150 或散热不再全开 → 退出（回 0.9） */
+    public static final float AUTO_ENRICH_ON_TEMP = 165f;
+    public static final float AUTO_ENRICH_OFF_TEMP = 150f;
+    public static final float AUTO_ENRICH_START = 1.05f;
+    public static final float AUTO_ENRICH_MAX = 1.4f;
+    public static final float AUTO_ENRICH_RATE = 0.035f;
+    /** 硬保底：T ≥ 200（= 沸腾阈值，比 220 过热硬停早 20°C）→ 直接富油 1.4，防 220 硬停与冷却液沸腾 */
+    public static final float AUTO_SAFETY_TEMP = OVERHEAT_RESUME;
+    /** 控制周期（s）：自动控制每 tick 执行，积分/微分按此步长换算 */
+    private static final float AUTO_DT = 1f / 20f;
+
+    /** 自动控制开关（NBT {@code AutoControl} 持久化；默认开——旧存档无记录也开）。玩家 Lua 写任一控制参数即关闭 */
+    protected boolean autoControl = AUTO_ENABLED_DEFAULT;
+    /** 风门 PI+D 积分状态（°C·s；transient，开关切换/接管时清零） */
+    protected float autoCoolIntegral = 0f;
+    /** 上一 tick 温度（微分用；NaN = 本 tick 不计 D 项） */
+    protected float autoLastTemp = Float.NaN;
+    /** 富油档是否激活（transient，带回差；风道+水冷全开仍过热才进入） */
+    protected boolean autoEnriching = false;
 
     /** 当前是否蒸汽引擎（tick 仲裁后：模块燃烧室为蒸汽型；流体/蒸汽物理排斥 → 互斥）。服务端权威，NBT 同步客户端供 Goggle。 */
     protected boolean steamEngine = false;
@@ -667,6 +709,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
         // P6 Plan B：蒸汽类型在仲裁后判定（物理排斥 → 互斥）；蒸汽 = 闭式锅炉自调节，永不过热
         steamEngine = !steamChambers.isEmpty();
+        // P10：自动控制（混合比/风门/水冷）——必须在 updateWaterCooling 之前写水冷开度（本 tick 生效），
+        // 也必须在下方混合比读取（leverMixture = mixture）之前写杆值（本 tick 生效）；关闭后不写任何字段（玩家接管）。
+        // 蒸汽引擎不参与（闭式锅炉自调节、无混合比/eco；水冷对蒸汽无效）。
+        if (!steamEngine && autoControl)
+            tickAutoControl(scan);
         // P9：水冷模块结算（必须在 steamEngine 判定之后：蒸汽引擎<b>完全忽略</b>水冷模块——温度不管、也不消耗冷却液）
         updateWaterCooling(scan);
 
@@ -909,7 +956,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         }
         boolean discreteChanged = running != lastSyncedRunning || overheated != lastSyncedOverheated
                 || warmingUp != lastSyncedWarmingUp || steamEngine != lastSyncedSteamEngine
-                || hasAirDuct != lastSyncedAirDuct || capacityChanged
+                || hasAirDuct != lastSyncedAirDuct || autoControl != lastSyncedAutoControl || capacityChanged
                 // P9：水冷（装没装 / 工作模块数变化发；散热贡献用容差门控）
                 || hasWaterCooling != lastSyncedWaterModule
                 || waterCoolingModules != lastSyncedWaterModules
@@ -933,6 +980,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             lastSyncedWarmingUp = warmingUp;
             lastSyncedSteamEngine = steamEngine;
             lastSyncedAirDuct = hasAirDuct;
+            lastSyncedAutoControl = autoControl;
             lastSyncedWaterModule = hasWaterCooling;
             lastSyncedWaterModules = waterCoolingModules;
             lastSyncedWaterPower = waterCoolingPower;
@@ -1421,6 +1469,106 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     protected float pressureFactor() {
         double p = SensorSystemAPI.getPressureForEngine(engineAltitude());
         return (float) Math.pow(Math.max(p, PRESSURE_FLOOR), 0.8);
+    }
+
+    // ================= P10：自动控制（Java 侧通用自动温度/混合比控制） =================
+
+    /**
+     * 自动控制（每 tick，服务端，仅 controller；蒸汽引擎不调用——闭式锅炉自调节、无混合比/eco）。
+     * <p>目标：实际混合比 m_eff 钉在 {@link #AUTO_MIX_EFF}≈0.9（eco 混合比窗口 0.8~1.1 之内），
+     * 温度钉在 {@link #ENGINE_T_OPT}=155°C（eco 温度窗口 145~165 之内）。只用「温度 + 风道开度 + 模块有无 +
+     * 自动富油系数（高度派生）」——<b>不看引擎/负载具体配置</b>，通用、满足「基本能用」；特殊需求玩家写 Lua 接管。</p>
+     * <ul>
+     *   <li><b>混合比</b>：杆 = AUTO_MIX_EFF / autoRichness（逐 tick 补偿高空自动富油，实际混合比保持 0.9 附近）；</li>
+     *   <li><b>风门</b>：PI+D（温度误差 155°C）；T &lt; 145°C（经济带下沿）→ 归零保热；</li>
+     *   <li><b>水冷</b>：风道开度 ≥ 0.98 且 T &gt; 155 后才按比例参与（开度 = 0.1×(T−155)，165°C 满开；
+     *       0 = 免费待命、不耗冷却液）；风道够用时保持 0；</li>
+     *   <li><b>富油兜底（渐进）</b>：风道+水冷全开仍 T ≥ 165 → m_eff 从 1.05 起步、按 0.035/°C 升到 1.4（≈175°C 封顶）；
+     *       T ≤ 150 或散热不再全开 → 退出；T ≥ 200 硬保底 1.4。</li>
+     * </ul>
+     * <p>不调用 sendData——字段逐 tick 变化，靠既有 1Hz 心跳同步 tooltip（P7+ 方案 A+B+D）。
+     * 玩家 Lua 调用 setMixture/setCooling/setWaterCooling 任一即关闭自动控制（见 {@link #disableAutoControlByManual()}）。</p>
+     */
+    private void tickAutoControl(ModuleScan scan) {
+        final float temp = temperature; // 上一 tick 温度（本 tick 温度在温度更新段才重算）
+        final float autoRich = autoRichness();
+        final boolean hasDuct = scan.coolingDucts > 0;
+        final boolean hasWater = !scan.waterModules().isEmpty();
+
+        // ---- 富油档（渐进；风道+水冷全开仍过热才进入，带回差） ----
+        boolean coolingMaxed = (!hasDuct || coolingStrength >= AUTO_WATER_GATE)
+                && (!hasWater || waterCoolingStrength >= AUTO_WATER_GATE);
+        if (!autoEnriching) {
+            if (coolingMaxed && temp >= AUTO_ENRICH_ON_TEMP)
+                autoEnriching = true;
+        } else if (temp <= AUTO_ENRICH_OFF_TEMP || !coolingMaxed) {
+            autoEnriching = false;
+        }
+        float targetEff = autoEnriching
+                ? Mth.clamp(AUTO_ENRICH_START + AUTO_ENRICH_RATE * (temp - AUTO_ENRICH_ON_TEMP),
+                        AUTO_ENRICH_START, AUTO_ENRICH_MAX)
+                : AUTO_MIX_EFF;
+        if (temp >= AUTO_SAFETY_TEMP)
+            targetEff = AUTO_ENRICH_MAX; // 硬保底：防 220 硬停 + 防冷却液沸腾
+        mixture = Mth.clamp(targetEff / autoRich, MIXTURE_MIN, MIXTURE_MAX);
+
+        // ---- 风门 PI+D + 保热 ----
+        float dTdt = 0f;
+        if (!Float.isNaN(autoLastTemp))
+            dTdt = (temp - autoLastTemp) / AUTO_DT;
+        autoLastTemp = temp;
+        float ductCmd = 0f;
+        if (temp < AUTO_WARM_OFF_TEMP) {
+            // 保热：温度达不到经济带 → 关闭全部散热（风门归零、积分清零）；再保不住就不管（玩家调负载）
+            autoCoolIntegral = 0f;
+        } else {
+            float err = temp - ENGINE_T_OPT;
+            float integral = Mth.clamp(autoCoolIntegral + err * AUTO_DT,
+                    -AUTO_COOL_INT_MAX, AUTO_COOL_INT_MAX);
+            float raw = AUTO_COOL_BASE + AUTO_COOL_KP * err + AUTO_COOL_KI * integral + AUTO_COOL_KD * dTdt;
+            // 抗积分饱和：输出已饱和且误差继续往饱和方向推时，不累积本 tick 的积分
+            boolean satHigh = raw >= 1f && err > 0f;
+            boolean satLow = raw <= 0f && err < 0f;
+            if (!satHigh && !satLow)
+                autoCoolIntegral = integral;
+            ductCmd = Mth.clamp(raw, 0f, 1f);
+        }
+        if (hasDuct)
+            coolingStrength = ductCmd; // 纯存值；没装风道不写（写了也无效果，不干扰玩家存值）
+
+        // ---- 水冷（风道饱和后的第二级；0 开度 = 免费待命，不耗冷却液） ----
+        if (hasWater) {
+            float waterTarget = 0f;
+            if (temp >= AUTO_WARM_OFF_TEMP && (!hasDuct || ductCmd >= AUTO_WATER_GATE))
+                waterTarget = Mth.clamp(AUTO_WATER_KP * (temp - ENGINE_T_OPT), 0f, 1f);
+            waterCoolingStrength = moveToward(waterCoolingStrength, waterTarget, AUTO_WATER_RAMP);
+        }
+    }
+
+    /** 把 current 以每 tick 最多 maxStep 的速率移向 target（水冷开度缓变，防阶跃） */
+    private static float moveToward(float current, float target, float maxStep) {
+        if (current < target)
+            return Math.min(current + maxStep, target);
+        if (current > target)
+            return Math.max(current - maxStep, target);
+        return current;
+    }
+
+    /** P10：玩家 Lua 手动写入任一控制参数 → 关闭自动控制并同步 Goggle（「自动控制：关」） */
+    private void disableAutoControlByManual() {
+        if (!autoControl)
+            return;
+        autoControl = false;
+        resetAutoControlState();
+        setChanged();
+        sendData();
+    }
+
+    /** 重置自动控制器内部状态（开关切换 / 接管时调用；落盘字段 autoControl 不动） */
+    private void resetAutoControlState() {
+        autoCoolIntegral = 0f;
+        autoLastTemp = Float.NaN;
+        autoEnriching = false;
     }
 
     // ================= P9：水冷模块（water_cooling_module） =================
@@ -2006,6 +2154,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         public final boolean setMixture(double value) {
             if (!Double.isFinite(value))
                 return false;
+            if (autoControl)
+                disableAutoControlByManual(); // P10：玩家手动写入混合比 → 交还玩家控制（关闭自动控制）
             float clamped = (float) Mth.clamp(value, MIXTURE_MIN, MIXTURE_MAX);
             if (Mth.equal(mixture, clamped))
                 return true;
@@ -2069,6 +2219,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         public final boolean setCooling(double value) {
             if (!Double.isFinite(value))
                 return false;
+            if (autoControl)
+                disableAutoControlByManual(); // P10：玩家手动写入风门 → 交还玩家控制（关闭自动控制）
             float clamped = (float) Mth.clamp(value, 0.0, 1.0);
             if (Mth.equal(coolingStrength, clamped))
                 return true;
@@ -2101,10 +2253,42 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         public final boolean setWaterCooling(double value) {
             if (!Double.isFinite(value))
                 return false;
+            if (autoControl)
+                disableAutoControlByManual(); // P10：玩家手动写入水冷回路 → 交还玩家控制（关闭自动控制）
             float clamped = (float) Mth.clamp(value, 0.0, 1.0);
             if (Mth.equal(waterCoolingStrength, clamped))
                 return true;
             waterCoolingStrength = clamped;
+            setChanged();
+            sendData();
+            return true;
+        }
+
+        // ---- P10：自动控制开关（模板自带通用自动控制；玩家可显式开关，手动写参数会自动关闭） ----
+
+        /**
+         * 当前自动控制开关（默认开，装模组即用）。玩家 Lua 调用 {@link #setMixture}/{@link #setCooling}/{@link #setWaterCooling}
+         * 任一即自动关闭（交还玩家），之后由玩家自行控制。
+         */
+        @LuaFunction
+        public final boolean getAutoControl() {
+            return autoControl;
+        }
+
+        /**
+         * 显式开关自动控制（true = 引擎自动控制混合比/风门/水冷；false = 完全交还玩家）。
+         * 开启时重置控制器内部状态（积分/微分/富油档），下一 tick 从自动目标重新接管；蒸汽引擎上自动控制本身不生效
+         * （闭式锅炉自调节、无混合比/eco）。
+         */
+        @LuaFunction(mainThread = true)
+        public final boolean setAutoControl(boolean enabled) {
+            if (autoControl == enabled) {
+                if (enabled)
+                    resetAutoControlState();
+                return true;
+            }
+            autoControl = enabled;
+            resetAutoControlState();
             setChanged();
             sendData();
             return true;
@@ -2223,6 +2407,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         warmingUp = donor.warmingUp;
         steamEngine = donor.steamEngine;
         hasAirDuct = donor.hasAirDuct;
+        // P10：自动控制开关随引擎延续（控制器切换不丢玩家设置）；控制器内部状态（积分/微分/富油档）重置
+        autoControl = donor.autoControl;
+        resetAutoControlState();
         // P2.5：拷贝储备与活动燃料（源列表按新 controller 的邻居重建，不拷贝——位置随 controller 变）
         waterReserve = donor.waterReserve;
         fluidFuelReserve = donor.fluidFuelReserve;
@@ -2462,6 +2649,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         coolantAmount = compound.getFloat("CoolantAmount");
         waterCoolingStrength = compound.contains("WaterCoolingStrength")
                 ? compound.getFloat("WaterCoolingStrength") : 1f;
+        // P10：自动控制开关（旧存档/旧包无字段 → 默认开，与「装模组即用」一致）
+        autoControl = compound.contains("AutoControl") ? compound.getBoolean("AutoControl") : AUTO_ENABLED_DEFAULT;
         // P7：经济解锁进度（服务端权威，客户端据此推导经济系数）；P7+ 方案 B 起 EconomyFactor/OptimalTemp/
         // ColdFactor/FuelFactor 不再随包同步——contains 兜底保留（旧包/旧档兼容，缺省即默认值）
         ecoProgress = compound.contains("EcoProgress") ? compound.getFloat("EcoProgress") : 0f;
@@ -2533,6 +2722,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         compound.putFloat("WaterPower", waterCoolingPower);
         compound.putFloat("CoolantAmount", coolantAmount);
         compound.putFloat("WaterCoolingStrength", waterCoolingStrength);
+        // P10：自动控制开关（Goggle「自动控制」行；同步客户端 + 落盘）
+        compound.putBoolean("AutoControl", autoControl);
         // P7+ 方案 B：经济解锁进度（服务端权威，同步客户端 Goggle）——经济系数/过冷系数/油耗系数均为其
         // 纯函数（1−0.25×ecoProgress / coldPenalty(T) / 杆值×经济×过冷），客户端按公式现算，不再随包同步
         // （EconomyFactor/OptimalTemp/ColdFactor/FuelFactor 已从客户端包移除，read 保留旧包兼容兜底）。
@@ -2627,6 +2818,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                             : Component.translatable("tooltip.ccpe.engine.water_cooling_none")
                                     .withStyle(ChatFormatting.DARK_GRAY)));
         }
+        // P10：自动控制行（模板自带通用自动控制；玩家 Lua 写任一控制参数会自动关闭，也可显式 setAutoControl 开关）
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.engine.auto_control").withStyle(ChatFormatting.GRAY))
+                .append(autoControl
+                        ? Component.translatable("tooltip.ccpe.engine.auto_control_on").withStyle(ChatFormatting.GREEN)
+                        : Component.translatable("tooltip.ccpe.engine.auto_control_off").withStyle(ChatFormatting.DARK_GRAY)));
         // 连接的模块清单（显示用：blockstate 轻扫，与服务端 scanModule 同判定；燃烧室按 FACING 反面贴核心归属，不双计）
         ModuleScan scan = scanModule();
         int fluid = scan.fluidChambers().size();
