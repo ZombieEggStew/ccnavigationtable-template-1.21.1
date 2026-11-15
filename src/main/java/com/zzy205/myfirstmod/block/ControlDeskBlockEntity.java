@@ -2737,6 +2737,15 @@ public class ControlDeskBlockEntity extends BlockEntity implements PartialSafeNB
         if (tag.contains(TAG_DESK_TOP_GRID)) {
             getDeskTopGrid().load(registries, tag.getCompound(TAG_DESK_TOP_GRID));
         }
+
+        // ── 蓝图 / 结构部署的时序修正（与 ShortRangeLinkerBlockEntity 同源） ──
+        // Create 部署蓝图时 setBlock ⇒ onLoad 先跑（用的是默认频道），随后才 loadWithComponents 到这里。
+        // 读到蓝图里的真实频道后立刻复核一次，既让自己当 tick 落回原频道，也避免把链上其它设备
+        // 部署时抢到的号顺延成"永久改号"。
+        // 世界加载路径下 level 尚未就绪（null）⇒ 跳过，交给 onLoad。
+        if (this.level != null && !this.level.isClientSide) {
+            this.revalidateChain();
+        }
     }
 
     /** Create 原理图 / 装置搬运时的「安全 NBT」（Schematicannon 打印保留控件配置）。 */

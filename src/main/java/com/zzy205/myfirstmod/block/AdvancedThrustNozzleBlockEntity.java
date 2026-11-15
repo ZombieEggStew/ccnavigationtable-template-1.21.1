@@ -1,6 +1,7 @@
 package com.zzy205.myfirstmod.block;
 
 import com.zzy205.myfirstmod.compat.cc.ShortRangeLinkerRegistry;
+import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
 import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import net.minecraft.core.BlockPos;
@@ -40,7 +41,7 @@ import java.util.Map;
  *     <b>长度</b>按圆形映射到锥角（长度 1 = {@link #MAX_TILT_DEG} 满锥角）。</li>
  * </ul>
  */
-public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
+public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity implements PartialSafeNBT {
 
     private static final String TAG_CHANNEL = "Channel";
     private static final String TAG_OCCUPIED = "OccupiedChannels";
@@ -863,6 +864,43 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
                     this.defX.value, this.defY.value,
                     this.visualDefX, this.visualDefY, this.visualInit);
         }
+
+        // 蓝图 / 结构部署路径里 onLoad 会**先于** loadAdditional 跑（BE 由 setBlock 建好后才
+        // loadWithComponents）⇒ 那一刻频道是按「自动分配」登记的。这里读到包里记的真实频道后
+        // 立刻重登记一次，让喷管在部署当 tick 就落回自己的地址，而不是等 20 tick 的例行复核。
+        if (this.level != null && !this.level.isClientSide) {
+            this.registerChannel();
+        }
+    }
+
+    /**
+     * Create 原理图 / 蓝图部署（以及 contraption 搬运）用的「安全 NBT」。
+     * <p>
+     * <b>为什么必须有它</b>：{@code BlockHelper.prepareBlockEntityData} 只在三种情况下才给蓝图存
+     * BE 数据 —— block 带 {@code create:safe_nbt} 标签、注册了 {@code SafeNbtWriter}、
+     * 或者 <b>BE 实现了 {@link PartialSafeNBT}</b>；否则<b>一个字段都不存</b>。
+     * 父类 {@code ThrustNozzleBlockEntity extends BlockEntity} 没有实现它 ⇒ 以前蓝图里喷管没有任何数据，
+     * 频道（以及偏转/出力姿态）随部署丢失、只能重新自动分配（memo §5.4 的"未补"）。
+     * <p>
+     * 写进去的都是「配置性质」的状态：频道 + 偏转点（含目标）+ 出力系数（含目标）。
+     * 运行时快照（{@code OccupiedChannels}、onPhysicsBody、视觉动画字段）一律不写 ——
+     * 它们会在部署后由 {@link #registerChannel()} 与首个同步包重建。
+     * <p>
+     * 读回来的是普通 {@code loadAdditional}（Create 部署时走 {@code loadWithComponents}），
+     * 所以键名与 {@link #saveAdditional} 完全一致，不需要额外的 read 路径。
+     */
+    @Override
+    public void writeSafe(final CompoundTag compound, final HolderLookup.Provider registries) {
+        if (this.channel != CHANNEL_UNASSIGNED) {
+            compound.putInt(TAG_CHANNEL, this.channel);
+        }
+
+        compound.putFloat(TAG_DEF_X, this.defX.value);
+        compound.putFloat(TAG_DEF_Y, this.defY.value);
+        compound.putFloat(TAG_TARGET_DEF_X, this.defX.target);
+        compound.putFloat(TAG_TARGET_DEF_Y, this.defY.target);
+        compound.putFloat(TAG_THRUST_SCALE, this.thrustScaleAxis.value);
+        compound.putFloat(TAG_TARGET_THRUST_SCALE, this.thrustScaleAxis.target);
     }
 
     @Override

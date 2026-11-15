@@ -9,6 +9,7 @@
 > 变更明细：第一轮（偏转点/摇杆/出力翻倍）见 §11；第二轮（用户重做模型 + 活塞头并进 base + 选择框两盒）见 §12.1–12.5；
 > 第三轮（活塞杆改 body 子件、枢轴抬到 y5、越界核算）见 §12.6。**前三轮全部经用户实测通过。**
 > 第四轮（`setThrustScale` 的出力系数同时缩放排气 / 进气粒子）见 §14 —— 已实现、编译通过，待实测。
+> 第五轮（蓝图部署保留频道：实现 `PartialSafeNBT.writeSafe`，见 §15）—— 已实现、编译通过，待实测。
 > ⚠️ 换模型后若动画错位，先对 §12.4 那张"模型数字 ↔ 代码常量"表；改动前先看 §4.1（活塞机构）与 §12.6（枢轴高度）。
 >
 > 七个能力一句话版：
@@ -227,8 +228,9 @@ flowchart LR
 ### 5.4 状态与坑
 
 - `onPhysicsBody` **不落盘、也不进 update tag**：客户端以 `channel >= 0` 推断。
-- **蓝图部署后频道会重新分配**：父类 `ThrustNozzleBlockEntity` 没实现 `SafeNbt.writeSafe`，本轮未补
-  （喷嘴的频道是"地址"，重分配可接受）。要持久化就给 BE 补 `writeSafe`/`readSafe`。
+- **蓝图部署后频道会保留**（2026-11 已修，见 §15）：`AdvancedThrustNozzleBlockEntity` 现在实现了
+  `PartialSafeNBT`，`writeSafe` 写出频道 + 偏转点 + 出力系数，部署时经 `loadWithComponents` → `loadAdditional`
+  读回，并在**部署当 tick** 重登记频道（`registerChannel()`），不再需要等 20 tick 复核。
 - 打开 GUI 前必须 `refreshOccupiedChannels()`，否则滚轮跳过的是旧占用。
 
 ---
@@ -418,7 +420,7 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 - **出力系数影响排气 / 进气粒子，但不影响高空尾迹**（§14）：尾迹按移动位移与高度发射，
   系数 0 时"没有排气却有尾迹"是有意为之（尾迹代表航迹的冰晶，与出力强弱解耦）。
 - 推力**不做遮挡判定**（与定向喷管一致：喷口被堵照样出力）。
-- 蓝图部署后**频道重分配**（父类无 `writeSafe`）；偏转/出力有 NBT 会保留。
+- 蓝图部署后**频道会保留**（§15 已修）；偏转/出力与频道一起进蓝图。
 - 没有"实际出力 pN"读数（需要调试时加 `getThrust()`）。
 - `getDeflection` 给角度 + 偏转点分量，但**不给世界系方向向量**（需要时可以加）。
 - 偏转点走直线时，**穿过中心那一刻方位角瞬间反向**（中心处方位无意义、报 0）；脚本若用方位角做反馈要避开这种中途采样。
@@ -675,4 +677,43 @@ y=8 侧向溢出更小（1.02px），但杆底漂移反而涨到 ±0.9px，不�
 
 `./gradlew.bat classes` ✅ 通过。**待用户实测**：`setThrustScale(0.5)` / `(0)` 时排气与进气应当明显变稀/停掉，
 且与推力的渐变同步（约 0.2s）；高空尾迹应当照旧。
+
+---
+
+## 15. 变更记录（2026-11 第五轮：蓝图部署保留频道）
+
+### 15.1 根因（Create 源码事实）
+
+Create 6.x 的 `BlockHelper.prepareBlockEntityData` 只在三种情况下把 BE 数据存进蓝图：
+block 带 `create:safe_nbt` 标签、注册了 `SafeNbtWriter`、或者 **BE 实现了
+`com.simibubi.create.api.schematic.nbt.PartialSafeNBT`** —— 否则**一个字段都不存**。
+
+`ThrustNozzleBlockEntity extends BlockEntity`，没有实现它 ⇒ 蓝图里喷管没有任何数据
+⇒ 部署后 `Channel`、偏转点、出力系数**全部丢失**，频道只能重新自动分配（正是 §8 那条"未补"）。
+（§5.4 当年写的是"父类没实现 `SafeNbt.writeSafe`，要持久化就补"，本轮补上了。）
+
+### 15.2 改动
+
+| 文件 | 改了什么 |
+|---|---|
+| `block/AdvancedThrustNozzleBlockEntity.java` | `implements PartialSafeNBT` + 新增 `writeSafe(...)`：写 `Channel` + `DefX/DefY` + `TargetDefX/TargetDefY` + `ThrustScale` + `TargetThrustScale`（键名与 `saveAdditional` 完全一致，部署时走普通 `loadAdditional`，不需要额外的 read 路径）。**运行时快照一律不写**（`OccupiedChannels`、`onPhysicsBody`、视觉动画字段） |
+| 同上 | `loadAdditional` 末尾（`level != null` 且服务端）立即 `registerChannel()`：修「部署时 `onLoad` 先于 `loadAdditional`、用默认频道登记」的时序问题（详见 `memo/short-range link.md` §11） |
+
+### 15.3 部署顺序与为什么需要那一次立即重登记
+
+`BlockHelper.placeSchematicBlock` 是 `setBlock`（建 BE ⇒ 立刻 `onLoad`）→ 然后 `loadWithComponents`。
+所以 `onLoad` 那一刻 `channel` 还是默认 `-1`（自动分配），真实频道要到 `loadAdditional` 才读回来。
+若不立即重登记，就要等 ≤20 tick 的例行复核才落回原频道（期间 Lua 在新号上查不到），
+而且同链一次部署多个设备时，期间的「顺延」可能把别人刚恢复的号抢走。
+逐方块串行执行 ⇒ 加上这次立即登记后，每个设备在部署当 tick 就落位。
+
+> 世界加载（读档）路径不受影响：那时 `loadAdditional` 里 `level` 还是 null，这段被跳过，仍由 `onLoad` 负责。
+
+### 15.4 验证
+
+`./gradlew.bat classes` ✅ 通过。**待用户实测**：
+复制一架带若干矢量喷管（频道各不相同）的飞机 → 打印到新位置 → **部署后立刻**用
+`ccpe.sensor_system.getPeripheral(ch)` 查每一台，都应该已经在原来的频道上；
+若新位置同链已有设备占了某个号，那台才顺延（预期）。
+
 
