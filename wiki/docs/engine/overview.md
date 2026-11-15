@@ -62,6 +62,7 @@ The system decouples into three quantities that never interfere:
 - [Cooling Air Duct](cooling-air-duct.md) — cooling fins and the shutter
 - [Water Cooling Module](water-cooling-module.md) — 8000 mB coolant, static/low-speed/high-altitude cooling, coolant consumption
 - [Temperature & Cooling Model](temperature.md) — how heat is generated and dissipated (altitude → temperature & pressure)
+- [Auto Control](auto-control.md) — the built-in controller holding 155°C and m_eff 0.9 (mixture / shutter / water / enrichment)
 - [Fuel & Fuel Sources](fuel.md) — datapack fuel, vanilla fuel, quick-fill tank / fuel vault
 - [Lua API](lua-api.md) — the `ccpe:engine` peripheral reference
 - [Example](../examples/trainer_aircraft_2.md) — a complete example using the fluid combustion chamber, automatically controlling engine temperature and mixture

@@ -62,6 +62,7 @@ plugins:
             Fuel & Fuel Sources: 燃料与燃料源
             Engine Lua API: 引擎 Lua API
             Temperature & Cooling Model: 温度与冷却模型
+            Temperature & Mixture Auto Control: 温度与混合比自动控制
             Modular Monitor: 模块化监视器
             Monitor: 监视器
             Monitor Slab: 板式监视器
@@ -145,6 +146,7 @@ nav:
     - Water Cooling Module: engine/water-cooling-module.md
     - Fuel & Fuel Sources: engine/fuel.md
     - Temperature & Cooling Model: engine/temperature.md
+    - Temperature & Mixture Auto Control: engine/auto-control.md
     - Engine Lua API: engine/lua-api.md
   - Avionics System:
     - Overview: sensor-system/overview.md
