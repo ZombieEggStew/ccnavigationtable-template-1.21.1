@@ -166,8 +166,9 @@
 
 - The water cooling module dissipates a bit more per module: `0.37` (was `0.33`). Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/water-cooling-module/
 
+- The water cooling module now **draws on the engine's output**: **512 SU per working module**, configurable with `engineWaterCoolingStress` (`0` = free). **No shaft connection is needed**. It is free when the tank is empty, when the loop is closed with `setWaterCooling(0)`, or on a steam engine (where water cooling does nothing anyway).
+
 - Added `isReversed` / `setReversed(bool)` Lua methods to the engine peripheral: reverses the **output rotation direction** (`e.setReversed(true)`). 
 
 - Added an in-world **hold-right-click panel** on the engine core to pick the output direction (Forward / Reversed). **Hold a Wrench** to open it — with an empty hand or any other item the core side shows no panel and right-click stays normal block placement / item interaction (such as attaching chambers). Works on any core segment and shares its state with the Lua method above.
 
-- The water cooling module now **draws on the engine's output**: **512 SU per working module**, configurable with `engineWaterCoolingStress` (`0` = free). **No shaft connection is needed**. It is free when the tank is empty, when the loop is closed with `setWaterCooling(0)`, or on a steam engine (where water cooling does nothing anyway).
