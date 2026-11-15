@@ -52,9 +52,9 @@ Modules:
 - **Load** = the actual network utilization (0% when idle, 100% when saturated, red at ≥90%) — this is what drives fuel burn and temperature.
 - The module list shows which chambers / ducts are attached.
 
-## Output direction (hold right-click)
+## Output direction (hold right-click with a wrench)
 
-Aim at one of the core's **four side faces** (the axis ends are the shaft, no button there) and **hold right-click** to open the direction panel with two icon options:
+Aim at one of the core's **four side faces** (the axis ends are the shaft, no button there) while **holding a wrench** and **hold right-click** to open the direction panel with two icon options:
 
 | Option | Effect |
 |---|---|

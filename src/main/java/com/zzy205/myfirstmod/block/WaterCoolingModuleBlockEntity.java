@@ -42,7 +42,9 @@ import java.util.Locale;
  * 来自上层（如 {@code ClientboundBlockEntityDataPacket} 直发）或区块重载——上面两条路径覆盖即可。
  * <p>
  * goggle tooltip：首段复用 {@link #containedFluidTooltip}（与 {@code create:fluid_tank} 同款：
- * 流体名 + 当前量/容量，空罐只显示总容量），再追加一行「冷却效率：×N」。
+ * 流体名 + 当前量/容量，空罐只显示总容量），再追加「冷却效率：×N」「散热：+k」两行；
+ * P10 起再追加「回路开度：XX%」——开度存在引擎 controller 上，本模块经
+ * {@link EngineCoreBlockEntity#engineControllerPos} 解析归属并读取同步值（孤立放置显示「—」）。
  */
 public class WaterCoolingModuleBlockEntity extends BlockEntity implements IHaveGoggleInformation {
 
@@ -83,7 +85,7 @@ public class WaterCoolingModuleBlockEntity extends BlockEntity implements IHaveG
         return level != null && level.isClientSide ? syncedCoolantEfficiency : EngineCoolants.efficiencyOf(tank.getFluid());
     }
 
-    // ── Create goggle tooltip（流体段同 create:fluid_tank，另加冷却效率行） ──
+    // ── Create goggle tooltip（流体段同 create:fluid_tank，另加冷却效率 / 散热 / 回路开度行） ──
 
     @Override
     public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
@@ -101,8 +103,7 @@ public class WaterCoolingModuleBlockEntity extends BlockEntity implements IHaveG
                         : Component.translatable("tooltip.ccpe.water_cooling_module.efficiency_none")
                                 .withStyle(ChatFormatting.DARK_GRAY)));
 
-        // P9 散热行：本模块的散热贡献（模块口径 = K_WATER × min(液量/COOLANT_FULL, 1) × 冷却液效率）——
-        // 引擎侧的回路开度（Lua setWaterCooling）在核心上，本模块不感知，故此处不含开度。
+        // P9 散热行：本模块的散热贡献（模块口径 = K_WATER × min(液量/COOLANT_FULL, 1) × 冷却液效率）。
         final float power = EngineCoreBlockEntity.K_WATER * coolantFill() * Math.max(0f, efficiency);
         tooltip.add(Component.literal("     ")
                 .append(Component.translatable("tooltip.ccpe.water_cooling_module.cooling")
@@ -116,6 +117,22 @@ public class WaterCoolingModuleBlockEntity extends BlockEntity implements IHaveG
                         ? Component.translatable("tooltip.ccpe.water_cooling_module.cooling_low")
                                 .withStyle(ChatFormatting.DARK_GRAY)
                         : Component.empty()));
+
+        // P10：回路开度（Lua setWaterCooling / 自动控制写在引擎 controller 上，本模块 BE 不持有——
+        // 沿位置解析归属 controller 读取：客户端读同步值 WaterCoolingStrength，服务端读权威值）。
+        // 未接入任何引擎（孤立放置）→ 显示「—」。
+        final BlockPos controllerPos = level != null
+                ? EngineCoreBlockEntity.engineControllerPos(level, worldPosition) : null;
+        final float opening = controllerPos != null
+                && level.getBlockEntity(controllerPos) instanceof EngineCoreBlockEntity core
+                        ? core.getWaterCoolingOpening() : -1f;
+        tooltip.add(Component.literal("     ")
+                .append(Component.translatable("tooltip.ccpe.water_cooling_module.opening")
+                        .withStyle(ChatFormatting.GRAY))
+                .append(opening >= 0f
+                        ? Component.literal(Math.round(opening * 100) + "%")
+                                .withStyle(opening < 1f ? ChatFormatting.AQUA : ChatFormatting.GRAY)
+                        : Component.literal("—").withStyle(ChatFormatting.DARK_GRAY)));
         return true;
     }
 

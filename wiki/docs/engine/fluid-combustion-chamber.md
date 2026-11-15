@@ -89,9 +89,9 @@ The **economy factor** is an AND-gated, time-unlocked discount (0.75–1.0):
 
 > For the full heat-generation and dissipation equations, altitude → temperature and altitude → pressure curves, see [Temperature & Cooling Model](temperature.md).
 
-- **Newton cooling model**: heat generated minus heat dissipated (ambient + core + cooling ducts, scaled by ram air at speed and air pressure at altitude), integrated against thermal mass.
+- **Newton cooling model**: heat generated minus heat dissipated, integrated against thermal mass. Air pressure at altitude scales the air-side terms (natural cooling and ducts); ram air at speed scales **only the duct component** (water cooling gets a small share, natural cooling none).
 - **Environment temperature** varies by height in the overworld (sea level 20°C → clouds 0°C → world top −40°C); the Nether is a constant **155°C** at all heights, the End a constant **0°C**.
-- **Ram air cooling**: 1.0 below 10 m/s, ramping linearly to **×2.0 at 30 m/s** — flying fast cools the engine for free.
+- **Ram air cooling**: at rest (0 m/s) the duct component is only **×0.5**, back to ×1.0 by 10 m/s and up to **×2.0 at 30 m/s** (**only the cooling-duct component gets it**; natural cooling gets none, water cooling 25% of the bonus and no penalty at rest) — flying fast cools the engine, but only if you actually have radiators.
 - **Overcooling penalty** (`cold`): below 100°C the fuel cost rises: `cold = 1 + max(0, 100−T)/100` (≈×1.8 at 20°C). A cold engine also runs at low load, so the absolute fuel loss is small; bring the machines / speed up and the penalty disappears once the temperature reaches the economy band.
 - **Overheat**: T ≥ **220°C** hard-stops the engine (no fuel burned); it resumes at T ≤ **200°C** (hysteresis). Overheating is the only thing that shuts a fluid engine down besides throttle 0 / no fuel.
 

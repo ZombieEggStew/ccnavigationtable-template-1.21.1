@@ -122,6 +122,8 @@ public class CCPeripheralExtender {
         SensorSystemAPI.refreshUniversalDrag(event.getServer().overworld());
         // 引擎源抽取批次倍数（K）：进游戏缓存一次（避免每 tick 读配置）；批次 = 引擎数量 × K
         EngineCoreBlockEntity.SOURCE_BATCH_MULTIPLIER = Config.ENGINE_SOURCE_BATCH_MULTIPLIER.get().floatValue();
+        // 水冷模块应力消耗（SU/模块）：同样进游戏缓存一次
+        EngineCoreBlockEntity.WATER_COOLING_STRESS = Config.ENGINE_WATER_COOLING_STRESS.get().floatValue();
     }
 
     /** 服务器停止（关世界/回主菜单）：清空静态全局频道注册表，避免跨世界残留占用频道。 */

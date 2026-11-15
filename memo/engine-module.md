@@ -1,9 +1,9 @@
-# 引擎模块（aero_engine：engine_core + 燃烧室 + 冷却气道）— 最终版（P0~P7 + 蒸汽燃料定稿 P2.5）
+# 引擎模块（aero_engine：engine_core + 燃烧室 + 冷却气道）— 最终版（P0~P10）
 
-> **状态：P0~P7 全部实现并编译通过；P2.5 蒸汽燃料定稿已实现（固体燃料并行燃烧 + 燃料箱自动抽取 + 余热运转 + 真实蒸汽车节流阀消耗 + Goggle 燃料行）；P2.5b 源抽取重构已实现并进游戏验证通过（四类源列表事件化重建 + 批量补料 + 删 priority 按查找顺序抽 + 断供换罐不重启）；**P8 应力固定 + 消耗 ∝ 负载已实现（编译通过，待进游戏验证）**。本文档为最终版权威描述（wiki 制作依据）。
+> **状态：P0~P10 全部实现并进游戏验证通过**（P2.5 蒸汽燃料定稿；P2.5b 源抽取重构；P8 应力固定 + 消耗 ∝ 负载；P10 Java 侧自动控制 + goggle 新行）。本文档为最终版权威描述（wiki 制作依据）。
 > 实现前先读参考源码（见文末「参考来源」）；本文档各数值以「最终版常量」为准，不再标注中间方案。
 
-> 设计封闭（用户逐项确认）：蒸汽室 = 水 + 燃料（无蒸汽流体）；**全引擎单燃料制**（P2.5 起按源列表查找顺序选一种，不混烧）+ **流体/蒸汽物理排斥**（不能混用）；严格零流体缓存（P2.5 起改为源列表 + 储备批量补料）；固体燃料从周围燃料箱（quick_fill_fuel_vault）自动抽取（**并行燃烧、流体优先**）；水走 drain 管线；**无红石控制，末段做 Lua 控制**；冷却气道（散热+风门数值消费）替换冷却风道；**setMixture / setCooling 均纯存值无门控**；**燃料体系分家**（蒸汽 = 纯原版解析，流体燃烧室 = 纯 datapack）；**温度阈值全部引擎固定**；过稀失火后续阶段。
+> 设计封闭（用户逐项确认）：蒸汽室 = 水 + 燃料（无蒸汽流体）；**全引擎单燃料制**（P2.5 起按源列表查找顺序选一种，不混烧）+ **流体/蒸汽物理排斥**（不能混用）；严格零流体缓存（P2.5 起改为源列表 + 储备批量补料）；固体燃料从周围燃料箱（quick_fill_fuel_vault）自动抽取（**并行燃烧、流体优先**）；水走 drain 管线；**无红石控制；P10 起内置 Java 自动控制（默认开，玩家 Lua 写参数即接管）**；冷却气道（散热+风门数值消费）替换冷却风道；**setMixture / setCooling 均纯存值无门控**；**燃料体系分家**（蒸汽 = 纯原版解析，流体燃烧室 = 纯 datapack）；**温度阈值全部引擎固定**；过稀失火后续阶段。
 
 ---
 
@@ -15,7 +15,7 @@
 | `fluid_combustion_chamber`（流体燃烧室） | 烧 datapack 流体燃料，**每室 8192 SU**（×燃料 stress 倍率） |
 | `steam_power_chamber`（蒸汽动力室） | 烧水 + 燃料产生蒸汽，**每室 4096 SU**；简单稳定、永不过热；燃料箱固体燃料并行燃烧 + 余热运转 |
 | `cooling_air_duct`（冷却气道） | 散热（计入 K_DUCT）+ 风门数值消费（setCooling 无门控纯存值）；**setMixture 无门控（纯存值，仅流体消费）** |
-| `water_cooling_module`（水冷模块） | 8000mb 单槽**冷却液**（只收 `coolant/*.json` 表内流体）+ 散热（计入 K_WATER，**不吃冲压/气压**）+ 200~220°C 缓慢沸腾失液；`setWaterCooling` 回路开度 |
+| `water_cooling_module`（水冷模块） | 8000mb 单槽**冷却液**（只收 `coolant/*.json` 表内流体）+ 散热（计入 K_WATER，**不吃冲压/气压**）+ 200~220°C 缓慢沸腾失液 + **P11：每工作模块恒定 512 SU 应力消耗（不接传动轴，占引擎出力）**；`setWaterCooling` 回路开度 |
 
 **两种引擎对照（wiki 用）**：
 
@@ -171,9 +171,31 @@ EngineCoreBlockEntity（仅 controller 干活；非 controller 的 getGeneratedS
   怠速下限 `IDLE_LOAD_FLOOR=0.2` 只在**消耗与发热**计算时叠加：`燃烧强度 = max(load, 0.2)`（流体燃料/水/burnTicks）、
   `heatLoad = max(load, 0.2)`（流体发热）——怠速确实在烧油，也就确实在发热。消耗用上一 tick 的 `lastLoadFactor`
   （本 tick 的 running/负载在消耗之后才算出，1 tick 滞后无害）。
-- **负载 ↔ 温度 ↔ 玩法**：`T_eq = T_amb + Σ运转室数×30×load/k_total`——海平面静止 4 室+2 风道：
+- **负载 ↔ 温度 ↔ 玩法**：`T_eq = T_amb + Σ运转室数×30×load×heatFactor(m_eff)/k_total`——
+  **有散热器的参考组（海平面静止，4 室 + 4 节 + 2 风道，k=0.38，m_eff=1.0）**：
   0.2（= 怠速下限，**发热口径**）→ 83°C（**怠速**，≈真车怠速水温 85~95°C 的下沿；空转时显示负载为 0%）、0.25 → 99°C、0.43 → 155°C（经济带）、0.63 → 219°C（过热）；
-  高速冲压 ×2 时满负载也只 178°C，高空 `p≈0.449` 时负载 0.2 就 167°C → **散热决定「能挂多少机器」= 现实的「最大持续功率」**。
+  高速冲压（30 m/s，**只有风道分量吃满 ×2**）时 k 从 0.38 提到 0.56 → 满负载 ≈234°C（仍过热）、63% 负载 ≈155°C；
+  高空 `p≈0.449`（Y≈263，f=0.53）static 散热只剩 53% → 25% 负载就 ≈170°C、34% 触 220 过热线 → **高空只能低转速、少挂机器或加水冷**。
+- **无散热器的低负载小引擎（2026-09 调参重点）**：自然散热削减到 `k_nat = K_CORE×节数 + K_AMB×室数 = 0.01×节数 + 0.04×室数`，
+  小引擎在低负载才进得了经济带。基准实测配置「1 流体室 + 2 节、无风道无水冷、25% 负载、燃料 heat=1.0」：
+  旧 k=0.09 → **111.7°C**（实测 111.4，与公式吻合；此配置即使手动拉稀到 m_eff=0.6 也只有 136.7°C，永远吃不到 eco）；
+  调参后 k=0.06 → **157.5°C（进带）**。同一台的过热负载阈值从 ~55% 降到 ~36%——「不装散热器 = 挂不了大机器」，与上一行同一结论。
+  注意：`m_eff` 在自动控制下默认 0.9（heatFactor ×1.1），比本表 `m_eff=1.0` 的旧参考值再热约 10%。
+
+**实测对账（2026-09，1 流体室 + 2 节核心、自动控制开 m_eff=0.9、燃料 heat=1.0、海平面基准 20°C）**——同一台引擎换风道数飞三个高度，模型与实测逐点吻合（风门 = 自动控制稳态开度）：
+
+| 配置 | 场景 | Model（旧：冲压作用于全部散热） | 实测 |
+|---|---|---|---|
+| **3 风道** | Y=90 / 22 m/s / 负载 43% | 3.6% | 4% |
+| | Y=183 / 32 m/s / 负载 65% | 16.0% | 16% |
+| | Y=256 / 42 m/s / 负载 88% | 35.2% | 35% |
+| **2 风道** | Y=90 / 22 m/s / 负载 43% | 5.4% | 7% |
+| | Y=183 / 31.5 m/s / 负载 65% | 24.1% | 25% |
+| | Y=256 / 43 m/s / 负载 88% | 52.8% | 53% |
+| **2 风道（新：冲压只作用于风道）** | Y=254 / 42 m/s / 负载 87% | 68.2% | 68% |
+| **2 风道（新，静止）** | Y=67 / 静止 / 负载 88% | 86.2% | 86%（156.1°C） |
+
+结论：**此前的“实测比模型凉 30°C”全部是风道数记录误差**（记成 1 个实际 2 个/记成 2 个实际 3 个），模型本身没问题；新冲压分配后的预测同样逐位吻合（68.2% vs 68%）。同配置在新模型下的稳态风门预测：3 风道 → **11.9% / 27.1% / 46.3%**，2 风道 → **17.9% / 40.7% / 68.2%**。
 - **固定机器组的手感不变**：`load = Σimpact × 256 × 油门 / 固定SU` → 负载与油门成正比，"拉转速 = 更热更费油"照旧；
   新增的第二个自由度是"挂多少机器"。
 - **负载读数来源**：`KineticBlockEntity` 的 `stress`/`capacity`（**整网**总量，网络成员增删时刷新）；引擎脱网
@@ -207,8 +229,11 @@ heatLoad        = max(load, IDLE_LOAD_FLOOR=0.2)                     // 流体�
 
 ```
 Q_heat   = Σ运行室 × load × 燃料.heat × heatFactor(m_eff) × 类型基础热      // P8：load 替代原 efficiency
-K_air    = (K_CORE×length + K_AMB×(running?运行室数:0) + K_DUCT×D×风门) × ram(speed) × f(pressure)
-K_water  = K_WATER × Σ_模块 min(液量/4000, 1) × 冷却液效率 × 回路开度        // P9：不吃 ram、不吃 f(pressure)
+K_air    = (K_CORE×length + K_AMB×运行室数) × f(pressure)                     // 自然散热：吃气压、不吃冲压（2026-09）
+         + K_DUCT×D×风门 × ram(speed) × f(pressure)                          // 冷却气道：吃满冲压 + 气压
+K_water  = K_WATER × Σ_模块 min(液量/4000, 1) × 冷却液效率 × 回路开度 × waterRam × waterPressure
+waterRam = 1 + (ram − 1) × WATER_RAM_FRACTION(0.25)                          // ram 2.0 → 水冷 ×1.25
+waterPressure = 1 − (1 − f) × WATER_PRESSURE_FRACTION(0.25)                  // f 0.54 → 水冷 ×0.885
 K_total  = K_air + K_water
 T_amb    = 地狱维度（the_nether）恒 155℃、末地维度（the_end）恒 0℃，均全高度、与高度无关；其余维度分段线性：Y≤63 → 20℃；63→200（云层）20→0℃；200→320（世界顶）0→−40℃；≥320 恒 −40℃
 T'       = (Q_heat − K_total×(T − T_amb)) / C_th
@@ -216,8 +241,8 @@ T       += T'/20；钳制 [T_amb, T_max×1.2]
 overheat = T ≥ 220 → 硬停；resume = T ≤ 200（滞回）
 沸腾失液（P9）：只要 T > 200°C（不看引擎开关）→ 每工作模块每秒掉 5.0×(T−200) mb；常态运行成本 = 引擎开着时每工作模块每 8 秒 1mb（累积器⊇16mb 才真 drain）
 
-ram(speed)：<10 m/s = 1.0，10→30 线性爬升到 2.0
-f(pressure)：pressure^0.8（钳位下限 0.25）
+ram(speed)：**0 速 = 0.5（静止没有迎风，风道只发挥一半）→ 0→10 m/s 线性接回 1.0 → 10→30 线性到 2.0**（**只有冷却气道分量吃满**；水冷只吃 ram>1 的增益份额、静止不受罚；自然散热吃 0）
+f(pressure)：pressure^0.8（钳位下限 0.25）——自然散热与风道吃满；水冷**只吃 25% 的气压损失**（f 0.54 → ×0.885）
 altitude：运动体取 getSubLevelWorldPos().y，静态取方块 Y
 ```
 
@@ -226,8 +251,8 @@ altitude：运动体取 getSubLevelWorldPos().y，静态取方块 Y
 | 常量 | 值 | 说明 |
 |---|---|---|
 | H0 / STEAM_HEAT_FACTOR | 30 °C/s / 0.8 | 流体室基础热 / 蒸汽室倍率 |
-| K_AMB / K_DUCT / K_CORE | 0.05 / 0.05 / 0.02 | 环境(每室) / 气道(每个) / 核心自身(每节) |
-| RAM_START / RAM_FULL / RAM_MAX | 10 / 30 m/s / ×2.0 | 冲压冷却曲线 |
+| K_AMB / K_DUCT / K_CORE | **0.04 / 0.09 / 0.01** | 环境(每室) / 气道(每个) / 核心自身(每节)。**2026-09 调参**：自然散热削减（K_CORE 0.02→0.01、K_AMB 0.05→0.04）+ 风冷加强（K_DUCT 0.05→0.09）：老参考组「4 室 + 4 节 + 2 风道」k 仍 = 0.38（有风道的手感不变），但「无散热器的低负载小引擎」变热（1 室 2 节 25% 负载 112→157°C），不装散热器更容易过热 |
+| RAM_START / RAM_FULL / RAM_MAX | 10 / 30 m/s / ×2.0 | 冲压曲线（**只作用于冷却气道分量**）：**0 速 = `RAM_STATIC 0.5`**（静止无迎风）→ 0→10 m/s 线性回 1.0 → 10→30 线性到 2.0；`WATER_RAM_FRACTION = 0.25`（水冷只吃 ram>1 的增益份额，ram 2.0 → ×1.25，**静止无惩罚**）；`WATER_PRESSURE_FRACTION = 0.25`（水冷只吃气压损失的 25%，f 0.54 → ×0.885）；自然散热**两项都吃 0** |
 | **OVERHEAT_TEMP / OVERHEAT_RESUME** | **220 / 200°C** | 过热硬停 / 滞回恢复（= 即将过热预警阈值） |
 | T_AMB_SEA_Y / T_AMB_SEA / T_AMB_CLOUD_Y / T_AMB_CLOUD_TEMP / T_AMB_TOP_Y / T_AMB_FLOOR | 63 / 20°C / 200 / 0°C / 320 / −40°C | 环境温度（Minecraft 尺度分段线性：海平面→云层→世界顶；不再用真实对流层 0.0065°C/m） |
 | **T_AMB_NETHER** | **155°C** | 地狱维度（the_nether）环境温度：**全高度恒定**（地狱 = 热环境，与高度无关；= 经济目标同值） |
@@ -236,7 +261,7 @@ altitude：运动体取 getSubLevelWorldPos().y，静态取方块 Y
 | PRESSURE_FLOOR | 0.25 | 气压因子下限 |
 | **ENGINE_T_OPT** | **155°C** | 经济目标（引擎固定，不随燃料/油门） |
 | **ENGINE_MIN_WORK_TEMP** | **100°C** | 过冷阈值（引擎固定，与蒸汽暖机门槛同值） |
-| **K_WATER** | **0.33** | 每个水冷模块满效散热（**不进 ram/pressure**）。定值依据：1 个满罐水冷模块把 2 个满载流体室压到 ~150°C（`Q=2×1.0×heat×30=60`、`k=60/130=0.462`、`k_air≈0.13`） |
+| **K_WATER** | **0.37** | 每个水冷模块满效散热（**不进 ram/pressure**）。定值依据：1 个满罐水冷模块把 2 个满载流体室压到 ~150°C（`Q=2×1.0×heat×30=60`、`k=60/130=0.462`、`k_air≈0.10` → K_WATER≈0.36，取 0.37）。**2026-09「略微加强」0.33→0.37**：配合自然散热削减，length=2 时 k_total = 0.10+0.37 = **0.47**（= 旧 0.14+0.33），老平衡点不变 |
 | **COOLANT_FULL** | **4000 mb** | 冷却液满效量：≥4000 满效，0~4000 线性衰减，0 mb = 0（P9 玩家定稿） |
 | **COOLANT_RUNTIME_TICKS_PER_MB** | **160 tick（8 秒）** | **常态运行成本**：每工作模块每 8 秒掉 1mb；**引擎开着才计**（停机/过热硬停不耗） |
 | **COOLANT_BOIL_MB_PER_DEGREE_SEC** | **5.0** | **过热沸腾失液速率（只管续航）**：**只要 T>200°C** 每工作模块每秒掉 `5.0×(T−200)×ΣboilMultiplier` mb（210°C≈51mb/s）；**不看引擎开关**（硬停后余热继续烧）。**这个常数不影响平台温度**（平台由 `BOIL_COOLING_PER_DEGREE` 锁定）：0.5→26 分钟 / 1.0→13 分钟 / 1.5→8.6 分钟 / 2.0→6.5 分钟 / 3.0→4.3 分钟 / **5.0→2.6 分钟**（满罐 8000mb，基准配置） |
@@ -264,19 +289,20 @@ eco：satisfied = |T−155|≤10 ∧ 0.8≤m_eff≤1.1（双因素平底窗）
      eco = 1 − 0.25×ecoProgress（1.0 → 0.75，省 25%）；保持才奖励、快速掠过不奖励
 cold = 1 + COLD_K×max(0, 100 − T)/100                           // 过冷惩罚（COLD_K=1.0，T<100°C，20°C ≈×1.8）
 
-heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1−0.5×(m−1))（浓侧平缓）
+heatFactor(m) = 1 − (m − 1) = 2 − m                                  // 2026-09 用户定稿：双侧统一线性、斜率 −1、无钳制
+                                                                   // m 0.8→×1.2（+20% 热）、0.9→×1.1、1.1→×0.9、1.4→×0.6
 ```
 
-**常量**：`MIXTURE_MIN/MAX=0.6/1.4`、`MIXTURE_PRESSURE_K=0.45`、`MIXTURE_ALT_MAX=1.25`、`MIXTURE_LEAN_K=2.0`、`MIXTURE_RICH_K=0.5`、`MIXTURE_RICH_FLOOR=0.7`、`ECO_MIN=0.75`、`ECO_FLAT=10`、`ECO_MIX_MIN/MAX=0.8/1.1`、`ECO_UNLOCK_RATE=1/15`、`ECO_DECAY_RATE=1/6`、`COLD_K=1.0`。
+**常量**：`MIXTURE_MIN/MAX=0.6/1.4`、`MIXTURE_PRESSURE_K=0.45`、`MIXTURE_ALT_MIN/MAX=0.75/1.25`、`ECO_MIN=0.75`、`ECO_FLAT=10`、`ECO_MIX_MIN/MAX=0.8/1.1`、`ECO_UNLOCK_RATE=1/15`、`ECO_DECAY_RATE=1/6`、`COLD_K=1.0`。热因子为线性 `2−m`（旧 `MIXTURE_LEAN_K/RICH_K/RICH_FLOOR` 已删除）。
 
 **设计张力（高空管理博弈）**——高空冷却更差 + 自动富油 = 免费降温福利：
 
 | 高空策略 | 油耗 | 温度 | 结果 |
 |---|---|---|---|
-| 不拉稀（杆 1.0，m_eff≈1.25） | ×1.0（无惩罚） | ×0.875（富油降温） | 省心安全，但吃不到 eco |
+| 不拉稀（杆 1.0，m_eff≈1.25） | ×1.0（无惩罚） | ×0.75（富油降温） | 省心安全，但吃不到 eco |
 | 拉稀到补偿位（杆≈0.8 → m_eff≈1.0） | ×0.8×0.75 = **×0.6** | 回 ×1.0（需冷却管好 155 带） | 海拔补偿奖励：省 40% |
-| 无脑拉大稀（杆<0.64 → m_eff<0.8） | ×杆值（纸面更低） | 偏热 | 后续过稀失火限制 |
-| 富油（杆 1.4） | ×1.4 | ×0.7 | 花油买冷 |
+| 无脑拉大稀（杆<0.64 → m_eff<0.8） | ×杆值（纸面更低） | 偏热（>×1.2） | 后续过稀失火限制 |
+| 富油（杆 1.4） | ×1.4 | ×0.6 | 花油买冷 |
 
 ### 7.7 蒸汽引擎（P6 Plan B）
 
@@ -301,17 +327,45 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 | 储罐 | 8000mb 单槽（`WaterCoolingModuleBlockEntity`，照 create:fluid_tank：FluidHandler capability + 手持容器右键 + `containedFluidTooltip`） |
 | 只收冷却液 | `FluidTank` validator = `EngineCoolants#isCoolant`（数据包 `coolant/*.json` 表）；管道/泵与手持容器两条途径都自动被拦 |
 | 归属 | 冷却气道同口径的**种子** = 贴在**核心成员 ∪ 燃烧室**上（`seen` 去重）；水冷模块另做**链式扩散**（`expandWaterModuleChain`）：贴着另一个水冷模块的也计入 → 核心四周可以堆一排散热器阵列。无 FACING 归属限制（不是燃烧室）；**无模块数上限**（N 个模块 = N 份散热） |
-| 散热 | `k_water = K_WATER(0.33) × Σ min(液量/4000, 1) × 冷却液效率 × 回路开度`（**逐模块求和的**，各用各的液量/冷却液），**加在 kTotal 的 ram/pressure 括号外**；**蒸汽引擎完全不参与**（闭式锅炉自调节，水冷对它无效） |
+| 散热 | `k_water = K_WATER(0.37) × Σ min(液量/4000, 1) × 冷却液效率 × 回路开度 × waterRam × waterPressure`（**逐模块求和的**，各用各的液量/冷却液，`waterRam = 1+(ram−1)×0.25` ⇒ ram 2.0 → ×1.25；`waterPressure = 1−(1−f)×0.25` ⇒ f 0.54 → ×0.885），**加在 kTotal 的 ram/pressure 括号外**（**冲压与气压都只吃少量份额**）；**蒸汽引擎完全不参与**（闭式锅炉自调节，水冷对它无效） |
 | 液量曲线 | ≥4000mb 满效；0~4000 线性衰减；0 = 0（**平滑、无门槛抖动**） |
 | 常态运行成本 | **引擎开着**时：每工作模块**各自**每 **8 秒掉 1mb**（满罐 ≈ 17.8 小时）；停机/过热硬停不耗。**逐模块独立计账**（`coolantDebtByPos`：各模块只抽自己的罐） |
 | 过热沸腾 | **只要 T > 200°C**（不看引擎开关）：每工作模块**各自**每秒掉 `5.0 × (T − 200) × 自己的 boilMultiplier` mb（210°C≈51mb/s）→ 与温度成正比，200°C 整点速率为 0（无边界抖动）；过热硬停后靠余热继续烧，冷却液越少散热越弱 → 掉得更快（正反馈）。**玩家定稿：蒸发维持高温只是紧急方案，不许长时间维持**（满罐 ≈2.6 分钟） |
 | **蒸发潜热散热** | **只要 T > 200°C**：`heat_net = heat − EVAP_LATENT_GAIN × 20 × Σ(沸腾 mb/tick)`，**扣在净发热一侧、不进 kTotal**（质量流量项，∝ 失液速率，不随温差变，所以也不吃冲压/气压/风道）。T≤200°C 恒 0 → 200 以下既有平衡一个数都不动。蒸汽引擎 / 回路关闭（开度 0）→ 0（那两种情况也不烧液） |
 | 两个常数的分工 | **`BOIL_COOLING_PER_DEGREE` 定平台温度、`COOLANT_BOIL_MB_PER_DEGREE_SEC` 定续航，两者解耦**——`EVAP_LATENT_GAIN = 前者÷后者`（派生，现 1.5÷5.0 = **0.3**）是"每 mB 蒸发的有效散热当量"，只承认 ≈17% 纯潜热（≈1.74，其余随排放口/排气带走）。想缩短续航只改失液速率，平台不动；想要更低平台改斜率 |
 | 回路开度 | Lua `setWaterCooling(0~1)`（默认 1.0）：只缩放 k_water，0 = 关闭（既不散热也不沸腾）；纯存值无门控 |
+| **应力消耗（P11）** | **每工作模块恒定 `512 SU`**（`Config.ENGINE_WATER_COOLING_STRESS`，默认 512，进游戏缓存到 `WATER_COOLING_STRESS`）；**不需要接通传动轴**——见 §7.12。免费 = 罐内 **0mb** / 回路开度 **0** / **蒸汽引擎**（水冷对它零作用）；**液量不足 4000mb 仍按满额收**（不看液量比例/冷却液效率） |
 | 客户端 | 散热贡献/工作模块数/冷却液总量/开度**全部服务端同步**（`WaterPower`/`WaterModules`/`CoolantAmount`/`WaterCoolingStrength`/`WaterModule`），客户端不重算（踩坑 10） |
 | 引擎源扫描 | `rebuildSources` 跳过水冷模块（冷却液不是锅炉水/燃料；`levitite_blend` 同时是 engine_fuel 条目，必须排除） |
 
 **已否掉的方案**（用户定稿）：失液下限烧到 0 / 「T>190 微量失液」这种额外常态成本（常态成本已定为 10mb/游戏小时）/ 每引擎模块数上限——都按「先不加，实测再说」。
+
+---
+
+### 7.12 水冷应力消耗（P11，`ccpe:water_cooling_module`）
+
+**需求（玩家定稿）**：水冷模块要**消耗引擎的应力**（吃掉出力），但**不需要接通传动轴**；恒定 **512 SU/模块、可配置**；免费条件 = 回路开度 0 或罐内 0mb；只对流体引擎生效。
+
+**实现原理（无传动轴、无自维护过载逻辑）**——Create 允许同一个 BE 既是 `sources`（发电）又是 `members`（耗应力）：
+
+```
+EngineCoreBlockEntity#calculateStressApplied()  // 覆写（基类是 BlockStressValues 查表，本引擎方块没注册 → 0）
+    = waterStressSU / |getTheoreticalSpeed()|   // Create 语义：返回值是「SU per RPM」
+    + 写 lastStressApplied                      // 读档 initialize→addSilently 要靠它减旧量，漏写会短暂重复计应力
+KineticNetwork#getActualStressOf(be) = members.get(be) × |theoreticalSpeed|   → 实际应力恒 = waterStressSU
+```
+
+- **每 tick 对账**（tick 里紧跟容量对账那一段，同一手法）：`hasNetwork() && getGeneratedSpeed() != 0` 时算一遍
+  `calculateStressApplied()`，与 `lastNotifiedStressPerRPM` 不等就 `getOrCreateNetwork().updateStressFor(this, 值)`；脱网/停机 → 置 NaN（重挂时必通知）。
+  网络只在成员增删时重算，模块增删 / 开度开关 / 转速变化都只改「per RPM 值」，不主动刷就永远不生效（与踩坑 31 同根因）。
+- **除数用 `getTheoreticalSpeed()`**（不是 `getGeneratedSpeed()`）：网络乘的正是理论转速，用同一个量做除数才能保证「每模块恒定 512 SU」——
+  多发电机共网被更快的发电机压速时也照样恒定；**过载时 `getSpeed()` 会返回 0 而 `getTheoreticalSpeed()` 不会**，所以过载不会把应力贡献打成 0（踩坑 32 的同类陷阱）。
+- **过载不需要自己维护**：`stress > capacity` 由 Create `KineticBlockEntity#updateFromNetwork` 判 → 红字 + 机器停转；引擎按方案 C **照常运行烧油**（踩坑 26），不会自激振荡。
+- **`waterStressSU` 的算法**（`updateWaterCooling` 里）：`(steamEngine || waterCoolingStrength <= 0f) ? 0 : 工作模块数 × WATER_COOLING_STRESS`。
+  「工作模块数」= 罐里 `getFluidInTank(0)` 非空且在冷却液表内的模块数（已经是现成变量 `working`）→ 天然满足「空罐免费」。
+- **连锁反应**：应力↑ → `load = stress/capacity` ↑ → 油耗与发热一起↑，同时水冷本身在散热 → **净温度平衡会移**（`K_WATER` 需要进游戏复测）。
+- **同步/显示**：`WaterStress`（SU）在离散差量门控里用 `|Δ| ≥ 1 SU` 触发（外加 1Hz 心跳兜底）；Goggle 核心新增「水冷耗应力：-1024 SU」行（0 → 灰「无」）；Lua 新增 `getWaterCoolingStress()`。
+- **常量**：`WATER_COOLING_STRESS = 512f`（static，`Config.ENGINE_WATER_COOLING_STRESS` 默认 512、范围 0~65536，由 `CCPeripheralExtender#onServerStarting` 缓存，0 = 完全免费）。
 
 ---
 
@@ -328,6 +382,30 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 **燃烧倒计时独立于燃料源**：蒸汽室循环门控 = 水储备 OK 且（流体可用 || 固体可用 || 任一室 `burnTicks>0`）——燃料箱/源罐被拆时已有储备继续燃烧（不冻结不停机），倒计时结束才尝试再抽，抽不到才停烧（停烧 = 停止加热，温度开始牛顿冷却）。
 
 **Goggle 燃料行**（悬停蒸汽室）：`燃料：熔岩`（流体，无数量/时间）/ `燃料：煤炭 x3 (1m 20s)`（固体：xN = 蒸汽室个数 + 墙钟剩余秒 = burnTicks/(max(负载,怠速下限)×20)，getTime 格式 `Xh Ym Zs`，英文括号、无"剩余"）/ `燃料：无`（红）。油门 0 停机不显示倒计时。数据经 controller NBT 同步（键 `SteamFuelType`/`SteamFuelKey`/`SteamBurnTicks`/`SteamSolidFuelKey`），客户端不重算（数量 xN 用客户端 scanModule 轻扫）。
+
+---
+
+### 7.11 自动控制（P10，Java 侧内置，默认开启）
+
+**定位**：装模组即用的**通用自动温度/混合比控制**（仅流体引擎），不依赖玩家配置、不需要额外 Lua 脚本；需要精准控制的玩家直接写 Lua 接管（调任一 `set*` 方法即关闭自动控制）。蒸汽引擎不参与（闭式锅炉自调节、无混合比/eco；水冷对蒸汽无效）。玩家进游戏后引擎默认就在自动控温控混合比，玩家手写参数即交还控制权。
+
+**控制律**（controller 每 tick，服务端；调用点在 `steamEngine` 判定之后、`updateWaterCooling` 之前 → 杆值/风门/水冷**本 tick 生效**）：
+
+- **混合比**：`lever = clamp(0.9 / autoRichness, 0.6, 1.4)` → 实际混合比钉在 **0.9**（eco 混合比窗口 0.8~1.1 内，两侧留裕度），逐 tick 抵消高空自动富油（Y≈260 时杆自动降到 ≈0.72）。
+- **风门（冷却气道）**：PI+D（沿用玩家 v2 实飞验证的增益：`KP=0.05 / KI=0.005 / KD=0.02`、基准 0.3、积分限幅 ±100°C·s + 抗饱和），目标 **155°C**；**T < 145°C（经济带下沿）→ 风门归零保热**，再保不住不处理（玩家调负载）。2026-09 自然散热削减后，25% 负载的小引擎已能自行进带（§7.4），保热分支只在更低负载/更冷维度（末地 0°C、高速冲压多风道）才触发。
+- **水冷（风道饱和后的第二级）**：**模型前馈 + 比例修正**。引擎内部有发热 `Q` 与散热的每一项，直接解出所需总 k 并由水冷补差：
+  ```
+  kNeed   = Q / (155 − T_amb)
+  kAirMax = (K_CORE×节数 + K_AMB×运行室数)×气压 + K_DUCT×风道数×冲压×气压   // 2026-09：自然散热不吃冲压
+  waterFF = (kNeed − kAirMax) / waterCoolingCapacity    // 风道够用（kNeed ≤ kAirMax）→ 0
+  开度目标 = clamp(waterFF + 0.1×(T−155), 0, 1)，每 tick 限速 0.05
+  ```
+  纯比例（旧实现）在 155°C 输出为 0，而水冷往往是唯一/主要执行器 → 稳态必偏离目标（实测 2 室满载 + 1 水冷模块：停在 164°C / 90%）；前馈把工作点直接坐到位（同配置算得 ≈0.99 开度 → ≈155°C），比例项只做小修正。`waterCoolingCapacity = Σ K_WATER×min(液量/4000,1)×效率 × waterRam × waterPressure`（不含开度；含少量冲压/气压）由 `updateWaterCooling` 每 tick 提供。风道够用时水冷保持 0（0 开度不耗冷却液）。
+- **富油兜底（渐进）**：风道+水冷都全开（或没装）仍 `T ≥ 165` → m_eff 从 **1.05**（仍在 eco 混合比窗口内）起步、按 `0.035/°C` 升到 **1.4**（≈175°C 封顶）；`T ≤ 150` 或散热不再全开 → 退出（回 0.9）；**`T ≥ 200` 硬保底 1.4**（防 220 硬停 + 防冷却液沸腾）。
+- **模块自检**：没装风道不写 `coolingStrength`、没装水冷不写 `waterCoolingStrength`（写了也只是纯存值、静默无效）；「散热全开」判定把「没装」视为全开。蒸汽引擎整体跳过。
+- **开关与接管**：`autoControl` 默认 **true**（NBT 无记录/旧存档同样默认开启；`adoptStateFrom` 随控制器切换继承，控制器内部状态重置）。玩家 Lua 调 `setMixture` / `setCooling` / `setWaterCooling` **任一 → 自动关闭**并交还玩家；显式开关 = `setAutoControl(bool)` / `getAutoControl()`（开启时重置积分/微分/富油档状态）。控制器内部状态（`autoCoolIntegral` / `autoLastTemp` / `autoEnriching`）transient 不落盘。
+- **同步**：自动控制只写字段、**不逐 tick `sendData`**（沿用 P7+ 心跳同步：离散字段差量 + 1Hz 心跳）；Goggle 新增「自动控制：开/关」行（开=绿、关=灰）。
+- **常量**：`AUTO_ENABLED_DEFAULT=true`、`AUTO_MIX_EFF=0.9`、`AUTO_COOL_BASE/KP/KI/KD=0.3/0.05/0.005/0.02`、`AUTO_COOL_INT_MAX=100`、`AUTO_WARM_OFF_TEMP=145`、`AUTO_WATER_KP=0.1`（前馈修正增益）、`AUTO_WATER_RAMP=0.05`、`AUTO_WATER_GATE=0.98`、`AUTO_ENRICH_ON/OFF=165/150`、`AUTO_ENRICH_START/MAX/RATE=1.05/1.4/0.035`、`AUTO_SAFETY_TEMP=200`。
 
 ---
 
@@ -349,6 +427,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 ```
 1. 枚举：scanModule —— 两类燃烧室（FACING 反面贴核心归属，去重）+ 冷却气道数 D + 去重邻居（方案 A：每 tick 枚举当安全网）
 2. 仲裁：流体+蒸汽并存只让多数派工作（平局流体优先）；steamEngine 标志
+2b. **P10 自动控制**（`!steamEngine && autoControl`，见 §7.11）：写混合比杆（m_eff=0.9）/ 风门（PI+D）/ 水冷（模型前馈）→ 本 tick 生效；玩家 Lua 写任一 `set*` → 自动关闭
 3. 门控：!overheated（滞回仅流体）→ heatAllowed
 4. 混合比（仅流体）：m_eff = 杆 × autoRichness（无气道杆钳 ≥1.0）；油耗因子 = 杆 × eco(T,m_eff) × cold(T)
 5. 源列表重建调度：sourcesDirty → 去抖/延迟倒计时 → rebuildSources（onLoad / neighborChanged / 连接性 / 全失败触发）
@@ -391,7 +470,12 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 | `getWaterCoolingPower()` | false | number | 当前有效水冷散热 k_water（含液量比例/效率/开度；不含冲压/气压） |
 | `getWaterCoolingModules()` | false | number | 工作中的水冷模块数（液量 > 0） |
 | `getCoolantAmount()` | false | number | 冷却液总量 mb（工作模块合计；服务端同步值） |
+| `getWaterCoolingStress()` | false | number | **P11：水冷模块占用的应力 SU**（= 工作模块数 × 512，真实进网：下游可用 SU 真减少、可触发真过载）；开度 0/空罐/蒸汽引擎 → 0 |
 | `isWarmingUp()` | false | boolean | 蒸汽暖机中（T<100°C 只烧不发电） |
+| `getAutoControl()` | false | boolean | **P10 自动控制开关**（默认开）：引擎是否在自动控制混合比/风门/水冷 |
+| `setAutoControl(bool)` | true | boolean | 显式开关自动控制：true = 引擎自动控制（重置控制器状态）；false = 完全交还玩家。玩家调 `setMixture`/`setCooling`/`setWaterCooling` 任一会自动关闭 |
+
+**P10 自动控制**（见 §7.11）：默认开启（含旧存档），流体引擎生效、蒸汽引擎不参与；玩家 Lua 写任一控制参数即自动关闭，`setAutoControl(true)` 恢复。
 
 **运行条件**（全满足才发电）：≥1 运行燃烧室 && 效率>0 && 未过热（仅流体）&& 蒸汽 T≥100°C 且水可用（**过载不停机**，方案 C 对齐 Create）。停机原因：缺燃料/缺水、油门 0、流体过热（滞回 T≤200 恢复）、蒸汽暖机未完成。
 
@@ -399,7 +483,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 
 ## 11. Goggle 显示（最终版）
 
-**引擎核心**（悬停 engine_core，6 内容行；**油门与负载两行只在这里显示**，各模块 tooltip 不再重复）：
+**引擎核心**（悬停 engine_core，7 内容行；**油门与负载两行只在这里显示**，各模块 tooltip 不再重复）：
 
 ```
 发动机状态
@@ -408,6 +492,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 油门：25%                    ← 只定转速（唯一由油门直接控制的量）
 目前转速：64 RPM
 负载：43%                    ← **实际**网络应力/容量（不叠加怠速下限，空转时就是 0%；≥90% 红、停机灰）
+自动控制：开                  ← P10：开=绿 / 关=灰；玩家 Lua 写任一控制参数会自动关闭（setAutoControl 显式开关）
 连接的模块：- 流体燃烧室 x1 / - 冷却气道 x1
 ```
 
@@ -434,10 +519,11 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 流体容器                     ← create:fluid_tank 同款（流体名 + 量/8000mb，空罐显示总容量）
   水 8000 mB / 8000 mB
 冷却效率：×1.00              ← coolant/*.json 的 efficiency（服务端算好随包同步）
-散热：+0.33                  ← K_WATER × min(液量/4000,1) × 效率；<4000mb 追加「液量不足」提示
+散热：+0.37                  ← K_WATER × min(液量/4000,1) × 效率；<4000mb 追加「液量不足」提示
+回路开度：100%               ← P10：引擎 controller 上的 setWaterCooling 开度（客户端同步值；孤立放置显示「—」）
 ```
 
-**引擎核心新增行（P9，装了水冷模块时显示）**：`水冷散热：+0.33`（无冷却液/回路关闭/蒸汽引擎 → 灰「无」），模块清单加 `- 水冷模块 xN`。
+**引擎核心新增行（P9，装了水冷模块时显示）**：`水冷散热：+0.37`（无冷却液/回路关闭/蒸汽引擎 → 灰「无」），模块清单加 `- 水冷模块 xN`。
 
 **流体燃烧室**（全量引擎状态）：
 
@@ -446,10 +532,11 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 状态：停机 / 过冷 / 正常 / 高效 / 即将过热 / 过热
 温度：XX.X°C
 油耗：×0.60                  ← 最终油耗系数 = 杆值 × 经济 × 过冷
-发热系数：×1.08              ← heatFactor(杆 × 高空自动富油)；稀>1 热 / 富油<1 凉
+发热系数：×1.08              ← heatFactor(杆 × 高空自动富油)；线性 2−m：稀>1 热 / 富油<1 凉
+实际混合比：0.90             ← P10：m_eff = 杆 × 高空自动富油（同步值；eco 窗口 0.8~1.1 内青、之外灰）
 ```
 
-**已移除条目**（用户要求精简）：混合比行、高空实际行、最佳温度行、风门行、Lua控制行、过冷数值行、应力影响行（Create 默认 goggle 经不调用 `super.addToGoggleTooltip` 抑制）；过冷由状态行体现。**一律显示服务端同步值**（客户端不重算，见踩坑 10）。
+**已移除条目**（用户要求精简）：混合比（杆值）行、高空实际行、最佳温度行、风门行、Lua控制行、过冷数值行、应力影响行（Create 默认 goggle 经不调用 `super.addToGoggleTooltip` 抑制）；过冷由状态行体现。**一律显示服务端同步值**（客户端不重算，见踩坑 10）。
 
 ---
 
@@ -533,6 +620,8 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 - 蒸汽 Goggle 燃料行墙钟秒 = burnTicks/(max(负载,怠速下限)×20)；油门 0 不显示倒计时；客户端外推基准同步用 NBT `Load`
 - **源列表事件化重建**（onLoad / 方块 neighborChanged 去抖 / 连接性变化 / 全源失败延迟重扫）；批次 = 室数×K；储备耗尽即时补料避免应力闪断
 - P7 奖励驱动：自动富油/heatFactor 绝不进油耗
+- **P10 自动控制默认开**（NBT 无记录 = 开，旧存档同样开）；流体引擎玩家 Lua 写 `setMixture`/`setCooling`/`setWaterCooling` 任一 → 自动关闭交还玩家（`setAutoControl(true)` 恢复）；蒸汽引擎不参与；自动控制只写字段不 `sendData`（靠既有心跳同步）；水冷前馈用 `waterCoolingCapacity`（Σ K_WATER×液量比例×效率×waterRam×waterPressure，不含开度）
+- **水冷应力（P11）= 真实网络应力**：核心以 member 身份上报（`calculateStressApplied`）+ 每 tick `updateStressFor` 对账（除数用 `getTheoreticalSpeed()`，过载时 `getSpeed()` 被清零的陷阱不踩）；**不自己判过载**（Create 的 `stress > capacity` 负责）；免费 = 空罐 / 开度 0 / 蒸汽引擎；液量不足不折价
 - P7 eco AND 门控 + 时间解锁；混合比不对无奖励无惩罚
 - P7 温度全部引擎固定（155/100/220）
 - 过冷惩罚只乘油耗
@@ -540,7 +629,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 - 燃料体系分家：蒸汽 = 原版，流体室 = datapack
 - 油门 0 = 停机不烧油；蒸汽点火判定必须带 efficiency>0
 - **输出反转只翻符号**：`setReversed(true)` → `getGeneratedSpeed()` 返回负转速；容量乘子取 abs → 容量/负载/油耗/发热全不动；`reActivateSource` 置位让网络重激活（网络不会自己发现源转速变号）；燃烧室活塞相位推进取 `abs(网络转速)`（负累加会让回绕判定 `prev > cur` 每 tick 成立 → "噗嗤"音效狂刷 + 渲染插值反向扫掠）
-- **转向的玩家入口 = 长按右键径向菜单**（照 `aeronautics:propeller_bearing` 的 `ScrollOptionBehaviour<ThrustDirection>`）：`EngineCoreBlockEntity.addBehaviours` 挂 `ScrollOptionBehaviour<OutputDirection>`，选项枚举实现 `INamedIconOptions`（`I_REFRESH` 正转 / `I_ROTATE_CCW` 反转，lang 键 `tooltip.ccpe.engine.direction.*`），槽位 = `CenteredSideValueBoxTransform((state, side) -> side.getAxis() != AXIS)`（4 个非轴端面）；**任意核心节都能开面板**，回调写 controller 的 `reversedRotation` 再 `syncDirectionOptionToSegments()` 抄回各节；面板值只是显示（存各节自己的 NBT `ScrollValue`），权威永远在 controller 的 `reversedRotation` → 读档/重组/Lua 改方向靠「变化 + 1Hz 心跳对齐」自愈（直接写 `directionOption.value` 绕开 `setValue` 的回调避免递归）
+- **转向的玩家入口 = 长按右键径向菜单**（照 `aeronautics:propeller_bearing` 的 `ScrollOptionBehaviour<ThrustDirection>`）：`EngineCoreBlockEntity.addBehaviours` 挂 `ScrollOptionBehaviour<OutputDirection>`，选项枚举实现 `INamedIconOptions`（`I_REFRESH` 正转 / `I_ROTATE_CCW` 反转，lang 键 `tooltip.ccpe.engine.direction.*`），槽位 = `CenteredSideValueBoxTransform((state, side) -> side.getAxis() != AXIS)`（4 个非轴端面）；**必须手持扳手**（`directionOption.requiresWrench()`，判定 tag = `c:tools/wrench`，同 `create:chassis`；空手/其它物品时数值框不渲染也不拦右键，右键回落到方块放置/物品交互）；**任意核心节都能开面板**，回调写 controller 的 `reversedRotation` 再 `syncDirectionOptionToSegments()` 抄回各节；面板值只是显示（存各节自己的 NBT `ScrollValue`），权威永远在 controller 的 `reversedRotation` → 读档/重组/Lua 改方向靠「变化 + 1Hz 心跳对齐」自愈（直接写 `directionOption.value` 绕开 `setValue` 的回调避免递归）
 - 放置拦截只防交互路径；蓝图/命令直放靠 controller 多数派仲裁兜底
 
 ---
@@ -556,7 +645,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 
 ---
 
-## 17. 实施阶段历史（P0~P7）
+## 17. 实施阶段历史（P0~P10）
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
@@ -573,7 +662,12 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 | **P8（应力固定 + 消耗 ∝ 负载）** | **容量固定**（每流体室 8192×stress / 每蒸汽室 4096 SU，去掉 `×油门`；capacityPerRPM = 固定SU/自身转速）+ **每 tick 网络容量对账**（照 Electronic Transmission）+ 补 `lastCapacityProvided`；**负载因子**（整网应力/容量，钳 [0, 1.0]，停机 0，除零保护；**显示/Lua = 实际值，消耗/发热才叠加怠速下限**）；**消耗与发热 ∝ 负载**（lever/eco/cold/heatFactor 分工不变）；**蒸汽温度与负载无关**（油门 ∧ 燃料 ∧ 水 → 钉 155）；Lua `getLoad/getStressUsed/getStressCapacity`；Goggle 三处新增「负载」行；蒸汽倒计时外推基准改 `Load` | ✅ 编译通过，待进游戏验证 |
 | P7+（tooltip 同步优化，方案 A+B+D） | 每 tick 20Hz 全量广播 → **事件差量 + 温度 ≥1°C 门控 + 慢字段 20 tick（1Hz）心跳**；**可推导字段下放客户端**（经济/过冷/油耗系数按公式现算，`economyFactor()/coldFactor()/fuelFactor()`；高度相关 EffectiveMixture/HeatFactor 仍服务端同步）；**蒸汽倒计时客户端线性外推**（`steamBurnTicksDisplay()`，运行中才外推）；setChanged 每 tick 保留保温度持久化；Lua 读缓存/活塞动画/应力网络重激活均不受影响 | ✅ 编译通过 + 进游戏验证通过（四套 tooltip 温度连续、状态档位切换、蒸汽倒计时逐秒走正常；稳态包量降到 1Hz 级，详见下方实施记录） |
 | **输出方向反转（Lua `setReversed`）** | `reversedRotation` 字段（NBT `ReversedRotation` 落盘 + 同步客户端 + `adoptStateFrom` 继承）→ `getGeneratedSpeed()` 取负；`setReversed(bool)` 置 `reActivateSource` 让 Create 网络重激活、`sendData`；核心 tooltip「目前转速」自动显示负值；**燃烧室活塞相位取 `abs(网络转速)`**（负累加会让回绕判定每 tick 成立 → 音效狂刷）；容量/负载/油耗/发热零改动（容量乘子取 abs） | ✅ 编译通过，待进游戏验证 |
-| **转向径向菜单（玩家入口）** | 照 `aeronautics:propeller_bearing` 的 `ScrollOptionBehaviour`（Create 全局长按右键面板，无自定义网络包）：`OutputDirection` 枚举（`I_REFRESH`/`I_ROTATE_CCW`）+ `CenteredSideValueBoxTransform`（非轴端面）+ `withCallback` 写 controller；任意节能开、选择后同步全引擎各节面板；Lua 与菜单共享同一状态 | ✅ 编译通过，待进游戏验证 |
+| **转向径向菜单（玩家入口）** | 照 `aeronautics:propeller_bearing` 的 `ScrollOptionBehaviour`（Create 全局长按右键面板，无自定义网络包）：`OutputDirection` 枚举（`I_REFRESH`/`I_ROTATE_CCW`）+ `CenteredSideValueBoxTransform`（非轴端面）+ `withCallback` 写 controller；**`requiresWrench()`：只有手持扳手才渲染面板/长按开面板**，空手或持其它物品右键不会被面板吞掉（照常放置/交互）；任意节能开、选择后同步全引擎各节面板；Lua 与菜单共享同一状态 | ✅ 编译通过，待进游戏验证 |
+| **P10（自动控制 + Goggle 新行）** | **Java 侧通用自动温度/混合比控制**（默认开启、旧存档同样开；蒸汽不参与，见 §7.11）：m_eff 钉 0.9（杆 = 0.9/autoRichness）+ 风门 PI+D（T<145 保热归零）+ 水冷**模型前馈 + 比例修正**（`WaterFF = (Q/(155−Tamb) − kAirMax)/水冷能力`）+ 富油渐进兜底（165 入门 1.05→1.4、200 硬保底）；玩家 Lua 写任一控制参数 → 自动关闭；Lua `getAutoControl`/`setAutoControl`；Goggle 核心新增「自动控制：开/关」行、流体室新增「实际混合比」行、水冷模块新增「回路开度」行 | ✅ 编译通过 + 进游戏验证通过（2 室满载 + 1 水冷模块：旧纯比例停在 164°C/90%，前馈后 ≈155°C） |
+| **2026-09 散热调参（低负载进经济带）** | 自然散热削减 + 风冷/水冷加强：`K_CORE 0.02→0.01`、`K_AMB 0.05→0.04`、`K_DUCT 0.05→0.09`、`K_WATER 0.33→0.37`。动机：基准实测「1 流体室 + 2 节、无散热器、25% 负载」恒 **111.4°C**（公式 111.7，完全吻合 ⇒ 非 bug），自然散热压过发热永远进不了经济带（即使拉到最稀 m_eff=0.6 也只 136.7°C）。结果：同配置 → **157.5°C 进带**；老参考组「4 室 + 4 节 + 2 风道」k 仍 = 0.38、「2 室满载 + 1 满罐水冷」k_total 仍 = 0.47（有散热器的手感不变）；代价 = 不装散热器的引擎更容易过热（无风道过热负载阈值 ~55% → ~36%） | ✅ 编译通过 + 进游戏验证通过（25% 负载进带） |
+| **2026-09 冲压分配（自然散热不吃冲压 / 水冷吃少量）** | `K_total = (K_CORE×节数 + K_AMB×运行室数)×f + K_DUCT×风道×风门×ram×f + k_water×waterRam`，`WATER_RAM_FRACTION = 0.25`（ram 2.0 → 水冷 ×1.25）。理由：迎面气流真正提升的是**有迎风面的散热器**（风道鳍片、水冷散热器表面），裸核心/燃烧室表面的自然对流几乎不随速度提升。效果（1 流体室 + 2 节核心、1 风道）：Y≈256/43 m/s 的散热上限从 ≈136% 负载降到 **≈68%**，Y≈183/31.5 m/s 从 ≈155% → **≈76%**，海平面静止仍 98% → **高空高速不再是「免费冷却」**；`kAirMax` 前馈同步改为「自然×气压 + 风道×冲压×气压」，`waterCoolingCapacity` 含 waterRam；水冷另外补上 `WATER_PRESSURE_FRACTION = 0.25`（吃 25% 的气压损失，f 0.54 → ×0.885） | ✅ 编译通过 + 与实测对账吻合（68.2% vs 68%） |
+| **2026-09 静止无迎风惩罚（`RAM_STATIC = 0.5`）** | 风道冲压曲线改成三段：**0 速 = 0.5** → 0→10 m/s 线性回 1.0 → 10→30 线性到 2.0。动机：实测「Y=67 静止、2 风道、88% 负载只需 86% 风门就把温度压在 156°C」——模型吻合（86.2%），但**静止吃满散热器收益不现实**（真实地面大功率是最容易过热的工况）。效果：同状态风门顶满后温度 ≈**215°C**（接近 200 沸腾线 / 220 硬停），静止 155°C 的负载上限 61%；3 风道 → 80%；水冷**不吃这项惩罚**（`waterRam = 1 + max(0, ram−1)×0.25`），所以静止高负载要靠水冷或压负载。飞行数据（≥22 m/s）一个数不变 | ✅ 编译通过，待进游戏验证 |
+| **P11（水冷应力消耗）** | 每工作模块恒定 **512 SU**（`Config.ENGINE_WATER_COOLING_STRESS`，进游戏缓存）**不需要接通传动轴**：引擎核心覆写 `calculateStressApplied()`（= `waterStressSU / \|getTheoreticalSpeed()\|` + 写 `lastStressApplied`）把自己同时登记成网络 member，tick 里每 tick `updateStressFor` 对账 → 整网真实少这么多 SU、过载由 Create 判定（引擎照常烧油）；免费 = 罐内 0mb / 开度 0 / 蒸汽引擎；液量不足 4000mb 仍满额收；Goggle 核心新增「水冷耗应力」行 + Lua `getWaterCoolingStress()`；`WaterStress` 随离散差量同步（≥1 SU） | ✅ 编译通过，待进游戏验证 |
 
 ### P7+ tooltip 同步优化（方案 A+B+D）实施记录
 
@@ -637,7 +731,7 @@ heatFactor(m)：m<1 → 1 + 2.0×(1−m)²（稀侧凸）；m≥1 → max(0.7, 1
 22. **P2.5b 邻居噪声饿死重建**：`markSourcesDirty` 若每次调用都重置去抖（cooldown=10），红石/装饰等连续邻居变化会让重建永远推迟。修复：已有排程（`sourcesDirty && cooldown>0`）则不重置 + **neighborChanged 只转发带流体/物品能力的邻居**（`onModuleNeighborChanged` 先查 capability），普通方块变化不触发。
 23. **P2.5b 删 priority 后燃料顺序 = 扫描序**：`EngineFuels.sortedByPriority()` 删除；流体室燃料 = `rebuildSources` 按 scanModule 邻居枚举序找到的第一个表命中条目（同源罐的 fluid 副本 + entry 一起缓存，drain 按源 fluid，防止罐中途换流体被误抽）。
 24. **P2.5b 配置「进游戏缓存」**：批次倍数 K 每 tick 读 `Config.get()` 有解析开销且改配置不热生效——按用户要求进游戏缓存一次到 `SOURCE_BATCH_MULTIPLIER`（`onServerStarting` 写入）。
-25. **P3 散热侧「有储备 ≠ 在消耗」→ 停机冷得更快**：发热侧早已加 efficiency 门控（踩坑 13），但温度更新的散热项 `K_AMBIENT × runningTotal` 漏了门控——停机（油门 0）时 `runningFluid/runningSteam` 仍计有储备的室（油门 0 储备不消耗、不归零）→ 燃烧室散热分量（每室 0.05）持续生效，**有剩燃料的停机引擎比无燃料冷得快约 2 倍**（实测 4 节+2 风道静止：k=0.095 vs 0.045；200→20 显示值 30 秒 vs ~3 分钟）。修复：蒸汽/流体两分支冷却处改为 `K_AMBIENT * (running ? runningTotal : 0)`（`K_CORE×length` 停机自散热不受影响，与 memo §15「冷却按运行中室数计」一致）。
+25. **P3 散热侧「有储备 ≠ 在消耗」→ 停机冷得更快**：发热侧早已加 efficiency 门控（踩坑 13），但温度更新的散热项 `K_AMBIENT × runningTotal` 漏了门控——停机（油门 0）时 `runningFluid/runningSteam` 仍计有储备的室（油门 0 储备不消耗、不归零）→ 燃烧室散热分量（每室 0.05）持续生效，**有剩燃料的停机引擎比无燃料冷得快约 2 倍**（实测 4 节+2 风道静止：k=0.095 vs 0.045；200→20 显示值 30 秒 vs ~3 分钟）。修复：蒸汽/流体两分支冷却处改为 `K_AMBIENT * (running ? runningTotal : 0)`（`K_CORE×length` 停机自散热不受影响，与 memo §15「冷却按运行中室数计」一致）。（本条数值为当时常量 K_AMB=0.05 / K_CORE=0.02 下的实测；2026-09 已调为 0.04 / 0.01，见 §7.5 常量表。）
 26. **过载高频闪烁（自激振荡）→ 方案 C 过载不停烧**：原实现把「燃料消耗」和「应力输出」都挂在 `!overstressed` 上——过载 → `running=false` → 轴停、容量归零（`calculateAddedStressCapacity()=0`）→ 网络重算 stress=0、capacity=0 → 解除过载 → 重启 → 又过载，约 20Hz 振荡，tooltip 状态（跟随同步 `running`）高频闪烁。修复（方案 C）：去掉 `!overstressed` 对流体/蒸汽室燃烧判定与 `running` 的门控——**过载 = 网络状态而非引擎状态，引擎照常运行烧油**（对齐 Create：Create 发电机过载从不停转、网络照常红字）；容量不随过载归零 → 无振荡；红字提示 = goggle 顶部新增「网络过载」行（客户端 `isOverStressed()` 由同步 capacity/stress 派生，见 Create `KineticBlockEntity.read`）。代价：**过载继续耗油**（§14「过载=停烧不白烧油」废弃）。
 27. **Lua 每 tick 变油门 → 活塞音效/动画高频重复播放**：活塞相位原为 `gameTime × speed`（瞬时转速 × 总时间），不是累积量——快速变油门（尤其油门到 0）时相位跳变：`prevPistonPhase > phase` 回绕判定误触发（音效高频"噗嗤"），动画相位跳变 + 停机回中间/重启任意相位续走（视觉高频"重复往复"）。修复：改为**累积角度**（客户端每 tick `angle += speed×3/10°` mod 2π，`FluidCombustionChamberBlockEntity` / `SteamPowerChamberBlockEntity`）：转速变化只改推进速率、不产生相位跳变；回绕检测基于累积角跨 2π（每圈一次，真实频率）；渲染按 partialTick 在 prev/current 累积角间插值（`Mth.lerp(partialTick, prevPistonAngle, pistonAngle)`）；停机累积角归零 → 重启从中间位开始。注意：音量配置 = 0 只跳过音效，角度推进始终执行（动画独立于音量）。
 28. **活塞每圈一次"卡一下"（相位回绕帧反向扫掠）**：渲染 `Mth.lerp(partialTick, prevPistonAngle, pistonAngle)` 在累积角跨 2π 回绕那一帧，prev（如 6.2）→ 当前（如 0.25）的插值会沿整圈**反向横扫**一次（sin 一路扫过整周期），视觉 = 每圈一次明显卡顿；默认油门 64rpm → 周期 18.75 tick ≈ 0.94s，正好"每隔一秒卡一下"（地狱无燃料纯水运行新场景下最容易注意到；高油门时高频化不易察觉）。修复：`getPistonOffset` 回绕帧把目标角展开到上一角之后再插值（`if (to < prevPistonAngle) to += 2π`）——插值差值 = 正常推进量，不反向扫掠；`pistonAngle` 仍保持 mod 2π 累积（回绕检测/相位跳变语义不变，与踩坑 27 兼容）。
