@@ -475,8 +475,9 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     public static final float AUTO_COOL_INT_MAX = 100f;
     /** 保热：温度低于经济带下沿（155−10=145°C）→ 关闭全部散热（风门/水冷归零）；再保不住就不管（玩家自己调负载） */
     public static final float AUTO_WARM_OFF_TEMP = ENGINE_T_OPT - ECO_FLAT;
-    /** 水冷自动控制（风道饱和后的第二级，0~1 比例开度）：开度 = KP×(T−155)（165°C 满开）；风道开度 ≥ GATE 才参与，
-     *  风道够用时保持 0（0 开度 = 免费待命，不耗冷却液）；每 tick 最多变化 RAMP（≈1/s 缓变） */
+    /** 水冷自动控制（风道饱和后的第二级）：<b>模型前馈</b>（WaterFF = (kNeed − kAirMax)/水冷能力，按引擎内部发热/散热
+     *  项算出 155°C 所需开度）+ KP 小修正（开度修正量/°C）；风道开度 ≥ GATE 或前馈本身 >0 才参与，风道够用时保持 0
+     *  （0 开度 = 免费待命，不耗冷却液）；每 tick 最多变化 RAMP（≈1/s 缓变） */
     public static final float AUTO_WATER_KP = 0.1f;
     public static final float AUTO_WATER_RAMP = 0.05f;
     public static final float AUTO_WATER_GATE = 0.98f;
@@ -542,6 +543,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * 服务端每 tick 计算、随包同步（Goggle 水冷行 / Lua getWaterCoolingPower）——客户端不重算（踩坑 10）。
      */
     protected float waterCoolingPower = 0f;
+
+    /**
+     * 水冷散热<b>能力</b>（Σ K_WATER × min(液量/4000,1) × 冷却液效率，<b>不含回路开度</b>；服务端每 tick 算）。
+     * 供 P10 自动控制算前馈：{@code waterFF = (kNeed − kAirMax) / waterCoolingCapacity}（开度 1 时的有效 k 上限）。
+     * transient，不落盘。
+     */
+    protected float waterCoolingCapacity = 0f;
 
     /** 冷却液总量（mb，工作模块合计；同步 Goggle/Lua） */
     protected float coolantAmount = 0f;
@@ -1481,8 +1489,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
      * <ul>
      *   <li><b>混合比</b>：杆 = AUTO_MIX_EFF / autoRichness（逐 tick 补偿高空自动富油，实际混合比保持 0.9 附近）；</li>
      *   <li><b>风门</b>：PI+D（温度误差 155°C）；T &lt; 145°C（经济带下沿）→ 归零保热；</li>
-     *   <li><b>水冷</b>：风道开度 ≥ 0.98 且 T &gt; 155 后才按比例参与（开度 = 0.1×(T−155)，165°C 满开；
-     *       0 = 免费待命、不耗冷却液）；风道够用时保持 0；</li>
+     *   <li><b>水冷</b>：<b>模型前馈 + 比例修正</b>——由引擎内部发热 Q 与散热 k 直接解出「到 155°C 还差多少 k」，
+     *       换算成所需开度（风道够用时为 0，保持 0 不耗冷却液）；风道饱和或前馈需要时才参与，比例项只做小修正；</li>
      *   <li><b>富油兜底（渐进）</b>：风道+水冷全开仍 T ≥ 165 → m_eff 从 1.05 起步、按 0.035/°C 升到 1.4（≈175°C 封顶）；
      *       T ≤ 150 或散热不再全开 → 退出；T ≥ 200 硬保底 1.4。</li>
      * </ul>
@@ -1537,10 +1545,29 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             coolingStrength = ductCmd; // 纯存值；没装风道不写（写了也无效果，不干扰玩家存值）
 
         // ---- 水冷（风道饱和后的第二级；0 开度 = 免费待命，不耗冷却液） ----
+        // 模型前馈：引擎内部有发热 Q 与散热的每一项，可直接解出「到 155°C 还差多少 k 由水冷补」：
+        //   kNeed   = Q / (155 − T_amb)                                                （达到目标所需的整机 k）
+        //   kAirMax = (K_CORE×节数 + K_AMB×运行室数 + K_DUCT×风道数) × 冲压 × 气压        （风道全开时的 k）
+        //   waterFF = (kNeed − kAirMax) / waterCoolingCapacity                          （风道够用时 = 0）
+        // 纯比例在 155°C 输出为 0，而水冷往往是唯一/主要执行器 → 稳态必偏离目标（实测 164°C/90% 即此原因）。
+        // 前馈把工作点直接放到位；比例项只做小修正（±0.5°C 级），并保留「风道饱和才介入」门控省冷却液。
         if (hasWater) {
+            final int fluidChambers = scan.fluidChambers().size();
+            final int runChambers = running ? fluidChambers : 0;
+            float heat = 0f;
+            if (running && !overheated && fluidFuel != null && fluidChambers > 0)
+                heat = fluidChambers * Math.max(loadFactor, IDLE_LOAD_FLOOR)
+                        * fluidFuel.heat() * BASE_HEAT_FLUID * heatFactor(targetEff);
+            float tGap = ENGINE_T_OPT - ambientTemp();
+            float kNeed = heat > 1e-4f ? (tGap > 1f ? heat / tGap : 1e6f) : 0f;
+            float kAirMax = (K_CORE * length + K_AMBIENT * runChambers + K_DUCT * scan.coolingDucts)
+                    * ramFactor() * pressureFactor();
+            float waterFF = (waterCoolingCapacity > 1e-4f && kNeed > kAirMax)
+                    ? Mth.clamp((kNeed - kAirMax) / waterCoolingCapacity, 0f, 1f) : 0f;
+
             float waterTarget = 0f;
-            if (temp >= AUTO_WARM_OFF_TEMP && (!hasDuct || ductCmd >= AUTO_WATER_GATE))
-                waterTarget = Mth.clamp(AUTO_WATER_KP * (temp - ENGINE_T_OPT), 0f, 1f);
+            if (temp >= AUTO_WARM_OFF_TEMP && (waterFF > 0f || !hasDuct || ductCmd >= AUTO_WATER_GATE))
+                waterTarget = Mth.clamp(waterFF + AUTO_WATER_KP * (temp - ENGINE_T_OPT), 0f, 1f);
             waterCoolingStrength = moveToward(waterCoolingStrength, waterTarget, AUTO_WATER_RAMP);
         }
     }
@@ -1574,6 +1601,14 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     // ================= P9：水冷模块（water_cooling_module） =================
 
     /**
+     * 水冷回路开度（0~1，默认 1.0；Lua {@code setWaterCooling} / 自动控制写）。
+     * 服务端返回权威值，客户端返回同步值（NBT {@code WaterCoolingStrength}）——供水冷模块 goggle tooltip 显示。
+     */
+    public float getWaterCoolingOpening() {
+        return waterCoolingStrength;
+    }
+
+    /**
      * 水冷结算（<b>仅服务端</b>，每 tick 一次，必须在 {@code steamEngine} 判定之后调用）：逐模块走
      * {@code FluidHandler} capability（零缓存、不落盘）读「液量 + 流体 id」，按表算出：
      * <pre>
@@ -1596,6 +1631,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (!hasWaterCooling) {
             waterCoolingModules = 0;
             waterCoolingPower = 0f;
+            waterCoolingCapacity = 0f;
             coolantAmount = 0f;
             coolantBoilWeight = 0f;
             workingCoolantModules = List.of();
@@ -1639,6 +1675,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         coolantAmount = amount;
         coolantBoilWeight = boilWeight;
         workingCoolantModules = workingList;
+        // P10：水冷散热能力（Σ贡献，不含开度）——自动控制前馈用（开度 1 时能提供的 k 上限）
+        waterCoolingCapacity = power;
         // 蒸汽引擎：水冷不参与温度（玩家定稿），所以贡献强制 0；模块数/液量仍如实记录（Lua 信息用）
         waterCoolingPower = steamEngine ? 0f : power * waterCoolingStrength;
         // 蒸发潜热散热：T>200°C 时把沸腾带走的热量从净发热里扣；蒸汽引擎 / 回路关闭 → 0（这两种也都不烧液）
@@ -2459,6 +2497,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return controllerOfCoreAt(level, modulePos.relative(facing.getOpposite()));
         }
 
+        // 水冷模块：可能只贴着另一个水冷模块（链式散热器，见 expandWaterModuleChain）——沿链 BFS 找归属
+        if (state.is(MyModBlocks.water_cooling_module.get())) {
+            BlockPos controller = waterModuleChainController(level, modulePos);
+            if (controller != null)
+                return controller;
+        }
+
         // 冷却气道：与冷却计数同范围（核心成员 ∪ 燃烧室邻居）
         for (Direction dir : Direction.values()) {
             BlockPos neighbor = modulePos.relative(dir);
@@ -2482,6 +2527,41 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (level.getBlockEntity(corePos) instanceof EngineCoreBlockEntity core) {
             EngineCoreBlockEntity controller = core.getControllerBE();
             return controller != null ? controller.getBlockPos() : null;
+        }
+        return null;
+    }
+
+    /**
+     * 水冷模块 → 归属 controller：从自身出发沿水冷模块链 BFS（与 {@code expandWaterModuleChain} 同口径），
+     * 链上任意模块的 6 邻居里出现核心成员 / 燃烧室即归属该引擎；不成链（孤立放置）返回 null。
+     * 供水冷模块 goggle tooltip 显示「回路开度」（开度存在 controller 上，模块 BE 不感知）。
+     */
+    private static BlockPos waterModuleChainController(Level level, BlockPos modulePos) {
+        List<BlockPos> queue = new ArrayList<>();
+        Set<BlockPos> seen = new HashSet<>();
+        queue.add(modulePos);
+        seen.add(modulePos);
+        for (int i = 0; i < queue.size(); i++) {
+            BlockPos cur = queue.get(i);
+            for (Direction dir : Direction.values()) {
+                BlockPos neighbor = cur.relative(dir);
+                if (!seen.add(neighbor))
+                    continue;
+                BlockState ns = level.getBlockState(neighbor);
+                if (ns.is(MyModBlocks.engine_core.get())) {
+                    BlockPos controller = controllerOfCoreAt(level, neighbor);
+                    if (controller != null)
+                        return controller;
+                } else if (ns.is(MyModBlocks.fluid_combustion_chamber.get())
+                        || ns.is(MyModBlocks.steam_power_chamber.get())) {
+                    Direction facing = ns.getValue(DirectionalBlock.FACING);
+                    BlockPos controller = controllerOfCoreAt(level, neighbor.relative(facing.getOpposite()));
+                    if (controller != null)
+                        return controller;
+                } else if (ns.is(MyModBlocks.water_cooling_module.get())) {
+                    queue.add(neighbor);
+                }
+            }
         }
         return null;
     }
@@ -3062,6 +3142,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                     .append(Component.translatable("tooltip.ccpe.engine.heat_factor").withStyle(ChatFormatting.GRAY))
                     .append(Component.literal("×" + String.format(Locale.ROOT, "%.2f", (double) lastHeatFactor))
                             .withStyle(lastHeatFactor > 1f ? ChatFormatting.GOLD : ChatFormatting.AQUA)));
+            // P10：实际混合比（m_eff = 杆值 × 高空自动富油，服务端同步值；eco 混合比窗口 0.8~1.1 内为青、之外灰）
+            float effectiveMix = lastEffectiveMixture;
+            tooltip.add(Component.literal("     ")
+                    .append(Component.translatable("tooltip.ccpe.engine.mixture_effective").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(String.format(Locale.ROOT, "%.2f", (double) effectiveMix))
+                            .withStyle(effectiveMix >= ECO_MIX_MIN && effectiveMix <= ECO_MIX_MAX
+                                    ? ChatFormatting.AQUA : ChatFormatting.GRAY)));
             // 过冷状态已由状态行（status.cold）显示，不再单独列数值行；风门/最佳温度/混合比行均移除（用户要求精简 tooltip）
         }
         // Lua 控制行已移除（用户要求精简 tooltip；luaConnected 字段/NBT 同步保留备用）
