@@ -814,6 +814,18 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         return 1.0D;
     }
 
+    /**
+     * <b>粒子强度系数</b>（0..1）：由子类覆盖（矢量喷管的 Lua {@code setThrustScale}），默认 1.0。
+     * <p>
+     * 只乘在<b>排气</b>与<b>进气</b>这两条与出力同源的链路上（{@link #tickClient} 里的「有效油门」=
+     * 油门 × 本系数），所以系数一变，<b>数量、排气速度、进气漏斗长度一起变</b>，0 = 完全不出粒子。
+     * <p>
+     * <b>高空尾迹不受它影响</b>：尾迹按移动位移与高度发射，与出力无关（{@link #tickContrail}，用户定稿）。
+     */
+    protected float particleIntensityScale() {
+        return 1.0F;
+    }
+
     @Override
     public void sable$physicsTick(final ServerSubLevel subLevel, final RigidBodyHandle handle, final double timeStep) {
         final float speed = this.getFanSpeed();
@@ -931,7 +943,12 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         // 本方块所在物理体：粒子坐标必须用它的姿态从 plot 局部系投到世界系（见下方 projectToWorld）
         final SubLevel own = Sable.HELPER.getContaining(this);
 
-        final float throttle = Math.min(Math.abs(speed) / 256.0F, 1.0F);
+        // 有效油门 = 油门（|转速| / 256）× 子类粒子强度系数（矢量喷管的出力系数，默认 1.0）。
+        // 它<b>只喂排气与进气</b>两条链路：数量、排气速度、进气漏斗长度都按这一个数缩放
+        // ⇒ 出力减半 ≈ 转速减半的观感、出力 0 = 完全不出粒子（用户定稿 2026-11）。
+        // 高空尾迹不走这条线（tickContrail 按位移与高度发射），所以不受出力系数影响。
+        final float particleThrottle = Mth.clamp(
+                Math.min(Math.abs(speed) / 256.0F, 1.0F) * this.particleIntensityScale(), 0.0F, 1.0F);
 
         // 吸力（负转速）：机体被拉向 +FACING ⇒ 空气被吸进口面，走一条独立的进气链路。
         // 此时<b>不出排气、也不出尾迹</b>：
@@ -940,15 +957,15 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         if (thrustSign < 0.0D) {
             this.contrailAnchorWorld = null;
             this.contrailAccum = 0.0D;
-            this.tickIntake(level, own, mouth, axis, throttle);
+            this.tickIntake(level, own, mouth, axis, particleThrottle);
             return;
         }
 
         // 高空尾迹：与排气<b>互相独立</b>的一条链路（只在冷空气里有、按位移发射、不做碰撞），见 tickContrail
         this.tickContrail(level, own, mouth, flowDir);
 
-        // 密度随转速线性变化；不足一颗就不生成
-        final int count = (int) Math.round(exhaustParticlesPerTick() * throttle);
+        // 密度随有效油门线性变化（= 转速 × 出力系数）；不足一颗就不生成
+        final int count = (int) Math.round(exhaustParticlesPerTick() * particleThrottle);
 
         if (count <= 0) {
             return;
@@ -1012,7 +1029,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
             final Vec3 flowWorld = this.projectToWorld(level, own, start.add(flow)).subtract(startWorld);
 
             if (USE_EXHAUST_PARTICLE) {
-                this.spawnExhaust(level, random, own, startWorld, flowWorld, throttle);
+                this.spawnExhaust(level, random, own, startWorld, flowWorld, particleThrottle);
             } else {
                 // 必须用 9 参数的 addAlwaysVisibleParticle(..., ignoreRange = true)：
                 // 7 参数那个重载的第二个布尔是 decreased 而不是 force（ClientLevel.java:733），
@@ -1188,7 +1205,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      *
      * @param mouth    喷口面中心（plot 局部系，与排气链路同一个点）
      * @param axis     喷口朝向的法向（plot 局部系）：进气从这一侧来
-     * @param throttle 油门 0~1（|转速| / 256）：决定发射密度与进气速度
+     * @param throttle <b>有效</b>油门 0~1（|转速| / 256 × 出力系数）：决定发射密度、进气漏斗长度与进气速度
      */
     private void tickIntake(final Level level, final @Nullable SubLevel own, final Vec3 mouth,
                             final Vec3 axis, final float throttle) {
@@ -1214,8 +1231,8 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         }
 
         final Vec3 dir = axisWorld.normalize();
-        // 漏斗长度随转速线性缩放：配置值就是「满转速 256 RPM 时」的长度（默认 8.0 格）
-        // ⇒ 128 RPM 吸 4 格、64 RPM 吸 2 格；转速越高吸得越远，观感上"吸力更强"。
+        // 漏斗长度随<b>有效油门</b>（转速 × 出力系数）线性缩放：配置值就是「满油门 256 RPM、出力系数 1.0 时」
+        // 的长度（默认 8.0 格）⇒ 128 RPM 吸 4 格、64 RPM 吸 2 格；出力减半同样把漏斗砍半。
         final double reach = Math.max(INTAKE_MIN_REACH, intakeFunnelLength() * throttle);
 
         // 前方被挡死就没有可吸的空气。射线在世界系里打（own = null ⇒ projectToWorld 退化为恒等），

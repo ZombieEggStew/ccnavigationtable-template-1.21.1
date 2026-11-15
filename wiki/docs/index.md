@@ -42,6 +42,9 @@ A Sable-physics bearing with direct axial power input. In **Lua Control mode** t
 ### [🤖 Servo Bearing](actuators/servo-bearing.md)
 A Lua-driven servo with **no power input**: a CC:Tweaked computer positions the assembled control surface at an exact target angle (shortest path). Kinematic and rigid, with smooth client rendering — no crawling.
 
+### [🔥 Advanced Thrust Nozzle](actuators/advanced-thrust-nozzle.md)
+The upgraded directional nozzle, mounted on an Encased Fan's airflow face: the nozzle body can point **anywhere inside a 15° cone** and thrust follows the tilted axis at **2 pN/RPM** (double the directional nozzle). Controlled from Lua in polar or **joystick** form, with straight-line animation.
+
 ### [🔧 Engine System](engine/overview.md)
 A modular, multi-block Create power source for aircraft, driven by a **single throttle lever**:
 

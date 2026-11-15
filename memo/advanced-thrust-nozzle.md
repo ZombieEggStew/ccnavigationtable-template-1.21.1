@@ -7,7 +7,8 @@
 > 三处几何定稿：**枢轴 `(8,5,8)px`**（= 活塞头中面）、**活塞杆 = body 子件 + 轴向滑移**（§4.1）、
 > **选择框 = `(0,0,0,16,4,16)` + `(2,4,2,14,16,14)`**（§7）。
 > 变更明细：第一轮（偏转点/摇杆/出力翻倍）见 §11；第二轮（用户重做模型 + 活塞头并进 base + 选择框两盒）见 §12.1–12.5；
-> 第三轮（活塞杆改 body 子件、枢轴抬到 y5、越界核算）见 §12.6。**全部经用户实测通过。**
+> 第三轮（活塞杆改 body 子件、枢轴抬到 y5、越界核算）见 §12.6。**前三轮全部经用户实测通过。**
+> 第四轮（`setThrustScale` 的出力系数同时缩放排气 / 进气粒子）见 §14 —— 已实现、编译通过，待实测。
 > ⚠️ 换模型后若动画错位，先对 §12.4 那张"模型数字 ↔ 代码常量"表；改动前先看 §4.1（活塞机构）与 §12.6（枢轴高度）。
 >
 > 七个能力一句话版：
@@ -15,6 +16,7 @@
 > 2. **四活塞随动**：活塞头固定（0 自由度，**已并进底座模型**）、活塞杆是 **body 的子件、只沿 body 轴伸缩**（1 自由度，§4）；
 > 3. **推力 = 倾斜轴**：`nozzleAxis()` 钩子让推力与**全部粒子链路**一起跟着倾斜轴走；
 > 4. **出力系数**：Lua `setThrustScale(0..1)` 乘在「风扇转速 × 气压」之上（默认 1.0）；**矢量喷管满出力 = 2 pN/RPM**；
+>    同一系数**也决定排气 / 进气粒子**（有效油门 = 转速 × 系数，见 §14）；
 > 5. **物理体作用域频道**：放置自动分配、只在物理体上生效、与 `short_range_linker` / 控制台共享频道空间；
 > 6. **CC:T 外设**：`setDeflection(方位角, 锥角)`（极坐标）/ `setDirection(x, y)`（摇杆，`-1..1`）/ `getDeflection` /
 >    `getMaxTilt` / `isMoving` / `setThrustScale` / `getThrustScale` / `getChannel`，可用 `ccpe.sensor_system.getPeripheral(ch)` 寻址。
@@ -35,7 +37,7 @@
 | 锥角钳位 | **15°**（几何依据见 §6.3） |
 | 角度 API 形态 | 两种写法并存：极坐标 `setDeflection(方位角, 锥角)` + 摇杆 `setDirection(x, y)`（`-1..1`，方向=方位、长度=锥角），另给 `getDeflection` / `getMaxTilt` |
 | 状态表示 | **偏转点 `(x, y)`**（长度=锥角、方向=方位）才是状态，方位/锥角只是它的极坐标读法；插值在偏转平面上做 ⇒ **走直线**（用户定稿） |
-| 出力 API | `setThrustScale(0..1)` 乘在「转速 × 气压」上，默认 **1.0**；**矢量喷管满出力 = 2 pN/RPM**（`THRUST_OUTPUT_MULTIPLIER = 2.0`，2026-11 用户定稿；定向喷管仍 1 pN/RPM） |
+| 出力 API | `setThrustScale(0..1)` 乘在「转速 × 气压」上，默认 **1.0**；**矢量喷管满出力 = 2 pN/RPM**（`THRUST_OUTPUT_MULTIPLIER = 2.0`，2026-11 用户定稿；定向喷管仍 1 pN/RPM）。**同一系数也缩放排气 / 进气粒子**（§14：只影响这两条链路，高空尾迹不受影响） |
 | 选择框/碰撞箱 | **底板 `(0,0,0,16,4,16)` + 喷口包络 `(2,4,2,14,16,14)`** 两个盒（2026-11 用户定稿；**不随倾斜/动画改变**，六向由模型旋转生成） |
 | GUI 内容 | **只有频道滚轮**，不做"加载物理体"开关（喷嘴不持有 force-load ticket） |
 | 频道作用域 | 物理体（含约束链）；非物理体**不注册** |
@@ -242,7 +244,7 @@ flowchart LR
 | `getDeflection()` → `{azimuth, tilt, targetAzimuth, targetTilt, x, y, targetX, targetY}` | `azimuth`/`tilt` = 此刻**实际**角（由偏转点反算，渐变中与目标不同），`targetAzimuth`/`targetTilt` = 目标角；方位均已归正 0..360（**点落在直出中心时方位无意义、报 0**）；`x`/`y` = 实际偏转点（度，`锥角·(cos,sin) 方位`），`targetX`/`targetY` = 目标偏转点 |
 | `getMaxTilt()` → `15` | 钳位上限（脚本归一化用） |
 | `isMoving()` → bool | 是否还在渐变中（偏转或出力尚未到位） |
-| `setThrustScale(scale)` → bool | 出力系数 0..1（越界钳位），乘在「风扇转速 × 气压」之上；**矢量喷管满出力 = 2 pN/RPM**（系数 1.0 ⇒ 2 倍额定；气压 1.0、256 RPM ⇒ 512 pN/喷管）；**只影响推力，不影响粒子**；同样按运动曲线渐变 |
+| `setThrustScale(scale)` → bool | 出力系数 0..1（越界钳位），乘在「风扇转速 × 气压」之上；**矢量喷管满出力 = 2 pN/RPM**（系数 1.0 ⇒ 2 倍额定；气压 1.0、256 RPM ⇒ 512 pN/喷管）；**同时也决定排气 / 进气粒子**（有效油门 = 转速 × 系数 ⇒ 数量、排气速度、进气漏斗长度一起变，0 时这两种粒子完全不出；高空尾迹不受影响，§14）；同样按运动曲线渐变 |
 | `getThrustScale()` → 0..1 | 当前出力系数（0..1 的比例值，渐变中是此刻实际值；实际推力 = 这个数 × 2 pN/RPM × 转速 × 气压） |
 | `getChannel()` → int | 本喷嘴在物理体内的频道（-1 = 不在物理体上 / 未分配） |
 
@@ -306,10 +308,11 @@ n.setDirection(0, 0)                  -- 回直出
 
 - `compat/cc/CCPeripheralCapabilities` 加一条 capability → `getPeripheral()`（懒加载内嵌 `Peripheral`）。
 - `compat/cc/SensorSystemAPI#getPeripheral(ch)` 加喷嘴分支（链接器 → 控制台 → **喷嘴**，三者同一频道空间）。
-- `DefX` / `DefY` / `TargetDefX` / `TargetDefY` / `ThrustScale` 进 `saveAdditional`；前四个**还要进 `getUpdateTag`**
-  （客户端 BER 与粒子要读）。旧键 `AzimuthDeg` / `TiltDeg` / `TargetAzimuthDeg` / `TargetTiltDeg`
+- `DefX` / `DefY` / `TargetDefX` / `TargetDefY` / `ThrustScale` / `TargetThrustScale` 进 `saveAdditional`；
+  **六个都要进 `getUpdateTag`**（客户端 BER 与粒子要读：前四个决定倾斜姿态，后两个决定粒子强度，见 §14）。
+  旧键 `AzimuthDeg` / `TiltDeg` / `TargetAzimuthDeg` / `TargetTiltDeg`
   **只在 `loadAdditional` 里兼容读取**（旧存档换算成偏转点），不再写出。
-- **不在 tick 里广播**（v8 定稿，见 §6.5）：`requestDeflection` / `requestThrustScale` 一次命令只
+- **不在 tick 里广播**（v8 定稿，见 §6.5）：`requestDeflection` / `requestDirection` / `requestThrustScale` 一次命令只
   `syncToClient()` 一次（客户端靠"目标值"自己推进动画），`tickMotion()` 只 `setChanged()` 落盘。
 
 ### 6.5 渐变到位：视觉偏转点 = **一个朝 target 走的点**（每次渲染用墙钟差值推进一步）
@@ -412,6 +415,8 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 - **出力的两倍是矢量喷管专属**（`THRUST_OUTPUT_MULTIPLIER`）：定向喷管 `ccpe:thrust_nozzle` 仍是 1 pN/RPM，
   两种喷管同机混装时"同转速不同推力"是预期差异，不是 bug。
 - 渐变中**中途保存会连目标一起落盘** ⇒ 读档后会继续转完剩余行程（不是停在半路）。
+- **出力系数影响排气 / 进气粒子，但不影响高空尾迹**（§14）：尾迹按移动位移与高度发射，
+  系数 0 时"没有排气却有尾迹"是有意为之（尾迹代表航迹的冰晶，与出力强弱解耦）。
 - 推力**不做遮挡判定**（与定向喷管一致：喷口被堵照样出力）。
 - 蓝图部署后**频道重分配**（父类无 `writeSafe`）；偏转/出力有 NBT 会保留。
 - 没有"实际出力 pN"读数（需要调试时加 `getThrust()`）。
@@ -445,6 +450,7 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 | v9：`setDirection(x, y)` 摇杆写法 + 全链路直线插值 | ✅ **用户实测"完全符合预期"**（2026-11） |
 | 偏转再提速 80→**160**°/s（平面线速度，动画与真实推力同源） | ✅ 已落地（用户反馈"功能基本齐全"；手感若还要调只改这一个常量） |
 | 矢量喷管出力翻倍（`THRUST_OUTPUT_MULTIPLIER = 2.0` ⇒ 2 pN/RPM；定向喷管不变） | ✅ 已落地（同上；要校数值只改这一个常量） |
+| 出力系数同时缩放排气 / 进气粒子（有效油门 = 转速 × 系数，客户端本地补同一条渐变，§14） | ⏳ 已实现、`gradlew classes` 通过，**待用户进游戏实测** |
 
 ---
 
@@ -622,3 +628,51 @@ y=8 侧向溢出更小（1.02px），但杆底漂移反而涨到 ±0.9px，不�
 - 最大锥角时十字臂仍伸出方块四边 **1.80px**、顶环仍超出方块顶 **3.39px**（几何必然，§12.6）——**用户已接受**。
 - 杆底在活塞头里仍有 0.2×0.8px 的微观漂移（过约束的必然结果）——视觉上等同于铰点。
 - 推力**不做遮挡判定**、蓝图部署后**频道重分配**、`getThrust` 读数未做（与定向喷管一致，见 §8）。
+
+---
+
+## 14. 变更记录（2026-11 第四轮：出力系数影响粒子）
+
+### 14.1 用户诉求与定稿
+
+> 「帮我改一下 `setThrustScale` 设定出力会影响产生的粒子。」
+
+两个细节由用户在选项里定稿：
+
+| 议题 | 结论 |
+|---|---|
+| 影响哪些粒子 | **只影响排气 + 进气**；**高空尾迹不动**（尾迹按位移与高度发射，与出力无关） |
+| 怎么影响 | **与油门同一套口径**：把「有效油门 = 油门 × 出力系数」喂给现有粒子链路 ⇒ **数量、排气速度、进气漏斗长度一起缩**；系数 0 = 排气/进气完全不出 |
+
+### 14.2 落地方式（一处乘法，不新增参数）
+
+原实现只有 `throttle = |转速| / 256` 一个强度来源，`thrustScale()` 只在 `sable$physicsTick` 的推力公式里读过一次。
+
+| 文件 | 改了什么 |
+|---|---|
+| `block/ThrustNozzleBlockEntity.java` | 新增钩子 `protected float particleIntensityScale()`（**默认 1.0 ⇒ 定向喷管行为不变**）；`tickClient` 里把它乘进油门得到 `particleThrottle`，再喂给 `tickIntake(..., particleThrottle)`、排气 `count`、`spawnExhaust(..., particleThrottle)`。**`tickContrail` 不经过它** ⇒ 尾迹天然不受影响 |
+| `block/AdvancedThrustNozzleBlockEntity.java` | 覆盖钩子返回 `thrustScaleAxis.value`；`requestThrustScale` 从 `setChanged()` 改成 **`syncToClient()`**（客户端得知道新目标）；`ThrustScale` + 新增 `TargetThrustScale` 进 `saveAdditional` / `loadAdditional` / **`getUpdateTag` / `handleUpdateTag`** |
+
+### 14.3 客户端怎么得到这个系数（关键）
+
+同步包仍然**只在命令时发一次**（§6.5 的铁律：不逐 tick 广播），所以客户端拿到的是「命令那一刻的值 + 目标」，
+而服务端那份 `value` 是 `tickMotion` 每 tick 推进的。若客户端直接用 `value`，粒子会在包到达时**瞬变**。
+
+⇒ 覆盖的 `particleIntensityScale()` 在客户端**本地补一步**：`thrustScaleAxis.stepToward(THRUST_SCALE_PER_TICK)`
+（0.25/tick，与服务端同一个常量、同一速度）⇒ 粒子与推力**同步在 0.2s 内平滑衰减**。
+副作用：客户端这个字段不再严格等于服务端快照，但它只被粒子密度读，且物理体周期性重载（`loadAdditional`）会把
+`value` 落回服务端真值 ⇒ 自愈。
+
+### 14.4 效果对照
+
+| 出力系数 | 推力 | 排气粒子 | 进气粒子 | 高空尾迹 |
+|---|---|---|---|---|
+| 1.0 | 2 pN/RPM × 转速 × 气压 | 满密度 / 满速度 | 满密度 / 满漏斗 8 格 | 不变 |
+| 0.5 | 减半 | 数量、速度 ≈ 转速减半的观感 | 数量减半 / 漏斗 4 格 | 不变 |
+| 0 | **0** | **完全不出** | **完全不出** | 不变 |
+
+### 14.5 验证
+
+`./gradlew.bat classes` ✅ 通过。**待用户实测**：`setThrustScale(0.5)` / `(0)` 时排气与进气应当明显变稀/停掉，
+且与推力的渐变同步（约 0.2s）；高空尾迹应当照旧。
+

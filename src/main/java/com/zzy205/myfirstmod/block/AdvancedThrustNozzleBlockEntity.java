@@ -55,6 +55,7 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
     private static final String TAG_LEGACY_TARGET_AZIMUTH = "TargetAzimuthDeg";
     private static final String TAG_LEGACY_TARGET_TILT = "TargetTiltDeg";
     private static final String TAG_THRUST_SCALE = "ThrustScale";
+    private static final String TAG_TARGET_THRUST_SCALE = "TargetThrustScale";
 
     /** 频道未分配：交给注册表在物理体内自动取最小空闲号 */
     public static final int CHANNEL_UNASSIGNED = -1;
@@ -233,7 +234,8 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
      * 它乘在父类公式的 {@code thrustScale()} 上 ⇒ 满出力（Lua 系数 1.0）时实际 <b>2 pN/RPM</b>：
      * 气压 1.0、256 RPM 时 <b>512 pN/喷管</b>（定向喷管仍是 256 pN）。
      * <p>
-     * ⚠️ 只影响<b>推力</b>，不影响排气/进气/尾迹粒子（那些按风扇转速走，见父类 {@code tickClient}）。
+     * ⚠️ 只影响<b>推力</b>的<b>倍率</b>：它不改变粒子的强度（粒子强度由 Lua 的出力系数
+     * {@code thrustScaleAxis} 决定，见 {@link #particleIntensityScale()}）。
      */
     private static final double THRUST_OUTPUT_MULTIPLIER = 2.0D;
 
@@ -329,7 +331,8 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
     /** 请求出力系数（0..1，越界钳位）：同样只写目标，恒速逼近 */
     public void requestThrustScale(final float scale) {
         this.thrustScaleAxis.setTarget(Mth.clamp(scale, 0f, 1f));
-        this.setChanged();
+        // 必须推一次客户端：粒子密度要跟着出力走，客户端得知道新目标（本地再按同一速度补渐变）
+        this.syncToClient();
     }
 
     /**
@@ -565,6 +568,27 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
         return this.thrustScaleAxis.value * THRUST_OUTPUT_MULTIPLIER;
     }
 
+    /**
+     * 覆盖父类钩子：<b>出力系数也决定粒子</b>（用户定稿 2026-11）。
+     * <p>
+     * 父类把「有效油门 = 油门 × 本系数」喂给排气与进气 ⇒ 系数 0.5 的观感约等于转速减半
+     * （数量、排气速度、进气漏斗长度一起缩），系数 0 = 排气/进气完全不出。
+     * 高空尾迹不在此列（按位移与高度发射，见 {@code tickContrail}）。
+     * <p>
+     * 客户端要在这里<b>本地补一步渐变</b>：同步包只在命令时发一次（不逐 tick 广播），
+     * 客户端拿到的是「命令那一刻的值 + 目标」，而服务端那份 {@code value} 是每 tick 推进的。
+     * 这里用同一个 {@link #THRUST_SCALE_PER_TICK} 把本地值朝目标推一步，
+     * 粒子才会和推力一样在 0.2s 内平滑衰减，而不是跟着包瞬变。
+     */
+    @Override
+    protected float particleIntensityScale() {
+        if (this.level != null && this.level.isClientSide) {
+            this.thrustScaleAxis.stepToward(THRUST_SCALE_PER_TICK);
+        }
+
+        return this.thrustScaleAxis.value;
+    }
+
     /** 当前方位角（度，0..360；由偏转点反算，正处于直出中心时无意义、返回 0） */
     public float getAzimuthDeg() {
         return azimuthDegOf(this.defX.value, this.defY.value);
@@ -730,7 +754,9 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
          * <p>
          * 满出力 = <b>2 pN/RPM</b>（{@link #THRUST_OUTPUT_MULTIPLIER}，用户定稿；定向喷管仍是 1 pN/RPM）
          * ⇒ 气压 1.0、256 RPM 时 512 pN/喷管。
-         * 只影响推力，不改变粒子（粒子仍按风扇转速喷）。同样按运动曲线渐变（0.2s 走完 0→1）。
+         * <b>同时决定排气与进气粒子</b>：有效油门 = 转速 × 本系数 ⇒ 数量、排气速度、进气漏斗长度一起变，
+         * 系数 0 时排气/进气完全不出（高空尾迹不受影响，它按位移与高度发射）。
+         * 推力与粒子都按同一条运动曲线渐变（0.2s 走完 0→1）。
          */
         @LuaFunction(mainThread = true)
         public final boolean setThrustScale(final double scale) {
@@ -786,6 +812,7 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
         tag.putFloat(TAG_TARGET_DEF_X, this.defX.target);
         tag.putFloat(TAG_TARGET_DEF_Y, this.defY.target);
         tag.putFloat(TAG_THRUST_SCALE, this.thrustScaleAxis.value);
+        tag.putFloat(TAG_TARGET_THRUST_SCALE, this.thrustScaleAxis.target);
     }
 
     @Override
@@ -821,7 +848,11 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
             }
         }
 
-        this.thrustScaleAxis.reset(tag.contains(TAG_THRUST_SCALE) ? tag.getFloat(TAG_THRUST_SCALE) : 1f);
+        final float scale = tag.contains(TAG_THRUST_SCALE) ? tag.getFloat(TAG_THRUST_SCALE) : 1f;
+        this.thrustScaleAxis.reset(scale);
+        // 目标也恢复：粒子与推力的渐变要"继续走完"而不是停在半路
+        this.thrustScaleAxis.setTarget(tag.contains(TAG_TARGET_THRUST_SCALE)
+                ? tag.getFloat(TAG_TARGET_THRUST_SCALE) : scale);
         // ⚠️ 这里**不要**重置视觉动画状态（曾写成 visualInit = false）：
         // 物理体（Sable 子次元）会周期性重发/重载方块实体数据，一旦重载就把视觉姿态吸附到
         // 服务端当前值，"渐变"直接退化成"瞬间跳转"（实测症状）。
@@ -844,6 +875,9 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
         tag.putFloat(TAG_DEF_Y, this.defY.value);
         tag.putFloat(TAG_TARGET_DEF_X, this.defX.target);
         tag.putFloat(TAG_TARGET_DEF_Y, this.defY.target);
+        // 出力系数：客户端要按它缩放排气/进气粒子（tickClient → particleIntensityScale）
+        tag.putFloat(TAG_THRUST_SCALE, this.thrustScaleAxis.value);
+        tag.putFloat(TAG_TARGET_THRUST_SCALE, this.thrustScaleAxis.target);
         return tag;
     }
 
@@ -859,6 +893,14 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
         final float newY = tag.contains(TAG_DEF_Y) ? tag.getFloat(TAG_DEF_Y) : 0f;
         this.defX.setSynced(newX, tag.contains(TAG_TARGET_DEF_X) ? tag.getFloat(TAG_TARGET_DEF_X) : newX);
         this.defY.setSynced(newY, tag.contains(TAG_TARGET_DEF_Y) ? tag.getFloat(TAG_TARGET_DEF_Y) : newY);
+
+        // 出力系数同理：照抄「当时的值 + 目标」，本地平滑推进交给 particleIntensityScale（客户端每 tick 一步）。
+        // ⚠️ 这里同样不许重置任何视觉动画状态（见 loadAdditional 的警告）。
+        if (tag.contains(TAG_THRUST_SCALE) || tag.contains(TAG_TARGET_THRUST_SCALE)) {
+            final float scale = tag.contains(TAG_THRUST_SCALE) ? tag.getFloat(TAG_THRUST_SCALE) : 1f;
+            this.thrustScaleAxis.setSynced(scale,
+                    tag.contains(TAG_TARGET_THRUST_SCALE) ? tag.getFloat(TAG_TARGET_THRUST_SCALE) : scale);
+        }
 
         if (DEBUG_ANIM_LOG) {
             System.out.printf("[ATN-pkt ] inst=%d pos=%s value=(%.2f,%.2f) target=(%.2f,%.2f)"
