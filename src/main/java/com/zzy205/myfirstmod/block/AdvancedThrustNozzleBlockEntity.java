@@ -204,10 +204,11 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity {
      * 权威单位是「度/秒」：服务端按 tick 换算成步长推进（{@code /20}），
      * 客户端视觉动画直接用墙钟（{@link System#nanoTime()}）算 —— 两者速度完全一致。
      * <p>
-     * 耗时（当前值，为了排查刻意放慢到肉眼可见）：方位 90° = 0.75s、180° = 1.5s；锥角满行程 15° = 0.38s。
+     * 耗时（当前值 = 2026-11 用户定稿"偏转要快一点"，比旧值 120/40 快一倍）：
+     * 方位 90° = 0.375s、180° = 0.75s；锥角满行程 15° = 0.19s。
      */
-    private static final float AZIMUTH_DEG_PER_SECOND = 120f;
-    private static final float TILT_DEG_PER_SECOND = 40f;
+    private static final float AZIMUTH_DEG_PER_SECOND = 240f;
+    private static final float TILT_DEG_PER_SECOND = 80f;
 
     /** 服务端每 tick 的步长（与上面的度/秒严格对应） */
     private static final float AZIMUTH_DEG_PER_TICK = AZIMUTH_DEG_PER_SECOND / 20f;

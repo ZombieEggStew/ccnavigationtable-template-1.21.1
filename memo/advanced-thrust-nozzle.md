@@ -34,7 +34,7 @@
 | 频道作用域 | 物理体（含约束链）；非物理体**不注册** |
 | 外设方法 | 本阶段提供偏转 + 出力 + `getChannel`（早期一版曾定"暂不给 getChannel"，最终按外设形态给回） |
 | 偏转是否瞬间到位 | **否**：Lua 只写目标，服务端**恒速**推进（§6.5），客户端用同一速度的墙钟纯函数画 |
-| 渐变参数 | **写死在代码里**（方位 120°/s = 6°/tick、锥角 40°/s = 2°/tick、出力 0.25/tick），Lua 不提供速度/时长参数 |
+| 渐变参数 | **写死在代码里**（方位 240°/s = 12°/tick、锥角 80°/s = 4°/tick、出力 0.25/tick），Lua 不提供速度/时长参数 |
 | 平滑算法 | 视觉角 = **一个朝 target 走的数**，每次渲染用 `System.nanoTime` **差值**推进一步（§6.5 v8）；**不要**改回"每 tick 累加 / 按调用频率推进 / (起点,终点,起始时刻) 三元组" |
 | 方位角跨 0/360 | 走**最短路径**（350°→10° 走 −20°） |
 | `getDeflection` 返回 | **实际角 + 目标角都给**，另加 `isMoving()` |
@@ -224,7 +224,7 @@ print(n.getDeflection().azimuth, n.getDeflection().targetAzimuth) -- 两个相�
 
 矢量喷管覆盖它们（`nozzleAxis` 返回倾斜轴转到 plot 系、`thrustScale` 返回 Lua 设的值）⇒ **一处改、全链路生效**。
 
-### 6.3 两个几何/数学要点
+### 6.3 三个几何/数学要点
 
 1. **模型空间 → plot 系的旋转**（最容易搞错）：vanilla blockstate 的模型旋转是
    **`R = Ry(−y) · Rx(−x)`**（`new Quaternionf().rotationYXZ(rad(−y), rad(−x), 0)`），
@@ -234,13 +234,24 @@ print(n.getDeflection().azimuth, n.getDeflection().targetAzimuth) -- 两个相�
 2. **为什么锥角钳 15°**：枢轴在 `y=1px`（底板中部），裙边下沿半径 ~5-6px ⇒ 下垂量 `6px × sinθ`：
    15° ≈ 1.6px（刚好）、20° ≈ 2.1px（可见地切进底板）、30° ≈ 3px（明显）；
    活塞杆摆幅 `7px × sinθ` 同理，15° 时 1.8px 正好仍在十字臂带内。
+3. **方位角是"锥面圆周角"，偏转轨迹是圆弧、不是直线**（用户实测提问过，**是预期行为**）：
+   `setDeflection(az, tilt)` 是**极坐标**（`tilt` = 锥面半径，`az` = 在锥面上的相位），
+   代码按球坐标合成方向 `(sin t·cos a, cos t, sin t·sin a)`（`tiltDirModel`）。
+   两个轴**各自恒速独立**推进 ⇒ 只改方位角时锥角保持不变，轴端就在**半径=锥角的那个圆**上画弧。
+   例：`setDeflection(90,15)` → `setDeflection(-90,15)`（=270°）⇒ 方位 90→270 而 tilt 恒 15°
+   ⇒ **在 15° 锥面上画半圈**（240°/s 走 180° 耗时 0.75s），**视觉上就是半圆**。
+   ⇒ 想走"直线"的两种途径（**均未实现**）：① Lua 分段经极点（先 `(az,0)` → 换 az → 再 `(az,tilt)`），
+   零改动但是三段；② 改插值为笛卡尔弦（方向向量 x/z 线性插值再归一化），真直线，但会废掉
+   "方位最短路 + 锥角独立恒速"的语义（跨极点时方位不连续），属设计变更需用户同意。
 
 ### 6.4 注册与同步
 
 - `compat/cc/CCPeripheralCapabilities` 加一条 capability → `getPeripheral()`（懒加载内嵌 `Peripheral`）。
 - `compat/cc/SensorSystemAPI#getPeripheral(ch)` 加喷嘴分支（链接器 → 控制台 → **喷嘴**，三者同一频道空间）。
 - `azimuthDeg` / `tiltDeg` / `thrustScale` 进 `saveAdditional`；前两个**还要进 `getUpdateTag`**
-  （客户端 BER 与粒子要读）；**动的时候每 tick 推一次** `sendBlockUpdated(..., 3)`，停下就停发。
+  （客户端 BER 与粒子要读）。
+- **不在 tick 里广播**（v8 定稿，见 §6.5）：`requestDeflection` / `requestThrustScale` 一次命令只
+  `syncToClient()` 一次（客户端靠"目标值"自己推进动画），`tickMotion()` 只 `setChanged()` 落盘。
 
 ### 6.5 渐变到位：视觉角 = **一个朝 target 走的数**（每次渲染用墙钟差值推进一步）
 
@@ -293,12 +304,13 @@ print(n.getDeflection().azimuth, n.getDeflection().targetAzimuth) -- 两个相�
 
 | 参数 | 当前值（实测确认的观感） | 耗时 |
 |---|---|---|
-| `AZIMUTH_DEG_PER_SECOND` | 120°/s | 方位 90° = 0.75s、180° = 1.5s |
-| `TILT_DEG_PER_SECOND` | 40°/s | 锥角满行程 15° = 0.38s |
+| `AZIMUTH_DEG_PER_SECOND` | **240°/s**（2026-11 用户定稿提速，旧值 120） | 方位 90° = 0.375s、180° = 0.75s |
+| `TILT_DEG_PER_SECOND` | **80°/s**（旧值 40） | 锥角满行程 15° = 0.19s |
 | `THRUST_SCALE_PER_TICK` | 0.25/tick | 出力 0→1 = 0.2s |
 
 > 想要更快的手感：改 `AZIMUTH_DEG_PER_SECOND` / `TILT_DEG_PER_SECOND`（当初想要的"快"约 400°/s / 100°/s
 > ⇒ 90° 0.22s、15° 0.15s；服务端每 tick 步长由 `/20` 自动跟着变）。
+> 当前 240/80 是"快一倍"档；两个常量同时被**服务端 tick（真实推力方向）**和**客户端视觉推进**读取，一改两边同步。
 
 **要点**
 
@@ -337,7 +349,7 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 
 ## 8. 已知边界 / 未做
 
-- **偏转速度写死**（方位 120°/s、锥角 40°/s、出力 0.25/tick，**无加减速**），Lua 不可配（用户定稿）。
+- **偏转速度写死**（方位 240°/s、锥角 80°/s、出力 0.25/tick，**无加减速**），Lua 不可配（用户定稿）。
 - 渐变中**中途保存会连目标一起落盘** ⇒ 读档后会继续转完剩余行程（不是停在半路）。
 - 推力**不做遮挡判定**（与定向喷管一致：喷口被堵照样出力）。
 - 蓝图部署后**频道重分配**（父类无 `writeSafe`）；偏转/出力有 NBT 会保留。
@@ -358,6 +370,8 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 | 频道自动分配 / 只在物理体 / GUI | ✅ 用户实测"这一步没问题" |
 | CC:T 外设偏转 + 出力 | ✅ 用户实测"没问题" |
 | 偏转渐变（视觉角 = 朝 target 走的数，`nanoTime` 差值推进） | ✅ **用户实测"偏转动画平滑了"**（v8：`loadAdditional` 不再重置视觉状态 + 目标角落盘） |
+| 偏转轨迹是锥面圆弧（`(90,15)→(-90,15)` 走半圆） | ✅ **是预期行为**（极坐标两个轴独立推进，见 §6.3 第 3 条）；用户确认无需改动 |
+| 偏转提速 2×（方位 120→**240**°/s、锥角 40→**80**°/s，动画与真实推力同源同时变快） | ⏳ 待用户实测确认手感 |
 
 ---
 
