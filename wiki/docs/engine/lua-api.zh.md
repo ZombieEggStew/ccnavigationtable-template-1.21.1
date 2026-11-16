@@ -23,7 +23,7 @@ local e = peripheral.wrap("front")
 | `getTemperature()` | false | number | 引擎温度 °C |
 | `isOverheated()` | false | boolean | 过热锁定（仅流体引擎：T≥220°C 硬停，T≤200°C 解锁） |
 | `getFluidTanks()` | true | table[] | 所有连接储罐：`{fluid, amount, remaining, capacity}`（空罐 fluid 为 nil） |
-| `getThrottle()` | false | number | 油门 0..1（默认 0.25）。**只决定输出转速**（转速 = 油门 × 256 rpm；应力容量恒定；0 = 停机不烧油，唯一启停控制） |
+| `getThrottle()` | false | number | 油门 0..1（默认 1.0 = 100%，256rpm）。**只决定输出转速**（转速 = 油门 × 256 rpm；应力容量恒定；0 = 停机不烧油，唯一启停控制） |
 | `getLoad()` | false | number | **负载** 0..1 = 应力网络「已用应力 / 可提供容量」（**实际值，不叠加怠速下限**；空转 0、停机 0）。**油耗与发热的驱动量**，适合做经济调度 |
 | `getStressUsed()` | false | number | 所在网络的已用应力（SU，整网总量：Σ 机器应力影响 × 转速；停机/脱网 → 0） |
 | `getStressCapacity()` | false | number | 所在网络的可提供容量（SU，整网总量；本引擎自身贡献恒定 = 8192×流体室 / 4096×蒸汽室） |

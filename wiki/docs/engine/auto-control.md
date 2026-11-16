@@ -155,8 +155,8 @@ Wearing Create goggles over any core section:
 ```
     Temperature: 156.3°C
     Total stress capacity: 8192 SU
-    Throttle: 25.0%
-    Current speed: 64 RPM
+    Throttle: 100.0%
+    Current speed: 256 RPM
     Load: 43%
     Water cooling: +0.02
     Coolant stress: -512 SU

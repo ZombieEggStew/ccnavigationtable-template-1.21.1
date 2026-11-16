@@ -173,3 +173,8 @@
 - Added an in-world **hold-right-click panel** on the engine core to pick the output direction (Forward / Reversed). **Hold a Wrench** to open it — with an empty hand or any other item the core side shows no panel and right-click stays normal block placement / item interaction (such as attaching chambers). Works on any core segment and shares its state with the Lua method above.
 
 1.2.4
+- **IMPORTANT!!!** The engine's **default throttle is now 100% (256 rpm)** — it used to be 25% (64 rpm). A freshly built engine starts at **full throttle** with no Lua script needed: its goggles read `Throttle: 100.0%`, and once it has fuel (and, for a steam engine, water and a warm boiler) it spins at the full **256 RPM**.
+
+  The throttle still does exactly one thing — it sets the output **rotation speed**: stress capacity stays fixed (8192 SU × fuel `stress` per fluid combustion chamber, 4096 SU per steam chamber) and fuel burn / heat still follow the **stress network load**, so an engine with nothing attached burns at the same 20% idle floor as before.
+
+  Engines already placed in an existing world keep the throttle stored in their NBT; call `setThrottle(1)` from Lua if you want those at 100% as well. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/engine-core/

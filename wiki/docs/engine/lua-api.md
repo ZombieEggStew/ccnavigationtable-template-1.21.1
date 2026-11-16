@@ -23,7 +23,7 @@ local e = peripheral.wrap("front")
 | `getTemperature()` | false | number | Engine temperature in °C |
 | `isOverheated()` | false | boolean | Overheat lock (fluid engines only; hard-stop at T≥220°C, unlock at T≤200°C) |
 | `getFluidTanks()` | true | table[] | All connected fluid tanks: `{fluid, amount, remaining, capacity}` (fluid is `nil` when empty) |
-| `getThrottle()` | false | number | Throttle 0..1 (default 0.25). **Sets the output speed only** (speed = throttle × 256 rpm; stress capacity is constant; 0 = stopped, no fuel burned; the only on/off control) |
+| `getThrottle()` | false | number | Throttle 0..1 (default 1.0 = 100%, 256 rpm). **Sets the output speed only** (speed = throttle × 256 rpm; stress capacity is constant; 0 = stopped, no fuel burned; the only on/off control) |
 | `getLoad()` | false | number | **Load** 0..1 = stress network's "stress used / capacity available" (**actual value, idle floor not included**; 0 when idle, 0 when stopped). **The driver of fuel burn and heat** — handy for economy scheduling |
 | `getStressUsed()` | false | number | Stress used by the network (SU, whole network: Σ machine impact × speed; stopped/unattached → 0) |
 | `getStressCapacity()` | false | number | Capacity available on the network (SU, whole network; this engine's own contribution is constant = 8192 per fluid chamber / 4096 per steam chamber) |
