@@ -394,8 +394,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /** 模块温度（°C，controller 持有；NBT 持久化 + 客户端同步显示） */
     protected float temperature = T_AMB_SEA;
-    /** 效率（= 油门：P8 起<b>只决定输出转速</b>——应力容量恒定、燃料消耗 ∝ 网络负载；默认 0.25 → 64rpm，由 Lua setThrottle 控制） */
-    protected float efficiency = 0.25f;
+    /** 效率（= 油门：P8 起<b>只决定输出转速</b>——应力容量恒定、燃料消耗 ∝ 网络负载；默认 1.0 → 100%（256rpm 满转速），由 Lua setThrottle 控制） */
+    protected float efficiency = 1.0f;
     /**
      * 输出旋转方向（false = 正转/默认，true = 反转；Lua {@code setReversed} 控制，默认正转）。
      * <p>实现方式 = {@link #getGeneratedSpeed()} 取负：<b>转速绝对值不变</b>，所以应力容量（Create
@@ -2208,7 +2208,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return fluidTanksCache;
         }
 
-        /** 当前油门（0..1；默认 0.25 → 64rpm）。P8：油门<b>只决定输出转速</b>（容量恒定、消耗 ∝ 网络负载）；0 = 停机不烧油 */
+        /** 当前油门（0..1；默认 1.0 = 100% → 256rpm 满转速）。P8：油门<b>只决定输出转速</b>（容量恒定、消耗 ∝ 网络负载）；0 = 停机不烧油 */
         @LuaFunction
         public final double getThrottle() {
             return efficiency;
