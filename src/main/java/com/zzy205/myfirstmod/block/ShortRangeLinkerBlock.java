@@ -135,17 +135,23 @@ public class ShortRangeLinkerBlock extends BaseEntityBlock implements IWrenchabl
 
     /**
      * 强充能（拉杆语义）：只在「附着面」那一个方向返回输出值 —— 于是它贴着的方块被标记为被充能，
-     * 绕到该方块其它侧的红石粉、以及直接贴着该方块的设备都能读到信号。
+     * 绕到该方块其它侧的红石粉、以及直接贴着该方块的设备（红石灯等）都能读到信号。
      * <p>
      * 行为与拉杆完全一致：原版 {@code LeverBlock#getDirectSignal} =
-     * {@code POWERED && getConnectedDirection(state) == direction ? 15 : 0}，
-     * 这里把方向换成 {@link #supportDirection}、把 15 换成 Lua 设定的输出值。
+     * {@code POWERED && getConnectedDirection(state) == direction ? 15 : 0}，这里把强度换成 Lua 设定的输出值。
+     * <p>
+     * <b>方向约定是反的</b>（{@link net.minecraft.world.level.SignalGetter} 的注释原话
+     * "directions in redstone signal related methods are backwards"）：传入的 {@code side} 是
+     * 「从查询方（附着方块）指向本链接器」的方向 = 原版 {@code getConnectedDirection}，
+     * 即 {@link #supportDirection} 的<b>反面</b>（地面放置 → {@code supportDirection}=DOWN，这里比 UP）。
+     * 写反了会永远返回 0（{@code getDirectSignalTo} 对上方邻块传的是 {@code Direction.UP}）。
+     * <p>
      * <b>开关</b>由 {@code ss.setStrongPower(channel, true)} 打开（BE {@code strongPower} 字段，默认关）：
      * 关闭时恒返回 0，六面弱信号（{@link #getSignal}）不受影响。
      */
     @Override
     protected int getDirectSignal(@NotNull BlockState state, @NotNull BlockGetter level, @NotNull BlockPos pos, @NotNull Direction side) {
-        if (side != supportDirection(state)) return 0;
+        if (side != supportDirection(state).getOpposite()) return 0;
         if (level.getBlockEntity(pos) instanceof ShortRangeLinkerBlockEntity be && be.isStrongPower())
             return be.getRedstoneOutput();
         return 0;
