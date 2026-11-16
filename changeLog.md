@@ -180,3 +180,5 @@
 - Added `getStrongPower` / `setStrongPower` to the `ccpe.sensor_system` Lua API: the Short-Range Signal Linker can now **strong-power the block it is attached to**, like a lever (only toward the support face; strength = its redstone output).
 
 - Added `getEngine` to the `ccpe.sensor_system` Lua API: `local e = ss.getEngine()` hands you the engine's `ccpe:engine` peripheral directly by body scope — no `peripheral.wrap`, no wired-network reachability needed, so an engine far from the computer is fine. It only returns a peripheral when the body (constraint chain included) has **exactly one** engine; with no engine or with several engines (e.g. a twin-engine craft) it returns `nil`. Resolved at call time and cached nowhere, so grab it once at the top of your script and keep it in a local. Costs nothing per tick.
+
+- Added `setInverted(bool)` / `isInverted()` to the Advanced Thrust Nozzle: instant thrust ⇄ suction reversal. The sign of the force along the tilted axis flips (strength, deflection and output scale untouched), exhaust particles switch to intake in the same step, and the state is stored in NBT / blueprints.
