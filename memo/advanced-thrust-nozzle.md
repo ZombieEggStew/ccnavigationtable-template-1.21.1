@@ -248,6 +248,8 @@ flowchart LR
 | `isMoving()` → bool | 是否还在渐变中（偏转或出力尚未到位） |
 | `setThrustScale(scale)` → bool | 出力系数 0..1（越界钳位），乘在「风扇转速 × 气压」之上；**矢量喷管满出力 = 2 pN/RPM**（系数 1.0 ⇒ 2 倍额定；气压 1.0、256 RPM ⇒ 512 pN/喷管）；**同时也决定排气 / 进气粒子**（有效油门 = 转速 × 系数 ⇒ 数量、排气速度、进气漏斗长度一起变，0 时这两种粒子完全不出；高空尾迹不受影响，§14）；同样按运动曲线渐变 |
 | `getThrustScale()` → 0..1 | 当前出力系数（0..1 的比例值，渐变中是此刻实际值；实际推力 = 这个数 × 2 pN/RPM × 转速 × 气压） |
+| `setInverted(enabled)` → bool | **出力反转（推力 ⇄ 吸力）**：`true` ⇒ 同一转速/出力系数下力沿轴的**符号整体翻过来**（原推力变吸力，负转速的吸力也反向）。**瞬间生效、不做渐变**（用户定稿 2026-11）；只翻符号、不动幅值与指向（大小仍由转速/气压/出力系数决定，轴朝哪仍由偏转决定）；粒子链路同步换向（**排气 ⇄ 进气**，气流永远与受力反向，见 §6.2 的 `thrustDirectionSign`）；状态进 NBT / 蓝图 |
+| `isInverted()` → bool | 出力是否已反转（`true` = 推力变吸力方向） |
 | `getChannel()` → int | 本喷嘴在物理体内的频道（-1 = 不在物理体上 / 未分配） |
 
 用法：
@@ -259,6 +261,11 @@ print(n.getChannel(), n.getMaxTilt()) -- 0  15
 n.setDeflection(90, 15)               -- 极坐标写法：方位 90° + 锥角 15°（渐进去，约 0.19s）
 n.setThrustScale(0.5)                 -- 出力减半（粒子不变，同样渐变）
 print(n.getDeflection().tilt, n.getThrustScale())
+
+-- 出力反转（推力 ⇄ 吸力）：瞬间生效，粒子同步从排气切进气
+n.setInverted(true)                   -- 力沿轴反向（原来的推力变成吸力）
+print(n.isInverted())                 -- true
+n.setInverted(false)                  -- 恢复正方向
 
 -- 等它转到位
 while n.isMoving() do sleep(0.05) end
@@ -279,8 +286,10 @@ n.setDirection(0, 0)                  -- 回直出
 |---|---|---|
 | `protected Vec3 nozzleAxis(BlockState)` | 返回 FACING 法线 | 推力（`sable$physicsTick` 冲量）与**全部粒子链路**（喷口位置、粒子基向量、遮挡射线、进气漏斗、尾迹锚点）的唯一方向来源 |
 | `protected double thrustScale()` | 返回 1.0 | 乘在「转速 × 气压」上的额外出力系数（矢量喷管返回 `Lua 系数 × 2`，见 §6.1） |
+| `protected double thrustDirectionSign()` | 返回 `+1.0` | 出力方向系数（`-1` = 反向）：**同时**乘进 `sable$physicsTick` 的 `magnitude` 与 `tickClient` 的 `thrustSign` ⇒ 力反向的同一刻排气/进气自动互换（漏掉 `tickClient` 那处就会出现"排气跟推力同向"）；矢量喷管 Lua `setInverted` 返回 ±1 |
 
-矢量喷管覆盖它们（`nozzleAxis` 返回倾斜轴转到 plot 系、`thrustScale` 返回 Lua 设的值）⇒ **一处改、全链路生效**。
+矢量喷管覆盖它们（`nozzleAxis` 返回倾斜轴转到 plot 系、`thrustScale` 返回 Lua 设的值、
+`thrustDirectionSign` 返回 `setInverted` 的 ±1）⇒ **一处改、全链路生效**。
 
 ### 6.3 三个几何/数学要点
 
@@ -310,8 +319,9 @@ n.setDirection(0, 0)                  -- 回直出
 
 - `compat/cc/CCPeripheralCapabilities` 加一条 capability → `getPeripheral()`（懒加载内嵌 `Peripheral`）。
 - `compat/cc/SensorSystemAPI#getPeripheral(ch)` 加喷嘴分支（链接器 → 控制台 → **喷嘴**，三者同一频道空间）。
-- `DefX` / `DefY` / `TargetDefX` / `TargetDefY` / `ThrustScale` / `TargetThrustScale` 进 `saveAdditional`；
-  **六个都要进 `getUpdateTag`**（客户端 BER 与粒子要读：前四个决定倾斜姿态，后两个决定粒子强度，见 §14）。
+- `DefX` / `DefY` / `TargetDefX` / `TargetDefY` / `ThrustScale` / `TargetThrustScale` / `Inverted` 进 `saveAdditional`；
+  **七个都要进 `getUpdateTag`**（客户端 BER 与粒子要读：前四个决定倾斜姿态，`ThrustScale` 那对决定粒子强度（见 §14），
+  `Inverted` 决定客户端走排气还是进气链路）。
   旧键 `AzimuthDeg` / `TiltDeg` / `TargetAzimuthDeg` / `TargetTiltDeg`
   **只在 `loadAdditional` 里兼容读取**（旧存档换算成偏转点），不再写出。
 - **不在 tick 里广播**（v8 定稿，见 §6.5）：`requestDeflection` / `requestDirection` / `requestThrustScale` 一次命令只

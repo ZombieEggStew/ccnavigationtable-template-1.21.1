@@ -57,6 +57,8 @@ Peripheral type: `advanced_thrust_nozzle` (obtained via `ccpe.sensor_system.getP
 | `isMoving()` | boolean | Whether it is still animating (deflection or thrust scale not settled) |
 | `setThrustScale(scale)` | boolean | Output scale `0..1` (clamped), multiplied on top of "RPM × air pressure". **Also drives the exhaust and intake particles** (see "Output and particles"); animated along the same motion curve |
 | `getThrustScale()` | number | Current output scale (`0..1`, the live value while animating) |
+| `setInverted(enabled)` | boolean | **Output reversal (thrust ⇄ suction)**: `true` flips the **sign** of the force along the axis at the same RPM and output scale (forward thrust becomes suction; negative-RPM suction reverses too). **Instant, no animation**; only the sign flips — magnitude (RPM / pressure / output scale) and pointing direction are untouched — and the particle chain swaps with it (**exhaust ⇄ intake**). Stored in NBT / blueprints |
+| `isInverted()` | boolean | Whether output is currently reversed (`true` = force along the axis is flipped, i.e. thrust acts as suction) |
 | `getChannel()` | number | Channel of this nozzle inside the physics body (`-1` = not on a body / unassigned) |
 
 ### Example
@@ -79,6 +81,11 @@ n.setDirection(1, 0)                   -- full tilt toward model +X (= setDeflec
 n.setDirection(0, -1)                  -- full tilt toward model −Z (= setDeflection(270, 15))
 n.setDirection(0.5, 0)                 -- toward +X at half tilt (7.5°)
 n.setDirection(0, 0)                   -- back to straight
+
+-- output reversal (thrust ⇄ suction): instant, exhaust switches to intake
+n.setInverted(true)                    -- force flips along the axis
+print(n.isInverted())                  -- true
+n.setInverted(false)                   -- back to normal direction
 ```
 
 Azimuth 0° is the model's **+X** direction and 90° is **+Z** (`(cos, sin)` maps to `(x, y)`); the whole frame rotates with the block's FACING.
@@ -94,6 +101,7 @@ thrust = fan RPM × air pressure × thrust scale × 2
 - Sign convention matches the directional nozzle: **positive RPM pushes along FACING** (the craft feels the reaction), negative RPM reverses it (reverse thrust / intake).
 - Thrust is **never occlusion-checked** — a blocked nozzle still pushes (same as the directional nozzle).
 - The thrust scale **also drives the exhaust and intake particles** (see below), but **not the high-altitude contrail**.
+- `setInverted(true)` only flips the **sign** (thrust ⇄ suction): magnitude and every other parameter stay identical, and the particle chain swaps from exhaust to intake in the same step.
 
 | Fan RPM | Pressure | `setThrustScale` | Thrust |
 |---|---|---|---|
