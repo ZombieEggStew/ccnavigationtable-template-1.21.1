@@ -12,6 +12,7 @@ import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.INamedIc
 import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollOptionBehaviour;
 import com.simibubi.create.foundation.gui.AllIcons;
 import com.zzy205.myfirstmod.Config;
+import com.zzy205.myfirstmod.compat.cc.BodyEngineRegistry;
 import com.zzy205.myfirstmod.compat.cc.SensorSystemAPI;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dan200.computercraft.api.lua.LuaFunction;
@@ -655,6 +656,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     @Nullable
     private IPeripheral peripheral;
 
+    // ---- 物理体作用域引擎登记（`ccpe.sensor_system` 的 ss.getEngine() 用；只在生命周期事件里写） ----
+    /** 是否已登记进 {@link BodyEngineRegistry}（登记成功后永久为 true，直到 setRemoved） */
+    private boolean bodyRegistered = false;
+    /** 未登记期间的有限重试计数（onLoad 时 sub-level 可能尚未就绪；耗尽后不再产生任何每 tick 开销） */
+    private int bodyRegisterRetries = 20;
+
     /** 客户端：流体燃烧室活塞"噗嗤"音效池（每引擎一个，音量 = Config.ENGINE_FLUID_PUFF_VOLUME）；不加 {@code @OnlyIn}，理由见 {@link #steamBurnTicksSyncTime} */
     protected SoundPool fluidPistonSoundPool;
 
@@ -750,6 +757,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (level.isClientSide) {
             CatnipServices.PLATFORM.executeOnClientOnly(() -> this::tickClient);
             return;
+        }
+        // 物理体作用域引擎登记（ss.getEngine() 依赖）：登记成功后每 tick 只多一次 boolean 读；
+        // 未登记期间（刚加载、sub-level 可能尚未就绪）每 tick 重试一次，20 tick 内仍失败则放弃，
+        // 之后非物理体上的引擎不再产生任何每 tick 开销。
+        if (!bodyRegistered && bodyRegisterRetries > 0) {
+            bodyRegisterRetries--;
+            tryRegisterInBody();
         }
         if (!isController())
             return;
@@ -2516,14 +2530,46 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         ConnectivityHandler.formMulti(this);
         // 组网后源列表按新模块邻居重建（新 controller 的邻居集合可能变化）
         markSourcesDirtyNow();
+        // 放置/延长组网后（controller 就绪）补齐物理体引擎登记（onLoad 时 sub-level 可能尚未就绪）
+        tryRegisterInBody();
     }
 
     /** BE 载入（读档/放置/方块加载）：源列表按当前邻居重建（下 tick 就扫） */
     @Override
     public void onLoad() {
         super.onLoad();
-        if (level != null && !level.isClientSide)
+        if (level != null && !level.isClientSide) {
             markSourcesDirtyNow();
+            bodyRegistered = false;
+            bodyRegisterRetries = 20;
+            tryRegisterInBody();
+        }
+    }
+
+    /**
+     * BE 被破坏 / 区块卸载（Create {@code SmartBlockEntity.setRemoved()} 是 final，走它内部调用的
+     * {@code invalidate()}）：从物理体引擎注册表注销，{@code ss.getEngine()} 不再命中该节。
+     */
+    @Override
+    public void invalidate() {
+        BodyEngineRegistry.unregister(this);
+        bodyRegistered = false;
+        super.invalidate();
+    }
+
+    /**
+     * 把一个引擎核心节登记进物理体作用域引擎注册表（{@link BodyEngineRegistry}）。
+     * <p>
+     * 只登记、不做任何世界扫描；登记后由 {@code ss.getEngine()} 在调用时按约束链查询，
+     * 因此<b>不需要每 tick 刷新</b>（详见 {@link BodyEngineRegistry} 的成本模型）。
+     * 非 controller 节也登记——查询时按 controller 去重成「引擎组」，controller 易主无需重登记。
+     */
+    private void tryRegisterInBody() {
+        if (bodyRegistered) return;
+        if (BodyEngineRegistry.register(this)) {
+            bodyRegistered = true;
+            bodyRegisterRetries = 0;
+        }
     }
 
     /**

@@ -51,6 +51,7 @@ Plus per-block methods (see each page):
 - **FMC** — `getPhysicsCenterOfMassRel()`, `getPhysicsMass()`, `getPhysicsChainMass()`, `getPhysicsGravityForce()`, `getPhysicsChainGravityForce()`, `getPhysicsChainCenterOfMassRel()`, `getStressRemaining()`, `getStressCapacity()`, `initPropeller(N, S)`, `getPropellerRPM(F, P, V, θ?)`, `getPressureFromAltitude(Y)`, `getAltitudeFromPressure(P)`, `solveSailLift(P, V, L?)`, `solveSailDirectionlessDrag(P, V, D?)`, `getUniversalDragForce(m, V)`, `solveMaxCruise(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)`
 - **Short-Range Signal Linker** — `getPeripheral(channel)`, `getRedstoneOutput(channel)`, `getRedstoneInput(channel)`, `setRedstoneOutput(channel, signal)`
 - **Position Light** — `setLights(color, on)`, `setAllLights(on)`
+- **Modular Engine** (the engine's own `ccpe:engine` peripheral) — `getEngine()`: when the body (including constraint chain) has **exactly one** engine, returns that engine's peripheral (`local e = ss.getEngine(); e:setThrottle(0.6)`); returns `nil` when not on a body / no engine / **≥ 2 engines (ambiguous)**. Resolved **at call time** (`mainThread = true`, independent of `peripheral.wrap` network reachability, no cached peripheral reference) — call it once at script start and keep the result in a local; multi-engine craft should keep using `peripheral.wrap(...)` per engine.
 
 ## Reading semantics
 
