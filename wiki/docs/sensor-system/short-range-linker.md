@@ -48,9 +48,31 @@ Computers on the same physics body (including constraint chains) use `require("c
 | `getRedstoneOutput(channel)` | number | Current redstone output signal (0-15) of the target linker |
 | `getRedstoneInput(channel)` | number | Strongest redstone signal (0-15) currently received at the target linker's position |
 | `setRedstoneOutput(channel, signal)` | - | Write the target linker's redstone output (automatically clamped to 0-15), updating the block's powered state and adjacent redstone |
+| `getStrongPower(channel)` | boolean | Whether the target linker is currently **strong-powering its attached block** |
+| `setStrongPower(channel, enabled)` | boolean | Turns the target linker's **strong power** (lever-style) on / off for its attached block; returns `true` if the target linker exists |
 | `enableNbtCache(channel, ticks?)` | boolean | Enable / adjust the target linker's **attached-block NBT cache** and set its refresh interval (see below) |
 | `getNbt(channel, path)` | any / nil | Read the value at NBT path `path` from the cached attached-block NBT (nil if the cache is not enabled) |
 | `getAllNbt(channel)` | table | Read the full cached attached-block NBT (converted to a Lua table; empty table if the cache is not enabled) |
+
+## Strong power (lever-style)
+
+By default the linker only emits **weak power** on all six sides: redstone dust and devices directly touching the linker itself react, but nothing beyond that.
+
+`setStrongPower(channel, true)` additionally powers the block the linker is **attached to**, exactly like a lever:
+
+- the strong signal is emitted **only** toward the support face — FLOOR → block below, CEILING → block above, WALL → the wall block it hangs on;
+- its strength equals the current redstone output value, so set an output first (`ss.setRedstoneOutput(ch, 15)`); with output `0` there is no signal;
+- the attached block then counts as *strongly powered*, so redstone dust routed to its other sides, and devices mounted on it, can read the signal;
+- the six-sided weak signal is unchanged;
+- the switch persists in the world save (it is not written into Create schematics, matching `RedstoneOutput`).
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+ss.setRedstoneOutput(1, 15)   -- the signal strength to send
+ss.setStrongPower(1, true)    -- now also power the attached block, like a lever
+print(ss.getStrongPower(1))   -- true
+```
 
 ## NBT cache (off by default, enabled from Lua)
 
@@ -81,9 +103,9 @@ local items = ss.getAllNbt(1)  -- full NBT
 ss.enableNbtCache(1, 0)
 ```
 
-- **Scope = the calling computer's physics body** (incl. constraint chains): if the computer is not on any physics body, `getPeripheral` returns `nil`, the redstone reads return `0`, `enableNbtCache` returns `false`, `getNbt` returns `nil` and `getAllNbt` returns an empty table.
+- **Scope = the calling computer's physics body** (incl. constraint chains): if the computer is not on any physics body, `getPeripheral` returns `nil`, the redstone reads return `0` (`getStrongPower` returns `false`), `setStrongPower` and `enableNbtCache` return `false`, `getNbt` returns `nil` and `getAllNbt` returns an empty table.
 - Target not found (channel free, or linker unloaded) → same result.
-- `getPeripheral` / `setRedstoneOutput` / `enableNbtCache` are scheduled onto the server main thread; the redstone reads and the NBT cache reads (`getNbt` / `getAllNbt`) are cache-driven with zero main-thread scheduling (the NBT snapshot refreshes at the configured interval, at most one refresh cycle stale).
+- `getPeripheral` / `setRedstoneOutput` / `setStrongPower` / `enableNbtCache` are scheduled onto the server main thread; the redstone reads (`getRedstoneOutput` / `getRedstoneInput` / `getStrongPower`) and the NBT cache reads (`getNbt` / `getAllNbt`) are cache-driven with zero main-thread scheduling (the NBT snapshot refreshes at the configured interval, at most one refresh cycle stale).
 
 ```lua
 local ss = require("ccpe.sensor_system")

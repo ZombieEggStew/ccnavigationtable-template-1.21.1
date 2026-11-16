@@ -118,6 +118,8 @@ import java.util.UUID;
  * local desk = ss.getPeripheral(2)      -- 频道 2 被控制台占用 → 返回控制台外设（ccpe:control_desk）
  * print(ss.getRedstoneInput(2))         -- 目标链接器位置的红石输入
  * ss.setRedstoneOutput(2, 15)           -- 写目标链接器红石输出（相邻红石线随之响应）
+ * ss.setStrongPower(2, true)            -- 目标链接器向「附着方块」强充能（拉杆语义：只朝附着面那一面，强度 = 输出值）
+ * print(ss.getStrongPower(2))           -- 当前强充能开关（true/false）
  * ss.enableNbtCache(1)                  -- 开启频道 1 链接器的附着方块 NBT 缓存（默认每 20 tick 刷新）
  * ss.enableNbtCache(1, 5)               -- 改为每 5 tick 刷新一次
  * local fuel = ss.getNbt(1, "Fuel")     -- 读缓存中附着方块 NBT 的路径值（未开启缓存返回 nil）
@@ -1783,6 +1785,45 @@ public class SensorSystemAPI implements ILuaAPI {
     public final void setRedstoneOutput(int channel, int signal) {
         ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
         if (linker != null) linker.setRedstoneOutput(Math.clamp(signal, 0, 15));
+    }
+
+    /**
+     * 目标链接器是否在向<b>附着方块强充能</b>（拉杆语义，只读，mainThread=false）。
+     * 未命中（电脑不在物理体上 / 频道空闲）返回 false。
+     *
+     * @param channel 目标链接器频道号（本机物理体内）
+     * @return 强充能开关状态
+     */
+    @LuaFunction
+    public final boolean getStrongPower(int channel) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        return linker != null && linker.isStrongPower();
+    }
+
+    /**
+     * 开 / 关目标链接器对<b>附着方块</b>的强充能（拉杆语义，mainThread=true）。
+     * <p>
+     * 短程信号链接器默认只给<b>六面弱信号</b>（紧贴它本体的设备/红石粉能读）。开启强充能后，
+     * 它还会沿<b>附着面方向</b>（地面→下方方块、天花板→上方方块、墙面→贴墙的那个方块）给
+     * {@code getDirectSignal}，效果同拉杆：该附着方块被标记为「被充能」，于是绕到该方块其它侧
+     * 的红石粉、以及直接贴着该方块的设备都能读到信号。
+     * <ul>
+     *   <li>强充能强度 = 当前红石输出值（{@link #setRedstoneOutput} 写的那个），所以通常配合
+     *       {@code ss.setRedstoneOutput(ch, 15)} 一起用；输出为 0 时强充能也是 0（无信号）。</li>
+     *   <li>只影响强充能方向，<b>不</b>改变六面弱信号（弱信号始终按输出值给）。</li>
+     *   <li>开关随世界存档持久化；不写进 Create 蓝图（与 {@code RedstoneOutput} 同理由，见 BE {@code writeSafe}）。</li>
+     * </ul>
+     *
+     * @param channel  目标链接器频道号（本机物理体内）
+     * @param enabled  true = 开启强充能，false = 关闭（缺省＝关闭）
+     * @return 是否成功（目标链接器存在；频道空闲 / 电脑不在物理体上返回 false）
+     */
+    @LuaFunction(mainThread = true)
+    public final boolean setStrongPower(int channel, boolean enabled) {
+        ShortRangeLinkerBlockEntity linker = ShortRangeLinkerRegistry.getLinker(chainUuids, channel);
+        if (linker == null) return false;
+        linker.setStrongPower(enabled);
+        return true;
     }
 
     // ═══════════════ 附着方块 NBT 缓存（与 pe 不同：默认关闭，需 enableNbtCache 显式开启） ═══════════════
