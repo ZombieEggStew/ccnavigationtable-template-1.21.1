@@ -7,6 +7,18 @@ local e = peripheral.wrap("front")
 -- or: peripheral.find("ccpe:engine")
 ```
 
+!!! tip "Scripts on a physics body: grab it from `ccpe.sensor_system` instead"
+    When the computer sits on a physics body (Sable sub-level), you can get the engine peripheral straight from the sensor module:
+
+    ```lua
+    local ss = require("ccpe.sensor_system")
+    local e = ss.getEngine()   -- exactly one engine on the body (constraint chain included) → its peripheral; otherwise nil
+    ```
+
+    - **No peripheral-network reachability needed** — the engine can be any distance from the computer.
+    - **Only returns a peripheral when the body has exactly one engine**; no engine, or ≥2 engines (twin/multi-engine craft) → `nil`, so keep using `peripheral.wrap` / `peripheral.find` per engine there.
+    - Resolved **at call time** (`mainThread = true`, one main-thread hop per call, at most 1 tick stale) and **no cached peripheral reference**: after the engine is broken/reformed/extended it returns `nil` instead of a stale object. Call it once at the top of your script and keep the result in a local.
+
 ## [Example — Temperature and Mixture Control](../examples/trainer_aircraft_2.md)
 
 > The engine already ships with **built-in temperature & mixture auto control** (no script needed) — see [Auto Control](auto-control.md). The methods below are for writing your own control loop (call `setAutoControl(false)` first).

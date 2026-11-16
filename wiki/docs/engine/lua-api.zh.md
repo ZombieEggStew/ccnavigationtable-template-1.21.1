@@ -7,6 +7,18 @@ local e = peripheral.wrap("front")
 -- 或：peripheral.find("ccpe:engine")
 ```
 
+!!! tip "物理体上的脚本：用 `ccpe.sensor_system` 直接取，不必 `peripheral.wrap`"
+    电脑装在物理体（Sable sub-level）上时，可以直接从传感器模块拿到引擎外设：
+
+    ```lua
+    local ss = require("ccpe.sensor_system")
+    local e = ss.getEngine()   -- 机体（含约束链）上恰好一个引擎 → 该引擎外设；否则 nil
+    ```
+
+    - **不依赖外设网络可达性**：引擎离电脑多远都能拿到（外设网络够不着的引擎也能控制）。
+    - **只在机体上恰好一个引擎时返回**；没有引擎、或 ≥2 个引擎（双发/多发）返回 `nil`——多发机体请继续用 `peripheral.wrap` / `peripheral.find` 逐台控制。
+    - **调用时解析**（`mainThread = true`，每次调用过一次主线程、最多滞后 1 tick），且**不缓存外设引用**：引擎拆解/重组/延长后返回 `nil`，不会拿到已失效的对象。脚本开头调一次、把结果存进局部变量即可。
+
 ## [示例——温度与混合比控制](../examples/trainer_aircraft_2.zh.md)
 
 > 引擎**默认自带**温度与混合比自动控制（不需要任何脚本），见[温度与混合比自动控制](auto-control.zh.md)。下面的方法用于**自己写**控制循环（先调 `setAutoControl(false)`）。
