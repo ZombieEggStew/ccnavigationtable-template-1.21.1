@@ -48,9 +48,31 @@
 | `getRedstoneOutput(channel)` | number | 目标链接器当前的红石输出信号（0-15） |
 | `getRedstoneInput(channel)` | number | 目标链接器位置当前接收到的最强红石信号（0-15） |
 | `setRedstoneOutput(channel, signal)` | - | 写目标链接器的红石输出（自动钳位 0-15），更新方块的充能状态与相邻红石 |
+| `getStrongPower(channel)` | boolean | 目标链接器当前是否在**向附着方块强充能** |
+| `setStrongPower(channel, enabled)` | boolean | 开 / 关目标链接器对**附着方块**的强充能（拉杆语义）；目标链接器存在返回 `true` |
 | `enableNbtCache(channel, ticks?)` | boolean | 开启 / 调整目标链接器的**附着方块 NBT 缓存**并设置刷新间隔（见下节） |
 | `getNbt(channel, path)` | any / nil | 读缓存中附着方块 NBT 路径 `path` 处的值（未开启缓存返回 nil） |
 | `getAllNbt(channel)` | table | 读缓存中附着方块 NBT 全量（转 Lua table；未开启缓存返回空表） |
+
+## 强充能（拉杆语义）
+
+默认情况下链接器只给**六面弱信号**：只有紧贴链接器本体的红石粉 / 设备会响应，再远就没了。
+
+`setStrongPower(channel, true)` 会让它额外向**它附着的那个方块**充能，行为与拉杆完全一致：
+
+- 强信号只朝**附着面**方向发出——地面→下方方块、天花板→上方方块、墙面→它挂着的那个墙方块；
+- 强度 = 当前红石输出值，所以通常先写输出（`ss.setRedstoneOutput(ch, 15)`）；输出为 0 时没有信号；
+- 该附着方块因此被标记为「被充能」，绕到该方块其它侧的红石粉、以及直接贴着该方块的设备都能读到信号；
+- 六面弱信号不受影响；
+- 开关随世界存档持久化（与 `RedstoneOutput` 一致，不写进 Create 蓝图）。
+
+```lua
+local ss = require("ccpe.sensor_system")
+
+ss.setRedstoneOutput(1, 15)   -- 先给一个信号强度
+ss.setStrongPower(1, true)    -- 现在还会像拉杆一样充能附着方块
+print(ss.getStrongPower(1))   -- true
+```
 
 ## NBT 缓存（默认关闭，Lua 手动开启）
 
@@ -81,9 +103,9 @@ local items = ss.getAllNbt(1)  -- 全量 NBT
 ss.enableNbtCache(1, 0)
 ```
 
-- **作用域 = 调用电脑所在物理体**（含约束链）：电脑不在任何物理体上时，`getPeripheral` 返回 `nil`，红石读方法返回 `0`，`enableNbtCache` 返回 `false`，`getNbt` 返回 `nil`、`getAllNbt` 返回空表。
+- **作用域 = 调用电脑所在物理体**（含约束链）：电脑不在任何物理体上时，`getPeripheral` 返回 `nil`，红石读方法返回 `0`（`getStrongPower` 返回 `false`），`setStrongPower` / `enableNbtCache` 返回 `false`，`getNbt` 返回 `nil`、`getAllNbt` 返回空表。
 - 目标未命中（频道空闲 / 链接器已卸载）→ 同上。
-- `getPeripheral` / `setRedstoneOutput` / `enableNbtCache` 调度到服务端主线程执行；红石读方法与 NBT 缓存读取（`getNbt` / `getAllNbt`）为缓存直读、零主线程调度（NBT 快照按配置的间隔刷新，最多滞后一个刷新周期）。
+- `getPeripheral` / `setRedstoneOutput` / `setStrongPower` / `enableNbtCache` 调度到服务端主线程执行；红石读方法（`getRedstoneOutput` / `getRedstoneInput` / `getStrongPower`）与 NBT 缓存读取（`getNbt` / `getAllNbt`）为缓存直读、零主线程调度（NBT 快照按配置的间隔刷新，最多滞后一个刷新周期）。
 
 ```lua
 local ss = require("ccpe.sensor_system")

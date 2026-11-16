@@ -69,7 +69,7 @@
 | 固体燃料 | 从模块邻居燃料箱（quick_fill_fuel_vault 等 ItemHandler 容器）自动抽取（物品 burnTime）；**流体燃料优先**；**并行燃烧**：一次抽 N×K 个（N = 蒸汽室个数，K = 配置批次倍数），当前箱不足 N×K → 切下一箱，每室同燃同熄，燃烧时长 = 单个燃料时长 |
 | 红石 | 不要；末段 Lua 控制 |
 | 过热行为 | T ≥ 220°C 硬停（不烧油）；**T ≤ 200°C 滞回解锁**；仅流体引擎 |
-| 效率语义 | 效率 = 油门：**只线性缩放转速**（P8）；应力容量恒定；发热/油耗 ∝ 网络负载；默认 0.25（64rpm） |
+| 效率语义 | 效率 = 油门：**只线性缩放转速**（P8）；应力容量恒定；发热/油耗 ∝ 网络负载；默认 1.0（100%，256rpm 满转速） |
 | 负载驱动（P8） | `load = clamp(网络应力/网络容量, 0, LOAD_MAX=1.0)`，钳下限 `IDLE_LOAD_FLOOR=0.2`，停机 = 0；**驱动油耗与发热** |
 | 转速-油门耦合 | 转速 = 油门×256；容量恒定 → 外部转速/变速器只能抬高应力需求（过载），**无法放大容量** |
 | 混合比范围 | `setMixture(0.6~1.4)`，默认 1.0，NBT 持久化，引擎级（仅流体消费；**纯存值无门控**） |
@@ -446,6 +446,15 @@ KineticNetwork#getActualStressOf(be) = members.get(be) × |theoreticalSpeed|   �
 ## 10. Lua API（ccpe:engine 最终版）
 
 `peripheral.wrap(...)` 任意引擎核心节（外设挂 controller，非 controller 委托）。读方法 mainThread=false 直读缓存（≤1 tick 滞后）；写方法与 `getFluidTanks` mainThread=true 服务端权威。
+
+**机体作用域快捷获取（2026-09 追加）**：脚本开头可用
+```lua
+local e = ss.getEngine()   -- ccpe.sensor_system；机体恰好一个引擎时返回 controller 的 ccpe:engine 外设，否则 nil
+if e then e:setThrottle(0.6) end
+```
+- **门控语义（保守）**：电脑不在物理体上 / 机体上没有引擎 / 机体上有 **≥2 个引擎（歧义，如双发）** → `nil`；多发机体继续用 `peripheral.wrap` 按外设名逐台控制。
+- **解析时机**：`mainThread = true`，**调用时解析**（不依赖 `peripheral.wrap` 的外设网络可达性——引擎离电脑很远也能拿；**不缓存**外设引用，引擎拆解/重组后自然返回 nil）。脚本在开头调一次、把返回值存局部变量即可。
+- **登记者**：`compat/cc/BodyEngineRegistry`（物理体作用域，Sable 子次元 UUID → engine_core 各节 BE）；引擎在 `onLoad` / 组网后 `updateConnectivity` / `invalidate()` 各登记/注销**一次**，**无每 tick 开销**、无 plot 扫描，查询 = 链遍历 + 哈希查 + 一次 BE 解析。
 
 | 方法 | mainThread | 返回 | 说明 |
 |---|---|---|---|

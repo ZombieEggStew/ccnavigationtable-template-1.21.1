@@ -12,6 +12,7 @@ import com.zzy205.myfirstmod.block.QuickFillFluidTankBlockEntity;
 import com.zzy205.myfirstmod.block.QuickFillFuelVaultBlockEntity;
 import com.zzy205.myfirstmod.block.TrailingWheelMountBlockEntity;
 import com.zzy205.myfirstmod.block.WaterCoolingModuleBlockEntity;
+import com.zzy205.myfirstmod.compat.cc.BodyEngineRegistry;
 import com.zzy205.myfirstmod.compat.cc.BodySensorRegistry;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralCapabilities;
 import com.zzy205.myfirstmod.compat.cc.CCPeripheralExtenderSetup;
@@ -131,6 +132,7 @@ public class CCPeripheralExtender {
         GlobalChannelRegistry.clear();
         ShortRangeLinkerRegistry.clear();
         BodySensorRegistry.clear();
+        BodyEngineRegistry.clear();
         FlightDataRecorder.closeAll();
     }
 

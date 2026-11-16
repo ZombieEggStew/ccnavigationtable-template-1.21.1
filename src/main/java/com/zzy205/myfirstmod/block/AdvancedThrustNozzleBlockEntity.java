@@ -57,6 +57,8 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
     private static final String TAG_LEGACY_TARGET_TILT = "TargetTiltDeg";
     private static final String TAG_THRUST_SCALE = "ThrustScale";
     private static final String TAG_TARGET_THRUST_SCALE = "TargetThrustScale";
+    /** 出力反转（推力 ↔ 吸力），Lua {@code setInverted} 的持久化键 */
+    private static final String TAG_INVERTED = "Inverted";
 
     /** 频道未分配：交给注册表在物理体内自动取最小空闲号 */
     public static final int CHANNEL_UNASSIGNED = -1;
@@ -269,6 +271,16 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
     private final Axis thrustScaleAxis = new Axis(1f);
 
     /**
+     * 出力方向是否反转（Lua {@link #setInverted}；用户定稿 2026-11：<b>瞬间生效</b>，不做渐变）。
+     * <p>
+     * 只翻<b>符号</b>，不动幅值也不动指向：风扇转速 / 气压 / {@link #thrustScaleAxis} 决定的力大小
+     * 完全不变，偏转点决定的「轴朝哪」也不变 —— 变的只是「沿这根轴推还是吸」。
+     * 父类 {@code sable$physicsTick} 的冲量与 {@code tickClient} 的粒子链路共用
+     * {@link #thrustDirectionSign()} 这一个符号 ⇒ 力反向的同一刻，排气自动切成进气。
+     */
+    private boolean inverted;
+
+    /**
      * 视觉偏转点（**只在客户端**，本地动画状态）：一个会自己朝 {@link Axis#target} 走的二维点。
      * <p>
      * 推进方式 = <b>每次渲染用墙钟差值走一步</b>：
@@ -333,6 +345,21 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
     public void requestThrustScale(final float scale) {
         this.thrustScaleAxis.setTarget(Mth.clamp(scale, 0f, 1f));
         // 必须推一次客户端：粒子密度要跟着出力走，客户端得知道新目标（本地再按同一速度补渐变）
+        this.syncToClient();
+    }
+
+    /**
+     * 请求反转出力（Lua {@code setInverted} 入口）：<b>瞬间生效</b>（用户定稿，不做渐变）。
+     * <p>
+     * 改了就推一次客户端 —— 粒子链路要立刻换向（排气 ⇄ 进气），否则会出现"力已经反了、
+     * 气流还朝原方向喷"的错位。值没变就什么都不做（不产生无谓的块更新）。
+     */
+    public void requestInverted(final boolean inverted) {
+        if (this.inverted == inverted) {
+            return;
+        }
+
+        this.inverted = inverted;
         this.syncToClient();
     }
 
@@ -570,6 +597,17 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
     }
 
     /**
+     * 覆盖父类钩子：<b>出力方向</b>由 Lua {@code setInverted} 决定（{@code true} ⇒ {@code -1}，瞬间生效）。
+     * <p>
+     * 父类把它同时乘进推力冲量与粒子链路的 {@code thrustSign} ⇒ 一键反向后，力反向的同时
+     * 排气自动变进气（气流方向永远与受力方向相反，不会出现"排气和推力同向"的错位）。
+     */
+    @Override
+    protected double thrustDirectionSign() {
+        return this.inverted ? -1.0D : 1.0D;
+    }
+
+    /**
      * 覆盖父类钩子：<b>出力系数也决定粒子</b>（用户定稿 2026-11）。
      * <p>
      * 父类把「有效油门 = 油门 × 本系数」喂给排气与进气 ⇒ 系数 0.5 的观感约等于转速减半
@@ -603,6 +641,11 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
     /** 当前出力系数（0..1；过渡中就是"此刻实际"的值） */
     public float getThrustScale() {
         return this.thrustScaleAxis.value;
+    }
+
+    /** 出力是否已反转（true = 沿轴的力反向：原来的推力变吸力，见 {@link #requestInverted(boolean)}） */
+    public boolean isInverted() {
+        return this.inverted;
     }
 
     /** 是否还在渐变中（偏转或出力没到位） */
@@ -780,6 +823,39 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
             return AdvancedThrustNozzleBlockEntity.this.thrustScaleAxis.value;
         }
 
+        // ── 出力反转（推力 ⇄ 吸力） ──
+
+        /**
+         * <b>反转出力方向</b>（推力 ⇄ 吸力）：{@code enabled = true} ⇒ 同一风扇转速、同一出力系数下，
+         * 力沿轴的<b>符号翻过来</b> —— 原来把机体往 {@code −轴} 推的变成往 {@code +轴} 推
+         * （负转速的吸力同样反向）。
+         * <p>
+         * <b>瞬间生效</b>（用户定稿 2026-11，不做渐变）：服务端下一次物理步就用新符号出力，
+         * 客户端收到同步包后粒子链路立刻换向 —— <b>排气切成进气</b>（反之亦然），
+         * 因为气流方向永远与受力方向相反（见 {@code ThrustNozzleBlockEntity#tickClient}）。
+         * <p>
+         * <b>只翻符号</b>，不动幅值与指向：力的大小仍由风扇转速 / 气压 / {@link #setThrustScale} 决定，
+         * 轴朝哪仍由 {@link #setDeflection} / {@link #setDirection} 决定。状态进 NBT / 蓝图，拆装后保留。
+         *
+         * @param enabled true = 反向出力（原推力变吸力）；false = 恢复正常方向
+         */
+        @LuaFunction(mainThread = true)
+        public final boolean setInverted(final boolean enabled) {
+            final AdvancedThrustNozzleBlockEntity be = AdvancedThrustNozzleBlockEntity.this;
+            if (be.level == null || be.level.isClientSide) {
+                return false;
+            }
+
+            be.requestInverted(enabled);
+            return true;
+        }
+
+        /** 出力方向是否已反转（true = 沿轴的力反向，见 {@link #setInverted(boolean)}） */
+        @LuaFunction
+        public final boolean isInverted() {
+            return AdvancedThrustNozzleBlockEntity.this.inverted;
+        }
+
         /** 本喷嘴在物理体内的频道号（-1 = 不在物理体上/未分配），配合 {@code sensor_system.getPeripheral} 使用 */
         @LuaFunction
         public final int getChannel() {
@@ -814,6 +890,7 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
         tag.putFloat(TAG_TARGET_DEF_Y, this.defY.target);
         tag.putFloat(TAG_THRUST_SCALE, this.thrustScaleAxis.value);
         tag.putFloat(TAG_TARGET_THRUST_SCALE, this.thrustScaleAxis.target);
+        tag.putBoolean(TAG_INVERTED, this.inverted);
     }
 
     @Override
@@ -854,6 +931,8 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
         // 目标也恢复：粒子与推力的渐变要"继续走完"而不是停在半路
         this.thrustScaleAxis.setTarget(tag.contains(TAG_TARGET_THRUST_SCALE)
                 ? tag.getFloat(TAG_TARGET_THRUST_SCALE) : scale);
+        // 出力反转是离散状态（瞬间生效，无渐变）：直接读回，缺省 = 正常方向
+        this.inverted = tag.contains(TAG_INVERTED) && tag.getBoolean(TAG_INVERTED);
         // ⚠️ 这里**不要**重置视觉动画状态（曾写成 visualInit = false）：
         // 物理体（Sable 子次元）会周期性重发/重载方块实体数据，一旦重载就把视觉姿态吸附到
         // 服务端当前值，"渐变"直接退化成"瞬间跳转"（实测症状）。
@@ -901,6 +980,7 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
         compound.putFloat(TAG_TARGET_DEF_Y, this.defY.target);
         compound.putFloat(TAG_THRUST_SCALE, this.thrustScaleAxis.value);
         compound.putFloat(TAG_TARGET_THRUST_SCALE, this.thrustScaleAxis.target);
+        compound.putBoolean(TAG_INVERTED, this.inverted);
     }
 
     @Override
@@ -916,6 +996,8 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
         // 出力系数：客户端要按它缩放排气/进气粒子（tickClient → particleIntensityScale）
         tag.putFloat(TAG_THRUST_SCALE, this.thrustScaleAxis.value);
         tag.putFloat(TAG_TARGET_THRUST_SCALE, this.thrustScaleAxis.target);
+        // 出力反转：客户端 tickClient 要靠它决定排气还是进气（thrustDirectionSign）
+        tag.putBoolean(TAG_INVERTED, this.inverted);
         return tag;
     }
 
@@ -939,6 +1021,9 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
             this.thrustScaleAxis.setSynced(scale,
                     tag.contains(TAG_TARGET_THRUST_SCALE) ? tag.getFloat(TAG_TARGET_THRUST_SCALE) : scale);
         }
+
+        // 出力反转：离散状态，直接照抄（客户端粒子链路要立刻按新符号选排气/进气）
+        this.inverted = tag.contains(TAG_INVERTED) && tag.getBoolean(TAG_INVERTED);
 
         if (DEBUG_ANIM_LOG) {
             System.out.printf("[ATN-pkt ] inst=%d pos=%s value=(%.2f,%.2f) target=(%.2f,%.2f)"

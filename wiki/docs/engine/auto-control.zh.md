@@ -156,8 +156,8 @@ waterFF = (kNeed − kAirMax) / waterCoolingCapacity              // 风道够�
 ```
     温度：156.3°C
     总应力输出：8192 SU
-    油门：25.0%
-    目前转速：64 RPM
+    油门：100.0%
+    目前转速：256 RPM
     负载：43%
     水冷散热：+0.02
     水冷耗应力：-512 SU

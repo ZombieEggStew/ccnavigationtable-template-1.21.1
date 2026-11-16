@@ -1,6 +1,6 @@
 # 短程信号链接器（ccpe:short_range_linker）实现方案
 
-> 状态：**功能全部落地**（`./gradlew.bat classes` 通过）；**NBT 缓存已进游戏验证（用户确认完全没问题）**，其余项待按第八节清单验证。已落地：`ShortRangeLinkerRegistry`（物理体作用域频道注册表）、`ShortRangeLinkerBlock` / `ShortRangeLinkerBlockEntity`（频道 + bodyLoad 共享开关 + ticket + 红石 + **附着方块 NBT 缓存**（默认关，Lua `enableNbtCache` 开启并配置刷新间隔，默认 20 tick；`getNbt`/`getAllNbt` 直读缓存）+ NBT/蓝图）、注册（方块/BE/菜单/创造标签/主入口 clear）、资源（blockstate 6 形态：地面 1 + 天花板 1 + 墙壁 4；**躺/竖共用一个模型** `models/block/short_range_link/short_range_link.json`（用户自建扁平小方块）+ 贴图 `textures/block/short_range_link/tex.png`；语言键 `block.ccpe.short_range_linker` + `gui.ccpe.short_range_linker.*`）、**选择框抄 static_port**（`VoxelShaper.forDirectional(Block.box(5,0,5,11,3,11), UP)`，FLOOR→UP / CEILING→DOWN / WALL→水平四向）、**音效对齐 static_port（SoundType.COPPER）**、GUI（Menu extraData 传频道/占用快照/bodyLoad；Screen 频道滚轮跳过同体占用 + 「加载物理体」ToggleButton + 非物理体提示 + tooltip 前景层）、payload（`ShortRangeLinkerConfigPayload` + `ShortRangeLinkerPacketHandlers`，经 `ModPackets` 注册）、Lua API（**并入 `ccpe.sensor_system`，原计划 `ccpe.link` 已删除**）、wiki 页面（`wiki/docs/sensor-system/short-range-linker.md` + `.zh.md`，已入 mkdocs 导航）。待做：第八节其余项进游戏验证。
+> 状态：**功能全部落地**（`./gradlew.bat classes` 通过）；**NBT 缓存已进游戏验证（用户确认完全没问题）**，**红石强充能（`setStrongPower`/`getStrongPower`）已进游戏验证（用户确认功能没问题，附着方块下方红石灯点亮/熄灭正常）**，其余项待按第八节清单验证。已落地：`ShortRangeLinkerRegistry`（物理体作用域频道注册表）、`ShortRangeLinkerBlock` / `ShortRangeLinkerBlockEntity`（频道 + bodyLoad 共享开关 + ticket + 红石 + **附着方块 NBT 缓存**（默认关，Lua `enableNbtCache` 开启并配置刷新间隔，默认 20 tick；`getNbt`/`getAllNbt` 直读缓存）+ NBT/蓝图）、注册（方块/BE/菜单/创造标签/主入口 clear）、资源（blockstate 6 形态：地面 1 + 天花板 1 + 墙壁 4；**躺/竖共用一个模型** `models/block/short_range_link/short_range_link.json`（用户自建扁平小方块）+ 贴图 `textures/block/short_range_link/tex.png`；语言键 `block.ccpe.short_range_linker` + `gui.ccpe.short_range_linker.*`）、**选择框抄 static_port**（`VoxelShaper.forDirectional(Block.box(5,0,5,11,3,11), UP)`，FLOOR→UP / CEILING→DOWN / WALL→水平四向）、**音效对齐 static_port（SoundType.COPPER）**、GUI（Menu extraData 传频道/占用快照/bodyLoad；Screen 频道滚轮跳过同体占用 + 「加载物理体」ToggleButton + 非物理体提示 + tooltip 前景层）、payload（`ShortRangeLinkerConfigPayload` + `ShortRangeLinkerPacketHandlers`，经 `ModPackets` 注册）、Lua API（**并入 `ccpe.sensor_system`，原计划 `ccpe.link` 已删除**）、wiki 页面（`wiki/docs/sensor-system/short-range-linker.md` + `.zh.md`，已入 mkdocs 导航）。待做：第八节其余项进游戏验证。
 > 已确认决策：API = `getPeripheral` + 红石输入/输出，**模块并入 `ccpe.sensor_system`（原计划 `ccpe.link` 已废弃）**；非物理体严格不链接；物理体 = Sable 约束链；物理体加载 = 链上共享开关；方块 ID = `ccpe:short_range_linker`。
 > 目标代码：`src/main/java/com/zzy205/myfirstmod` 下新增 block / compat/cc / screen / network 若干类（见文件清单）。
 
@@ -17,6 +17,7 @@
    - `getPeripheral(channel)` → 本体内频道 `channel` 的目标设备外设：链接器 → 附着方块外设；**控制台（controlDesk）也占用同一频道空间**（`ControlDeskRegistry` 委托本注册表）→ 返回控制台自身外设（Capability 查询，mainThread=true）
    - `getRedstoneOutput(channel)` / `getRedstoneInput(channel)` → 目标链接器红石输出 / 输入（mainThread=false）
    - `setRedstoneOutput(channel, signal)` → 写目标链接器红石输出并更新方块 POWERED（mainThread=true）
+   - `getStrongPower(channel)` / `setStrongPower(channel, enabled)` → 目标链接器是否在向**附着方块强充能** / 开-关该开关（拉杆语义：只在附着面方向给 `getDirectSignal`，强度 = 当前红石输出值；`get` mainThread=false 直读 BE，`set` mainThread=true 并通知邻居两处；开关落 NBT、**不进** `writeSafe` 蓝图）
    - **NBT 缓存三方法（与 pe 不同：默认关闭，需显式开启）**：`enableNbtCache(channel, ticks?)`（mainThread=true；`ticks` 缺省 20，`<=0` 关闭；开启后服务端按间隔刷新附着方块 NBT 快照）→ `getNbt(channel, path)` / `getAllNbt(channel)`（mainThread=false 直读 volatile 缓存；路径语法与 `ccpe.pe.get` 相同，复用 `PeripheralExtenderAPI.resolvePath`/`convertCompoundToMap`）；开关 + 间隔随 NBT/蓝图持久化（BE 字段 `nbtCacheEnabled`/`nbtCacheInterval`，快照本身不落盘，onLoad 置脏首 tick 重建）
    - **作用域解析照抄 `SensorSystemAPI.resolveSubLevel()`**：`computer.getLevel()` + `computer.getPosition()` → `SableCompat.getContainingSubLevel` → `getConnectedChain` 得链 UUID 集合 → 在该链内查频道。**实现 = 链 UUID 集合在 `SensorSystemAPI.update()`（服务端主线程）缓存进 volatile `chainUuids`，Lua 线程只读**（照 SensorSystemAPI 高频缓存模式；顺带避免红石读方法在电脑线程直接碰 Sable，最多滞后 1 tick）。
 5. **物理体加载 = 链上共享开关**（新增需求，见第四节）。
@@ -60,8 +61,8 @@ ShortRangeLinkerRegistry
 |---|---|
 | `compat/cc/ShortRangeLinkerRegistry.java` | 物理体作用域频道注册表（第三节设计，纯逻辑） |
 | ~~`compat/cc/ShortRangeLinkerAPI.java`~~（**已删除**） | 原 `ccpe.link` Lua API；四个方法已并入 `compat/cc/SensorSystemAPI.java`（见「修改（Java）」表） |
-| `block/ShortRangeLinkerBlock.java` | 贴附式方块：**复制 `PeripheralExtenderBlock`**（FACE/FACING/POWERED、canSurvive、红石 getSignal/isSignalSource、右键开 GUI、扳手拆除、`getAttachedPos` 复用；开菜单前 `refreshOccupiedChannels()` 保证占用快照最新） |
-| `block/ShortRangeLinkerBlockEntity.java` | BE：频道持久化、`bodyLoad` 共享开关 + ticket 管理、onLoad/setRemoved 注册注销、20 tick 链复核、红石输出/输入（照 pe BE）、体内占用快照、`PartialSafeNBT.writeSafe` |
+| `block/ShortRangeLinkerBlock.java` | 贴附式方块：**复制 `PeripheralExtenderBlock`**（FACE/FACING/POWERED、canSurvive、红石 getSignal / **getDirectSignal（强充能，只在 `supportDirection().getOpposite()` 方向返回，拉杆语义）** / isSignalSource、`supportDirection(BlockState)` 统一「附着面」映射（canSurvive / getAttachedPos / getDirectSignal 三处共用）、`updateRedstoneOutput` + **`updateStrongPower`（通知链接器 + 附着方块两处邻居）**、右键开 GUI、扳手拆除；开菜单前 `refreshOccupiedChannels()` 保证占用快照最新） |
+| `block/ShortRangeLinkerBlockEntity.java` | BE：频道持久化、`bodyLoad` 共享开关 + ticket 管理、onLoad/setRemoved 注册注销、20 tick 链复核、红石输出/输入（照 pe BE）+ **`strongPower` 开关（`isStrongPower`/`setStrongPower`，NBT 存 `StrongPower`，`writeSafe` 故意不写）**、体内占用快照、`PartialSafeNBT.writeSafe` |
 | `screen/ShortRangeLinkerMenu.java` | 服务端菜单：传 pos、当前频道、**体内**占用频道数组、当前 `bodyLoad` |
 | `screen/ShortRangeLinkerScreen.java` | 客户端 GUI：频道滚轮（跳过同体占用）+ 「加载物理体」ToggleButton + 非物理体提示 + **tooltip 前景层**（照 `AbstractMonitorScreen.renderWidgetTooltips`，否则 tooltip 被后渲染的「完成」按钮盖住） |
 | `network/ShortRangeLinkerConfigPayload.java` | 客户端→服务端：保存频道 + bodyLoad（照 `SensorFilterPayload` codec 模式） |
@@ -77,7 +78,7 @@ ShortRangeLinkerRegistry
 |---|---|
 | `block/MyModBlocks.java` | 注册 `short_range_linker` 方块 |
 | `block/MyModBlockEntities.java` | 注册 BE 类型并绑定 |
-| `compat/cc/SensorSystemAPI.java` | **并入链接器四方法**（getPeripheral / 红石三件套）+ `chainUuids` 缓存（`update()` 主线程刷新）；`CCPeripheralExtenderSetup` 无需改动（SensorSystemAPI 本就已注册） |
+| `compat/cc/SensorSystemAPI.java` | **并入链接器方法**（getPeripheral / 红石三件套 / **强充能开关 getStrongPower + setStrongPower**）+ `chainUuids` 缓存（`update()` 主线程刷新）；`CCPeripheralExtenderSetup` 无需改动（SensorSystemAPI 本就已注册） |
 | `network/ModPackets.java` | 注册 `ShortRangeLinkerPacketHandlers`（payload 实际注册入口；原计划的 `CCPeripheraExtender.java` 未改动） |
 | `screen/MyModMenus.java` | 注册菜单类型 |
 | `item/MyModCreativeModeTabs.java` | 加入创造标签 |
@@ -120,6 +121,7 @@ flowchart LR
 8. **蓝图**：Create 蓝图保存 / 部署后频道与 `bodyLoad` 不丢（`writeSafe`），部署后同链开关经 OR 自愈一致。
 9. 已有存档的 pe / Monitor / 控制台频道全部不受影响（回归验证）。
 10. **NBT 缓存**：默认不缓存（`getNbt`/`getAllNbt` 返回 nil/空表）→ `enableNbtCache(1)` 后 `getAllNbt(1)` 返回附着方块 NBT（首个 tick 即有快照）；改间隔 `enableNbtCache(1, 5)` 后刷新频率变化；`enableNbtCache(1, 0)` 关闭后读取返回 nil；重进存档 / 蓝图部署后开关与间隔保持、首个 tick 快照重建；附着方块 NBT 变化（如油箱油量）在间隔内反映。✅ **已进游戏验证（用户确认完全没问题，2025-07 前）**
+11. **红石强充能（拉杆语义）**：`setRedstoneOutput(5, 15)` + `setStrongPower(5, true)` → 地面摆放的链接器所附着的**实心方块**变成被充能，该方块**下方**的红石灯点亮；`setStrongPower(5, false)` → 灯立刻熄灭；`getStrongPower(5)` 读数与开关一致。✅ **已进游戏验证（用户确认功能没问题）**
 
 ## 九、频道唯一性语义（详细）
 
@@ -145,6 +147,26 @@ flowchart LR
 - **冗余 ticket**：链上所有开启的链接器各自持有 ticket（与 pe 多传感器同体行为一致，Sable 按 (ticketType, key=pos) 去重，无害）。
 - **Sable 坐标投影**：本轮 API 不含 NBT 读取，无坐标投影需求；将来若加 `getAll` 再复用 `PeripheralExtenderBlock.tryAddRealWorldPos`。
 - **作用域 = 调用电脑所在物理体**：电脑不在任何物理体上时 `ccpe.sensor_system` 查询一律 nil（严格语义，与「非物理体不链接」一致）。作用域解析由 `update()` 主线程缓存 `chainUuids`，Lua 侧最多滞后 1 tick。
+
+### 10.1 强充能（`getDirectSignal`）的三个坑（已踩、已修、已验证）
+
+参考来源（原版行为全部据其核对，取自 `build/moddev/artifacts/neoforge-21.1.266-sources.jar`）：
+`net/minecraft/world/level/block/LeverBlock.java`、`net/minecraft/world/level/SignalGetter.java`、
+`net/minecraft/world/level/block/RedstoneLampBlock.java`、`net/minecraft/world/level/block/state/BlockBehaviour.java`。
+
+1. **方向约定是反的（第一版就写错了）**：`getDirectSignal(state, level, pos, side)` 的 `side` 不是「从链接器指向附着面」，而是**「从附着方块指向链接器」**——`SignalGetter` 注释原话
+   *"directions in redstone signal related methods are backwards"*，原版 `LeverBlock` 比的是 `getConnectedDirection(state)`。
+   所以必须写 `side != supportDirection(state).getOpposite()`（地面摆放：`supportDirection`=DOWN，比的是 **UP**），
+   写成 `side == supportDirection(state)` 会**恒返回 0**（`getDirectSignalTo` 对「附着方块上方的邻块」传的正是 `Direction.UP`）。
+   症状：强充能"看起来没生效"，灯不亮、粉不亮，而六面弱信号一切正常。
+2. **必须通知两处**（照原版 `LeverBlock#updateNeighbours`）：`level.updateNeighborsAt(pos, block)` **和**
+   `level.updateNeighborsAt(附着方块, block)`。只通知前者时，附着方块**另一侧**的红石粉 / 贴着的设备不会重算；
+   关闭开关时尤其要通知，否则另一侧的粉会一直亮着（`updateStrongPower` 因此无条件通知两处）。
+3. **附着方块必须是红石导体**：红石灯只用 `level.hasNeighborSignal(pos)`（弱信号），而
+   `SignalGetter.getSignal` 只有在 `blockstate.shouldCheckWeakPower(...)`（= `isRedstoneConductor`）为真时，
+   才把自己 **收到的强充能**（`getDirectSignalTo`）当成自己的弱信号上报。玻璃 / 台阶 / 漏斗这类非全方块导体可能
+   不成立 → 灯不亮。**验证时请用石头等实心方块**（用户已验证：地面链接器 + 实心方块 + 其下方红石灯正常）。
+4. 强度 = `redstoneOutput`（0-15），输出 0 时强充能为 0；开关落 NBT（`StrongPower`），**不进** `writeSafe` 蓝图（同 `RedstoneOutput` 理由，见 §11.4）。
 
 ## 十一、蓝图兼容性审计（2026-11，用户要求复查）
 

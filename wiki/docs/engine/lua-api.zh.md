@@ -7,6 +7,18 @@ local e = peripheral.wrap("front")
 -- 或：peripheral.find("ccpe:engine")
 ```
 
+!!! tip "物理体上的脚本：用 `ccpe.sensor_system` 直接取，不必 `peripheral.wrap`"
+    电脑装在物理体（Sable sub-level）上时，可以直接从传感器模块拿到引擎外设：
+
+    ```lua
+    local ss = require("ccpe.sensor_system")
+    local e = ss.getEngine()   -- 机体（含约束链）上恰好一个引擎 → 该引擎外设；否则 nil
+    ```
+
+    - **不依赖外设网络可达性**：引擎离电脑多远都能拿到（外设网络够不着的引擎也能控制）。
+    - **只在机体上恰好一个引擎时返回**；没有引擎、或 ≥2 个引擎（双发/多发）返回 `nil`——多发机体请继续用 `peripheral.wrap` / `peripheral.find` 逐台控制。
+    - **调用时解析**（`mainThread = true`，每次调用过一次主线程、最多滞后 1 tick），且**不缓存外设引用**：引擎拆解/重组/延长后返回 `nil`，不会拿到已失效的对象。脚本开头调一次、把结果存进局部变量即可。
+
 ## [示例——温度与混合比控制](../examples/trainer_aircraft_2.zh.md)
 
 > 引擎**默认自带**温度与混合比自动控制（不需要任何脚本），见[温度与混合比自动控制](auto-control.zh.md)。下面的方法用于**自己写**控制循环（先调 `setAutoControl(false)`）。
@@ -23,7 +35,7 @@ local e = peripheral.wrap("front")
 | `getTemperature()` | false | number | 引擎温度 °C |
 | `isOverheated()` | false | boolean | 过热锁定（仅流体引擎：T≥220°C 硬停，T≤200°C 解锁） |
 | `getFluidTanks()` | true | table[] | 所有连接储罐：`{fluid, amount, remaining, capacity}`（空罐 fluid 为 nil） |
-| `getThrottle()` | false | number | 油门 0..1（默认 0.25）。**只决定输出转速**（转速 = 油门 × 256 rpm；应力容量恒定；0 = 停机不烧油，唯一启停控制） |
+| `getThrottle()` | false | number | 油门 0..1（默认 1.0 = 100%，256rpm）。**只决定输出转速**（转速 = 油门 × 256 rpm；应力容量恒定；0 = 停机不烧油，唯一启停控制） |
 | `getLoad()` | false | number | **负载** 0..1 = 应力网络「已用应力 / 可提供容量」（**实际值，不叠加怠速下限**；空转 0、停机 0）。**油耗与发热的驱动量**，适合做经济调度 |
 | `getStressUsed()` | false | number | 所在网络的已用应力（SU，整网总量：Σ 机器应力影响 × 转速；停机/脱网 → 0） |
 | `getStressCapacity()` | false | number | 所在网络的可提供容量（SU，整网总量；本引擎自身贡献恒定 = 8192×流体室 / 4096×蒸汽室） |

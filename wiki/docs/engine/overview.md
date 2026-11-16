@@ -47,7 +47,7 @@ The system decouples into three quantities that never interfere:
 | Knob | What it decides | How to change it |
 |---|---|---|
 | **Chamber count + fuel `stress`** | **Stress capacity** (8192 SU × stress per fluid chamber, 4096 SU per steam chamber) — **constant, independent of throttle** | Add chambers / use better fuel |
-| **Throttle** | **Output speed** (speed = throttle × 256 rpm; throttle 0 = stopped) | Lua `setThrottle` |
+| **Throttle** | **Output speed** (speed = throttle × 256 rpm; default **100% = 256 rpm**; throttle 0 = stopped) | Lua `setThrottle` |
 | **How many machines are attached** | **Load** (= stress used / capacity available, 0~1) — **fuel burn and heat follow it** | Add/remove machines, change speed |
 
 - With nothing attached (load 0) the engine still burns at the **idle floor (20%)** so it stays warm instead of shutting down.

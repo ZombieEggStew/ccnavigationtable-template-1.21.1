@@ -826,6 +826,22 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         return 1.0F;
     }
 
+    /**
+     * <b>出力方向系数</b>：{@code +1.0} = 正常方向，{@code -1.0} = 沿轴的力整体反向。
+     * 由子类覆盖（矢量喷管的 Lua {@code setInverted}，推力 ↔ 吸力互换）。默认 {@code +1.0}，
+     * 所以定向喷管行为不变。
+     * <p>
+     * 乘在<b>两处</b>，缺一处就会出现"力和气流不同向"的怪象：
+     * <ul>
+     * <li>{@link #sable$physicsTick} 的 {@code magnitude} ⇒ 力反向；</li>
+     * <li>{@link #tickClient} 的 {@code thrustSign} ⇒ 排气 / 进气<b>链路自动互换</b>
+     *     （气流方向必须始终与受力方向相反，见那里的注释）。</li>
+     * </ul>
+     */
+    protected double thrustDirectionSign() {
+        return 1.0D;
+    }
+
     @Override
     public void sable$physicsTick(final ServerSubLevel subLevel, final RigidBodyHandle handle, final double timeStep) {
         final float speed = this.getFanSpeed();
@@ -846,7 +862,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         // 少了它，facing=DOWN 的喷管推力会整体反向（step = -1），水平/UP 则看不出问题。
         final double pressure = this.airPressureAt(subLevel);
         final double magnitude = (REVERSE_SIGN ? -1.0D : 1.0D) * this.axisStep(facing)
-                * THRUST_PER_RPM * speed * pressure * timeStep * this.thrustScale();
+                * THRUST_PER_RPM * speed * pressure * timeStep * this.thrustScale()
+                // 出力方向系数（矢量喷管的 Lua setInverted）：反转到"吸力"时整个冲量换符号
+                * this.thrustDirectionSign();
 
         // 力向量与作用点都必须每次新建：QueuedForceGroup.applyImpulseAtPoint 会就地改写传入的
         // position（减去质心求力臂），且 recordPointForce 保留引用（FlightDataRecorder 遥测会读），
@@ -928,8 +946,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         // 排气方向 = 机体受力方向的反向：
         // 受力 = -FACING · (REVERSE_SIGN ? -1 : 1) · axisStep · 转速 ⇒ 排气 = +FACING · 同一个符号。
         // axisStep 必须一起带上，否则竖直朝向喷管的粒子会与真实推力反向（力的方向改了，气流也得跟着改）。
+        // thrustDirectionSign() 同理：矢量喷管 Lua 反转出力时，排气必须同时切成进气（否则排气会与受力同向）。
         final double thrustSign = (REVERSE_SIGN ? -1.0D : 1.0D) * this.axisStep(facing)
-                * (speed > 0.0F ? 1.0D : -1.0D);
+                * (speed > 0.0F ? 1.0D : -1.0D) * this.thrustDirectionSign();
         double flowSign = thrustSign;
 
         if (INVERT_PARTICLE_FLOW) {

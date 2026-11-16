@@ -45,6 +45,11 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
 
     /** 红石输出信号 (0-15) */
     private int redstoneOutput = 0;
+    /**
+     * 是否向<b>附着方块强充能</b>（拉杆语义：只朝附着面那一个方向给 {@code getDirectSignal}）。
+     * Lua {@code ss.setStrongPower(channel, enabled)} 控制；对方块态的 POWERED 无影响（那条仍由输出值决定）。
+     */
+    private boolean strongPower = false;
 
     // ── 附着方块 NBT 缓存（与 pe 不同：默认关闭，需 Lua enableNbtCache 显式开启；开启后每 nbtCacheInterval tick 刷新） ──
 
@@ -107,6 +112,7 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
             releaseSableTicket();
             ShortRangeLinkerRegistry.unregisterAll(this);
             this.redstoneOutput = 0;
+            this.strongPower = false; // 输出已归零，强充能开关同步失效（重载后经 NBT 恢复）
         }
         super.setRemoved();
     }
@@ -367,6 +373,25 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
         }
     }
 
+    /** 是否向附着方块强充能（拉杆语义，见 {@link ShortRangeLinkerBlock#getDirectSignal}） */
+    public boolean isStrongPower() { return strongPower; }
+
+    /**
+     * 设置是否向附着方块强充能（服务端主线程调用，Lua {@code setStrongPower} 经此写）。
+     * <p>
+     * 只影响 {@code getDirectSignal}（拉杆式的「向附着方块给强充能」），<b>不</b>改变弱信号
+     * {@link ShortRangeLinkerBlock#getSignal}（那一条始终六面按输出值给）。开关变化必须通知邻居，
+     * 否则被充能的方块/红石粉不会重算信号；方块态（POWERED）不变，故不用 setBlock。
+     */
+    public void setStrongPower(boolean strong) {
+        if (this.strongPower == strong) return;
+        this.strongPower = strong;
+        this.setChanged();
+        if (this.level != null && !this.level.isClientSide) {
+            ShortRangeLinkerBlock.updateStrongPower(this.level, this.worldPosition);
+        }
+    }
+
     /** 读取链接器位置接收到的最强红石信号 (0-15) */
     public int getRedstoneInput() {
         if (this.level == null) return 0;
@@ -417,6 +442,7 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
         tag.putInt("ScrolledValue", scrolledValue);
         tag.putBoolean("BodyLoad", bodyLoad);
         tag.putInt("RedstoneOutput", redstoneOutput);
+        tag.putBoolean("StrongPower", strongPower);
         tag.putIntArray("OccupiedChannels", occupiedChannels);
         tag.putBoolean("NbtCacheEnabled", nbtCacheEnabled);
         tag.putInt("NbtCacheInterval", nbtCacheInterval);
@@ -435,6 +461,7 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
         if (tag.contains("ScrolledValue")) scrolledValue = tag.getInt("ScrolledValue");
         if (tag.contains("BodyLoad")) bodyLoad = tag.getBoolean("BodyLoad");
         if (tag.contains("RedstoneOutput")) redstoneOutput = tag.getInt("RedstoneOutput");
+        if (tag.contains("StrongPower")) strongPower = tag.getBoolean("StrongPower");
         if (tag.contains("OccupiedChannels")) occupiedChannels = tag.getIntArray("OccupiedChannels");
         if (tag.contains("NbtCacheEnabled")) nbtCacheEnabled = tag.getBoolean("NbtCacheEnabled");
         if (tag.contains("NbtCacheInterval")) nbtCacheInterval = Math.max(1, tag.getInt("NbtCacheInterval"));
@@ -462,6 +489,7 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
         tag.putInt("ScrolledValue", scrolledValue);
         tag.putBoolean("BodyLoad", bodyLoad);
         tag.putInt("RedstoneOutput", redstoneOutput);
+        tag.putBoolean("StrongPower", strongPower);
         // NBT 缓存开关与间隔持久化（快照本身是运行时数据不落盘，重载后经 onLoad 置脏首个 tick 重建）
         tag.putBoolean("NbtCacheEnabled", nbtCacheEnabled);
         tag.putInt("NbtCacheInterval", nbtCacheInterval);
@@ -477,6 +505,8 @@ public class ShortRangeLinkerBlockEntity extends BlockEntity implements PartialS
      *   <li>{@code RedstoneOutput} <b>故意不写</b>：部署后没有任何路径会去 apply 它，
      *       若把它写进蓝图，就会出现「字段有值但方块没充能」的不一致；归零反而与真实信号一致
      *       （与 {@code setRemoved} 里把输出清零的语义同源）。</li>
+     *   <li>{@code StrongPower} 同理不写：它只是「怎么给强充能」的修饰开关，输出归零后毫无意义，
+     *       部署出来保持默认 false 与 {@code RedstoneOutput} 默认 0 语义一致。</li>
      * </ul>
      */
     @Override

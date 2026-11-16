@@ -1,4 +1,4 @@
-1.0.1
+# 1.0.1
 - Added `getPhysicsChainMass` and `getPhysicsChainGravityForce` methods to retrieve the total mass and gravity of the entire physics body chain.
   (Testing revealed that after assembly with a swivel bearing, the bearing's mass is counted twice, inflating the chain's total mass.)
 
@@ -8,13 +8,13 @@
 
 - Removed test blocks and test items.
 
-1.0.2
+# 1.0.2
 - Added transmission peripheral : a rotation speed controller designed specifically for CC:T control
 
-1.0.3
+# 1.0.3
 - Added recipe for transmission peripheral
 
-1.0.4
+# 1.0.4
 - Added wiki https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/
 
 - **!?NEWNEW?!** Added the Monitor: a modular instrument panel with a 12×10 module grid.
@@ -38,33 +38,33 @@
     client-side block entities).
 
 
-1.0.5
+# 1.0.5
 - Fixed dedicated server crash: the Toggle Switch item referenced client-only rendering
   classes (BlockEntityWithoutLevelRenderer) at registration, failing mod load on dedicated
   servers. The item now uses a static OBJ model (Knob-style) — server-safe.
 
-1.0.6
+# 1.0.6
 - Added servo mode to the Transmission Peripheral
 
-1.0.7
+# 1.0.7
 - Reworked screen rendering; the monitor background can no longer be drawn on.
 - Added physical rotation limits to the Knob.
 - Fixed outline rendering on moving physics bodies (preview no longer lags or ghosts).
 
-1.0.8
+# 1.0.8
 - getRelativePercent,getAbsolutePercent return 0-100 -> 0-1
 - **!?NEWNEW?!** Added control desk system, including two joysticks, two throttles, one dual pedal, one screen, expansion dock and baffle.
 
-1.0.9
+# 1.0.9
 - Added isAxisXPositive/isAxisXNegative/isAxisYPositive/isAxisYNegative for joystick.
 - Added reaim mode for transmission peripheral.
 - **!?NEWNEW?!** Added the Aero Bearing, Check the wiki for more details.
 - **!?NEWNEW?!** Added a new sensor system, Check the wiki for more details.
 
-1.1.0
+# 1.1.0
 - Added the Aviation Integrated Computer (AIC), Check the wiki for more details.
 
-1.1.1
+# 1.1.1
 - **IMPORTANT!!!** Control desk channels are now **physics-body-scoped**, Check the wiki for more details(https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/control-desk/overview/).
 - **!?NEWNEW?!** Added the Fluid Port
 - **!?NEWNEW?!** Added the Short Range Linker, Check the wiki for more 
@@ -76,12 +76,12 @@
 - getPhysicsCenterOfMassRel is now relative to the FMC block center; added getPhysicsChainCenterOfMassRel.
 - monitor_2 can no longer be washed away by water. When dismantling a control desk carrying a monitor_2 with modules, the modules now drop to the ground.
 
-1.1.2
+# 1.1.2
 - Added the position light.
 - ccpe.sensor_system.getAngularVelocity()：world frame → Body-frame
 - Added the trailing wheel mount
 
-1.1.3
+# 1.1.3
 - Added free mode for the Throttle.
 - Added altitude-pressure conversion tools, sail aero tools, the universal drag tool and the max-cruise-altitude solver to the FMC. Check the wiki for more details.
 - Added the Flight Data Recorder system.
@@ -89,7 +89,7 @@
 - Added steering to the trailing wheel mount. Check the wiki for the control method.
 - Improved the Examples & Tutorials section of the wiki.
 
-1.1.4
+# 1.1.4
 - fluid port 0.5kg->0.25kg
 - Added the quick fill fluid tank and quick fill fuel vault.
 - Added the modular engine
@@ -104,7 +104,7 @@
 - `_verify_pressure.py`: the hard-coded `_8_delaytest` detail log is now optional (skipped with a notice when missing) instead of failing the whole analysis.
 - Flight Data Recorder docs now consistently describe the actual **FMC/AIC/INS** scope (INS-only bodies are recorded too) and correct the "default on" wording to "default off": Config comment, class Javadoc, en_us / zh_cn tooltips, and both wiki pages.
 
-1.1.5
+# 1.1.5
 - Mixture now has a much stronger effect on heat output (linear heat factor `2 − m`, both lean and rich). Check the [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/temperature/) for more details.
 - Widened the fluid engine's economy-factor mixture window: the mixture condition is now `0.8 ≤ actual mixture ≤ 1.1` (was `|actual mixture − 1| ≤ 0.05`).
 
@@ -113,7 +113,7 @@
 
 - engine.getFluidTanks() now mainThread = false
 
-1.1.6
+# 1.1.6
 - Fixed the control desk throttle clipping through the desk surface
 
 - Monitors can now be hung upside-down from ceilings : only the base and bearing flip, while the screen body (case) stays upright —
@@ -121,21 +121,21 @@
 
 - Added the Monitor Slab, a step-shaped monitor block with a 14×14 surface grid. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/monitor/monitor-slab/
 
-1.1.7
+# 1.1.7
 - Transmission peripheral: `setTargetSpeed` now accepts **negative speeds (-256 ~ 256)**  and `setRatio` accepts **negative ratios** — a negative value makes the downstream rotate **opposite to the input**.
 
   Stress is now charged on the signed difference `|output − input|`, so reversing costs more stress than slowing down in the same direction.
 
-1.1.8
+# 1.1.8
 - Added the thrust nozzle: Mounts on the front face of an Encased Fan and turns its airflow into axial thrust - far stronger than the fan on its own.
 
-1.1.9
+# 1.1.9
 - Fixed a dedicated server crash (`NoSuchFieldError`) when placing or breaking the Engine Core, the Fluid Combustion Chamber or the Steam Power Chamber.
 
 1.2.0
 - Added the auto packager.
 
-1.2.1
+# 1.2.1
 - Added the water cooling module. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/water-cooling-module/
 
 - **IMPORTANT!!!** Reworked how the engine makes power: each chamber now provides a **fixed amount of stress** (8192 SU per fluid combustion chamber, × its fuel multiplier; 4096 SU per steam power chamber) that **no longer changes with the throttle**. The throttle now only sets the output **rotation speed** (0-256 rpm, 0 = stopped).Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/engine-core/
@@ -145,17 +145,17 @@
 - Added `getLoad`, `getStressUsed` and `getStressCapacity` Lua methods to the engine peripheral. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/lua-api/
 
 
-1.2.2
+# 1.2.2
 - **IMPORTANT!!!** Reworked the Aero Bearing:
   - Its shaft now runs **through** the block, so rotation and stress continue straight into the assembled structure (input speed = output speed).
   - Power no longer turns the plate on its own — it only costs stress and drives the machines inside the assembled structure. The plate's angle is set from Lua with `setTargetAngle` only, and it **cannot move while there is no input rotation**. (`setControlMode` is now a no-op, kept so old scripts still run.)
   - Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/aero-bearing/overview/
 
 
-1.2.3
+# 1.2.3
 - **NEW!** Added the Advanced Thrust Nozzle: Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/actuators/advanced-thrust-nozzle/
 
-- **NEW!** The fluid engine now comes with **built-in automatic control** — no Lua script needed. It holds the actual mixture at ~0.9 (comfortably inside the economy window), drives the cooling air duct with a PI+D loop, runs the water cooling loop from a heat / cooling **model feedforward**. It is **on by default**, including in existing saves. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/engine-core/
+- **NEW!** The fluid engine now comes with **built-in automatic control** — no Lua script needed. It holds the actual mixture at ~0.9 (comfortably inside the economy window), drives the cooling air duct with a PI+D loop, runs the water cooling loop from a heat / cooling **model feedforward**. It is **on by default**, including in existing saves. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/auto-control/
 
 - **IMPORTANT!!!** Cooling rebalanced: passive cooling is weaker and air cooling is stronger, so a small engine at low load can finally reach the economy band (1 fluid chamber + 2 core segments at 25% load used to sit at ~112°C forever and now settles at ~157°C). The core's own dissipation dropped from `0.02` to `0.01` per segment and chambers' ambient convection from `0.05` to `0.04`, while each cooling air duct now dissipates `0.09` (was `0.05`). An engine **with** ducts feels about the same, but an engine **without** radiators overheats much sooner at high load. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/engine/temperature/
 
@@ -172,3 +172,13 @@
 
 - Added an in-world **hold-right-click panel** on the engine core to pick the output direction (Forward / Reversed). **Hold a Wrench** to open it — with an empty hand or any other item the core side shows no panel and right-click stays normal block placement / item interaction (such as attaching chambers). Works on any core segment and shares its state with the Lua method above.
 
+# 1.2.4
+- The engine's **default throttle is now 100% (256 rpm)** .
+
+- Fixed the engine refusing to take fluid out of **Simulated (Aeronautics) fluid containers** — the docking connector in particular.
+
+- Added `getStrongPower` / `setStrongPower` to the `ccpe.sensor_system` Lua API: the Short-Range Signal Linker can now **strong-power the block it is attached to**, like a lever (only toward the support face; strength = its redstone output).
+
+- Added `getEngine` to the `ccpe.sensor_system` Lua API: `local e = ss.getEngine()` hands you the engine's `ccpe:engine` peripheral directly by body scope — no `peripheral.wrap`, no wired-network reachability needed, so an engine far from the computer is fine. It only returns a peripheral when the body (constraint chain included) has **exactly one** engine; with no engine or with several engines (e.g. a twin-engine craft) it returns `nil`. Resolved at call time and cached nowhere, so grab it once at the top of your script and keep it in a local. Costs nothing per tick.
+
+- Added `setInverted(bool)` / `isInverted()` to the Advanced Thrust Nozzle: instant thrust ⇄ suction reversal. The sign of the force along the tilted axis flips (strength, deflection and output scale untouched), exhaust particles switch to intake in the same step, and the state is stored in NBT / blueprints.

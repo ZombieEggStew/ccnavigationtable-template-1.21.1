@@ -7,6 +7,18 @@ local e = peripheral.wrap("front")
 -- or: peripheral.find("ccpe:engine")
 ```
 
+!!! tip "Scripts on a physics body: grab it from `ccpe.sensor_system` instead"
+    When the computer sits on a physics body (Sable sub-level), you can get the engine peripheral straight from the sensor module:
+
+    ```lua
+    local ss = require("ccpe.sensor_system")
+    local e = ss.getEngine()   -- exactly one engine on the body (constraint chain included) → its peripheral; otherwise nil
+    ```
+
+    - **No peripheral-network reachability needed** — the engine can be any distance from the computer.
+    - **Only returns a peripheral when the body has exactly one engine**; no engine, or ≥2 engines (twin/multi-engine craft) → `nil`, so keep using `peripheral.wrap` / `peripheral.find` per engine there.
+    - Resolved **at call time** (`mainThread = true`, one main-thread hop per call, at most 1 tick stale) and **no cached peripheral reference**: after the engine is broken/reformed/extended it returns `nil` instead of a stale object. Call it once at the top of your script and keep the result in a local.
+
 ## [Example — Temperature and Mixture Control](../examples/trainer_aircraft_2.md)
 
 > The engine already ships with **built-in temperature & mixture auto control** (no script needed) — see [Auto Control](auto-control.md). The methods below are for writing your own control loop (call `setAutoControl(false)` first).
@@ -23,7 +35,7 @@ local e = peripheral.wrap("front")
 | `getTemperature()` | false | number | Engine temperature in °C |
 | `isOverheated()` | false | boolean | Overheat lock (fluid engines only; hard-stop at T≥220°C, unlock at T≤200°C) |
 | `getFluidTanks()` | true | table[] | All connected fluid tanks: `{fluid, amount, remaining, capacity}` (fluid is `nil` when empty) |
-| `getThrottle()` | false | number | Throttle 0..1 (default 0.25). **Sets the output speed only** (speed = throttle × 256 rpm; stress capacity is constant; 0 = stopped, no fuel burned; the only on/off control) |
+| `getThrottle()` | false | number | Throttle 0..1 (default 1.0 = 100%, 256 rpm). **Sets the output speed only** (speed = throttle × 256 rpm; stress capacity is constant; 0 = stopped, no fuel burned; the only on/off control) |
 | `getLoad()` | false | number | **Load** 0..1 = stress network's "stress used / capacity available" (**actual value, idle floor not included**; 0 when idle, 0 when stopped). **The driver of fuel burn and heat** — handy for economy scheduling |
 | `getStressUsed()` | false | number | Stress used by the network (SU, whole network: Σ machine impact × speed; stopped/unattached → 0) |
 | `getStressCapacity()` | false | number | Capacity available on the network (SU, whole network; this engine's own contribution is constant = 8192 per fluid chamber / 4096 per steam chamber) |

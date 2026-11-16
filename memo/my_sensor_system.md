@@ -191,3 +191,33 @@ ss.hasPressureSensor()   -- boolean
   稳定缓存字段，`stressOf(be)` 返回 `StressInfo(stress, capacity)`；字段缺失/反射被拒返回 `null`，不抛异常）。
   读的是网络**缓存值**，零 tick 开销、无 Mixin。
 - **待进游戏验证**：FMC 贴在动力方块上读剩余应力（已实测原表形式输出正常，改名后待复测）。
+
+## 实施补充记录（2026-09）：`ss.getEngine()` 机体引擎快捷获取
+
+> 相关：`memo/engine-module.md` §10（`ccpe:engine` 外设最终版 + 本方法的使用段）、
+> `wiki/docs/sensor-system/overview.zh.md`「模块化引擎」条目、`memo/code-map.md`「`BodyEngineRegistry`」行。
+
+**需求定位（用户明确约束）**：只覆盖**一个物理体只有一个引擎**的场景；**只在脚本开头调用一次**；
+**不接受每 tick 开销与大范围扫描**。因此刻意做成“最轻”，与本文上面“每 tick 刷 volatile 缓存”的
+传感器体系**不同**。
+
+- **Lua 方法**：`ss.getEngine()` → `ccpe:engine` 外设（挂在引擎 controller 上，包裹任意核心节同一实例；
+  非 controller 委托逻辑见 `EngineCoreBlockEntity.getPeripheral()`）。`mainThread = true`，**调用时解析**：
+  `resolveSubLevel()` → `chainUuidsOf(sub)` → 注册表查询 → `controller.getPeripheral()`。
+- **门控（保守语义）**：电脑不在物理体上 / 机体（含约束链）上没有引擎 / **≥2 个引擎**（歧义，如双发）→ `nil`；
+  多发机体继续用 `peripheral.wrap(...)` 按外设名控制。**不缓存外设引用**（引擎拆解/重组/延长后自然返回 nil，
+  不会拿到失效对象）；**不新增任何 `update()` 缓存字段**。
+- **登记者**：新建 `compat/cc/BodyEngineRegistry.java`（物理体作用域，
+  `ConcurrentHashMap<UUID, Set<EngineCoreBlockEntity>>`，照 `ShortRangeLinkerRegistry` 的小型注册表模式）。
+  引擎核心节在 **`onLoad`**、**`updateConnectivity()`（放置/延长组网后）** 各尝试登记一次，**`invalidate()`** 注销
+  （Create `SmartBlockEntity.setRemoved()` 是 `final`，只能在它内部调用的 `invalidate()` 里挂注销——踩坑）。
+  查询 `singleEngineControllerOnChain` 按 `getControllerBE()` 的 **BE 身份**去重成引擎组，所以 controller
+  易主/延长**不需要重登记**（登记的是所有核心节，不只 controller）。
+- **成本账**：登记 = 每个核心节生命周期事件一次 `getContainingSubLevel` + HashMap put；查询 = 链遍历（轴承链通常
+  1~3 个 sub-level）+ 哈希查 + 一次 BE 解析；**每 tick 新增开销 = 一个 boolean 读**（`!bodyRegistered && retries > 0`
+  守卫，登记成功后永久停手；非物理体引擎最多重试 20 tick 后彻底放弃，不再产生开销）。
+- **组网瞬态**：未组网完成（`controller == null`）的孤立核心节各自算作一个引擎组 → 瞬态期间可能返回 `nil`，
+  下一 tick 恢复。
+- **未做**：`getEngines()` 列表 / 索引 / 最近选择（用户当前只要单引擎场景，保持最小 API；将来要加时复用同一注册表）。
+- **待进游戏验证**：① 单引擎机体上 `print(ss.getEngine())` 能拿到外设且 `setThrottle` 生效；
+  ② 放第二个引擎后立即返回 `nil`；③ 拆掉引擎后返回 `nil`（不会拿到失效对象）。

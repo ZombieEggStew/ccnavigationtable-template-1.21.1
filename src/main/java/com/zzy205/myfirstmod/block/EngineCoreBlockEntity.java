@@ -12,6 +12,7 @@ import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.INamedIc
 import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollOptionBehaviour;
 import com.simibubi.create.foundation.gui.AllIcons;
 import com.zzy205.myfirstmod.Config;
+import com.zzy205.myfirstmod.compat.cc.BodyEngineRegistry;
 import com.zzy205.myfirstmod.compat.cc.SensorSystemAPI;
 import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import dan200.computercraft.api.lua.LuaFunction;
@@ -394,8 +395,8 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     /** 模块温度（°C，controller 持有；NBT 持久化 + 客户端同步显示） */
     protected float temperature = T_AMB_SEA;
-    /** 效率（= 油门：P8 起<b>只决定输出转速</b>——应力容量恒定、燃料消耗 ∝ 网络负载；默认 0.25 → 64rpm，由 Lua setThrottle 控制） */
-    protected float efficiency = 0.25f;
+    /** 效率（= 油门：P8 起<b>只决定输出转速</b>——应力容量恒定、燃料消耗 ∝ 网络负载；默认 1.0 → 100%（256rpm 满转速），由 Lua setThrottle 控制） */
+    protected float efficiency = 1.0f;
     /**
      * 输出旋转方向（false = 正转/默认，true = 反转；Lua {@code setReversed} 控制，默认正转）。
      * <p>实现方式 = {@link #getGeneratedSpeed()} 取负：<b>转速绝对值不变</b>，所以应力容量（Create
@@ -655,6 +656,12 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     @Nullable
     private IPeripheral peripheral;
 
+    // ---- 物理体作用域引擎登记（`ccpe.sensor_system` 的 ss.getEngine() 用；只在生命周期事件里写） ----
+    /** 是否已登记进 {@link BodyEngineRegistry}（登记成功后永久为 true，直到 setRemoved） */
+    private boolean bodyRegistered = false;
+    /** 未登记期间的有限重试计数（onLoad 时 sub-level 可能尚未就绪；耗尽后不再产生任何每 tick 开销） */
+    private int bodyRegisterRetries = 20;
+
     /** 客户端：流体燃烧室活塞"噗嗤"音效池（每引擎一个，音量 = Config.ENGINE_FLUID_PUFF_VOLUME）；不加 {@code @OnlyIn}，理由见 {@link #steamBurnTicksSyncTime} */
     protected SoundPool fluidPistonSoundPool;
 
@@ -750,6 +757,13 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         if (level.isClientSide) {
             CatnipServices.PLATFORM.executeOnClientOnly(() -> this::tickClient);
             return;
+        }
+        // 物理体作用域引擎登记（ss.getEngine() 依赖）：登记成功后每 tick 只多一次 boolean 读；
+        // 未登记期间（刚加载、sub-level 可能尚未就绪）每 tick 重试一次，20 tick 内仍失败则放弃，
+        // 之后非物理体上的引擎不再产生任何每 tick 开销。
+        if (!bodyRegistered && bodyRegisterRetries > 0) {
+            bodyRegisterRetries--;
+            tryRegisterInBody();
         }
         if (!isController())
             return;
@@ -1292,7 +1306,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 advanceWaterSource();
                 continue;
             }
-            FluidStack drained = handler.drain(new FluidStack(Fluids.WATER, batch), IFluidHandler.FluidAction.EXECUTE);
+            FluidStack drained = drainFluidBatch(handler, Fluids.WATER, batch);
             if (drained.getAmount() > 0) {
                 fluidTanksCache = snapshotFluidTanks(); // 补料成功 → 罐内容变 → 刷新 getFluidTanks 缓存
                 return drained.getAmount(); // 部分接受：罐剩多少收多少
@@ -1332,7 +1346,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 advanceFluidFuelSource();
                 continue;
             }
-            FluidStack drained = handler.drain(new FluidStack(fuel, batch), IFluidHandler.FluidAction.EXECUTE);
+            FluidStack drained = drainFluidBatch(handler, fuel, batch);
             if (drained.getAmount() > 0) {
                 fluidFuel = src.entry(); // 活动燃料 = 当前源条目
                 fluidTanksCache = snapshotFluidTanks(); // 补料成功 → 罐内容变 → 刷新 getFluidTanks 缓存
@@ -1371,7 +1385,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 advanceSteamFuelSource();
                 continue;
             }
-            FluidStack drained = handler.drain(new FluidStack(src.fluid().getFluid(), batch), IFluidHandler.FluidAction.EXECUTE);
+            FluidStack drained = drainFluidBatch(handler, src.fluid().getFluid(), batch);
             if (drained.getAmount() > 0) {
                 // 每室 + 实际抽到的 mb/N × burnTicksPerBucket/1000（部分接受；并行燃烧各室同值）
                 float addBurn = drained.getAmount() / (float) steamChambers.size() * src.burnTicksPerBucket() / 1000f;
@@ -1845,7 +1859,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
             int wanted = Math.min((int) debt, 256);
             int ask = Math.min(wanted, stack.getAmount());
-            FluidStack moved = handler.drain(new FluidStack(stack.getFluid(), ask), IFluidHandler.FluidAction.EXECUTE);
+            FluidStack moved = drainFluidBatch(handler, stack.getFluid(), ask);
             debt -= moved.getAmount();
             // 欠账钳 [0, 256]：全部抽干时不留无限欠账
             coolantDebtByPos.put(pos, Math.min(Math.max(debt, 0d), 256d));
@@ -1982,6 +1996,33 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     protected IFluidHandler fluidHandlerAt(BlockPos pos) {
         return level.getCapability(Capabilities.FluidHandler.BLOCK, pos, null);
+    }
+
+    /**
+     * 抽一批流体（带退化路径，防某些 tank 实现的 {@code drain(FluidStack)} 有坑）。
+     * <p>
+     * 先走标准 {@code IFluidHandler#drain(FluidStack, EXECUTE)}；返回空则退化为 {@code drain(amount, EXECUTE)}
+     * 按量抽取，并先用 {@code getFluidInTank(0)} 校验罐内流体确实是目标流体（防抽错液体）。
+     * <p>
+     * <b>已知踩坑（Simulated 桥接罐）</b>：Simulated 的 {@code SingleTankWrapper} 继承
+     * {@code net.neoforged.neoforge.fluids.capability.templates.FluidTank}，但只重写了 {@code getFluid()} /
+     * {@code drain(int, FluidAction)} / {@code fill}，把真实内容放在自己的 {@code SingleTank} 里——没有重写
+     * {@code drain(FluidStack, FluidAction)}，而父类那一版比对的是父类的<b>字段</b> {@code fluid}
+     * （{@code SingleTankWrapper} 从未写入 → 永远 {@code FluidStack.EMPTY}），
+     * 于是标准路径恒返回 EMPTY：Jade/护目镜能读到 {@code getFluidInTank(0)}（走重写后的 getFluid()），
+     * 但管道/引擎的 {@code drain(FluidStack)} 一滴也抽不出来。docking_connector 的 1000mB 罐即属此类。
+     */
+    protected FluidStack drainFluidBatch(IFluidHandler handler, net.minecraft.world.level.material.Fluid fluid, int amount) {
+        if (handler == null || fluid == null || amount <= 0)
+            return FluidStack.EMPTY;
+        FluidStack drained = handler.drain(new FluidStack(fluid, amount), IFluidHandler.FluidAction.EXECUTE);
+        if (!drained.isEmpty())
+            return drained;
+        // 退化路径：确认罐里装的确实是目标流体再按量抽（多罐实现只认 0 号罐，与源列表探测口径一致）
+        FluidStack stored = handler.getFluidInTank(0);
+        if (stored.isEmpty() || stored.getFluid() != fluid)
+            return FluidStack.EMPTY;
+        return handler.drain(Math.min(amount, stored.getAmount()), IFluidHandler.FluidAction.EXECUTE);
     }
 
     /**
@@ -2208,7 +2249,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
             return fluidTanksCache;
         }
 
-        /** 当前油门（0..1；默认 0.25 → 64rpm）。P8：油门<b>只决定输出转速</b>（容量恒定、消耗 ∝ 网络负载）；0 = 停机不烧油 */
+        /** 当前油门（0..1；默认 1.0 = 100% → 256rpm 满转速）。P8：油门<b>只决定输出转速</b>（容量恒定、消耗 ∝ 网络负载）；0 = 停机不烧油 */
         @LuaFunction
         public final double getThrottle() {
             return efficiency;
@@ -2489,14 +2530,46 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
         ConnectivityHandler.formMulti(this);
         // 组网后源列表按新模块邻居重建（新 controller 的邻居集合可能变化）
         markSourcesDirtyNow();
+        // 放置/延长组网后（controller 就绪）补齐物理体引擎登记（onLoad 时 sub-level 可能尚未就绪）
+        tryRegisterInBody();
     }
 
     /** BE 载入（读档/放置/方块加载）：源列表按当前邻居重建（下 tick 就扫） */
     @Override
     public void onLoad() {
         super.onLoad();
-        if (level != null && !level.isClientSide)
+        if (level != null && !level.isClientSide) {
             markSourcesDirtyNow();
+            bodyRegistered = false;
+            bodyRegisterRetries = 20;
+            tryRegisterInBody();
+        }
+    }
+
+    /**
+     * BE 被破坏 / 区块卸载（Create {@code SmartBlockEntity.setRemoved()} 是 final，走它内部调用的
+     * {@code invalidate()}）：从物理体引擎注册表注销，{@code ss.getEngine()} 不再命中该节。
+     */
+    @Override
+    public void invalidate() {
+        BodyEngineRegistry.unregister(this);
+        bodyRegistered = false;
+        super.invalidate();
+    }
+
+    /**
+     * 把一个引擎核心节登记进物理体作用域引擎注册表（{@link BodyEngineRegistry}）。
+     * <p>
+     * 只登记、不做任何世界扫描；登记后由 {@code ss.getEngine()} 在调用时按约束链查询，
+     * 因此<b>不需要每 tick 刷新</b>（详见 {@link BodyEngineRegistry} 的成本模型）。
+     * 非 controller 节也登记——查询时按 controller 去重成「引擎组」，controller 易主无需重登记。
+     */
+    private void tryRegisterInBody() {
+        if (bodyRegistered) return;
+        if (BodyEngineRegistry.register(this)) {
+            bodyRegistered = true;
+            bodyRegisterRetries = 0;
+        }
     }
 
     /**

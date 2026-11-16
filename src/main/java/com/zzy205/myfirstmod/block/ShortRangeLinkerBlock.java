@@ -98,14 +98,22 @@ public class ShortRangeLinkerBlock extends BaseEntityBlock implements IWrenchabl
         return RenderShape.MODEL;
     }
 
-    @Override
-    public boolean canSurvive(@NotNull BlockState state, @NotNull LevelReader level, @NotNull BlockPos pos) {
-        Direction supportDirection = switch (state.getValue(FACE)) {
+    /**
+     * 链接器的「附着面」朝向：链接器贴在哪个方向的方块上（= 强充能要打进去的那个方向）。
+     * FLOOR→下方、CEILING→上方、WALL→FACING 的反面；{@link #getAttachedPos} / {@link #canSurvive}
+     * / {@code getDirectSignal} 共用这一处映射，避免三份 switch 走样。
+     */
+    public static Direction supportDirection(BlockState state) {
+        return switch (state.getValue(FACE)) {
             case FLOOR -> Direction.DOWN;
             case CEILING -> Direction.UP;
             case WALL -> state.getValue(FACING).getOpposite();
         };
-        BlockPos supportPos = pos.relative(supportDirection);
+    }
+
+    @Override
+    public boolean canSurvive(@NotNull BlockState state, @NotNull LevelReader level, @NotNull BlockPos pos) {
+        BlockPos supportPos = pos.relative(supportDirection(state));
         return !level.getBlockState(supportPos).isAir();
     }
 
@@ -125,9 +133,50 @@ public class ShortRangeLinkerBlock extends BaseEntityBlock implements IWrenchabl
         return 0;
     }
 
+    /**
+     * 强充能（拉杆语义）：只在「附着面」那一个方向返回输出值 —— 于是它贴着的方块被标记为被充能，
+     * 绕到该方块其它侧的红石粉、以及直接贴着该方块的设备（红石灯等）都能读到信号。
+     * <p>
+     * 行为与拉杆完全一致：原版 {@code LeverBlock#getDirectSignal} =
+     * {@code POWERED && getConnectedDirection(state) == direction ? 15 : 0}，这里把强度换成 Lua 设定的输出值。
+     * <p>
+     * <b>方向约定是反的</b>（{@link net.minecraft.world.level.SignalGetter} 的注释原话
+     * "directions in redstone signal related methods are backwards"）：传入的 {@code side} 是
+     * 「从查询方（附着方块）指向本链接器」的方向 = 原版 {@code getConnectedDirection}，
+     * 即 {@link #supportDirection} 的<b>反面</b>（地面放置 → {@code supportDirection}=DOWN，这里比 UP）。
+     * 写反了会永远返回 0（{@code getDirectSignalTo} 对上方邻块传的是 {@code Direction.UP}）。
+     * <p>
+     * <b>开关</b>由 {@code ss.setStrongPower(channel, true)} 打开（BE {@code strongPower} 字段，默认关）：
+     * 关闭时恒返回 0，六面弱信号（{@link #getSignal}）不受影响。
+     */
+    @Override
+    protected int getDirectSignal(@NotNull BlockState state, @NotNull BlockGetter level, @NotNull BlockPos pos, @NotNull Direction side) {
+        if (side != supportDirection(state).getOpposite()) return 0;
+        if (level.getBlockEntity(pos) instanceof ShortRangeLinkerBlockEntity be && be.isStrongPower())
+            return be.getRedstoneOutput();
+        return 0;
+    }
+
     @Override
     protected boolean isSignalSource(@NotNull BlockState state) {
         return state.getValue(POWERED);
+    }
+
+    /**
+     * 强充能开关变化后通知邻居（不改变方块态，故不 setBlock）。
+     * 由 {@link ShortRangeLinkerBlockEntity#setStrongPower} 调用。
+     * <p>
+     * 与 {@link #updateRedstoneOutput} 一样必须通知<b>两处</b>（照原版 {@code LeverBlock#updateNeighbours}）：
+     * 链接器自己（六面弱信号）+ <b>附着方块自己</b>（它的另一侧的红石粉 / 设备只会在它被通知时重算）。
+     * 开关是单向的（关掉时也得通知，否则另一侧的粉会一直亮着），所以这里无条件通知两处。
+     */
+    public static void updateStrongPower(Level level, BlockPos pos) {
+        if (level.isClientSide || !level.isLoaded(pos)) return;
+        BlockState state = level.getBlockState(pos);
+        if (!state.is(MyModBlocks.short_range_linker.get())) return;
+        level.updateNeighborsAt(pos, state.getBlock());
+        BlockPos support = getAttachedPos(state, pos);
+        if (level.isLoaded(support)) level.updateNeighborsAt(support, state.getBlock());
     }
 
     /**
@@ -144,6 +193,11 @@ public class ShortRangeLinkerBlock extends BaseEntityBlock implements IWrenchabl
             level.setBlock(pos, state.setValue(POWERED, shouldPower), Block.UPDATE_ALL);
         }
         level.updateNeighborsAt(pos, state.getBlock());
+        // 强充能开着时，附着方块另一侧的邻居也要重算（照 LeverBlock#updateNeighbours 的第二处通知）
+        if (level.getBlockEntity(pos) instanceof ShortRangeLinkerBlockEntity be && be.isStrongPower()) {
+            BlockPos support = getAttachedPos(state, pos);
+            if (level.isLoaded(support)) level.updateNeighborsAt(support, state.getBlock());
+        }
     }
 
     @Override
@@ -187,12 +241,7 @@ public class ShortRangeLinkerBlock extends BaseEntityBlock implements IWrenchabl
 
     /** 计算链接器所附着的方块坐标 */
     public static BlockPos getAttachedPos(BlockState state, BlockPos linkerPos) {
-        Direction supportDir = switch (state.getValue(FACE)) {
-            case FLOOR -> Direction.DOWN;
-            case CEILING -> Direction.UP;
-            case WALL -> state.getValue(FACING).getOpposite();
-        };
-        return linkerPos.relative(supportDir);
+        return linkerPos.relative(supportDirection(state));
     }
 
     /**
