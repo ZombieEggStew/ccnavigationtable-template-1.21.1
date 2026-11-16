@@ -1292,7 +1292,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 advanceWaterSource();
                 continue;
             }
-            FluidStack drained = handler.drain(new FluidStack(Fluids.WATER, batch), IFluidHandler.FluidAction.EXECUTE);
+            FluidStack drained = drainFluidBatch(handler, Fluids.WATER, batch);
             if (drained.getAmount() > 0) {
                 fluidTanksCache = snapshotFluidTanks(); // 补料成功 → 罐内容变 → 刷新 getFluidTanks 缓存
                 return drained.getAmount(); // 部分接受：罐剩多少收多少
@@ -1332,7 +1332,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 advanceFluidFuelSource();
                 continue;
             }
-            FluidStack drained = handler.drain(new FluidStack(fuel, batch), IFluidHandler.FluidAction.EXECUTE);
+            FluidStack drained = drainFluidBatch(handler, fuel, batch);
             if (drained.getAmount() > 0) {
                 fluidFuel = src.entry(); // 活动燃料 = 当前源条目
                 fluidTanksCache = snapshotFluidTanks(); // 补料成功 → 罐内容变 → 刷新 getFluidTanks 缓存
@@ -1371,7 +1371,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
                 advanceSteamFuelSource();
                 continue;
             }
-            FluidStack drained = handler.drain(new FluidStack(src.fluid().getFluid(), batch), IFluidHandler.FluidAction.EXECUTE);
+            FluidStack drained = drainFluidBatch(handler, src.fluid().getFluid(), batch);
             if (drained.getAmount() > 0) {
                 // 每室 + 实际抽到的 mb/N × burnTicksPerBucket/1000（部分接受；并行燃烧各室同值）
                 float addBurn = drained.getAmount() / (float) steamChambers.size() * src.burnTicksPerBucket() / 1000f;
@@ -1845,7 +1845,7 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
             int wanted = Math.min((int) debt, 256);
             int ask = Math.min(wanted, stack.getAmount());
-            FluidStack moved = handler.drain(new FluidStack(stack.getFluid(), ask), IFluidHandler.FluidAction.EXECUTE);
+            FluidStack moved = drainFluidBatch(handler, stack.getFluid(), ask);
             debt -= moved.getAmount();
             // 欠账钳 [0, 256]：全部抽干时不留无限欠账
             coolantDebtByPos.put(pos, Math.min(Math.max(debt, 0d), 256d));
@@ -1982,6 +1982,33 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
 
     protected IFluidHandler fluidHandlerAt(BlockPos pos) {
         return level.getCapability(Capabilities.FluidHandler.BLOCK, pos, null);
+    }
+
+    /**
+     * 抽一批流体（带退化路径，防某些 tank 实现的 {@code drain(FluidStack)} 有坑）。
+     * <p>
+     * 先走标准 {@code IFluidHandler#drain(FluidStack, EXECUTE)}；返回空则退化为 {@code drain(amount, EXECUTE)}
+     * 按量抽取，并先用 {@code getFluidInTank(0)} 校验罐内流体确实是目标流体（防抽错液体）。
+     * <p>
+     * <b>已知踩坑（Simulated 桥接罐）</b>：Simulated 的 {@code SingleTankWrapper} 继承
+     * {@code net.neoforged.neoforge.fluids.capability.templates.FluidTank}，但只重写了 {@code getFluid()} /
+     * {@code drain(int, FluidAction)} / {@code fill}，把真实内容放在自己的 {@code SingleTank} 里——没有重写
+     * {@code drain(FluidStack, FluidAction)}，而父类那一版比对的是父类的<b>字段</b> {@code fluid}
+     * （{@code SingleTankWrapper} 从未写入 → 永远 {@code FluidStack.EMPTY}），
+     * 于是标准路径恒返回 EMPTY：Jade/护目镜能读到 {@code getFluidInTank(0)}（走重写后的 getFluid()），
+     * 但管道/引擎的 {@code drain(FluidStack)} 一滴也抽不出来。docking_connector 的 1000mB 罐即属此类。
+     */
+    protected FluidStack drainFluidBatch(IFluidHandler handler, net.minecraft.world.level.material.Fluid fluid, int amount) {
+        if (handler == null || fluid == null || amount <= 0)
+            return FluidStack.EMPTY;
+        FluidStack drained = handler.drain(new FluidStack(fluid, amount), IFluidHandler.FluidAction.EXECUTE);
+        if (!drained.isEmpty())
+            return drained;
+        // 退化路径：确认罐里装的确实是目标流体再按量抽（多罐实现只认 0 号罐，与源列表探测口径一致）
+        FluidStack stored = handler.getFluidInTank(0);
+        if (stored.isEmpty() || stored.getFluid() != fluid)
+            return FluidStack.EMPTY;
+        return handler.drain(Math.min(amount, stored.getAmount()), IFluidHandler.FluidAction.EXECUTE);
     }
 
     /**
