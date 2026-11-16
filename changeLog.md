@@ -176,3 +176,5 @@
 - The engine's **default throttle is now 100% (256 rpm)** .
 
 - Fixed the engine refusing to take fluid out of **Simulated (Aeronautics) fluid containers** — the docking connector in particular.
+
+- Added `getStrongPower` / `setStrongPower` to the `ccpe.sensor_system` Lua API: the Short-Range Signal Linker can now **strong-power the block it is attached to**, like a lever (only toward the support face; strength = its redstone output).
