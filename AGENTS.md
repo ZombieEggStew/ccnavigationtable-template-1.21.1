@@ -45,3 +45,36 @@
 - 只改当前请求直接需要的资源或数据。
 - 保持现有命名空间、JSON 布局与模型约定。
 - 将 `build/`、`bin/`、`run/`、`api/`、`references/`、`.research/`、`libs/` 视为只读参考目录，不要编辑。
+
+## PowerShell / 脚本规则（仅修改 `tools/**/*.ps1` 或写脚本/批量命令时适用）
+
+### 编码：`.ps1` 正文必须纯 ASCII（最高优先级，已多次踩）
+
+- 本机 PowerShell **5.1** 读取**无 BOM 的 UTF-8** 脚本时按 ANSI（本机 CP936/GBK）解码，中文注释与字符串里的 UTF-8 字节会被解成引号、反引号、括号，
+  于是**紧随其后的一整段代码被当成字符串/注释吞掉**。症状：「循环体静默不执行、统计数据恒为 0、`Unexpected token` / `Missing closing '}'`」。
+  已真实发生：`tools/digest_csv.ps1` 首版整个 CSV 解析循环被吞，排查了 5 轮才定位。
+- 因此：**脚本注释、变量说明、输出标签一律用英文**。中文只允许出现在 `Write-Host` 之外的**文档/memo** 里。
+- 万不得已需要中文文本 → 把文件保存为 **UTF-8 with BOM**，并在写完后复核首字节是 `EF BB BF`；
+  或者改为从外部 UTF-8 文件读取文本再打印。**不要**用"先写中文试一下"的方式排错。
+- 一次性 `pwsh -Command` 命令行不写文件，不受此限；但**禁止**把中文塞进 `.ps1` 文件再跑。
+
+### 调用方式与语法
+
+- 固定用 `powershell -NoProfile -ExecutionPolicy Bypass -File tools\xxx.ps1 <参数>` 调脚本：
+  交互 shell 是 pwsh 7，但**脚本体必须按 PS 5.1 兼容**写 —— 禁用 `??`、`?.`、三元运算符、`-AsHashtable`、`Get-ChildItem -ErrorRecurse` 等 PS7 专有语法。
+- `-File` 传参**不做数组拆分**：`[string[]]$Cols` 收到 `a,b,c` 会当成单个字符串 ⇒ 脚本内自己 `$_ -split ','`。
+- 路径含空格（如 `run\saves\New World\computercraft\...`）必须加引号或使用 `-LiteralPath`。
+- `$a[$x..([Math]::Min($y, $z))]` 这类「范围里套方法调用」在 PS 5.1 解析失败 ⇒ 拆成 `for` 循环。
+- `$arr | Select-Object -First N` 会**提前关闭管道**：对原生命令或写文件的脚本会产生 broken-pipe 导致的 `[exit code: 1]`（伪失败），判定失败前先确认是不是这个。
+- `@()` 包住 `-split` / `Get-Content` 的结果，否则单行文件会退化成字符串，`.Count` 变成字符数。
+
+### 数据量纪律
+
+- **不把大 CSV / 大日志读进上下文**：先跑摘要器（CC:T 飞行日志用 `tools/digest_csv.ps1`，输出 ≤30 行），只吃摘要结果。
+- 超过 2 MB 的文件必须 `StreamReader` 流式处理 + 抽样 stride，禁止 `Get-Content` 整体读入（`run/flight_logs/` 单文件最大约 74 MB）。
+- 脚本输出控制在 ≤30 行；用退出码 0 / 非 0 区分，并在输出里写清 `NOFILE` / `EMPTY` / `NO DATA` 这类可判定原因。
+- 改完脚本必须**用仓库内真实文件跑一遍再交付**（最好覆盖正常、空文件、缺列、超大文件四种），把实测输出贴出来；只写不跑不算完成。
+
+### 位置约定
+
+- 可复用的通用工具放 `tools/`；一次性实验脚本放 `temp/`；`.tmp_luatest/` 保留给 Lua 干跑夹具。

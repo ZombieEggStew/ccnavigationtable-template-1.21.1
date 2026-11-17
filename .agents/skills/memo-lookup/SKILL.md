@@ -63,7 +63,9 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 | `pitot-selection-box.md` | 皮托管选择框调试记录（VoxelShaper 旋转坑：单位混用/基准朝向/end_rod 风格下 Catnip 与原版 X 旋转方向相反，水平四向绕 Y 180°；新增方块选择框的 checklist） | 新增或修改 6 向 FACING 方块的选择框/碰撞框，或排查选择框"不可见/差 90°/水平反了"时 |
 | `neoforge-debugging.md` | 本项目 F5 启动事实 | 调试启动配置或 classpath 时 |
 | `flip-autopilot.md` | **CC:T 飞行自动驾驶复刻实战总账（特斯拉飞车）**：已验证的落地剖面（`A_REF/KV/FF_BAND`、触地 0.65~0.70 m/s）、四元数姿态环与 `COS_MIN` 门控、**写预算不变量（每周期一个 `parallel.waitForAll` 块 ⇒ 20 Hz）**、吸附/翻滚/横向制导的全部实测常量与踩坑 | 写任何 CC:T 飞行/落地控制环（推力标定、下降剖面、姿态、频率）时，先读本文 |
-| `starship15-catch.md` | **星舰助推器回收复刻（进行中）**：实测常量（G=11、`F=N×256×2.04×p×scale`、TWR 3.53、`u_hover` 28.4%）、五个程序 `probe/cal1/att/starship/fixture` 与用法、火箭+夹具频道表、**9 条实机踩坑（顺序写红石不同步、锥角偏转产生俯仰力矩等）**、Flight 15 真机时间线、§18 直播轨迹 `0°→90°→115°→90°` 与"机体倾斜才是主矢量手段"的架构结论 | 继续做火箭降落/姿态/夹取时；开头「当前状态一页纸」即进度总览 |
+| `starship15-ROUND.md` | **星舰复刻「本轮工作卡」（唯一开工入口，≤60 行，每轮覆写）**：本轮目标 / 只读清单（≤3 文件）/ 上轮结论 / 本轮改动 / 交给用户的运行指令与回报模板 / 6 条每轮硬规矩（CSV 不进对话、局部 edit、版本归档、memo 只追加增量） | 只要在继续做星舰（`starship15`）这条线，**先读它 + `starship15-constants.md`**，不要通读 catch.md |
+| `starship15-constants.md` | **星舰复刻「可信常数 + 已否决假设黑名单」（唯一真相源）**：G=11、`F=N×256×2.05×p`、m=61、α=1.0/单位D、pairA→body X(负)/pairB→body Z(正)、`frameYawOff=180°`、20 Hz 写预算、能力上限推导、三条已验证控制律、13 条黑名单（锥角横向阻尼、`h-target` 符号、顺序写红石、`0.898 pN/RPM`…）、程序版本表、工具（`harness.lua` 干跑 + `tools/digest_csv.ps1`） | 要给星舰写/改控制环、判断某个数能不能信、或怀疑自己要走以前踩过的路时 |
+| `starship15-catch.md` | **星舰助推器回收复刻总账（归档，77 KB，禁止整篇读）**：§11~§16 标定飞行、§19/§20 力矩通道、§21 姿态环、§22 世界几何、§23 横向环；实测常量与 9 条踩坑、Flight 15 真机时间线、§18 直播轨迹 `0°→90°→115°→90°` | 需要某个结论的**原始推导/日志证据**时，先 `grep` 定位 §N 再读那一段（≤80 行） |
 | `registrate-datagen.md` | **Registrate + datagen 新增方块完整流程**（红色航行灯实战；含三个坑：datagen 生成 lang 会盖手写文件、Registrate 自动 .tab(SEARCH) 导致服务器启动崩溃及修复、datagen 环境需最小化 mod） | 用 Registrate 注册新方块/跑 runData/排查创造标签崩溃时 |
 
 ## 最小上下文原则
@@ -72,6 +74,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 - 只读取与当前请求直接对应的一份 memo；仅当它引用了另一个必须的文档时再读取下一份。
 - 与项目进度或设计取舍没有直接关系时，不加载 memo。
 - 需要定位 Java 文件职责、模块边界或修改入口时，查阅 `code-map.md`；需要定位外部依赖 API 时查阅 `api-code-map.md`。不要因此读取全部其他 memo。
+- **CC:T 飞行迭代轮次**（星舰 / 飞车）：只读 `starship15-ROUND.md` + `starship15-constants.md`（各 ≤60/≤120 行），程序按函数锚点局部读，日志一律走 `tools/digest_csv.ps1` 取数 —— 原始 CSV（最大 74 MB）与 `starship15-catch.md`/`flip-autopilot.md`（77 KB/320 KB）**不允许进对话**。
 
 ## 查阅步骤
 
