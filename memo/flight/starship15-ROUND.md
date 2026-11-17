@@ -6,50 +6,53 @@
 
 ## 0. 本轮目标（只做这一件，不扩）
 
-**B · 实飞 `guide` v4 验收**：v3 参数（`MOV/RET` 9 s）+ v4 日志体系（每轮独立 CSV 名、每 10 行 flush、结尾 close）都已改完并干跑 PASS。
-验收：`MOV` / `RET` 末端 **≤0.5 m**、`HOLD` ≤0.15 m、`cosMin ≥0.99`、`slow = 0`。
-附带验收日志：跑完**不用退世界**就能在磁盘读到完整 CSV（close 生效）。
+**F · 云端平台「横躺 → 竖直」单段验证**（`flip.lua` v6 的 `flip back` 模式）：
+机体现在**横躺停靠在云端平台**（`cosVert≈0`、y≈212.5、没有塔、没有 fixture 电脑）。
+判据：`ch5/ch6` 本地脱落 → 锥角闭环把 θ 90→0 在 ≤3 s 内、峰值角速度 ≤1.4 rad/s、**不越过 170°**、
+随后 `ARREST` 把 vy 收住、`HOVER` 稳在 `capH`。
+做法：脱落（无通信）→ `DAMP` 泄残余转速 → `ctrlConeAtt(0)`（θ̇ 反馈 + 探测式方向锁）→ 差动 PD 接管竖直保持。
 
 ## 1. 只读清单（本轮最多三个；超了就不许动手，先问）
 
 1. 本卡 + `memo/flight/starship15-constants.md`
-2. `run/saves/New World/computercraft/computer/0/guide.lua` 的 `PHASES` 与 `ctrlGuide`
+2. `computer/0/flip.lua` 的 `ctrlConeAtt` / `main` 的 `MODE == "back"` 分支
    —— 先 `grep -n` 找锚点再 `read offset/limit ≤80 行`，禁止整篇读
-3. 数据一律走 `tools/digest_csv.ps1`，**原始 CSV 不进对话**
+3. 数据：`run/flight_logs/*.csv` **只走** `tools/digest_csv.ps1`（大文件必须给 `-T0/-T1`）
 
-## 2. 上轮结论（§23.7 v2 实飞 / §23.8 落盘条件）
+## 2. 上轮结论（§28/§29 + 本轮 §30）
 
-- 稳态很好：`HP1` err 0.03 m、`HOLD` err 0.03 m、`cosMin` 0.996、`slow=0`、x 摆幅 7 mm（**无抖动**）
-- **末端不达标**：`MOV` 0.84 m、`RET` 0.84 m（判据 0.5）；但规律是「5 s→1.19、7 s→0.84」**与时长线性相关**
-- **落盘条件已锁死**：CC:T 写句柄只有 `close()`（或电脑关机/存档）才推到主机磁盘，`flush()` 不够
-  ⇒ 以前「测完发现记录是空的」= 程序从来没 close（旧项目 `flip-autopilot` 的 `finish()` 是 close 的，所以它能测完直接读）
-- 安全：只在 **−Z** 活动（**+Z 是塔/平台**，见 §22）；落地停在 y≈69（地面 63 + 机体长度）正常，摔不坏
+- **锥角 = 主姿态执行器**：满偏 + 满推力 **α≈2.5 rad/s²**、峰值 7.30 rad/s、90° 只要 ~1.2 s / 55 m（差动 0.33 的 7~8 倍）。
+- **开环定角必滚圈**（实测 2 圈+）⇒ 必须闭环；**锥角与差动不能同刻并联**（满推力 `room=0`，见 constants §3 末）。
+- `flip` 完整剖面在云端平台**不可用**：v5 第一行预检就 `!! fixture unreachable` 直接 return（02:02 那次喷口没动）；
+  v6 已把夹具改为可选 + 新增 `back` 模式（横躺停机起步）。
 
 ## 3. 本轮改动（改完填，3~5 行，一行一条）
 
-- [x] `-- VER v4 @2026-11-17  CHANGELOG: ...`（v3: `MOV/RET dur 7.0 -> 9.0`；v4: 日志体系）
-- [x] CSV 文件名改 **`/log/guide_<epoch>.csv`**（每轮独立，不再覆盖上一轮）
-- [x] `csvRow` 每 10 行 `CSVH.flush()`
-- [x] 结尾写 `=== finished: guide v4 ... rows=N ===` 后 **close `CSVH` + `fileH`**
-- [x] 干跑：`MOV/RET` 末端 0.41 m、PASS、`slow=0`；`CSV /log/guide_1794911300050.csv`、`FILES … closed` 正常
-- [x] v2 实飞数据已归档 `run/saves/New World/cc_logs_archive/2026-11-17_guide_v2/`
+- [x] `flip.lua` **v6**：夹具预检改为**可选**（`ping` 不通就只做本地 `ch5/ch6` 脱落，不再 abort）
+- [x] `flip.lua` **v6**：新增 **`MODE == "back"`** 分支 —— 跳过 FALL/CLIMB/FLIP1/HOLD，直接 DAMP→FLIPBACK→ARREST→HOVER，
+      `capH = max(floorH+20, h0−40)`；桩内 `VERDICT PASS` 跑通
+- [x] 常数补记「锥角+差动分时分工」；catch §30
+- [ ] 上机 `computer/0` → **`flip back`**，测完归档 `cc_logs_archive/<日期>_flipback_v6/`
 
-## 4. 交给你（两步，**不用抄屏幕、不用退世界**）
+## 4. 交给你（两步）
 
-1. `computer/1` 确认 `fixture` 在跑 → `computer/0` 执行 `guide`
-2. 等它跑完（约 45 s，屏幕上出现 `FILES  csv + status closed`）→ 回我一句「好了」
+1. 机体**横躺**停在云端平台（`ch5/ch6` 上电即可；`fixture` 不需要，也不要有塔）
+2. `computer/0` 执行 **`flip`**（**不要加 `back`** —— v7 按起始姿态自动判定；参数在本世界不可靠，见 §31）
 
-我直接从磁盘读**最新的** `computer/0/log/guide_<epoch>.csv` + `status_guide.txt`（digest ≤30 行）。
-现在有 close，跑完就能读；万一显示 `!! ERROR` / 崩了，请口述那一行。
+**预期**：`MODE back (start cosVert≈0)` → `DISK free=... KB` → `FIXTURE unreachable -- local release only`
+→ `RELEASE ch5/ch6` → `DAMP` → `FLIPBACK theta 90→0`（~2~3 s、`tiltMax` 满 15°）→ `ARREST vy→0` → `HOVER`。
+**磁盘**：`/log` 满 1 MB 会 out of space（已做软着陆：<120 KB 自动跳过 CSV，只写 status）。
+上一轮日志已归档成 `cc_logs_archive/log.zip`（120 KB）。我直接从磁盘读 `/log/flip_<epoch>.csv` + `status_flip.txt`。
+**只有 `!! ERROR` / `!! ABORT` 才需要口述那一行。**
 
 ## 5. 每轮硬规矩
 
 | # | 规矩 |
 |---|---|
-| 1 | 原始 CSV / 原始长日志**不进对话**；只吃 digest 输出（≤30 行） |
-| 2 | 改 Lua 用 `edit` 局部替换，**禁止整篇 write 重写**；改完先 `lua54 .tmp_luatest/harness.lua <程序> 0.08` 干跑，输出取末 15 行 |
-| 3 | 程序头必须有 `-- VER vN @date  CHANGELOG:...`；旧版本存 `computer/0/ver/xxx_vN.lua`（v1 已存；v2/v3 与 v4 只差参数与日志） |
+| 1 | 原始 CSV / 原始长日志**不进对话**；只吃 digest 输出（≤30 行）或定向流式抽样 |
+| 2 | 改 Lua 用 `edit` 局部替换，**禁止整篇 write 重写**；新文件除外；改完必跑干跑 |
+| 3 | 程序头必须有 `-- VER vN @date  CHANGELOG:...`；旧版本存 `computer/0/ver/xxx_vN.lua` |
 | 4 | 每轮收尾三件事：memo 只追加 ≤15 行增量 §N（不重复旧结论）｜覆写本卡｜`handover.md` 只改"状态表"那一行 |
 | 5 | 常数只认 `starship15-constants.md`；新数实测到了就改那一行，别在 memo 其它地方复制 |
 | 6 | 开工先报"本轮读哪几个文件"，没报不许动手；每轮工具调用预算 ≈3 次定位 + 1 次改 + 1 次干跑 |
-| 7 | 日志三条铁律：**结尾必须 close**（否则主机磁盘上是 0 字节）｜**每轮独立文件名**｜**测完立刻归档到 `cc_logs_archive/`**；磁盘上限 1 MB、主机侧删文件无效（用游戏内 `fs.delete`） |
+| 7 | 日志三条铁律：**结尾必须 close**（否则磁盘上是 0 字节）｜**每轮独立文件名**｜**测完立刻归档到 `cc_logs_archive/`**；磁盘上限 1 MB、主机侧删文件无效 |

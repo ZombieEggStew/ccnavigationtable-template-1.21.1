@@ -19,6 +19,8 @@ local S = {
   lx = 0, lz = 0,                    -- world x/z drift
   vx = 0, vz = 0,
   scales = {}, tgt = {},
+  chOut = {},                        -- redstone-linker output levels (ch -> 0..15)
+  dir = { x = 0, y = 0 },            -- nozzle cone joystick (last written) -- v5
   throttle = 0,
   frozen = false,
 }
@@ -63,13 +65,34 @@ local function physicsStep(dt)
   local p = pressureAt(S.y)
   local rpm = 256.0 * S.throttle
   local acc = 0.0
-  for _, ch in ipairs(FIRING) do acc = acc + (S.scales[ch] or 0) * PN * rpm * p / MASS end
+  local thrFrac = 0.0
+  for _, ch in ipairs(FIRING) do
+    acc = acc + (S.scales[ch] or 0) * PN * rpm * p / MASS
+    thrFrac = thrFrac + (S.scales[ch] or 0)
+  end
+  thrFrac = thrFrac / #FIRING
+  -- v5: CONE DEFLECTION (measured 2026-11-18): tilt length 0..1 => 0..15 deg cone,
+  -- torque about body X at alpha ~2.0 rad/s^2 for ch1..4 at full thrust, sign as
+  -- measured (y = -1 reduces theta), AND the plume itself rotates by that tilt
+  -- (so a belly-flop body gets a sin(15)=0.26 vertical thrust share).
+  local dx, dy = S.dir.x or 0, S.dir.y or 0
+  local tiltFrac = math.sqrt(dx*dx + dy*dy)
+  if tiltFrac > 1.0 then dx, dy, tiltFrac = dx / tiltFrac, dy / tiltFrac, 1.0 end
+  local tiltRad = math.rad(15.0) * tiltFrac
+  local ux, uy = 0, 0
+  if tiltFrac > 1e-9 then ux, uy = dx / tiltFrac, dy / tiltFrac end
   local up = upVec()
-  S.vy = S.vy + (acc * up[2] - G) * dt
+  local bx = qrot(S.q, { 1, 0, 0 })
+  local bz = qrot(S.q, { 0, 0, 1 })
+  local ct, stt = math.cos(tiltRad), math.sin(tiltRad)
+  local px = up[1]*ct + (bx[1]*ux + bz[1]*uy)*stt
+  local py = up[2]*ct + (bx[2]*ux + bz[2]*uy)*stt
+  local pz = up[3]*ct + (bx[3]*ux + bz[3]*uy)*stt
+  S.vy = S.vy + (acc * py - G) * dt
   S.y = S.y + S.vy * dt
   -- lateral from the tilted thrust
-  S.vx = S.vx + acc * up[1] * dt
-  S.vz = S.vz + acc * up[3] * dt
+  S.vx = S.vx + acc * px * dt
+  S.vz = S.vz + acc * pz * dt
   S.lx = S.lx + S.vx * dt
   S.lz = S.lz + S.vz * dt
   -- torque: differentials, alpha = 1.0 rad/s^2 per unit D (att v2, signs as measured)
@@ -77,7 +100,7 @@ local function physicsStep(dt)
   local s2, s4 = S.scales[2] or 0, S.scales[4] or 0
   local da = (s1 - s3) * 0.5
   local db = (s2 - s4) * 0.5
-  S.wx = S.wx + (-1.0 * da) * dt
+  S.wx = S.wx + (-1.0 * da + 2.0 * (-uy) * thrFrac * tiltRad / math.rad(15.0)) * dt
   S.wz = S.wz + ( 1.0 * db) * dt
   -- integrate orientation (body-frame rate -> small-angle multiply)
   local dq = { S.wx * dt * 0.5, 0, S.wz * dt * 0.5, 1.0 }
@@ -106,6 +129,7 @@ end
 fs = {
   exists = function(p) return true end,
   makeDir = function() end,
+  getFreeSpace = function(p) return 600000 end,
   open = function(p, m)
     if p == "/log/target.txt" and m == "r" then return mkFile(p) end
     if m == "w" then return mkFile(p) end
@@ -140,8 +164,17 @@ local function nozzle(ch)
     getMaxTilt = function() return 15 end,
     setThrustScale = function(v) S.tgt[ch] = math.max(0, math.min(1, v)) end,
     getThrustScale = function() return S.scales[ch] or 0 end,
-    setDirection = function(dx, dz) end,
-    getDirection = function() return 0, 0 end,
+    -- v5: the vector nozzle's joystick deflection (0..1 length = 0..15 deg cone).
+    -- Physics uses the LAST written value, like the real servo train.
+    setDirection = function(dx, dy)
+      S.dir.x = tonumber(dx) or 0
+      S.dir.y = tonumber(dy) or 0
+    end,
+    getDirection = function() return S.dir.x, S.dir.y end,
+    setDeflection = function(az, tilt)
+      S.dir.x = (tilt or 0) * math.cos(math.rad(az or 0))
+      S.dir.y = (tilt or 0) * math.sin(math.rad(az or 0))
+    end,
     setInverted = function(b) end,
   }
 end
@@ -166,6 +199,13 @@ package.preload["ccpe.sensor_system"] = function()
       local u = upVec()
       return { x = S.q[1], y = S.q[2], z = S.q[3], w = S.q[4] }
     end,
+    setRedstoneOutput = function(ch, lvl)
+      if S.frozen then return false end
+      S.chOut[ch] = math.max(0, math.min(15, tonumber(lvl) or 0))
+      return true
+    end,
+    getRedstoneOutput = function(ch) return S.chOut[ch] or 0 end,
+    getRedstoneInput = function(ch) return S.chOut[ch] or 0 end,
   }
 end
 
@@ -198,4 +238,21 @@ end
 for p, c in pairs(perPath) do print("  " .. p .. " : " .. c .. " lines") end
 print("---- CSV head ----")
 for i = 1, math.min(6, #LOGFILE) do print(tostring(LOGFILE[i].path) .. ": " .. tostring(LOGFILE[i].s)) end
+-- optional phase dump:  lua54 harness.lua <prog> [tau] [PHASE] [stride]
+local ph = arg[3]
+if ph then
+  local stride = tonumber(arg[4]) or 4
+  print("---- rows for phase " .. ph .. " (stride " .. stride .. ") ----")
+  local k, shown = 0, 0
+  for i = 1, #LOGFILE do
+    local s = tostring(LOGFILE[i].s)
+    if string.find(s, "^[^,]*," .. ph .. ",", 1) then
+      k = k + 1
+      if (k - 1) % stride == 0 and shown < 24 then
+        print(s); shown = shown + 1
+      end
+    end
+  end
+  print("---- " .. ph .. " rows: " .. k .. " ----")
+end
 os.exit(ok and 0 or 1)
