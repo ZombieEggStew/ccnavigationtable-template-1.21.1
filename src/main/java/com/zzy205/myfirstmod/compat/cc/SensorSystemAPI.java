@@ -116,7 +116,7 @@ import java.util.UUID;
  * --  {type="pitot_tube",  pos={x,y,z}, pos_rel={x,y,z}, speed=..., air_speed=...},
  * --  {type="ins",         pos={x,y,z}, pos_rel={x,y,z}}, ...}
  * local sensor = ss.getPeripheral(1)    -- 本机物理体（含约束链）上频道 1 的设备外设（寻址模型，频道 = 目标设备地址；链接器 → 附着外设，控制台 → 控制台外设）
- * local e = ss.getEngine()              -- 机体（含约束链）上恰好一个模块化引擎时的 ccpe:engine 外设（0 或 ≥2 引擎 → nil；调用时解析，不缓存）
+ * local e = ss.getEngine()              -- 电脑所在单个物理体（不含约束链）上恰好一个模块化引擎时的 ccpe:engine 外设（0 或 ≥2 引擎 → nil；调用时解析，不缓存）
  * local desk = ss.getPeripheral(2)      -- 频道 2 被控制台占用 → 返回控制台外设（ccpe:control_desk）
  * print(ss.getRedstoneInput(2))         -- 目标链接器位置的红石输入
  * ss.setRedstoneOutput(2, 15)           -- 写目标链接器红石输出（相邻红石线随之响应）
@@ -1760,20 +1760,24 @@ public class SensorSystemAPI implements ILuaAPI {
     }
 
     /**
-     * 所在物理体（含约束链）上<b>恰好一个</b>模块化引擎时，返回该引擎的 CC:T 外设
-     * （{@code ccpe:engine}，外设挂在整条引擎的 controller 上，包裹任意引擎核心节得到同一实例）。
+     * 电脑所在<b>单个物理体</b>（Sable sub-level，<b>不含约束链</b>）上<b>恰好一个</b>模块化引擎时，
+     * 返回该引擎的 CC:T 外设（{@code ccpe:engine}，外设挂在整条引擎的 controller 上，包裹任意引擎核心节
+     * 得到同一实例）。
+     * <p>
+     * <b>作用域 = 单个物理体</b>：只认电脑自身所在的那个 sub-level。约束链上其它 sub-level（轴承连接的
+     * 另一段机体）上的引擎<b>不</b>参与判定——需要那边的引擎就在那段机体的电脑上调本方法。
      * <p>
      * <b>调用时解析</b>（{@code mainThread = true}）：由 {@link BodyEngineRegistry}（物理体作用域引擎
-     * 注册表）按当前约束链查询引擎组 → 当场从 controller BE 取外设实例。因此
+     * 注册表）按电脑所在 sub-level 的 UUID 查询引擎组 → 当场从 controller BE 取外设实例。因此
      * <ul>
      *   <li><b>不依赖</b> {@code peripheral.wrap(...)} 的外设网络可达性——引擎离电脑很远也能拿到；</li>
      *   <li><b>不缓存</b>外设引用：引擎拆解/重组/延长后自然返回 nil，不会拿到已失效的外设对象；</li>
-     *   <li>成本 = 链遍历 + 哈希查 + 一次 BE 解析，<b>无 plot 扫描、无每 tick 开销</b>
+     *   <li>成本 = 一次哈希查 + 一次 BE 解析，<b>无约束链遍历、无 plot 扫描、无每 tick 开销</b>
      *       （引擎只在 onLoad / 组网 / invalidate 各登记或注销一次，见 {@link BodyEngineRegistry}）。</li>
      * </ul>
      * 脚本通常在开头调用一次、把返回值存进局部变量反复使用（每次调用都要过一次主线程）。
      * <p>
-     * <b>语义（保守）</b>：不在物理体上 / 机体上没有引擎 / 机体上有 ≥2 个引擎（歧义，如双发）→
+     * <b>语义（保守）</b>：不在物理体上 / 该物理体上没有引擎 / 该物理体上有 ≥2 个引擎（歧义，如双发）→
      * 返回 nil。多发机体请继续用 {@code peripheral.wrap(...)} 按外设名逐台控制。
      *
      * <pre>{@code
@@ -1781,13 +1785,13 @@ public class SensorSystemAPI implements ILuaAPI {
      * if e then e:setThrottle(0.6) end
      * }</pre>
      *
-     * @return 该引擎的 {@code ccpe:engine} 外设；不满足「恰好一个引擎」时返回 nil
+     * @return 该引擎的 {@code ccpe:engine} 外设；不满足「单个物理体上恰好一个引擎」时返回 nil
      */
     @LuaFunction(mainThread = true)
     public final @Nullable IPeripheral getEngine() {
         SubLevel sub = resolveSubLevel();
         if (sub == null) return null;
-        EngineCoreBlockEntity controller = BodyEngineRegistry.singleEngineControllerOnChain(chainUuidsOf(sub));
+        EngineCoreBlockEntity controller = BodyEngineRegistry.singleEngineController(SableCompat.getSubLevelUUID(sub));
         return controller != null ? controller.getPeripheral() : null;
     }
 

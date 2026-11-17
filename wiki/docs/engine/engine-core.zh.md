@@ -78,6 +78,6 @@ e.setThrottle(0.5)         -- 50% 油门 = 128rpm（应力容量不变）
 print(e.getLoad())         -- 负载 0..1：网络的已用应力 / 可提供容量
 ```
 
-电脑装在物理体（Sable sub-level）上时，还可以跳过 `peripheral.wrap`，用 `ccpe.sensor_system` 的 `ss.getEngine()` 直接拿到同一外设（机体上恰好一个引擎才返回，多发机体返回 `nil`）——见 [Lua API 页面](lua-api.zh.md)。
+电脑装在物理体（Sable sub-level）上时，还可以跳过 `peripheral.wrap`，用 `ccpe.sensor_system` 的 `ss.getEngine()` 直接拿到同一外设（只看**电脑所在这一个物理体**——不含约束链——上恰好一个引擎才返回，那里多发或没有引擎返回 `nil`）——见 [Lua API 页面](lua-api.zh.md)。
 
 完整方法见 [Lua API 页面](lua-api.zh.md)。

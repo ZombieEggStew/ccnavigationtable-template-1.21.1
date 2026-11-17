@@ -12,11 +12,12 @@ local e = peripheral.wrap("front")
 
     ```lua
     local ss = require("ccpe.sensor_system")
-    local e = ss.getEngine()   -- exactly one engine on the body (constraint chain included) → its peripheral; otherwise nil
+    local e = ss.getEngine()   -- exactly one engine on the single body the computer sits on (constraint chain excluded) → its peripheral; otherwise nil
     ```
 
+    - **Scope = the one physics body the computer sits on** (a single Sable sub-level), **constraint chain excluded**: engines on other sub-levels of the chain (another segment linked by bearings) are neither counted nor returned — to drive the engine on that segment, call this from the computer on that segment.
     - **No peripheral-network reachability needed** — the engine can be any distance from the computer.
-    - **Only returns a peripheral when the body has exactly one engine**; no engine, or ≥2 engines (twin/multi-engine craft) → `nil`, so keep using `peripheral.wrap` / `peripheral.find` per engine there.
+    - **Only returns a peripheral when that body has exactly one engine**; no engine there, or ≥2 engines (twin/multi-engine craft) → `nil`, so keep using `peripheral.wrap` / `peripheral.find` per engine there.
     - Resolved **at call time** (`mainThread = true`, one main-thread hop per call, at most 1 tick stale) and **no cached peripheral reference**: after the engine is broken/reformed/extended it returns `nil` instead of a stale object. Call it once at the top of your script and keep the result in a local.
 
 ## [Example — Temperature and Mixture Control](../examples/trainer_aircraft_2.md)

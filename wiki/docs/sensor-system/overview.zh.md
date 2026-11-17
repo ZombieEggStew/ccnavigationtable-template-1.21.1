@@ -50,7 +50,7 @@ local ss = require("ccpe.sensor_system")
 - **FMC** — `getPhysicsCenterOfMassRel()`、`getPhysicsMass()`、`getPhysicsChainMass()`、`getPhysicsGravityForce()`、`getPhysicsChainGravityForce()`、`getPhysicsChainCenterOfMassRel()`、`getStressRemaining()`、`getStressCapacity()`、`initPropeller(N, S)`、`getPropellerRPM(F, P, V, θ?)`、`getPressureFromAltitude(Y)`、`getAltitudeFromPressure(P)`、`solveSailLift(P, V, L?)`、`solveSailDirectionlessDrag(P, V, D?)`、`getUniversalDragForce(m, V)`、`solveMaxCruise(m, wingSails, symmetricSails, propellerCount, sailsPerPropeller, maxRpm)`
 - **短程信号链接器** — `getPeripheral(channel)`、`getRedstoneOutput(channel)`、`getRedstoneInput(channel)`、`setRedstoneOutput(channel, signal)`
 - **航行灯** — `setLights(color, on)`、`setAllLights(on)`
-- **模块化引擎**（`ccpe:engine`，引擎自身的外设）— `getEngine()`：所在物理体（含约束链）上**恰好一个**引擎时返回该引擎外设（`local e = ss.getEngine(); e:setThrottle(0.6)`）；不在物理体 / 无引擎 / **≥ 2 个引擎（歧义）** → `nil`。该方法**调用时解析**（`mainThread = true`，不依赖 `peripheral.wrap` 的外设网络可达性、不缓存外设引用），适合脚本开头取一次并存入局部变量；多发机体请继续用 `peripheral.wrap(...)` 逐台控制。
+- **模块化引擎**（`ccpe:engine`，引擎自身的外设）— `getEngine()`：电脑所在**单个物理体**（Sable sub-level，**不含约束链**）上**恰好一个**引擎时返回该引擎外设（`local e = ss.getEngine(); e:setThrottle(0.6)`）；不在物理体 / 该物理体无引擎 / 该物理体上 **≥ 2 个引擎（歧义）** → `nil`。约束链上其它 sub-level 的引擎不参与判定——要在那段机体上控制引擎，就在那段机体的电脑上调本方法。该方法**调用时解析**（`mainThread = true`，不依赖 `peripheral.wrap` 的外设网络可达性、不缓存外设引用），适合脚本开头取一次并存入局部变量；多发机体请继续用 `peripheral.wrap(...)` 逐台控制。
 
 ## 读数语义
 

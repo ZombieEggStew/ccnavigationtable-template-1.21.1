@@ -6,7 +6,6 @@ import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
@@ -22,12 +21,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code compat/cc/CCPeripheralCapabilities}，非 controller 节委托给整条引擎的 controller，
  * 见 {@link EngineCoreBlockEntity#getPeripheral()}）。
  * <p>
+ * <b>作用域 = 单个物理体（一个 Sable sub-level），不含约束链</b>：查询只看电脑所在那个 sub-level 的
+ * 引擎节，链上其它 sub-level 的引擎<b>不</b>参与判定（链上的引擎由那边自己的电脑取）。
+ * <p>
  * <b>成本模型（刻意做成最轻）</b>：
  * <ul>
  *   <li>写入只在方块生命周期事件发生：BE {@code onLoad} / 放置组网后 {@code updateConnectivity} /
  *       {@code setRemoved} —— <b>不每 tick 刷新</b>（与 {@link BodySensorRegistry} 的传感器不同，后者
  *       每 tick 被 {@code update()} 聚合）；</li>
- *   <li>查询 = 遍历所在物理体约束链的 UUID 集合 + 哈希表查找，<b>无 plot 包围盒扫描</b>；
+ *   <li>查询 = 一次哈希查找（子次元 UUID → 引擎节集合），<b>无约束链遍历、无 plot 包围盒扫描</b>；
  *       由 {@code ss.getEngine()}（{@code mainThread = true}）在调用时执行，脚本通常只调一次；</li>
  *   <li>登记所有核心节（含非 controller），查询时按 {@link EngineCoreBlockEntity#getControllerBE()}
  *       去重成「引擎组」，所以 controller 易主/延长不需要重登记。</li>
@@ -75,25 +77,26 @@ public final class BodyEngineRegistry {
     // ═══════════════ 查询 ═══════════════
 
     /**
-     * 给定物理体链内<b>恰好一个</b>引擎组时返回其 controller 的 BE；0 个或 ≥2 个（歧义）返回 null。
+     * 给定物理体（<b>单个</b> sub-level，不含约束链）内<b>恰好一个</b>引擎组时返回其 controller 的 BE；
+     * 0 个或 ≥2 个（歧义）返回 null。
      * <p>
      * 语义刻意保守：双发 / 多发机体上返回 null（宁可让脚本显式失败，也不静默把控制全推给某个引擎）。
-     * 链上引擎组数量按 controller BE 身份去重；未组网完成（controller 为 null）的孤立核心节
+     * 物理体内引擎组数量按 controller BE 身份去重；未组网完成（controller 为 null）的孤立核心节
      * 各自算作一个组，因此组网瞬态期间可能短暂返回 null，下一 tick 恢复。
+     *
+     * @param subLevelId 目标物理体（单个 sub-level）的 UUID；null 返回 null
      */
-    public static @Nullable EngineCoreBlockEntity singleEngineControllerOnChain(Collection<UUID> chainUuids) {
-        if (chainUuids == null || chainUuids.isEmpty()) return null;
+    public static @Nullable EngineCoreBlockEntity singleEngineController(@Nullable UUID subLevelId) {
+        if (subLevelId == null) return null;
+        Set<EngineCoreBlockEntity> set = ENGINES.get(subLevelId);
+        if (set == null || set.isEmpty()) return null;
         Set<EngineCoreBlockEntity> controllers = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (UUID id : chainUuids) {
-            Set<EngineCoreBlockEntity> set = ENGINES.get(id);
-            if (set == null) continue;
-            for (EngineCoreBlockEntity core : set) {
-                if (core == null || core.isRemoved()) continue;
-                EngineCoreBlockEntity controller = core.getControllerBE();
-                if (controller == null || controller.isRemoved()) continue;
-                controllers.add(controller);
-                if (controllers.size() > 1) return null;   // 多个引擎组 → 歧义
-            }
+        for (EngineCoreBlockEntity core : set) {
+            if (core == null || core.isRemoved()) continue;
+            EngineCoreBlockEntity controller = core.getControllerBE();
+            if (controller == null || controller.isRemoved()) continue;
+            controllers.add(controller);
+            if (controllers.size() > 1) return null;   // 多个引擎组 → 歧义
         }
         return controllers.size() == 1 ? controllers.iterator().next() : null;
     }

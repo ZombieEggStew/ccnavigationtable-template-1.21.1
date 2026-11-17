@@ -78,6 +78,6 @@ e.setThrottle(0.5)         -- 50% throttle = 128 rpm (stress capacity unchanged)
 print(e.getLoad())         -- load 0..1: stress used / capacity available
 ```
 
-When the computer sits on a physics body (Sable sub-level) you can skip `peripheral.wrap` and grab the same peripheral with `ss.getEngine()` from `ccpe.sensor_system` (it returns it only when the body has exactly one engine, `nil` on multi-engine craft) — see the [Lua API page](lua-api.md).
+When the computer sits on a physics body (Sable sub-level) you can skip `peripheral.wrap` and grab the same peripheral with `ss.getEngine()` from `ccpe.sensor_system` (it returns it only when the **single body the computer sits on** — constraint chain excluded — has exactly one engine, `nil` when that body has none or several) — see the [Lua API page](lua-api.md).
 
 See the [Lua API page](lua-api.md) for the full method reference.
