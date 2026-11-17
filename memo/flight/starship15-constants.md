@@ -90,7 +90,7 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | `cal1.lua` | 0 | ✅ 已跑（§16），竖直通道标定 | v5 |
 | `att.lua` | 0 | ✅ 已跑并闭合（§20），力矩通道 | v2 |
 | `tilt.lua` | 0 | ✅ PASS（§21），姿态 PD ±6°/±9° | 待补 |
-| `guide.lua` | 0 | 🔶 v3 = v2 + `MOV/RET dur 9 s`，**待实跑验收** | v3 |
+| `guide.lua` | 0 | 🔶 v4 = v3 参数 + 日志体系修复（`/log/guide_<epoch>.csv`、每 10 行 flush、结尾 close），**待实跑验收** | v4 |
 | `starship.lua` | 0 | ❌ 旧版缺姿态环，待按 §20/§21/§23 重写 | v1(旧) |
 | `fixture.lua` | 1 | ✅ 命令端：`fixture` 常驻 / `status` / `release` / `clamp` / `arms <deg>` / `open` / `close` | 待补 |
 

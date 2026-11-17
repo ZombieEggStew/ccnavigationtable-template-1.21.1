@@ -17,7 +17,7 @@
 | 竖直（定高/剖面） | `cal1` §16 | ✅ PASS | `A_REF=4 / A_BRK_MAX=5 / KV=6` 可用，定高 h ±0.06 m |
 | 力矩通道标定 | `att` v2 §20 | ✅ 闭合 | pairA→body X（负）、pairB→body Z（正）、`α=1.0 rad/s²/单位D`、`I≈15.9 kg·m²`、力臂≈1.0 m |
 | 姿态环（四元数 PD） | `tilt` §21 | ✅ PASS | KP=3.0 KD=2.5；±6°/±9° 阶跃误差 ≤0.8°；被撞后 1.5 s 恢复 cos 1.00 |
-| 横向环（位置+速度） | `guide` v3 §23 | 🔶 v2 实飞 PASS / 末端 0.84 m 未达标 ⇒ v3 待实跑 | 悬停 0.03 m、`cosMin` 0.996、`slow=0`、末端无抖动；末端 err 5 s→1.19、7 s→0.84（**时长线性相关**） |
+| 横向环（位置+速度） | `guide` v4 §23 | 🔶 v2 实飞 PASS / 末端 0.84 m 未达标 ⇒ v4 待实跑 | v3 加时长（干跑 0.41）+ 日志体系修好（close 落盘、CSV 每轮独立文件名、已归档）；悬停 0.03 m、`cosMin` 0.996、无抖动 |
 | 大角度翻转 0→90→115→90 | — | ❌ **未做** | 下一步 |
 | 任务集成 + 夹取 | `starship.lua` | ❌ 旧版缺姿态环，需按 §20/§21/§23 重写 | 再下一步 |
 
@@ -90,7 +90,7 @@ theta   = atan(|aDes|/G) ≤18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | `cal1.lua` | `cal1` / `cal1 zero` | 释放→落体→满推力脉冲→定高悬停→锥角探针 | `/log/cal1.csv` | ✅ 已跑（§16） |
 | `att.lua` | `att` / `att zero` | 悬停工作点上的正反差动对 + 开环回正 | `/log/att.csv` | ✅ 已跑（§20） |
 | `tilt.lua` | `tilt` / `tilt zero` | 姿态 PD 跟踪 ±6°/±9° 倾角阶跃 | `/log/tilt.csv` | ✅ 已跑（§21） |
-| `guide.lua` | `guide` / `guide zero` | 横向闭环：悬停保持 + 沿 −Z 平移 6 m 再回来 | `/log/guide.csv` | 🔶 v3（`MOV/RET` 9 s），待实跑 |
+| `guide.lua` | `guide` / `guide zero` | 横向闭环：悬停保持 + 沿 −Z 平移 6 m 再回来 | `/log/guide_<epoch>.csv` | 🔶 v4，待实跑 |
 | `starship.lua` | `starship` | 任务程序（**旧版，缺姿态环**） | `/log/starship.csv` | ❌ 待重写 |
 | `fixture.lua`（在 `computer/1`） | `fixture` 常驻；`status`/`release`/`clamp`/`arms <deg>`/`open`/`close` | 夹具命令端 | `/log/fixture_1.txt` | ✅ 可用 |
 
@@ -164,7 +164,7 @@ tools/digest_csv.ps1   把 50 KB~60 MB 的 CSV 压成 ≤30 行看板
 | 横向环增益按"位置误差"直接给大 | 倾角爬升慢 ⇒ 速度超调、过冲数米 | `LAT_KP≈0.3 / LAT_VMAX≤1.5 / LAT_AMAX≤2.0` |
 | 开环 ±对称倾斜当"居中测试" | 每步 1.5 s 爬坡 ⇒ 横向冲量不对称，净漂 5~9 m | 一律走**速度闭环**给倾角 |
 | 悬停高度设在平台/塔附近 | 实测在 z≈+6 撞平台（ω 被踹 0.2 rad/s） | 只在 −Z 活动；`capH` 用 −8（y≈85） |
-| 看 `computer/<id>/log/*` 是 0 字节就判"没写" | 游戏运行时那只是**内存镜像**，磁盘副本滞后到退出世界才落盘（`fsprobe` 实测 A~E 全 `wr=Y`，`pcall(fs.open, …, "w")` 也正常 ⇒ 旧结论「pcall 恒 nil」已推翻） | 先「保存并退到标题」再看；游戏内查用 `fs.getSize(path)` |
+| 看 `computer/<id>/log/*` 是 0 字节就判"没写" | **只有 `close()`（或电脑关机/存档）才把写句柄推到主机磁盘**，`flush()` 不够（§23.8）；`pcall(fs.open, …, "w")` 实测正常 ⇒ 旧结论「pcall 恒 nil」已推翻 | 程序结尾必须 close；CSV 用带 epoch 的文件名；测完立刻复制到 `cc_logs_archive/` |
 | 忘了电脑磁盘有上限 | `cap=1,000,000`、`free=581,811`；一次 `guide` 就吃 78 KB，撞满后 `fs.open("w")` 会返回 nil | 实跑前清掉 `/log` 里不要的 csv |
 | CSV 相位名带逗号（`A(1,3)+`） | 整行错位，解析全崩 | `ph:gsub(",","")` |
 | 顺序写红石 / connector | 释放瞬间倾斜 → 推力侧漏 → 漂移翻车 | 全部塞进**同一个** `parallel` 块 |

@@ -1287,3 +1287,14 @@ tilt≈6° 时： propF(机体系) = (|Fh|=0.00, Fv=11.15≈G) ，pitchDeg=−5.
 - 另：电脑磁盘 **cap=1,000,000 / free=581,811**；一次 `guide` 吃 78 KB，别把上限撞死
 
 v3 改动：`MOV/RET dur 7.0 → 9.0`（干跑末端 0.67→**0.41**，PASS）。
+
+### 23.8 落盘条件锁定 + 日志体系对齐旧项目（`flip-autopilot`）
+
+- **锁死结论**：CC:T 的写句柄**只有 `close()`（或电脑关机/存档）才推到主机磁盘**，`flush()` 不够。
+  §23.7 那次「运行时 0 字节、退出后 77,975 字节」就是这个条件；`fsprobe` 里 A~E 能立刻在磁盘看到，正因为它们都 close 了。
+- 旧项目做法（`flip-autopilot.md` L1341/L3614/L877/L1751/L1763）：status 镜像每 print flush ｜ **每轮 CSV 文件名带后缀**（防覆盖）｜
+  **测完立刻主机侧复制归档**到 `cc_logs_archive/<日期>/` ｜磁盘 1 MB 上限 + `usedSpace` 是缓存（主机侧删文件无效，要游戏内 `fs.delete` 或重载世界）。
+  它同样有「尾部丢行 ~14 行未定位」——就是没 close 的同类症状。
+- **v4 移植**：csv 名改 `/log/guide_<epoch>.csv`（每轮独立）＋ 每 10 行 `flush` ＋ 结尾写 `=== finished … rows=N ===` 后 **close 两个句柄**。
+- 本轮数据已归档：`run/saves/New World/cc_logs_archive/2026-11-17_guide_v2/`
+  （`guide.csv` 77,975 B、`status_guide.txt`、`fsprobe_report.txt`、`guide_v4_snapshot.lua`、`guide_v1.lua`、`fsprobe.lua`）。
