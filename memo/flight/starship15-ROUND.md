@@ -6,39 +6,40 @@
 
 ## 0. 本轮目标（只做这一件，不扩）
 
-**A · `guide.lua` 参数收尾**：`MOV` 5 s → 7 s、`LAT_VMAX` 1.5 → 1.2、末端死区 0.05 → 0.08 m。
-验收：`MOV` / `RET` 末端 ≤ 0.5 m，`HOLD` ≤ 0.15 m，`cosMin ≥ 0.99`，`slow = 0`。
+**B · 实跑 `guide` v2 验收**：参数已改完并干跑通过（§23.6），现在**只等实机一次飞行**。
+验收：`MOV` / `RET` 末端 ≤ 0.5 m，`HOLD` ≤ 0.15 m，`cosMin ≥ 0.99`，`slow = 0`，
+且末端**不许出现 ±10 cm 抖动**（死区收紧的已知风险）。
 
 ## 1. 只读清单（本轮最多三个；超了就不许动手，先问）
 
 1. 本卡 + `memo/flight/starship15-constants.md`
-2. `run/saves/New World/computercraft/computer/0/guide.lua`
-   —— **先 `grep -n` 找函数锚点，再 `read offset/limit` ≤80 行**，禁止整篇读
+2. `run/saves/New World/computercraft/computer/0/guide.lua` 的
+   `CFG`(55~95) / `ctrlGuide`(336~366) / 相位统计(516~556) 三块
+   —— 先 `grep -n` 找锚点再 `read offset/limit ≤80 行`，禁止整篇读
 3. 数据一律走 `tools/digest_csv.ps1`，**原始 CSV 不进对话**
 
-## 2. 上轮结论（§23.5，已跑，VERDICT CHECK）
+## 2. 上轮结论（§23.5 实跑 CHECK + §23.6 v2 改动，已干跑）
 
-- 稳态没问题：`HP1` err 0.02 → 0.02 m、`|vh|max` 0.01、`cosMin` 1.000、`u` 0.350
-- 平移装不下：`MOV` 6 m 用 5 s，末端 err 1.06 m、`|vh|max` 1.75、tiltMax 7.8°
-  ⇒ **是时长不够 + VMAX 太高**，不是增益不够
-- 回程同理：`RET` 末端 0.925 m；`HP3` 0.505 m 压线
-- 姿态权限够用：tilt 只用到 7.8°，离 18° 上限还有余量
+- 稳态没问题：`HP1` err 0.02 m、`cosMin` 1.000、`u` 0.350 ⇒ 竖直/姿态通道可信
+- 上一轮三个问题都判过：MOV 5 s 装不下 6 m（不是增益不够）／VMAX 1.5 造成 16% 超调／
+  `DB_POS` 0.20 让末端停在 0.11 m。v2 对应改了时长 7 s、VMAX 1.2、`DB_POS` 0.08、末端闸 `am` 0.08
+- 干跑 v2：`MOV final 0.67 / RET final 0.66 / cosMin 0.996 / slow=0` PASS；
+  `DB_POS` 0.20 vs 0.08 干跑输出**逐行相同**（死区在桩世界里从不触发）⇒ 实跑重点看末端抖动
 - 安全：只在 **−Z** 活动（**+Z 是塔/平台，悬停高度上去必撞**，见 §22）
 
 ## 3. 本轮改动（改完填，3~5 行，一行一条）
 
-- [ ] …
+- [x] `guide.lua` 头部加 `-- VER v2 @2026-11-17  CHANGELOG:...`，v1 冻结到 `computer/0/ver/guide_v1.lua`
+- [x] `PHASES`：`MOV` / `RET` `dur` 5.0 → **7.0** s
+- [x] `CFG.LAT_VMAX` 1.50 → **1.20** m/s
+- [x] `CFG.DB_POS` 0.20 → **0.08** m
+- [x] `ctrlGuide` 末端倾角闸 `am > 0.05` → **`am > 0.08`** m/s²
 
 ## 4. 交给你（只做两步）
 
 1. `computer/1` 确认 `fixture` 在跑 → `computer/0` 执行 `guide`
-2. 回报（**只这一条模板**）：
+2. 回报
 
-```
-RUN: guide v<N> @HH:MM  ok|crash
-<paste status_guide.txt 全文，约 18 行>
-备注: <一句人话，如"途中撞了平台">
-```
 
 CSV **不用贴** —— 我跑 `powershell -File tools/digest_csv.ps1 "...\log\guide.csv"` 自己取数。
 

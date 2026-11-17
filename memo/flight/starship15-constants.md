@@ -48,10 +48,10 @@ room = min(0.33, u-0.02, 1-u)
 ch0=0；ch1=u+D_A  ch3=u-D_A；ch2=u+D_B  ch4=u-D_B   ← 每对和为 2u，净竖直推力不变
 
 -- 横向（位置 → 速度 → 加速度 → 倾角）
-vTarget = clamp(LAT_KP*posErr, ±LAT_VMAX)            LAT_KP=0.30  LAT_VMAX=1.5（收尾后 1.2）
+vTarget = clamp(LAT_KP*posErr, ±LAT_VMAX)            LAT_KP=0.30  LAT_VMAX=1.2（v2 收尾，v1 是 1.5）
 aDes    = clamp(LAT_KV*(vTarget-vHoriz), ±LAT_AMAX)  LAT_KV=1.00  LAT_AMAX=2.0
 theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
-死区 |posErr| < 0.20 m 且 |vh| < 0.08 ⇒ 不给倾角（末端对接用 0.08）
+死区 |posErr| < 0.08 m（v2，v1 是 0.20）且 |vh| < 0.08 m/s ⇒ 不给倾角；|aDes| < 0.08 m/s² 也不给倾角
 ```
 
 **三条硬道理（都是撞出来的）**
@@ -89,7 +89,7 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | `cal1.lua` | 0 | ✅ 已跑（§16），竖直通道标定 | v5 |
 | `att.lua` | 0 | ✅ 已跑并闭合（§20），力矩通道 | v2 |
 | `tilt.lua` | 0 | ✅ PASS（§21），姿态 PD ±6°/±9° | 待补 |
-| `guide.lua` | 0 | ⚠️ 结构 OK / 参数待收（§23.5） | 待补 |
+| `guide.lua` | 0 | 🔶 v2 参数已收尾（§23.6），**待实跑验收** | v2 |
 | `starship.lua` | 0 | ❌ 旧版缺姿态环，待按 §20/§21/§23 重写 | v1(旧) |
 | `fixture.lua` | 1 | ✅ 命令端：`fixture` 常驻 / `status` / `release` / `clamp` / `arms <deg>` / `open` / `close` | 待补 |
 

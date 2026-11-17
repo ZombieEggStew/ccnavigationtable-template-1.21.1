@@ -17,7 +17,7 @@
 | 竖直（定高/剖面） | `cal1` §16 | ✅ PASS | `A_REF=4 / A_BRK_MAX=5 / KV=6` 可用，定高 h ±0.06 m |
 | 力矩通道标定 | `att` v2 §20 | ✅ 闭合 | pairA→body X（负）、pairB→body Z（正）、`α=1.0 rad/s²/单位D`、`I≈15.9 kg·m²`、力臂≈1.0 m |
 | 姿态环（四元数 PD） | `tilt` §21 | ✅ PASS | KP=3.0 KD=2.5；±6°/±9° 阶跃误差 ≤0.8°；被撞后 1.5 s 恢复 cos 1.00 |
-| 横向环（位置+速度） | `guide` §23 | ⚠️ 结构 OK / 参数待收 | 悬停保持 0.02 m、末端 0.11 m；MOV 5 s 装不下 6 m、速度超调 16% |
+| 横向环（位置+速度） | `guide` v2 §23 | 🔶 参数已收尾 / **待实跑验收** | 三处改完（`MOV/RET` 7 s、`VMAX` 1.2、`DB_POS` 0.08）+ 干跑 PASS；v1 实跑末端 0.11~1.19 m |
 | 大角度翻转 0→90→115→90 | — | ❌ **未做** | 下一步 |
 | 任务集成 + 夹取 | `starship.lua` | ❌ 旧版缺姿态环，需按 §20/§21/§23 重写 | 再下一步 |
 
@@ -90,7 +90,7 @@ theta   = atan(|aDes|/G) ≤18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | `cal1.lua` | `cal1` / `cal1 zero` | 释放→落体→满推力脉冲→定高悬停→锥角探针 | `/log/cal1.csv` | ✅ 已跑（§16） |
 | `att.lua` | `att` / `att zero` | 悬停工作点上的正反差动对 + 开环回正 | `/log/att.csv` | ✅ 已跑（§20） |
 | `tilt.lua` | `tilt` / `tilt zero` | 姿态 PD 跟踪 ±6°/±9° 倾角阶跃 | `/log/tilt.csv` | ✅ 已跑（§21） |
-| `guide.lua` | `guide` / `guide zero` | 横向闭环：悬停保持 + 沿 −Z 平移 6 m 再回来 | `/log/guide.csv` | ⚠️ 已跑（§23.5，参数待收） |
+| `guide.lua` | `guide` / `guide zero` | 横向闭环：悬停保持 + 沿 −Z 平移 6 m 再回来 | `/log/guide.csv` | 🔶 v2 参数已收尾（§23.6），待实跑 |
 | `starship.lua` | `starship` | 任务程序（**旧版，缺姿态环**） | `/log/starship.csv` | ❌ 待重写 |
 | `fixture.lua`（在 `computer/1`） | `fixture` 常驻；`status`/`release`/`clamp`/`arms <deg>`/`open`/`close` | 夹具命令端 | `/log/fixture_1.txt` | ✅ 可用 |
 
@@ -178,7 +178,8 @@ tools/digest_csv.ps1   把 50 KB~60 MB 的 CSV 压成 ≤30 行看板
 
 1. **大角度翻转**（0°→90°→115°→90°）：PD 只在小角度（±9°）验证过；90° 时 `cosVert≈0`，
    竖直通道必须关掉/降权，翻转靠倾角+差动；**掉高预算**：纯差动 4.3 s ⇒ 100 m（释放点到夹持点有 122 m，够用）。
-2. **横向环末端精度**：`DB_POS` 收到 0.08 m、`MOV` 时长 7 s、`LAT_VMAX` 1.2 —— 改完要再跑一遍 `guide` 确认。
+2. **横向环末端精度**：`DB_POS` 0.08 m、`MOV` 时长 7 s、`LAT_VMAX` 1.2 —— **代码已改完并干跑 PASS（§23.6），只差一次实跑**；
+   实跑重点看 `MOV/RET` 末端是否 ≤0.5 m，以及末端有无 ±10 cm 抖动（死区收紧的已知风险，坏就改回 0.20）。
 3. **跨相位衔接**：`starship.lua` 里 `FALL→FLIP→LAND→HOLD` 的切换判据（"越过目标高度"误判是已知缺陷 §18.3）。
 4. **夹取闭环**：`close` + 关推力验证是否真被夹住（代码在 `fixture.lua`，未联调）。
 5. **锥角精修**：现在锥角通道完全没用；`frameYawOff=180°` 已在 §16 复现三次，可用于 ±15° 精修。
@@ -191,7 +192,7 @@ tools/digest_csv.ps1   把 50 KB~60 MB 的 CSV 压成 ≤30 行看板
 
 | 步 | 做什么 | 验收标准 | 风险 |
 |---|---|---|---|
-| **A** | `guide` 参数收尾（MOV 7 s、VMAX 1.2、末端死区 0.08） | `MOV/RET` 末端 ≤0.5 m、`HOLD` ≤0.15 m | 低 |
+| **A** | `guide` 参数收尾（MOV 7 s、VMAX 1.2、末端死区 0.08） | `MOV/RET` 末端 ≤0.5 m、`HOLD` ≤0.15 m | 低 —— ✅ 改动完成，**待实跑** |
 | **B** | 新程序 `flip.lua`：**下落中**做 0→90° 翻转（集合推力按 cosVert 门控，抬起角速度用 PD） | 到达 90±5°、cosVert ≥0.95、掉高 ≤100 m、落地不死 | 中高（可能砸，但机体不坏） |
 | **C** | `flip.lua` 加 115° 过冲段（用倾斜消横向速度） | 横向速度被压到 ≤2 m/s、姿态回到 90° | 中 |
 | **D** | 重写 `starship.lua`：`FALL→FLIP→LAND（竖直剖面+横向环）→HOLD→CLOSE` | 悬停到 (11,95,0) ±0.5 m，`close` 后不坠 | 高 |
