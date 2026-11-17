@@ -453,7 +453,7 @@ local e = ss.getEngine()   -- ccpe.sensor_system；电脑所在单个物理体�
 if e then e:setThrottle(0.6) end
 ```
 - **门控语义（保守）**：电脑不在物理体上 / 该物理体上没有引擎 / 该物理体上有 **≥2 个引擎（歧义，如双发）** → `nil`；多发机体继续用 `peripheral.wrap` 按外设名逐台控制。
-- **作用域**：只认**电脑所在的那一个 sub-level**，不遍历约束链（链上其它 sub-level 的引擎不参与判定，需在那边机体的电脑上调本方法，详见 `memo/my_sensor_system.md` §`ss.getEngine()`）。
+- **作用域**：只认**电脑所在的那一个 sub-level**，不遍历约束链（链上其它 sub-level 的引擎不参与判定，需在那边机体的电脑上调本方法，详见 `memo/peripherals/my_sensor_system.md` §`ss.getEngine()`）。
 - **解析时机**：`mainThread = true`，**调用时解析**（不依赖 `peripheral.wrap` 的外设网络可达性——引擎离电脑很远也能拿；**不缓存**外设引用，引擎拆解/重组后自然返回 nil）。脚本在开头调一次、把返回值存局部变量即可。
 - **登记者**：`compat/cc/BodyEngineRegistry`（物理体作用域，Sable 子次元 UUID → engine_core 各节 BE）；引擎在 `onLoad` / 组网后 `updateConnectivity` / `invalidate()` 各登记/注销**一次**，**无每 tick 开销**、无 plot 扫描，查询 = 链遍历 + 哈希查 + 一次 BE 解析。
 

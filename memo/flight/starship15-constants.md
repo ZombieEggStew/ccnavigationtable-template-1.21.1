@@ -2,7 +2,7 @@
 
 > **规矩**：这里每个数都是实机实测过的。**不许重测、不许重推、不许在别处复制**；
 > 新的实测替代某个数时，**只改那一行**并注明日期。
-> 出处指 `memo/starship15-catch.md` 的章节号。
+> 出处指 `memo/flight/starship15-catch.md` 的章节号。
 
 ## 1. 物理常数（五次以上一致，别再测）
 
@@ -106,8 +106,8 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 
 ## 7. 相关经验文档（按需查，不要通读）
 
-- `memo/flip-autopilot.md`（320 KB，只做关键词检索）：落地剖面 / 四元数姿态环 / **写预算与 20 Hz 不变量** / COS_MIN 门控
-- `memo/advanced-thrust-nozzle.md`（58 KB）：喷管 Lua API 与推力模型
-- `memo/cc-rednet-communication.md`（10 KB）：跨电脑命令协议
-- `memo/my_aero_sensor.md`（12 KB）：INS 读数与门控
-- `memo/starship15-catch.md`（77 KB）：**归档**，按 §N 定向 grep
+- `memo/flight/flip-autopilot.md`（320 KB，只做关键词检索）：落地剖面 / 四元数姿态环 / **写预算与 20 Hz 不变量** / COS_MIN 门控
+- `memo/propulsion/advanced-thrust-nozzle.md`（58 KB）：喷管 Lua API 与推力模型
+- `memo/peripherals/cc-rednet-communication.md`（10 KB）：跨电脑命令协议
+- `memo/peripherals/my_aero_sensor.md`（12 KB）：INS 读数与门控
+- `memo/flight/starship15-catch.md`（77 KB）：**归档**，按 §N 定向 grep

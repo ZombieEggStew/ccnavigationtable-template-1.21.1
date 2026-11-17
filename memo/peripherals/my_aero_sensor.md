@@ -147,6 +147,6 @@ compass  = Y·Z·X          (applyCompass→applyPrimary→applySecondary, euler
       （**重心相对最后放置的 FMC 的方块中心**，机体局部系 plot 帧差值）、`getPhysicsMass()` /
       `getPhysicsChainMass()`（kg）、`getPhysicsGravityForce()` / `getPhysicsChainGravityForce()`
       （pN = 质量×11）。这些属于 `ccpe.sensor_system` 的物理读数族（门控 = 机体上有 ≥1 FMC），
-      详见 `memo/code-map.md`（`SensorSystemAPI` 行）与 `wiki/docs/sensor-system/fmc.zh.md`。
+      详见 `memo/project/code-map.md`（`SensorSystemAPI` 行）与 `wiki/docs/sensor-system/fmc.zh.md`。
 - Create 护目镜 tooltip 显示俯仰/滚转/航向读数。
 - 非自然维度指北行为开关（当前随机乱转）。

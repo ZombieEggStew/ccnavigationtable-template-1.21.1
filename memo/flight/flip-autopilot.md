@@ -51,7 +51,7 @@
 > 3. §1~§10 的常量多来自**旧构型**（旧 `create:nozzle`、火箭、无喷嘴角扇）⇒ **已作废**。
 >    当前有效数据集中在 §22 / §24 / §25 / §29~§43。
 >
-> 参考：推力模型 `memo/thrust-nozzle.md`；传感器 API `memo/my_sensor_system.md`；
+> 参考：推力模型 `memo/propulsion/thrust-nozzle.md`；传感器 API `memo/peripherals/my_sensor_system.md`；
 > 传感器源码 `compat/cc/SensorSystemAPI.java`。
 
 ## 0. 目标与验收指标
@@ -382,7 +382,7 @@ IDLE → STICK    喷嘴吸力闭环吸在 U 型弯（50% 基准 + 修正；用�
 | `compat/cc/SensorSystemAPI.java` | 各 Lua 方法的返回值、门控、`mainThread`、欧拉角算法（`computeAttitudeDeg`）与倒挂奇异保护 |
 | `block/TransmissionPeripheralBlockEntity.java` | `setTargetSpeed` 语义（±256、"负值=与输入反向"）与 `mainThread=true` |
 | `compat/cc/MonitorPeripheral.java`、`KnobModuleHandle.java` | 模块 ID 查询与旋钮读数语义 |
-| `memo/my_sensor_system.md`、`memo/my_aero_sensor.md` | 传感器系统设计背景 |
+| `memo/peripherals/my_sensor_system.md`、`memo/peripherals/my_aero_sensor.md` | 传感器系统设计背景 |
 | `references/create-propulsion-simulated-main` | 火箭推进系统设计参考 |
 
 ## 10. 下一步（按依赖顺序）
@@ -1770,7 +1770,7 @@ autopilot track          （可选：autopilot track 0.4 加长出赛道去抖�
 | `computer/3/tests.lua` | `id / sensor(prox) / probe / ramp / roll / drop / pair / brake8 / drive / side / rate3 / df / clean` |
 | `computer/3/autopilot.lua` | 上面那套 FSM，含 `track` 任务模式 |
 | `computer/3/startup.lua` | **用户维护**，手动驾驶（4 轮 + 2 竖直组 + 屏） |
-| `memo/flip-autopilot.md` | 本文档 |
+| `memo/flight/flip-autopilot.md` | 本文档 |
 
 ## 24. 侧向推进器 ch10~13（2026-11，用户实测方向）
 
@@ -2607,7 +2607,7 @@ attitudePD（已验证）：pCmd 与 ePitch 同号  =>  |ePitch| 变小（把车
 | `tests.lua` | 新增 `tests side lat|yaw|latyaw|fl|fr|bl|br [pct] [s]`（标定用，写 `/log/side_*.csv`）；`tests id` 改用缓存句柄读 ch10~13 |
 | `autopilot.lua` | 吸力自动调度 `STICK_SCHED` + 间隙闭环 `STICK_GAP_*` + 速度限制器 `SPEED_SCHED`；出赛道判据改为**距离饱和** `GAP_FAR=2.90`×0.25 s；STICK 30 s 硬超时 + 回地面安全阀；**方案2 预对齐** `PRE_*`；偏航率 `worldYawRate`（任意姿态）+ 低通 `YAW_LP` + 阻尼 `K_YAW=1.0`（仅 SETTLE/FLIP/RECOVER/BRAKE/FLARE/HOVER）；`FLIP_LEAD=0.18`、`FLIP_STOP_TOL=10°`；`[stick]`/`[yaw]` 诊断行 |
 | `startup.lua` | **只改了 4 行**：轮子 `throttle * -256` → `* +256`（结构改动导致反转） |
-| `memo/flip-autopilot.md` | 新增 §24.1~24.27（侧推方向、符号表、地面/空中标定、全段阻尼、自动吸力、出赛道判据、方案2 与两次修 bug） |
+| `memo/flight/flip-autopilot.md` | 新增 §24.1~24.27（侧推方向、符号表、地面/空中标定、全段阻尼、自动吸力、出赛道判据、方案2 与两次修 bug） |
 
 ### 25.4 本轮新实测常量（可直接用）
 
@@ -4179,7 +4179,7 @@ BRAKE(横向+航向) → FLARE → TOUCH
 | `.../computer/3/vtel.lua` | 遥测/执行器封装（本会话**未改**） |
 | `.../computer/3/startup.lua` | 用户自己维护（**未改**） |
 | `.../computer/3/tests.lua` | 辨识测试台（**未改**） |
-| `memo/flip-autopilot.md` | 本记录（§31~§43 属本会话） |
+| `memo/flight/flip-autopilot.md` | 本记录（§31~§43 属本会话） |
 | `run/saves/New World (2)/cc_logs_archive/2026-11_26_lateral_hdg/` | 归档日志（本会话全部实测 CSV/TXT） |
 
 ---
@@ -4349,7 +4349,7 @@ autopilot track axis=z:-107.5           （= stickflip 180 + 守轴）
 | `.../computer/3/tests.lua` / `startup.lua` | 未改 |
 | `.../computer/3/log/auto_stick.csv` | 本轮实测（357 行 / 52 列） |
 | `.../computer/3/log/status_stick.txt` | 本轮终端输出快照（含 AXIS 三条回显） |
-| `memo/flip-autopilot.md` | 本节（§44） |
+| `memo/flight/flip-autopilot.md` | 本节（§44） |
 
 ---
 

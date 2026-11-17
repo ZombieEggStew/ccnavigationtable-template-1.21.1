@@ -1,13 +1,13 @@
 ---
 name: memo-lookup
-description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首要入口。memo 目录还包含项目进度以及关键技术参考文档。当需要定位应修改的 Java 文件、了解项目整体状态、当前开发的功能、或查阅 OBJ 模型、旋转、Catnip、物品栏渲染等技术要点时使用此技能。'
+description: '查阅项目 memo 文档。`memo/README.md` 是唯一目录索引；`memo/project/code-map.md` 是定位 Java 源码的首要入口。memo 按主题分目录（project / flight / propulsion / peripherals / cockpit / rendering / archive），含项目进度与关键技术参考。当需要定位应修改的 Java 文件、了解项目整体状态、或查阅 CC:T 飞行控制、喷管与传感器 API、Monitor 与屏幕渲染等技术要点时使用此技能。'
 ---
 
 # 项目 Memo 查阅
 
-## code-map.md：定位 Java 源码的首要入口
+## `memo/project/code-map.md`：定位 Java 源码的首要入口
 
-> 需要定位或修改 `src/main/java/com/zzy205/myfirstmod` 下的 Java 代码时，**第一步先读 `memo/code-map.md`，不要直接搜索源码**。
+> 需要定位或修改 `src/main/java/com/zzy205/myfirstmod` 下的 Java 代码时，**第一步先读 `memo/project/code-map.md`，不要直接搜索源码**。
 
 `code-map.md` 是一份按行为组织的 Java 代码地图，包含以下内容：
 
@@ -27,64 +27,48 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 
 ## 何时使用
 
-- 需要定位或修改 Java 源码 → 先读 `code-map.md`
-- 需要查外部依赖 API（Sable / Flywheel / Catnip / Create / CC:Tweaked / JEI）的包路径、类位置、方法签名 → 先读 `api-code-map.md`，再进 `api/` 目录搜索
+- 需要定位或修改 Java 源码 → 先读 `memo/project/code-map.md`
+- 需要查外部依赖 API（Sable / Flywheel / Catnip / Create / CC:Tweaked / JEI）的包路径、类位置、方法签名 → 先读 `memo/project/api-code-map.md`，再进 `api/` 目录搜索
 - 需要了解项目整体进度、已完成/待完成的功能
-- 需要查阅 OBJ 模型、旋转、渲染、Catnip 等技术参考文档
-- 添加新 Monitor 元件时需要参考标准流程
+- 需要查阅 CC:T 飞行控制、喷管、传感器、控制台、屏幕渲染等技术参考文档
+- 添加新 Monitor 元件或 controlDesk 控件时需要参考标准流程
 - 需要了解独立模型烘焙、物品栏渲染等技术细节
 
-## Memo 文件索引
+## Memo 目录索引
 
-所有 memo 文件位于工作区根目录下的 `memo/` 文件夹：
+`memo/` 已按主题分 7 个目录。**完整索引（每份文件一句话 + 何时读 + 维护规则）在 `memo/README.md`** —— 那里是唯一的目录真相源，本技能不再复制清单。
 
-| 文件 | 用途 | 何时查阅 |
-|------|------|---------|
-| `code-map.md` | Java 源码职责、核心数据流、修改入口和已知边界 | 需要定位或修改 Java 文件时（首要入口，先查它） |
-| `api-code-map.md` | **api/ 依赖源码代码地图**（全部为 Java 源码 `-sources`）：Sable Companion / Flywheel / Catnip（核心三件套，项目根基）与 Create / CC:Tweaked / Ponder 的包级地图、import 前缀→路径对照、项目内使用文件清单；JEI / Registrate 未提取（标注为不在 api/） | 需要查外部依赖 API 的包路径/类位置/签名（先查它，再进 api/ 搜索）；涉及渲染、物理、子次元、Outliner、GUI 控件时尤其有用 |
-| `ATTENTION.md` | **踩坑与注意事项合集**（Sable 坐标/变换互逆/枢轴/GridState re-key/屏幕破坏性变更/引擎门控/INS randomNudge 等） | 改任何代码前先核对对应模块小节，避免重踩已知坑 |
-| `record_screen_module.md` | 可变尺寸屏幕实现记录 | 修改屏幕数据、渲染、放置或拆卸行为时 |
-| `record_screen_text.md` | 屏幕字符/矩形渲染实现记录（位图字体、UV 环绕、镜像/深度坑） | 修改屏幕文本/图形渲染或 `ScreenTextRenderer` 时 |
-| `knob-interaction.md` | 旋钮交互数据流 | 修改旋钮拖拽、角度同步或音效时 |
-| `monitor-state-isolation.md` | 多 Monitor 客户端状态规范 | 修改交互状态、动画缓存或 Outliner key 时 |
-| `gui-infrastructure.md` | 已落地 GUI 基础设施 | 修改现有控件的实现细节时 |
-| `control-desk-grid-slot.md` | controlDesk 桌顶棋盘网格自由放置系统（joystick_2 完整接入；常量/数据流/变换链/添加新模块 checklist） | 修改或新增 controlDesk 自由放置模块（throttle / monitor_2 / 新控件）的预览、放置、占用、拆除时 |
-| `create-schematic-nbt.md` | Create 蓝图 NBT 经验记录（保存/部署中的配置丢失问题） | 排查 PeripheralExtender / RedstoneTransceiver 在 Create 蓝图中的行为时 |
-| `servo-mode.md` | 传动外设舵机模式实现记录（TiltAdapter 段式状态机 + 段内同向重瞄 re-aim + flicker 门控） | 修改舵机角度定位、段推进、flicker 门控或 Lua 舵机 API 时 |
-| `my_bearing.md` | 自研风帆轴承方案设计 + 实施记录（轴向应力输入 + RotaryConstraint 物理驱动；阶段 4 限速到位/动力门控、阶段 5b 应力网络贯通、阶段 6 Lua 外设；含锁定模式和 transmission_peripheral 一致性对齐） | 实现/修改 my_bearing 或 transmission_peripheral 方块时，先读方案再动手 |
-| `my_aero_sensor.md` | 惯性导航系统（ccpe:ins）实现记录（部件层级 test(Y)→gimbal(Z)→compass(X)、重力摆动画、逆变换链一致性、randomNudge 坑、PIVOT_DROP；Lua API getAngles/getPosition/getBodyPosition/getOrientation/getAngularVelocity/getVelocity 现状） | 修改 ccpe:ins 的动画/层级/渲染/扰动时，先读本文 |
-| `my_sensor_system.md` | `ccpe.sensor_system` 方案蓝图 + **实施补充记录**（FMC 附着方块应力网络 getStressRemaining/getStressCapacity、CreateStressReadout 反射读数） | 修改传感器 Lua API、门控或应力读数时 |
-| `screen-render-rework.md` | 屏幕渲染重构需求分析与方案决策 + **「实施状态」**（方案三格子模型已落地清单、与计划差异、待游戏内验证 13 项） | 修改屏幕数据模型/同步/渲染平面或 API 时 |
-| `short-range link.md` | 短程信号链接器（ccpe:short_range_linker）实现方案（物理体作用域频道注册表、链上共享加载开关、Lua API ccpe.link、频道唯一性语义） | 实现/修改短程信号链接器时，先读本文 |
-| `engine-module.md` | 引擎模块（engine_core 排排坐组网 + 零缓存抽储罐 + 燃烧室并入 + 冷却过热约束 + 末段 Lua 控制）方案设计（CDG modular + Create ConnectivityHandler/SteamEngine 参考） | 实现/修改 engine_core / 燃烧室 / cooling_duct 的组网、燃料消耗、冷却、Lua 控制时，先读本文 |
-| `cc-rednet-communication.md` | **CC:T 两台电脑通信方案**：rednet API 速查（1.118.0 源码核实、频道常量 65535/65533/65500、消息可序列化约束）、有线/无线 modem 连线、worker（命令表 dispatch + pcall）与 caller（关联码 + 超时）完整 Lua 脚本对、坑清单（不排队/常驻/关联码/host 重名/rednet 无安全性）、与项目内直连通道（`CCPeripheralCapabilities` / `GlobalChannelRegistry` / `SensorSystemAPI.getPeripheral` / `ShortRangeLinkerRegistry`）的边界区分 | 要让两台电脑互发请求/远程触发动作，或确认「能不能直接调对方函数」时，先读本文 |
-| `thrust-nozzle.md` | 定向喷管（`ccpe:thrust_nozzle`）工作记录：无 mixin 的 Sable 点力推力器、纯轴向恒定推力标定（800 pN/管 @256RPM、REVERSE_SIGN 实测值）、六向碰撞盒生成、粒子三次迭代（`create:air` vs `air_flow` + `fan_transparent` 标签的坑）与遮挡射线 | 修改喷管出力/符号/粒子/碰撞盒，或要参考"自研方块 + Sable 力组"的最短路径时 |
-| `advanced-thrust-nozzle.md` | **矢量喷管**（`ccpe:advanced_thrust_nozzle`，**已定稿**）：固定底板（含并入的 4 个活塞头）+ 绕枢轴 **`(8,5,8)px`**（= 活塞头中面）在锥角 15° 内倾斜的喷口本体 + 四活塞随动（**活塞杆 = body 子件、只沿 body 轴滑移**；v1–v6 各版自由度/枢轴错误的记录 + "`piston_pole` 局部原点 = 杆底面中心"的模型定位约定）、只走 BER 的绕枢轴渲染链、**两盒选择框**、物理体作用域频道（复用 `ShortRangeLinkerRegistry`）+ 右键 GUI、CC:T 外设 `setDeflection/setDirection/setThrustScale`、父类 `nozzleAxis`/`thrustScale` 钩子、`rotationYXZ` 模型旋转映射、**§12.6 枢轴高度/越界核算表**、§13 交付状态与常量一览 | 修改矢量喷管的倾斜/活塞动画/枢轴/频道/GUI/Lua API，或要为别的方块做"物理体频道 + 外设"时 |
-| `pitot-selection-box.md` | 皮托管选择框调试记录（VoxelShaper 旋转坑：单位混用/基准朝向/end_rod 风格下 Catnip 与原版 X 旋转方向相反，水平四向绕 Y 180°；新增方块选择框的 checklist） | 新增或修改 6 向 FACING 方块的选择框/碰撞框，或排查选择框"不可见/差 90°/水平反了"时 |
-| `neoforge-debugging.md` | 本项目 F5 启动事实 | 调试启动配置或 classpath 时 |
-| `flip-autopilot.md` | **CC:T 飞行自动驾驶复刻实战总账（特斯拉飞车）**：已验证的落地剖面（`A_REF/KV/FF_BAND`、触地 0.65~0.70 m/s）、四元数姿态环与 `COS_MIN` 门控、**写预算不变量（每周期一个 `parallel.waitForAll` 块 ⇒ 20 Hz）**、吸附/翻滚/横向制导的全部实测常量与踩坑 | 写任何 CC:T 飞行/落地控制环（推力标定、下降剖面、姿态、频率）时，先读本文 |
-| `starship15-ROUND.md` | **星舰复刻「本轮工作卡」（唯一开工入口，≤60 行，每轮覆写）**：本轮目标 / 只读清单（≤3 文件）/ 上轮结论 / 本轮改动 / 交给用户的运行指令与回报模板 / 6 条每轮硬规矩（CSV 不进对话、局部 edit、版本归档、memo 只追加增量） | 只要在继续做星舰（`starship15`）这条线，**先读它 + `starship15-constants.md`**，不要通读 catch.md |
-| `starship15-constants.md` | **星舰复刻「可信常数 + 已否决假设黑名单」（唯一真相源）**：G=11、`F=N×256×2.05×p`、m=61、α=1.0/单位D、pairA→body X(负)/pairB→body Z(正)、`frameYawOff=180°`、20 Hz 写预算、能力上限推导、三条已验证控制律、13 条黑名单（锥角横向阻尼、`h-target` 符号、顺序写红石、`0.898 pN/RPM`…）、程序版本表、工具（`harness.lua` 干跑 + `tools/digest_csv.ps1`） | 要给星舰写/改控制环、判断某个数能不能信、或怀疑自己要走以前踩过的路时 |
-| `starship15-catch.md` | **星舰助推器回收复刻总账（归档，77 KB，禁止整篇读）**：§11~§16 标定飞行、§19/§20 力矩通道、§21 姿态环、§22 世界几何、§23 横向环；实测常量与 9 条踩坑、Flight 15 真机时间线、§18 直播轨迹 `0°→90°→115°→90°` | 需要某个结论的**原始推导/日志证据**时，先 `grep` 定位 §N 再读那一段（≤80 行） |
-| `registrate-datagen.md` | **Registrate + datagen 新增方块完整流程**（红色航行灯实战；含三个坑：datagen 生成 lang 会盖手写文件、Registrate 自动 .tab(SEARCH) 导致服务器启动崩溃及修复、datagen 环境需最小化 mod） | 用 Registrate 注册新方块/跑 runData/排查创造标签崩溃时 |
+| 目录 | 内容 | 首要文件 |
+|---|---|---|
+| `memo/project/` | 项目元信息与入口（5 份） | `code-map.md`（Java 定位）、`api-code-map.md`（依赖 API）、`ATTENTION.md`（踩坑合集） |
+| `memo/flight/` | CC:T 飞行与自动驾驶（6 份） | `starship15-ROUND.md`（本轮工作卡）、`starship15-constants.md`（常数/黑名单）、`flip-autopilot.md`（通用经验库） |
+| `memo/propulsion/` | 喷管与引擎（3 份） | `thrust-nozzle.md`（母文档）、`advanced-thrust-nozzle.md`（矢量喷管定稿） |
+| `memo/peripherals/` | 传感器/频道/通信/机械件（9 份） | `my_aero_sensor.md`（INS）、`short-range-link.md`（频道注册）、`cc-rednet-communication.md`（跨电脑） |
+| `memo/cockpit/` | 控制台/Monitor/屏幕/GUI（9 份） | `control-desk-grid-slot.md`（加控件先读）、`record_screen_text.md`（屏幕渲染） |
+| `memo/rendering/` | 渲染/兼容/注册（5 份） | `buffer-source-render-lifecycle.md`、`registrate-datagen.md` |
+| `memo/archive/` | 历史记录（1 份） | `9.24.md` |
+
+命名约定：文件名英文短横线、无空格、无中文；日期型记录进 `archive/`；移动或改名后必须跑引用校验（见 `memo/README.md` 维护规则）。
 
 ## 最小上下文原则
 
-- 不要在每次任务开始时读取 `ATTENTION.md` 或全部 memo。
+- 不要在每次任务开始时读取 `memo/project/ATTENTION.md` 或全部 memo。
 - 只读取与当前请求直接对应的一份 memo；仅当它引用了另一个必须的文档时再读取下一份。
 - 与项目进度或设计取舍没有直接关系时，不加载 memo。
-- 需要定位 Java 文件职责、模块边界或修改入口时，查阅 `code-map.md`；需要定位外部依赖 API 时查阅 `api-code-map.md`。不要因此读取全部其他 memo。
-- **CC:T 飞行迭代轮次**（星舰 / 飞车）：只读 `starship15-ROUND.md` + `starship15-constants.md`（各 ≤60/≤120 行），程序按函数锚点局部读，日志一律走 `tools/digest_csv.ps1` 取数 —— 原始 CSV（最大 74 MB）与 `starship15-catch.md`/`flip-autopilot.md`（77 KB/320 KB）**不允许进对话**。
+- 需要定位 Java 文件职责、模块边界或修改入口时，查阅 `memo/project/code-map.md`；需要定位外部依赖 API 时查阅 `memo/project/api-code-map.md`。不要因此读取全部其他 memo。
+- **CC:T 飞行迭代轮次**（星舰 / 飞车）：只读 `memo/flight/starship15-ROUND.md` + `memo/flight/starship15-constants.md`（各 ≤60/≤120 行），程序按函数锚点局部读，日志一律走 `tools/digest_csv.ps1` 取数 —— 原始 CSV（最大 74 MB）与 `memo/flight/starship15-catch.md`（77 KB）/`memo/flight/flip-autopilot.md`（320 KB）**不允许整篇进对话**。
 
 ## 查阅步骤
 
 ### 1. 确定需要查阅的文档
 
-根据用户问题或当前任务确定需要查阅哪个 memo 文件。**定位 Java 文件时优先查 `code-map.md`**：
+根据用户问题或当前任务确定需要查阅哪个 memo 文件（先看 `memo/README.md` 的「按任务找文档」表）：
 
-- **定位/修改 Java 源码** → `code-map.md`（首要入口）
-- **查外部依赖 API（Sable/Flywheel/Catnip/Create/CC/JEI）** → `api-code-map.md`（首要入口）
-- **添加新元件** → `add-monitor-module` skill
+- **定位/修改 Java 源码** → `memo/project/code-map.md`（首要入口）
+- **查外部依赖 API（Sable/Flywheel/Catnip/Create/CC/JEI）** → `memo/project/api-code-map.md`（首要入口）
+- **改任何代码前核对已知坑** → `memo/project/ATTENTION.md`
+- **星舰 CC:T 飞行迭代（每轮开工）** → `memo/flight/starship15-ROUND.md` + `memo/flight/starship15-constants.md`
+- **添加新 Monitor 元件** → `add-monitor-module` skill
 - **3D 线框/高亮** → `catnip-outliner` skill
 - **OBJ 模型或模型烘焙** → `neoforge-model-rendering` skill
 - **物品栏渲染** → `create-custom-item-rendering` skill
@@ -94,7 +78,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 
 ### 2. 读取对应文件
 
-使用 `read_file` 读取 `memo/<文件名>` 中与当前任务有关的段落，不需要搜索源码。
+用 `read` 读取 `memo/<主题目录>/<文件名>` 中与当前任务有关的段落（大文件按标题/§N 定位，不要整篇读），不需要搜索源码。
 
 ### 3. 结合源码实施
 
@@ -107,5 +91,5 @@ memo 文档提供了关键 API 速查和代码模板，结合项目现有代码�
 
 ## 注意事项
 
-- `ATTENTION.md` 是踩坑与注意事项的首选入口；各功能的**实施总结与后续计划写在各主题文档里**（引擎 → `engine-module.md` §17；定向喷管/排气粒子 → `thrust-nozzle.md`、矢量喷管 → `advanced-thrust-nozzle.md`；航空轴承 → `my_bearing.md`；屏幕格子模型 → `screen-render-rework.md`「实施状态」；传感器物理读数 → `my_sensor_system.md`「实施补充记录」；INS → `my_aero_sensor.md`）
+- `memo/project/ATTENTION.md` 是踩坑与注意事项的首选入口；各功能的**实施总结与后续计划写在各主题文档里**（引擎 → `memo/propulsion/engine-module.md` §17；定向喷管/排气粒子 → `memo/propulsion/thrust-nozzle.md`、矢量喷管 → `memo/propulsion/advanced-thrust-nozzle.md`；航空轴承 → `memo/peripherals/my_bearing.md`；屏幕格子模型 → `memo/cockpit/screen-render-rework.md`「实施状态」；传感器物理读数 → `memo/peripherals/my_sensor_system.md`「实施补充记录」；INS → `memo/peripherals/my_aero_sensor.md`）
 - 如果 memo 和相关 skill 都无法回答当前 API 问题，再回退到 `minecraft-research` skill。

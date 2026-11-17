@@ -1,9 +1,9 @@
 # 星舰助推器复刻 —— 交接文档（2026-11-17 收盘）
 
-> 给"下一个接手的人（或下一次的自己）"看的**一页纸**。细节全在 `memo/starship15-catch.md`，
+> 给"下一个接手的人（或下一次的自己）"看的**一页纸**。细节全在 `memo/flight/starship15-catch.md`，
 > 本文只放：现在到哪了、哪些数是可信的、程序怎么跑、下一步做什么、哪些坑别再踩。
 
-> ⚡ **每轮开工先读** `memo/starship15-ROUND.md`（本轮工作卡，≤60 行）+ `memo/starship15-constants.md`（常数表 / 黑名单）。
+> ⚡ **每轮开工先读** `memo/flight/starship15-ROUND.md`（本轮工作卡，≤60 行）+ `memo/flight/starship15-constants.md`（常数表 / 黑名单）。
 > 本文只在**换人、换会话、或大阶段收尾**时通读一次 —— 别每轮都读。
 
 ---
@@ -205,11 +205,11 @@ tools/digest_csv.ps1   把 50 KB~60 MB 的 CSV 压成 ≤30 行看板
 
 | 文件 | 内容 |
 |---|---|
-| `memo/starship15-catch.md` | 主文档：§11~§16 标定飞行、§19~§20 力矩通道、§21 姿态环、§22 世界几何、§23 横向环 |
-| `memo/flip-autopilot.md` | 落地剖面 / 四元数姿态环 / 20 Hz 写预算 / COS_MIN 门控（通用经验） |
-| `memo/advanced-thrust-nozzle.md` | 喷管 Lua API 与推力模型 |
-| `memo/cc-rednet-communication.md` | 跨电脑命令协议 |
-| `memo/my_aero_sensor.md` | INS 读数与门控 |
+| `memo/flight/starship15-catch.md` | 主文档：§11~§16 标定飞行、§19~§20 力矩通道、§21 姿态环、§22 世界几何、§23 横向环 |
+| `memo/flight/flip-autopilot.md` | 落地剖面 / 四元数姿态环 / 20 Hz 写预算 / COS_MIN 门控（通用经验） |
+| `memo/propulsion/advanced-thrust-nozzle.md` | 喷管 Lua API 与推力模型 |
+| `memo/peripherals/cc-rednet-communication.md` | 跨电脑命令协议 |
+| `memo/peripherals/my_aero_sensor.md` | INS 读数与门控 |
 | `run/saves/.../computer/0/log/*.csv, *.txt` | 每次实跑的原始数据（att/tilt/guide/cal1/starship） |
 | `run/flight_logs/*.csv` | 模组自带 FlightDataRecorder（机体系角速度 `wb*`、喷管力矩 `propM*`）—— 交叉验证用 |
 | `.tmp_luatest/harness.lua` | 桩世界干跑夹具 |

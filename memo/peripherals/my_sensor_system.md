@@ -127,7 +127,7 @@ ss.hasPressureSensor()   -- boolean
 | `ILuaAPI.update()` / `IComputerSystem` | `references/CC-Tweaked-mc-1.21.x/projects/common-api/.../api/lua/` | 每电脑 tick 主线程钩子；`getLevel()/getPosition()` 公开接口 |
 | `SableCompat` | `src/main/java/com/zzy205/myfirstmod/compat/sable/` | 全部物理读取 API（复用，不改） |
 | `PeripheralExtenderBlockEntity` | `src/main/java/com/zzy205/myfirstmod/block/` | 生命周期（onLoad/tick/setRemoved）、按需缓存模式（本次改为每 tick 恒定刷新） |
-| `InsBlockEntity` | `src/main/java/com/zzy205/myfirstmod/block/` | 惯性导航系统（INS，姿态指示器）：服务端 `XAngle/ZAngle` getter 已预留；未来 `getOrientation` 可直接读 `subLevel.logicalPose().orientation()`，实现记录见 `memo/my_aero_sensor.md` |
+| `InsBlockEntity` | `src/main/java/com/zzy205/myfirstmod/block/` | 惯性导航系统（INS，姿态指示器）：服务端 `XAngle/ZAngle` getter 已预留；未来 `getOrientation` 可直接读 `subLevel.logicalPose().orientation()`，实现记录见 `memo/peripherals/my_aero_sensor.md` |
 
 ## 将改动的文件（实施时）
 
@@ -177,8 +177,8 @@ ss.hasPressureSensor()   -- boolean
 ## 实施补充记录（2026-08）：FMC 附着方块应力网络读数
 
 > 落地在现有 `SensorSystemAPI` 上（**与上文蓝图里的「speed_sensor / pressure_sensor 方块」无关**——实际由
-> 静压孔（PRESSURE）与皮托管（SPEED）承担，见 `memo/code-map.md`「`BodySensorRegistry`」行）。
-> 相关 wiki：`wiki/docs/sensor-system/fmc.zh.md`；踩坑见 `memo/ATTENTION.md`「FMC 应力网络」。
+> 静压孔（PRESSURE）与皮托管（SPEED）承担，见 `memo/project/code-map.md`「`BodySensorRegistry`」行）。
+> 相关 wiki：`wiki/docs/sensor-system/fmc.zh.md`；踩坑见 `memo/project/ATTENTION.md`「FMC 应力网络」。
 
 - **Lua 方法**：`ss.getStressRemaining()`（**剩余应力** su = 网络总容量 − 当前总应力，**过载时为负**）、
   `ss.getStressCapacity()`（**网络总容量** su）。两方法门控相同，不可读返回 `nil`。
@@ -194,8 +194,8 @@ ss.hasPressureSensor()   -- boolean
 
 ## 实施补充记录（2026-09）：`ss.getEngine()` 机体引擎快捷获取
 
-> 相关：`memo/engine-module.md` §10（`ccpe:engine` 外设最终版 + 本方法的使用段）、
-> `wiki/docs/sensor-system/overview.zh.md`「模块化引擎」条目、`memo/code-map.md`「`BodyEngineRegistry`」行。
+> 相关：`memo/propulsion/engine-module.md` §10（`ccpe:engine` 外设最终版 + 本方法的使用段）、
+> `wiki/docs/sensor-system/overview.zh.md`「模块化引擎」条目、`memo/project/code-map.md`「`BodyEngineRegistry`」行。
 
 **需求定位（用户明确约束）**：只覆盖**一个物理体只有一个引擎**的场景；**只在脚本开头调用一次**；
 **不接受每 tick 开销与大范围扫描**。因此刻意做成“最轻”，与本文上面“每 tick 刷 volatile 缓存”的

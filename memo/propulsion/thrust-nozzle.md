@@ -3,7 +3,7 @@
 > 状态（2026-08 末）：**推力 / 排气（含轻微重力）/ 高空尾迹 / 染料染色 / 配置化 / tooltip / 扳手拆除 全部完成，
 > `gradlew classes` 通过；斜喷穿墙已修复并经用户多角度实测确认**。
 >
-> **矢量喷管 `ccpe:advanced_thrust_nozzle`（加强版）已独立成 `memo/advanced-thrust-nozzle.md`**（已实测通过）；
+> **矢量喷管 `ccpe:advanced_thrust_nozzle`（加强版）已独立成 `memo/propulsion/advanced-thrust-nozzle.md`**（已实测通过）；
 > 本文只保留定向喷管本体，以及为子类加的那几个钩子（见 §8）。
 > **交接速览见 §13**（文件清单、玩家可见行为、参数在哪、待办）；**穿墙修复 + 重力的完整记录见 §14**，
 > **扳手快速拆除见 §15**。
@@ -25,7 +25,7 @@
 >
 > **仍待进游戏确认**（其余已由用户实测确认）：配置**界面**的标题/说明文案、物品 tooltip 展开、
 > "潜行空手清除染色"已移除、**扳手潜行右键拆除 / 普通右键不旋转**（§15.3）、**进气粒子观感**（§16.7）。
-> 上游背景见 `memo/flip-autopilot.md`（火箭方案作废 ⇒ 自研喷管）；相关 `memo/my_sensor_system.md`、`memo/api-code-map.md`。
+> 上游背景见 `memo/flight/flip-autopilot.md`（火箭方案作废 ⇒ 自研喷管）；相关 `memo/peripherals/my_sensor_system.md`、`memo/project/api-code-map.md`。
 
 ## 0. 需求与决策链（用户定稿）
 
@@ -171,7 +171,7 @@ pressure = DimensionPhysicsData.getAirPressure(level,
 - ⇒ **实用升限**（估算，4 管满载）：**y ≈ 273**（800 pN 版 ≈305、200 pN 版 ≈210）。
 - ⇒ 悬停油门变成高度的函数：**43% 只在海平面成立**，y≈163 时 ≈65%、y≈213 时 ≈79%、y≈263 时 ≈96%，
   y≳273 直接失去悬停能力。`flip-autopilot.md` 里按 14% 标定的控制律增益/死区**必须按高度重标**，
-  或者让脚本读 `sensor` 的气压做前馈（`SensorSystemAPI` 已暴露气压，见 `memo/my_sensor_system.md`）。
+  或者让脚本读 `sensor` 的气压做前馈（`SensorSystemAPI` 已暴露气压，见 `memo/peripherals/my_sensor_system.md`）。
 - 左右差动（各 2 管、r=2 m、I≈160 kg·m²）：**单边满速** ⇒ τ = 2×256×2 = 1024 N·m ⇒ α_roll ≈ **6.4 rad/s²
   —— 刚好压在 `flip-autopilot.md` 的翻滚预算 6.4 线上**（余量为 0，姿态机动的偏差修正会很紧）；
   想留余量就**双边反向差动**（一侧 +256、另一侧 −256）：τ = (512+512)×2 = 2048 N·m ⇒ α_roll ≈ **12.8 rad/s²**。
@@ -660,7 +660,7 @@ protected void setLocationFromBoundingbox() {
 ## 8. 矢量喷管（`ccpe:advanced_thrust_nozzle`）已独立成文档
 
 矢量喷管（加强版：可倾斜喷口 + 四活塞随动 + 物理体频道 + CC:T 外设）的全部记录见
-**`memo/advanced-thrust-nozzle.md`**，不在本文维护；本文只保留两个方块共用、以及为它加的钩子。
+**`memo/propulsion/advanced-thrust-nozzle.md`**，不在本文维护；本文只保留两个方块共用、以及为它加的钩子。
 
 关系：`AdvancedThrustNozzleBlock extends ThrustNozzleBlock`、`AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity`
 —— 推力 / 气压 / 排气·进气·尾迹粒子 / 遮挡射线 / 染料 / 扳手**全部继承本文的实现**。
@@ -676,4 +676,4 @@ protected void setLocationFromBoundingbox() {
 > ⚠️ **两种喷管的出力口径不同（2026-11 用户定稿）**：本文表格里的「1 RPM = 1 pN / 256 RPM = 256 pN」
 > 只针对**定向喷管** `ccpe:thrust_nozzle`；矢量喷管在 `thrustScale()` 里还乘了
 > `THRUST_OUTPUT_MULTIPLIER = 2.0` ⇒ **2 pN/RPM（256 RPM = 512 pN）**。
-> 同机混装时"同转速不同推力"是预期差异，详见 `memo/advanced-thrust-nozzle.md` §6.1 / §8。
+> 同机混装时"同转速不同推力"是预期差异，详见 `memo/propulsion/advanced-thrust-nozzle.md` §6.1 / §8。

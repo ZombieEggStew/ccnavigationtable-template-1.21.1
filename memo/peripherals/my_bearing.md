@@ -151,7 +151,7 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
   **`face` 轴向**，而 BER `kineticRotationTransform` 恒绕**轴正方向** → 背面半轴（多为轴负向）
   视觉反向。修法：`float spin = shaftFace.getAxisDirection() == POSITIVE ? angle : -angle`
   （`MyBearingVisual` 76 行）；同源 bug 已一并修掉 `TransmissionPeripheralVisual` 双端半轴
-  （96 行）。详见 `memo/ATTENTION.md`「Create 渲染（Flywheel Visual / 半轴）」。
+  （96 行）。详见 `memo/project/ATTENTION.md`「Create 渲染（Flywheel Visual / 半轴）」。
 - 从动物理体由 Sable 自己渲染（sub-level），不需要额外渲染代码
 
 ### 阶段 5b：应力网络贯通（已实现，同 swivel）

@@ -43,7 +43,7 @@
 > | `att.lua` | `computer/0` | **力矩通道标定 v2（已跑并闭合，§19/§20）**：悬停工作点上的正反差动对 + 开环回正 |
 > | `tilt.lua` | `computer/0` | **姿态环闭环（已跑 PASS，§21）**：四元数 PD 跟踪 ±6°/±9° 倾角阶跃 |
 > | `guide.lua` | `computer/0` | **横向闭环（已跑，结构 OK/参数待收，§23.5）**：姿态 PD + 位置/速度环，沿 −Z 平移 6 m 再回来 |
-> | — | `memo/starship15-handover.md` | ⭐ **交接文档**（现状/常数/控制律/程序/坑/下一步，一页纸） |
+> | — | `memo/flight/starship15-handover.md` | ⭐ **交接文档**（现状/常数/控制律/程序/坑/下一步，一页纸） |
 > | `starship.lua` | `computer/0` | 任务程序（**当前版本缺姿态环**，见 ❌#2） |
 > | `fixture.lua` | `computer/1` | 夹具命令端：`fixture` 常驻监听 / `status` / `release` / `clamp` / `arms <deg>` / `open` / `close` |
 >
@@ -89,11 +89,11 @@
 > §17 任务程序 v1 · **§18 直播轨迹与架构变更（最关键）** · §19 力矩标定 v1 审查 ·
 > **§20 力矩通道定稿（I≈16、力臂≈1.0 m）** · §21 姿态环 PASS · **§22 世界几何与安全方向** · §23 横向闭环
 >
-> ⭐ **接手请先读 `memo/starship15-handover.md`**（一页纸：现状 / 可信常数 / 三条控制律 / 程序清单 / 坑 / 下一步）。
+> ⭐ **接手请先读 `memo/flight/starship15-handover.md`**（一页纸：现状 / 可信常数 / 三条控制律 / 程序清单 / 坑 / 下一步）。
 >
-> 相关经验：`memo/flip-autopilot.md`（落地剖面 / 四元数姿态环 / **写预算与 20 Hz 不变量** / COS_MIN 门控）、
-> `memo/advanced-thrust-nozzle.md`（喷管 Lua API 与推力模型）、`memo/cc-rednet-communication.md`（跨电脑命令）、
-> `memo/my_aero_sensor.md`（INS 读数与门控）。
+> 相关经验：`memo/flight/flip-autopilot.md`（落地剖面 / 四元数姿态环 / **写预算与 20 Hz 不变量** / COS_MIN 门控）、
+> `memo/propulsion/advanced-thrust-nozzle.md`（喷管 Lua API 与推力模型）、`memo/peripherals/cc-rednet-communication.md`（跨电脑命令）、
+> `memo/peripherals/my_aero_sensor.md`（INS 读数与门控）。
 
 ---
 
@@ -150,7 +150,7 @@
 
 这是本场景最大的物理风险，必须**先算再搭程序**。
 
-- 本 mod 大气模型实测锚点（`memo/flip-autopilot.md` §12.2，世界海平面 y≈63）：
+- 本 mod 大气模型实测锚点（`memo/flight/flip-autopilot.md` §12.2，世界海平面 y≈63）：
   **y≈102 处 p ≈ 0.862**；往上继续下降。精确值请用 Lua 直接查：
   `ss.getPressureFromAltitude(Y)`（FMC 门控）或静压孔 `ss.getPressure()`。
 - 着陆剖面要求：`F/m ≥ G + A_BRK_MAX = 11 + 5 = 16 m/s²` ⇒ **TWR ≥ 1.45**，
@@ -218,7 +218,7 @@ a_lat_max = 0.259 × TWR × 11   （TWR=2 时 ≈5.7 m/s²，但随油门同步�
 
 - 下落可用时间 ≈ 5~8 s（剖面参数下）⇒ 横向可修正距离 ≈ `½·5.7·t²` ≈ 70~180 m。
   **⇒ 指定点离初始水平位置 100 m 以内是舒适的，越远越依赖提前倾斜。**
-- 落点精度目标：贴 `memo/flip-autopilot.md` §44/§49 水平（**XZ 残差 ≤ 0.5 m**），
+- 落点精度目标：贴 `memo/flight/flip-autopilot.md` §44/§49 水平（**XZ 残差 ≤ 0.5 m**），
   该 memo 实测能到 0.07~0.35 m（那是地面低速场景，空中要打折）。
 
 ### 3.6 悬停油门（用于 sanity check）
@@ -252,7 +252,7 @@ TWR=2 ⇒ 悬停约 50% 出力；TWR=1.5 ⇒ 67%。**悬停油门 > 85% 就别�
 ### 5.1 总则（沿用已验证结论，不要重新发明）
 
 1. **姿态一律走四元数**：欧拉角过 90° 会进奇异保护分支（横躺正好是 90° 附近！）——
-   `memo/my_aero_sensor.md` / `flip-autopilot` §2.1。
+   `memo/peripherals/my_aero_sensor.md` / `flip-autopilot` §2.1。
 2. **机体角速度自己差分四元数**，不要用 `getAngularVelocity()` 的分量轴（轴映射与文档不符）。
 3. **写出推力前做 `cosVert` 门控**：`cosVert = 机体上·世界上`，`< COS_MIN(0.25)` 时**不许出集合推力**，
    否则"越推越快下坠"（`flip-autopilot` §18.2 的致命坑）。
@@ -373,7 +373,7 @@ starship15.lua
 | `computer/0`（火箭） | 火箭物理体上 | `startup.lua`：5 台喷管 `setThrustScale(0)`、`ss.setRedstoneOutput(5,15)`（两个上方 docking connector 通电固定）、`ss.setStrongPower(6,true)`（下方燃料 connector）、`ss.getEngine().setThrottle(1)` | 降落程序的主机 |
 | `computer/1`（夹具） | 夹具物理体上 | `startup.lua`：`bearing_L=ch10` / `bearing_R=ch11`，`reset_bearing` = `setRotationSpeed(2)` + `setTargetAngle(0)` | 夹臂 + 搭接 |
 
-两台都有 `computercraft:wireless_modem_advanced` ⇒ 跨电脑走 rednet（协议 `starship15`，见 `memo/cc-rednet-communication.md`）。
+两台都有 `computercraft:wireless_modem_advanced` ⇒ 跨电脑走 rednet（协议 `starship15`，见 `memo/peripherals/cc-rednet-communication.md`）。
 
 ### 10.2 火箭侧设备（**频道 = 同一物理体内的地址**）
 

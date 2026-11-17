@@ -56,7 +56,7 @@
 插到 `block.10988=copper_lantern ...` 那一行之后、`block.20000=` 之前：
 
 ```
-# === ccpe 航行灯（ACT 彩色光兼容补丁；见 memo/complementary-act-coloured-light.md）===
+# === ccpe 航行灯（ACT 彩色光兼容补丁；见 memo/rendering/complementary-act-coloured-light.md）===
 block.10990=ccpe:red_position_light:lit=true
 block.10992=ccpe:green_position_light:lit=true
 block.10994=ccpe:white_position_light:lit=true

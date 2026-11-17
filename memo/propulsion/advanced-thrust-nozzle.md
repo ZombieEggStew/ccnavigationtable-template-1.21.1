@@ -23,7 +23,7 @@
 >    `getMaxTilt` / `isMoving` / `setThrustScale` / `getThrustScale` / `getChannel`，可用 `ccpe.sensor_system.getPeripheral(ch)` 寻址。
 > 7. **渐变到位**：Lua 只写目标，服务端**恒速**推进、客户端本地指数逼近平滑（§6.5），插值发生在**偏转平面**上 ⇒ 轴端走**直线**。
 >
-> 母文档：`memo/thrust-nozzle.md`（定向喷管 `ccpe:thrust_nozzle` 本体；本方块**继承**它的一切）。
+> 母文档：`memo/propulsion/thrust-nozzle.md`（定向喷管 `ccpe:thrust_nozzle` 本体；本方块**继承**它的一切）。
 
 ---
 
@@ -477,7 +477,7 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 | `block/ShortRangeLinkerBlock.java` / `…BlockEntity.java` / `screen/ShortRangeLinker*` / `network/ShortRangeLinker*` | 频道注册生命周期、GUI（滚轮 + 非物理体提示 + tooltip 前景层）、payload 处理器 |
 | `compat/cc/ShortRangeLinkerRegistry.java` | **物理体作用域频道表**（自动分配 / 顺延 / 链聚合 / 非物理体返回 -1） |
 | `block/MyBearingPlateRenderer.java` | "只走 BER、不注册 Visual"的合法范例 |
-| `memo/thrust-nozzle.md` | 母文档：推力/气压/粒子/尾迹/染料/扳手全部继承自它 |
+| `memo/propulsion/thrust-nozzle.md` | 母文档：推力/气压/粒子/尾迹/染料/扳手全部继承自它 |
 
 ---
 
@@ -500,8 +500,8 @@ recipe、lang（`block.ccpe.advanced_thrust_nozzle*` + `gui.ccpe.advanced_thrust
 | 文件 | 改了什么 |
 |---|---|
 | `src/main/java/com/zzy205/myfirstmod/block/AdvancedThrustNozzleBlockEntity.java` | **主战场**：偏转点状态（`defX`/`defY` + 视觉 `visualDefX`/`visualDefY`）、`requestDirection`、`stepDeflectionTowardTarget`（二维直线恒速）、`advanceVisualAnimation`（同款二维步进）、`tiltDirModel(x,y)` 新签名、`getDeflection` 增 `x/y/targetX/targetY`、`setDirection` Lua 方法、NBT/同步键迁移 + 旧键兼容、`THRUST_OUTPUT_MULTIPLIER` |
-| `memo/advanced-thrust-nozzle.md` | 本轮全部结论（§1/§6.1/§6.3/§6.4/§6.5/§8/§9/§10 + 本节） |
-| `memo/thrust-nozzle.md` | §8 加一条「两种喷管出力口径不同」的警告（定向 1 pN/RPM vs 矢量 2 pN/RPM），避免以后混装时误判为 bug |
+| `memo/propulsion/advanced-thrust-nozzle.md` | 本轮全部结论（§1/§6.1/§6.3/§6.4/§6.5/§8/§9/§10 + 本节） |
+| `memo/propulsion/thrust-nozzle.md` | §8 加一条「两种喷管出力口径不同」的警告（定向 1 pN/RPM vs 矢量 2 pN/RPM），避免以后混装时误判为 bug |
 
 > 用户测试脚本（`run/saves/.../computer/2/startup.lua`）属按规范**只读**目录，本轮未改；测试用的
 > `setDirection` 片段见 §6.1 用法示例。
@@ -707,7 +707,7 @@ block 带 `create:safe_nbt` 标签、注册了 `SafeNbtWriter`、或者 **BE 实
 | 文件 | 改了什么 |
 |---|---|
 | `block/AdvancedThrustNozzleBlockEntity.java` | `implements PartialSafeNBT` + 新增 `writeSafe(...)`：写 `Channel` + `DefX/DefY` + `TargetDefX/TargetDefY` + `ThrustScale` + `TargetThrustScale`（键名与 `saveAdditional` 完全一致，部署时走普通 `loadAdditional`，不需要额外的 read 路径）。**运行时快照一律不写**（`OccupiedChannels`、`onPhysicsBody`、视觉动画字段） |
-| 同上 | `loadAdditional` 末尾（`level != null` 且服务端）立即 `registerChannel()`：修「部署时 `onLoad` 先于 `loadAdditional`、用默认频道登记」的时序问题（详见 `memo/short-range link.md` §11） |
+| 同上 | `loadAdditional` 末尾（`level != null` 且服务端）立即 `registerChannel()`：修「部署时 `onLoad` 先于 `loadAdditional`、用默认频道登记」的时序问题（详见 `memo/peripherals/short-range-link.md` §11） |
 
 ### 15.3 部署顺序与为什么需要那一次立即重登记
 

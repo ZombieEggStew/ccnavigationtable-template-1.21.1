@@ -78,3 +78,19 @@
 ### 位置约定
 
 - 可复用的通用工具放 `tools/`；一次性实验脚本放 `temp/`；`.tmp_luatest/` 保留给 Lua 干跑夹具。
+
+### 读取文本时的编码（与写入同源的问题）
+
+- 本仓库的 `.md` / `.json` / `.lang` 大多是**无 BOM 的 UTF-8**。PS 5.1 的 `Get-Content` 默认按 ANSI 读取，会打印成乱码（容易被误判成"文件损坏/内容不符"）：
+  - 读文本一律 `Get-Content -LiteralPath <路径> -Encoding UTF8`，或用 `[System.IO.File]::ReadAllText(<路径>, [System.Text.Encoding]::UTF8)`。
+  - 批量改写文件必须显式指定编码：`[System.IO.File]::WriteAllText(<路径>, $text, (New-Object System.Text.UTF8Encoding($false)))`（`$false` = 不写 BOM，保持原样）。
+- `read` / `grep` 工具直接按 UTF-8 读，不受此限 —— 需要看内容时优先用它们，不要用 `Get-Content` 打印。
+
+## memo 文档规则（仅修改或新增 `memo/**/*.md` 时适用）
+
+- `memo/` 已按主题分目录：`project/`（代码地图/踩坑/调试）、`flight/`（CC:T 飞行与自动驾驶）、`propulsion/`（喷管与引擎）、`peripherals/`（传感器/频道/通信/机械件）、`cockpit/`（控制台/Monitor/屏幕/GUI）、`rendering/`（渲染/兼容/注册）、`archive/`（历史记录）。**`memo/README.md` 是唯一目录索引**。
+- 新文档必须落到对应主题目录，并在 `memo/README.md` 对应表格加一行；**不要平铺在 `memo/` 根下**。
+- 文件名用英文短横线、无空格、无中文（中文路径在 PowerShell / 工具链里有编码坑）；日期型记录进 `archive/`。
+- 移动或改名后必须校验引用：全仓 grep `memo/` 路径，逐条确认目标文件存在（包括 `.agents/skills/*/SKILL.md`）。
+- 同一结论只维护一处：控制手法与常数 → `memo/flight/starship15-constants.md`；当前进度 → `memo/flight/starship15-ROUND.md`；历史证据与推导 → `memo/flight/starship15-catch.md`。
+- 超过 ~100 KB 的 memo（`memo/flight/flip-autopilot.md` 320 KB、`memo/flight/starship15-catch.md` 77 KB）只作检索用，按标题 / §N 定向读，禁止整篇读。

@@ -11,7 +11,7 @@
 
 ## 1. 只读清单（本轮最多三个；超了就不许动手，先问）
 
-1. 本卡 + `memo/starship15-constants.md`
+1. 本卡 + `memo/flight/starship15-constants.md`
 2. `run/saves/New World/computercraft/computer/0/guide.lua`
    —— **先 `grep -n` 找函数锚点，再 `read offset/limit` ≤80 行**，禁止整篇读
 3. 数据一律走 `tools/digest_csv.ps1`，**原始 CSV 不进对话**
