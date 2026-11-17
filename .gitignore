@@ -64,3 +64,5 @@ start-mkdocs.bat
 
 .env
 .dsh-drop/
+
+cc_logs_archive/

@@ -1,106 +1,106 @@
-# 星舰助推器复刻 —— 交接文档（2026-11-17 收盘）
+# 星舰助推器复刻 —— 交接文档（2026-11-18 04:30 收盘，V 段收官）
 
-> 给"下一个接手的人（或下一次的自己）"看的**一页纸**。细节全在 `memo/flight/starship15-catch.md`，
+> 给"下一个接手的人（或下一次的自己）"看的**一页纸**。细节全在 `memo/flight/starship15-catch.md`（按 §N 定向 grep）。
 > 本文只放：现在到哪了、哪些数是可信的、程序怎么跑、下一步做什么、哪些坑别再踩。
-
-> ⚡ **每轮开工先读** `memo/flight/starship15-ROUND.md`（本轮工作卡，≤60 行）+ `memo/flight/starship15-constants.md`（常数表 / 黑名单）。
-> 本文只在**换人、换会话、或大阶段收尾**时通读一次 —— 别每轮都读。
+> **本轮工作卡**：`starship15-ROUND.md`（每轮开工只读它 + `starship15-constants.md`；本文只在换人/换会话/大阶段收尾时通读）。
 
 ---
 
 ## 0. 一句话现状
 
-**三条控制通道（竖直 / 姿态 / 横向）都已在实机上跑通并标定完毕；0→90° 横躺翻转也已实飞成立，还差"横躺→竖直 + 任务集成"。**
+**「belly-flop → 锥角回翻 → 反推刹车」这条完整的 V 已经真机跑通并 PASS 三次；最后那次（v15）带完整 CSV，
+从竖直起点到「回竖直 + 横向刹停」只用 149.8 m，距地板还剩 ~60 m。**
+**缺的只剩：用这 ~60 m 做软着陆（F2），以及把 V 串进任务程序。**
 
 | 层 | 程序 | 状态 | 关键结论 |
 |---|---|---|---|
-| 竖直（定高/剖面） | `cal1` §16 | ✅ PASS | `A_REF=4 / A_BRK_MAX=5 / KV=6` 可用，定高 h ±0.06 m |
+| 竖直（定高/剖面） | `cal1` §16 | ✅ PASS | `A_REF=4 / A_BRK_MAX=5 / KV=6`，定高 h ±0.06 m |
 | 力矩通道标定 | `att` v2 §20 | ✅ 闭合 | pairA→body X（负）、pairB→body Z（正）、`α=1.0 rad/s²/单位D`、`I≈15.9 kg·m²`、力臂≈1.0 m |
-| 姿态环（四元数 PD） | `tilt` §21 | ✅ PASS | KP=3.0 KD=2.5；±6°/±9° 阶跃误差 ≤0.8°；被撞后 1.5 s 恢复 cos 1.00 |
-| 横向环（位置+速度） | `guide` v4 §23 | ✅ **PASS**（末端 0.42 m） | `MOV/RET` 末端 0.42 / 0.42 m、`HOLD` 0.03 m、`cosMin` 0.996、`slow=0`；日志体系已修（close 落盘 / 每轮独立文件名 / 已归档） |
-| 大角度翻转 0→90 / 90→0 | `flip` v8 §24/§27/§28/§32/§33 | ✅ **两段都真机验证**：0→90 由 v3 完成；**90→0 由 v8 锥角闭环完成**（θ 90→2.8、峰值 90.0 无过冲、`wMax 0.96`、drop 53.7 m、drift 26.2 m、`VERDICT PASS`） | 锥角是主执行器（α≈2.5，差动 0.33 的 7~8 倍）；**翻转段推力封顶 `u=0.45`** 才能不飞远；差动只做竖直后精修（满推力时差动余量=0） |
-| 任务集成 + 夹取 | `starship.lua` | ❌ 旧版缺姿态环，需按 §20/§21/§23 重写 | 再下一步 |
+| 姿态环（四元数 PD） | `tilt` §21 | ✅ PASS | KP=3.0 KD=2.5；被撞后 1.5 s 恢复 cos 1.00 |
+| 横向环（位置+速度） | `guide` v4 §23 | ✅ PASS | `MOV/RET` 末端 0.42 / 0.42 m，`HOLD` 0.03 m |
+| **完整 V（0→90→0 + 反推刹车）** | **`flip` v15 §35~§41** | ✅ **真机 PASS ×3（v15 有全量 CSV）** | FLIP1 2.15 s/5.4 m｜FLIPBACK 3.25 s/92.8 m｜BRAKE 3.20 s/47.6 m（vh 25.2→2.1）⇒ 到刹车结束只用 **149.8 m**，余量 **~60 m** |
+| 软着陆（用那 60 m） | — | ❌ **下一步 F2** | `BRAKE` 后机体停在 h≈40、离塔 ~90 m，`HOVER` 6 s 降不到 `capH=-8` |
+| 任务集成 + 夹取 | `starship.lua` | ❌ 旧版缺姿态环，须按 §20/§21/§23/§40 重写 | handover §9 的 D/E 步 |
 
 ---
 
-## 1. 可信的物理常数（全部实测，别再重测）
+## 1. 可信常数（唯一真相源是 `starship15-constants.md`，这里只列交接最常用的）
 
-| 量 | 值 | 出处 |
-|---|---|---|
-| 重力 | **G = 11 m/s²** | §13/§14/§15/§19/§21 五次一致 |
-| 推力模型 | `F = N × 256 × 2.05 × p × scale`（pN） | §14/§16/§20 |
-| 机体质量 | **61.00 kg**（链质量夹住时 219 kg） | §11 |
-| 满推力 TWR | 平台 p≈0.887 时 **3.44~3.55**；云层 p≈0.58 时 ≈**2.26** | §13/§16 |
-| 悬停油门（5 台） | **u_hover ≈ 0.284**；**只开 4 台**（ch0=0）时 **0.348~0.351** | §16/§23 |
-| 差动增益 | **α = 1.0 rad/s² 每单位 D**（D=0.22 时 0.22）；两路相同 | §20（Lua + 飞行记录仪交叉验证） |
-| 差动映射 | `pairA(ch1/ch3)` → body **X**，`D>0 ⇒ ωX<0`；`pairB(ch2/ch4)` → body **Z**，`D>0 ⇒ ωZ>0`；正交、**真串扰 0** | §19/§20 |
-| 推力对 `setThrustScale` 的阶跃滞后 | **≈0.15 s**（一阶） | §19/§20 |
-| 机体惯量 / 力臂 | **I ≈ 15.9 kg·m²** / **r ≈ 1.0 m** | §20（由 propM 与 α 反解） |
-| 控制频率 | **20 Hz**（dt 中位 0.050 s），每周期**只有一个** `parallel.waitForAll` 写块 | §15.5/§16/§23 |
-| 锥角坐标系 | `setDirection(1,0)` 的 model +X → 世界 **(yaw+180°)**（三次复现） | §13/§14/§16 |
-| 推力方向 | 严格沿**机体上方向**（机体系 `|Fh|=0`，无寄生横向分量） | §23.5（记录仪） |
+| 量 | 值 |
+|---|---|
+| 重力 / 推力模型 / 质量 | `G=11`；`F = N×256×2.05×p×scale`（pN）；`m=61.00 kg` |
+| 满推力 TWR | 4 台 @p≈0.54 ≈ **1.68**；@p≈0.82 ≈ **2.57**；5 台各 ×1.25 |
+| 悬停油门 | 5 台 ≈0.284；**只开 4 台（ch0=0）≈0.348~0.351** |
+| 差动 | `α=1.0 rad/s²` 每单位 D；pairA→body X（D>0⇒ωX<0）、pairB→body Z（D>0⇒ωZ>0）；滞后 ≈0.15 s |
+| 锥角（主翻转执行器） | 15° 满锥角；`α=2.0 rad/s² @u=1` ⇒ **α_可用 = 2.0·u**；`setDirection(x,y)` 是摇杆语义；**ch0 必须 `setInverted(true)`** |
+| 磁场/环境 | 无气动阻力模型（`d=0.09` 通用阻力，`τ≈11 s`）；地面 **Y=63**；云层 ≈Y=195 |
 
-**⇒ 由这些常数推出来的能力上限**
+**实测出来的能力上限（别重新发明）**
 
 ```
-姿态权限 α_max = 1.0 × D_max ≈ 0.33 rad/s²（D_max≈0.33，悬停油门下）
-纯差动翻 90°：t = 2√(θ/α) ≈ 4.3 s，自由落体掉 ~100 m   ← 所以翻转必须靠机体倾角做主
-悬停横向加速度 = G·tan(tilt)：10° ⇒ 1.94 m/s²；18° ⇒ 3.57；25° ⇒ 5.13
+过冲 Δθ = w²/(2α)，α = 2.0·u   ⇒ u=0.45 交 60°/s 必过冲 ~38°；u=0.60 过冲 ~25°
+回翻腿「时长就是落差」（近横躺时 15° 锥角只给 sin15°·u·TWR ≈ 0.2~0.4 G）
+高度不是杠杆：推力∝气压，翻转点每高 10 m，锥角腿多掉 ~8.5 m（净赚 1.5 m/10 m）
+刹车段真实权限：4 台 @p≈0.82 ⇒ 17.3 m/s²（u=1.0）；剖面用 arrestBrk=16 时 u 会打到 1.00
 ```
 
 ---
 
-## 2. 三条控制律（都已验证，直接抄）
+## 2. 四条控制律（都实测过，直接抄）
 
 ```lua
--- 竖直（定高 / 剖面）
+-- ① 竖直（定高/剖面）
 vyRef = clamp(K_POS*(hTarget-h), ±VY_HOVER)          K_POS=0.9 VY_HOVER=3
-aDes  = clamp(KV*(vyRef-vy), -A_ACC, A_BRK_MAX)      KV=6 A_ACC=6 A_BRK_MAX=5
-u     = clamp(m*(G+aDes)/cosVert / Fmax4, 0, 1)      Fmax4 = 4*256*2.05*p
-cosVert < COS_MIN(0.25) ⇒ u=0
+aDes  = clamp(KV*(vyRef-vy), -A_ACC, A_BRK_MAX)      KV=6 A_ACC=6 A_BRK_MAX=5（刹车腿临时 16）
+u     = clamp(m*(G+aDes)/cosVert / FmaxFiring(p), 0, 1)；cosVert<COS_MIN(0.25) ⇒ u=0
 
--- 姿态（四元数 PD）
-n_w = up × u_cmd  (把机体上方向拽到指令方向的世界转轴)
-e   = acos(up·u_cmd)；n_b = R⁻¹n_w ⇒ e_x,e_z(rad)
-a_x = KP*e_x - KD*w_x     a_z = KP*e_z - KD*w_z      KP=3.0 KD=2.5
-D_A = clamp(a_x/GAINX, ±room)   D_B = clamp(a_z/GAINZ, ±room)   GAINX=-1.0 GAINZ=+1.0
-room = min(0.33, u-0.02, 1-u)
-ch0=0；ch1=u+D_A ch3=u-D_A；ch2=u+D_B ch4=u-D_B     ← 每对和为 2u，净竖直推力不变
+-- ② 姿态（四元数 PD，差动）
+a_x = KP*e_x - KD*w_x   a_z = KP*e_z - KD*w_z        KP=3.0 KD=2.5
+D_A = clamp(a_x/GAINX, ±room)  D_B = clamp(a_z/GAINZ, ±room)  GAINX=-1.0 GAINZ=+1.0
+room = min(0.33, u-0.02, 1-u)；ch0=0；ch1=u+D_A ch3=u-D_A；ch2=u+D_B ch4=u-D_B
 
--- 横向（位置 → 速度 → 加速度 → 倾角）
-vTarget = clamp(LAT_KP*posErr, ±LAT_VMAX)        LAT_KP=0.30,  LAT_VMAX=1.5→(建议 1.2)
-aDes    = clamp(LAT_KV*(vTarget-vHoriz), ±LAT_AMAX)   LAT_KV=1.00, LAT_AMAX=2.0
-theta   = atan(|aDes|/G) ≤18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
-死区 |posErr|<0.20m 且 |vh|<0.08 ⇒ 不给倾角       （末端对接建议 0.08）
+-- ③ 横向（位置→速度→加速度→倾角）
+vTarget = clamp(LAT_KP*posErr, ±LAT_VMAX)  LAT_KP=0.30 LAT_VMAX=1.2
+aDes    = clamp(LAT_KV*(vTarget-vHoriz), ±LAT_AMAX)  LAT_KV=1.00 LAT_AMAX=2.0
+theta = atan(|aDes|/G) ≤18°；死区 |posErr|<0.08 且 |vh|<0.08
+
+-- ④ 锥角（大角度翻转，唯一可用的大力矩通道）
+e = lean - tgt               lean = deg(atan2(up_z, up_y))  ← 带符号，负 = 朝 −Z（横躺侧）
+α_now = 2.0*u                ← 分母必须用「实际权限」，不是满推力 α（v11 的真 bug）
+wDes = min(WMax, sqrt(2·α_now·|e|))   ← 刹车曲线（fast 腿）；小误差也不塌尾巴
+tilt = clamp(KA*(wDes - leanDot)/α_now, ±1)   KA=6；leanDot 用差分+一阶滤波(τ=0.08)
+DIRCMD = {0, -CONE_SGN*tilt}   ← 极性是喷管映射属性，跨腿共享（首腿探针锁定后不再探）
 ```
 
-**反复强调的三条硬道理**（都是实测撞出来的）
+**四条硬道理**
 
-1. **机体倾斜方向 = 推力方向 = 漂移方向**（§21.5）。想加速就往那倾，想刹车就往速度反方向倾。
-2. **机体倾角是慢执行器**：18° 摆动要 ~1.3 s ⇒ 横向环带宽必须 ≪0.7 rad/s，别往上加 KP。
-3. **没有姿态环之前绝不能用倾角/锥角拉横向**（§15.2 的正反馈翻车）。现在姿态环有了，禁令解除。
+1. 机体倾斜方向 = 推力方向 = 漂移方向；想刹车就往速度反方向倾。
+2. 倾角是慢执行器（18°≈1.3 s），横向环带宽必须 ≪0.7 rad/s。
+3. **锥角力矩 ∝ u**：用满推力 α 当分母 ⇒ 以为力矩是 2.2 倍 ⇒ 饱和 + 过冲。
+4. **锥角 + 差动不能同刻并联**（满推力时差动余量=0）；分工是**分时**：大角度用锥角、竖直后用差动 PD。
 
 ---
 
-## 3. 程序清单（都在 `run/saves/New World/computercraft/computer/0/`）
+## 3. 程序清单（`run/saves/New World/computercraft/computer/0/`）
 
-| 程序 | 用法 | 干什么 | 日志 | 状态 |
-|---|---|---|---|---|
-| `probe.lua` | `probe` | 只读识别、TWR 预测、**把夹持点写进 `/log/target.txt`** | `/log/probe_0.txt` | ✅ 已跑 |
-| `cal1.lua` | `cal1` / `cal1 zero` | 释放→落体→满推力脉冲→定高悬停→锥角探针 | `/log/cal1.csv` | ✅ 已跑（§16） |
-| `att.lua` | `att` / `att zero` | 悬停工作点上的正反差动对 + 开环回正 | `/log/att.csv` | ✅ 已跑（§20） |
-| `tilt.lua` | `tilt` / `tilt zero` | 姿态 PD 跟踪 ±6°/±9° 倾角阶跃 | `/log/tilt.csv` | ✅ 已跑（§21） |
-| `guide.lua` | `guide` / `guide zero` | 横向闭环：悬停保持 + 沿 −Z 平移 6 m 再回来 | `/log/guide_<epoch>.csv` | ✅ v4 PASS（末端 0.42 m，§23.9） |
-| `flip.lua` | `flip` / `flip zero` | 爬升到 y≈217 → 0→90° 横躺 → 保持到落地 | `/log/flip_<epoch>.csv` | ✅ v3 实飞（横躺 102°，§24.4）；**回程未做** |
-| `spin.lua` | `spin` | 悬停→差动脉冲→自由衰减→回正立（量角阻尼） | `/log/spin_<epoch>.csv` | ✅ v1 两轮（§25.1，8 块对称风帆无感阻尼） |
-| `starship.lua` | `starship` | 任务程序（**旧版，缺姿态环**） | `/log/starship.csv` | ❌ 待重写 |
-| `fixture.lua`（在 `computer/1`） | `fixture` 常驻；`status`/`release`/`clamp`/`arms <deg>`/`open`/`close` | 夹具命令端 | `/log/fixture_1.txt` | ✅ 可用 |
+| 程序 | 用法 | 状态 |
+|---|---|---|
+| `probe.lua` | `probe` | ✅ 只读识别 + 把夹持点写进 `/log/target.txt` |
+| `cal1.lua` | `cal1` / `cal1 zero` | ✅ §16 竖直通道标定 |
+| `att.lua` | `att` / `att zero` | ✅ §20 力矩通道 |
+| `tilt.lua` | `tilt` / `tilt zero` | ✅ §21 姿态 PD |
+| `guide.lua` | `guide` / `guide zero` | ✅ v4 PASS（横向环 + 落地剖面的竖直环） |
+| **`flip.lua`** | `flip` / `flip back` / `flip zero` | ✅ **v15 真机 PASS**：爬升到 h=190 → 0→90（锥角）→ 0.05 s → 锥角回翻 → 反推刹车(arrestBrk 16) → 竖直；`flip back` = 横躺起点直接回翻 |
+| `spin.lua` | `spin` | ✅ §25.1 角阻尼≈0（气动件对小转速无效） |
+| `thruststress.lua` / `dropall.lua` | 一次性 | ✅ 脱落/推力取证工具 |
+| `starship.lua` | `starship` | ❌ **旧版缺姿态环**，须重写 |
+| `fixture.lua`（`computer/1`） | `fixture` 常驻 + `status/release/clamp/arms/open/close` | ✅ 可用 |
 
 **通用约定**
 
-- 所有测试程序：`xxx zero` = 应急归零；结尾 **只把喷口 `setThrustScale=0` + `setDirection(0,0)`，引擎保持 100%**（用户规则）。
-- **跑测试前夹具电脑必须先跑 `fixture`**（轴承无转速时会拒绝释放）。
-- 释放要在**同一个 `parallel` 块**里关掉所有 connector（顺序写会各吃 1 tick，造成倾斜→漂移→翻车）。
+- `xxx zero` = 应急归零；程序结尾**只把喷口 `setThrustScale=0` + `setDirection(0,0)`，引擎保持 100%**。
+- 跑测试前夹具电脑必须先跑 `fixture`；**但云端平台没有夹具电脑**（`flip` 会自动降级成「本地脱落」）。
+- 释放/接线一律塞进**同一个 `parallel` 块**（顺序写每条吃 1 tick ⇒ 倾斜 ⇒ 漂移 ⇒ 翻车）。
 
 ---
 
@@ -108,14 +108,14 @@ theta   = atan(|aDes|/G) ≤18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 
 | 体 | 频道 | 设备 | 备注 |
 |---|---|---|---|
-| 火箭 | 0 | 矢量喷管**中心** | `inverted=true`，**测试里一律 scale=0**（无力臂、反推力） |
-| 火箭 | 1 / 3 | 矢量喷管前/后 | 差动 ⇒ body X 力矩（pairA） |
-| 火箭 | 2 / 4 | 矢量喷管左/右 | 差动 ⇒ body Z 力矩（pairB） |
-| 火箭 | 5 | 上方两个 docking connector | `setRedstoneOutput(5,15)` = 夹紧 |
-| 火箭 | 6 | 下方燃料 connector | 强充能强度=红石输出值 |
+| 火箭 | 0 | 矢量喷管**中心** | **`setInverted(true)`**；默认 scale=0（F4 才会启用） |
+| 火箭 | 1 / 3 | 矢量喷管前/后 | 差动 ⇒ body X（pairA） |
+| 火箭 | 2 / 4 | 矢量喷管左/右 | 差动 ⇒ body Z（pairB） |
+| 火箭 | 5 | 上方两个 docking connector | `setRedstoneOutput(5,0)` = 脱落 |
+| 火箭 | 6 | 下方燃料 connector | 脱落 = 输出清零 + `setStrongPower(6,false)` |
 | 夹具 | 7/8/9 | fuel/right/left connector | |
-| 夹具 | 10/11 | 左右 `aero_bearing` | `setTargetAngle(30/-30)`=张开，`0`=搭接；**必须有轴向输入转速**（实测 ±256） |
-| — | — | 引擎 | `setThrottle(1)` ⇒ 256 RPM（保持常开） |
+| 夹具 | 10/11 | 左右 `aero_bearing` | `setTargetAngle(30/-30)` 张开；**必须有轴向输入转速** |
+| — | — | 引擎 | `setThrottle(1)` ⇒ 256 RPM 常开 |
 
 ---
 
@@ -123,39 +123,28 @@ theta   = atan(|aDes|/G) ≤18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 
 | 项 | 值 |
 |---|---|
-| 世界 | 超平坦；**地面 Y=63**；云层 ≈**Y=195** |
-| 回收塔 | x≈11，Y 63~102，**z≈12（+Z 侧）** |
-| 夹持平台 | **+Z**，实测边界到 z≈+6（去那儿必撞） |
-| 夹臂 | **X 两侧，臂高 ≈Y 95** |
-| 夹持点 | ≈**(11, 95, 0)**；`target.txt` 的 `dockY=93.047` 是机体原点 |
-| 未来释放点 | ≈**(10, 217, 70)**（比夹持点高 ~122 m、+Z 偏 ~70 m，对应直播的"落点在后方 69 m"） |
-
-**安全方向表**：`−Z` 无限 ✅｜`±X` 只要 y<93（低于夹臂）⚠️｜`+Z` 悬停高度**禁止** ❌｜竖直 `h ≥ −30`（地面）。
+| 世界 | 超平坦；**地面 Y=63**；云层 ≈Y=195；build limit 320 |
+| 回收塔 | x≈11，Y 63~102，**z≈+12**；夹持点 ≈**(11,95,0)**；`dockY=93.047` 是机体原点 |
+| 夹臂 | X 两侧，臂高 ≈Y 95；夹持平台边界到 z≈+6（去那儿必撞） |
+| 释放点（实际用的） | ≈**(10,217,70)** ⇒ 程序里 `h=122.7` 起步，`flipAlt 190` ⇒ y≈283 |
+| 安全方向 | `−Z` 无限 ✅｜`±X` 只要 y<93 ⚠️｜`+Z` 悬停高度禁止 ❌｜`h ≥ −30` 是地面，`floorH=-20` |
 
 ---
 
-## 6. 工具（改完 Lua 先干跑，别直接上机）
+## 6. 工具与磁盘纪律
 
 ```
-.tmp_luatest/harness.lua   桩世界（桩外设 + 桩物理 + 虚拟时钟）
-用法： lua54 harness.lua <程序路径> [推力滞后τ, 默认0.08]
-    物理：α=1.0/单位D、p(y)=1-0.00371(y-63)、一阶推力滞后、G=11、mass=61
-输出：完整 status 行 + 每个日志文件的行数（能抓"日志没写进去"这类 bug）
+.tmp_luatest/harness.lua   桩世界（桩外设+桩物理+虚拟时钟）
+  lua54 harness.lua <程序路径> [τ=0.08]
+  桩的硬限制：气压模型在 h≈150 就把推力顶到重力 ⇒ 190 m 只能真机验；
+  验尾部相位要复制一份程序把 flipAlt/floorH 改小（temp/flip_stub_*.lua）
+tools/digest_csv.ps1       把 50 KB~60 MB CSV 压成 ≤30 行看板（正文必须纯 ASCII！）
+  powershell -File tools\digest_csv.ps1 <log.csv> [-Cols h,vy,u] [-T0 12 -T1 20 -Win 0.5]
 ```
 
-已知它抓过的真 bug：脉冲基准没串接、`S0` 取错（脉冲期爬升 20 m）、`pcall(fs.open(...))` 写法错导致 status 文件恒空。
-
-**日志摘要器（每轮取数都走它，别把 CSV 读进对话）**
-
-```
-tools/digest_csv.ps1   把 50 KB~60 MB 的 CSV 压成 ≤30 行看板
-用法： powershell -File tools/digest_csv.ps1 <log.csv> [-Cols h,vy,u] [-T0 12 -T1 20 -Win 0.5] [-HeaderOnly]
-输出： 每相位 n / dtMd / 各列 min..max (avg) →last  +  自动判据
-       SLOW(dt>0.07) / GAP(>1 s 停顿) / ATT_DIP(cosVert<0.9 且 u>0.1)
-       SAT(u 打满) / SINK(出推力还在掉高度) / ERR_END(收尾 posErr>0.5) / COL_SHIFT(行字段数不符)
-       + 同目录 status_*.txt 尾部
-注意： 本脚本正文必须保持纯 ASCII（PS 5.1 读无 BOM 的 UTF-8 会按 ANSI 解码，中文注释会吞代码行）
-```
+⚠️ **CC 电脑磁盘只有 1 MB**（可用 ~880 KB）。2026-11-18 实测：把 8 份 `flip.lua` 塞进 `computer/0/ver/`（**544 KB**）
+导致剩余 69.7 KB < `diskMinFree 120 KB` ⇒ **CSV 被静默跳过**，整轮数据只剩程序自打印。
+**规矩：旧版本一律存主机侧 `cc_logs_archive/lua_versions/computer0/`**，电脑盘只放运行用程序（当前 266 KB）。
 
 ---
 
@@ -163,71 +152,71 @@ tools/digest_csv.ps1   把 50 KB~60 MB 的 CSV 压成 ≤30 行看板
 
 | 坑 | 后果 | 修法 |
 |---|---|---|
-| 横向环增益按"位置误差"直接给大 | 倾角爬升慢 ⇒ 速度超调、过冲数米 | `LAT_KP≈0.3 / LAT_VMAX≤1.5 / LAT_AMAX≤2.0` |
-| 开环 ±对称倾斜当"居中测试" | 每步 1.5 s 爬坡 ⇒ 横向冲量不对称，净漂 5~9 m | 一律走**速度闭环**给倾角 |
-| 悬停高度设在平台/塔附近 | 实测在 z≈+6 撞平台（ω 被踹 0.2 rad/s） | 只在 −Z 活动；`capH` 用 −8（y≈85） |
-| 看 `computer/<id>/log/*` 是 0 字节就判"没写" | **只有 `close()`（或电脑关机/存档）才把写句柄推到主机磁盘**，`flush()` 不够（§23.8）；`pcall(fs.open, …, "w")` 实测正常 ⇒ 旧结论「pcall 恒 nil」已推翻 | 程序结尾必须 close；CSV 用带 epoch 的文件名；测完立刻复制到 `cc_logs_archive/` |
-| 忘了电脑磁盘有上限 | `cap=1,000,000`、`free=581,811`；一次 `guide` 就吃 78 KB，撞满后 `fs.open("w")` 会返回 nil | 实跑前清掉 `/log` 里不要的 csv |
-| CSV 相位名带逗号（`A(1,3)+`） | 整行错位，解析全崩 | `ph:gsub(",","")` |
-| 顺序写红石 / connector | 释放瞬间倾斜 → 推力侧漏 → 漂移翻车 | 全部塞进**同一个** `parallel` 块 |
-| 锥角偏转当横向阻尼 | 俯仰耦合正反馈，被掀翻（cosVert 0.06） | **先有姿态环**再用横向；阻尼交给 PD |
-| `cosVert=0`（横躺）时出集合推力 | 越推越快往下掉 | `COS_MIN` 门控 + FLIP 段（待做） |
-| `getOrientation()` 可能 `w=−1` | 四元数镜像 | 入口统一归一 `w>0` |
-| 日志读取抢跑 | 读到 0 字节的半成品文件 | 看 mtime 是不是还在涨；或直接读 `status` 的最后一行 |
+| 锥角环分母用满推力 α | 以为力矩 2.2 倍 ⇒ 饱和 + 每腿过冲（真机峰 90.5°，桩 107.7°） | 分母用 `α_now = 2.0·u`（v11 修） |
+| 横躺段用**差动**做阻尼 | u=0 时差动几乎无权限 ⇒ 刹不住 1 rad/s ⇒ 翻过 90°（桩 114.7° OVERFLIP） | 横躺段一律用锥角（`ctrlConeDamp` / 锥角 HOLD） |
+| 想「翻得快又停在 90°」 | `Δθ=w²/2α`：u 不够时物理上不可能 | 要么慢（老 KW 律，4 s / 128 m），要么提 u（0.60 ⇒ 3.25 s / 92.8 m） |
+| 以为「抬高翻转点就有余量」 | 推力∝气压 ⇒ 高 10 m 反多掉 8.5 m | **别动 flipAlt**；余量靠 u / arrestBrk / ch0 |
+| 拿比例式反推去消 Z 回滑 | 会杀掉用户要保留的 SN15 签名，且尾部刹不住（桩 9 s / 169 m） | **保留固定 22°**（用户 2026-11-18 裁定） |
+| `capH` 被 CLIMB 改成 flipAlt 后没还原 | HOVER 永远追 190 ⇒ 任何高度都判不出 PASS | 函数作用域存原值，BRAKE 前还原（v10 修） |
+| `HOLD/DAMP` 后的差动腿在 u=0 下写 ±da | 会出现反向力矩/空转 | v11 起 HOLD 走锥角、DAMP 在符号锁定后整段跳过 |
+| 用全局 `args` 读程序参数 | 参数**静默丢失**、跑默认分支（两次） | `local ARGV = {...}`（黑名单 #16） |
+| `pcall(fs.open,…)` 被判"恒 nil" | 旧结论已推翻；但 `flush()` 不够，**必须 close()** 才落盘 | 结尾 close；CSV 带 epoch 文件名；测完立刻归档 |
+| CSV 相位名带逗号 | 整行错位、解析全崩 | `ph:gsub(",","")` |
+| 顺序写红石/connector | 释放瞬间倾斜 ⇒ 侧漏 ⇒ 漂移翻车 | 同一 `parallel` 块 |
+| 悬停高度设在塔/平台附近 | 实测在 z≈+6 撞平台（ω 被踹 0.2 rad/s） | 只在 −Z 活动；`capH=-8` |
+| 刹车后机体停在 ~40 m 却指望 HOVER 收尾 | `HOVER` 6 s 内降不到 `capH=-8`（3 m/s 剖面要 16 s） | 这就是 F2 落地剖面要接的位置 |
+| `getOrientation()` 可能 `w=−1` | 四元数镜像 | 入口统一归一到 `w>0` |
 
 ---
 
 ## 8. 未解决 / 待验证（按优先级）
 
-1. **横躺→竖直（回程翻转）** ← **下一步主线**：0→90 已实测（5.6 s、掉 30 m、横躺停在 102°），
-   但 90→0 有**三处不对称**：前半段全程自由落体（横躺时推力没有竖直分量）、起点正落在 90° 方向歧义区
-   （干跑已两次跑飞 88.4→118.4 / 87→164）、过冲即倒扣。做法：**方向锁定**（每 0.1 s 检查 θ 是否朝目标减小，
-   否则反号锁死）+ 既有制动曲线速率环 + 回到 `cosVert>cosNeed` 后竖直刹车。
-2. ~~横向环末端精度~~ ✅ 已解决：`guide` v4 实飞 `MOV/RET` 末端 **0.42 / 0.42 m**、`HOLD` 0.03 m（§23.9）。
-3. **跨相位衔接**：`starship.lua` 里 `FALL→FLIP→LAND→HOLD` 的切换判据（"越过目标高度"误判是已知缺陷 §18.3）。
-4. **夹取闭环**：`close` + 关推力验证是否真被夹住（代码在 `fixture.lua`，未联调）。
-5. **锥角精修**：现在锥角通道完全没用；`frameYawOff=180°` 已在 §16 复现三次，可用于 ±15° 精修。
-6. **残余偏航**：机体 Y 轴没有控制通道，撞一下就会带着 7°/s 的偏航（§21.5）；对位置夹取无害，
-   但会转动锥角的模型系 —— 用锥角前要现算 yaw。
+1. **软着陆剖面（F2）**：`BRAKE` 结束时机体 h≈40、`vh≈2`、离塔 ~90 m。需要「降高度 + 收位置 + 触地」的完整剖面，
+   预算是那 ~60 m 余量。`guide` v4 的竖直环（`A_REF/KV/VY_TOUCH`）是现成料，但**要重做触地判据**。
+2. **belly-flop 峰 109.3°**（过横 19°）：与过冲同源（`Δθ=w²/2α`），用户认可为效果；若哪天要压回 90°
+   只能再提 `u`（F4 ch0 +25%）或加长 HOLD（但每秒 ~±10 m 落差）。
+3. **`FLIP1` 的 `wMax` 实测 1.45 rad/s > 指令上限 1.05**：循环在饱和段跟不上目标速率（不影响结果，但说明
+   `coneKA/滤波` 在高速率下有滞后；VERDICT 只把 FLIPBACK 的 `wMax3 ≤1.4` 当判据）。
+4. **夹取闭环**：`close` + 关推力是否真被夹住（`fixture.lua` 未联调）。
+5. **残余偏航**：机体 Y 轴无控制通道，撞一下带 ~7°/s 偏航；用锥角前要现算 yaw（`frameYawOff=180°` 已三次复现）。
+6. **爬升剖面太慢**：`CLIMB` 28~32 s（限速 `VY_HOVER=3`）；若嫌慢可加 `VY_CLIMB≈8` + sqrt 减速曲线（只省时间）。
 
 ---
 
-## 9. 下一步（建议顺序，每步都能独立上机、能回滚）
+## 9. 下一步（建议顺序，一步一上机、能回滚）
 
 | 步 | 做什么 | 验收标准 | 风险 |
 |---|---|---|---|
-| **A** | `guide` 参数收尾（v4：`MOV/RET` 9 s、`VMAX` 1.2、`DB_POS` 0.08） | `MOV/RET` 末端 ≤0.5 m、`HOLD` ≤0.15 m | ✅ **达标**（0.42 / 0.42、0.03）；质量与重心**不必改**（§23.9） |
-| **B** | ✅ `flip.lua` v3：**下落中** 0→90°（`CLIMB` 到 y≈217 + `cosVert`/`vh` 双门控 + 制动曲线速率环） | 峰值 80°、横躺保持 81~102°、掉 30 m、不跑飞 | ✅ **已完成**（§24.3/§24.4） |
-| **C** | ✅ **已完成（真机 PASS）** `flip.lua` v8 `back` 模式：横躺 → 竖直（**锥角闭环** + `BRAKE` 反推段） | θ 90→2.8、峰值 90.0（无过冲）、`wMax 0.96`、drop 53.7 m、drift 26.2 m、`VERDICT PASS` | ✅（§32/§33，2026-11-18 02:30） |
-| **D** | 重写 `starship.lua`：`FALL→FLIP→LAND（竖直剖面+横向环）→HOLD→CLOSE` | 悬停到 (11,95,0) ±0.5 m，`close` 后不坠 | 高 |
-| **E** | 首飞：从 (10,217,70) 放手 | 标称成功（被夹住） | 高 |
+| **A** | ✅ `guide` v4 参数收尾 | 末端 ≤0.5 m | ✅ 已达标（0.42） |
+| **B** | ✅ `flip` v3：下落中 0→90° | 峰值 80°、不跑飞 | ✅（§24.3/§24.4） |
+| **C** | ✅ `flip` v8 `back`：横躺→竖直（锥角 + 反推） | θ→2.8、`VERDICT PASS` | ✅（§32/§33） |
+| **C+** | ✅ `flip` v15：**整条 V 连贯**（锥角两段 + 刹车开满） | 到刹车结束 ≤185 m、`aborted=nil` | ✅ **149.8 m / 余量 60 m**（§41） |
+| **D** | **F2 落地剖面**：`BRAKE` 之后接竖直+横向环做软着陆 | 触地 `|vy| ≤0.8`、`|vh| ≤2`、`cos ≥0.95`、位置误差 ≤3 m、不撞地板 | 中高 |
+| **E** | 重写 `starship.lua`：`FALL→FLIP→LAND→HOLD→CLOSE` | 悬停到 (11,95,0) ±0.5 m，`close` 后不坠 | 高 |
+| **F** | 首飞：从 (10,217,70) 放手 | 标称成功（被夹住） | 高 |
 
-**下一步（下一轮从这批里挑一条，一次只做一条）**：
+**下一轮候选（一次只做一条，按性价比）**
 
-1. **F1 · 同一个 V 全程锥角**：`FLIP1` 也从差动换成 `ctrlConeAtt(+90)` —— 现在整条 V 约 12 s（差动 6.25 s + 回程 3.7 s），
-   换完预计 ~5 s、省 40~70 m 落差，也是「翻转→着陆」连续动作的前提。
-2. **F2 · 接落地剖面**：竖直后接 `guide` v4 的竖直+横向环（`A_REF/KV/VY_TOUCH`），做出完整
-   **belly-flop → 回翻 → 软着陆**（SN15 直播的核心动作）。
-3. **F3 · `BRAKE` 改比例式**：现在固定 22° 会刹过头（实测 HOVER 段反向滑回 **+28.9 m**），
-   改成 `leanTgt = clamp(k·vh, ±brakeMax)` 可把 drift 再压一半。
-4. **F4 · 加入 ch0**（`setInverted(true)`）：推力/力矩各 +25%，但必须验证 ch0 反向在 4 台同向差动里不破坏对称。
-5. **F5（可选）· RCS**：只有想要「2~3 s 回翻 + 零漂移」时才值得做（§26 结构卡住）。
+1. **F2 · 落地剖面**（推荐，主线就卡在这）：把 ~60 m 余量变成「降高度 + 收位置 + 软触地」。
+2. **F4 · 加 ch0**（`setInverted(true)`）：全段 +25%（刹车 24 m/s²、回翻 α +25%、belly-flop 过冲更小）；先验差动对称性。
+3. **爬升加速**：`VY_CLIMB≈8` + sqrt 减速曲线（只省时间，不影响动力学）。
+4. **串任务程序**：把已验证的 V + 落地并进 `starship.lua`（D/E 步）。
 
-**已暂停的结构方向（记录在案，别重启）**：RCS / 横向喷口方案要**结构大改** —— 现动力在机尾且空间占满，
-喷口是 `create:encased_fan + thrust_nozzle` 两个方块；要做 RCS 得先做出「整合引擎」+「单方块 RCS 喷口」两个新方块。
-在此之前主线继续用**锥角 + 差动分时**（锥角管大角度、差动管竖直后精修）；气动件已实测**对小转速无效**（8 块对称风帆，§25.1）。
+**已暂停的结构方向（记录在案，别重启）**：RCS / 横向喷口要**结构大改**（现动力在机尾且空间占满，
+喷口是 `create:encased_fan + thrust_nozzle` 两个方块）。RCS 需先做「整合引擎」+「单方块 RCS 喷口」两个新方块。
+在此之前主线继续**锥角（大角度）+ 差动（竖直后精修）分时**；气动件对小转速无效（8 块对称风帆实测，§25.1）。
 
 ---
 
 ## 10. 数据文件索引
 
-| 文件 | 内容 |
+| 文件 / 目录 | 内容 |
 |---|---|
-| `memo/flight/starship15-catch.md` | 主文档：§11~§16 标定飞行、§19~§20 力矩通道、§21 姿态环、§22 世界几何、§23 横向环 |
-| `memo/flight/flip-autopilot.md` | 落地剖面 / 四元数姿态环 / 20 Hz 写预算 / COS_MIN 门控（通用经验） |
-| `memo/propulsion/advanced-thrust-nozzle.md` | 喷管 Lua API 与推力模型 |
-| `memo/peripherals/cc-rednet-communication.md` | 跨电脑命令协议 |
-| `memo/peripherals/my_aero_sensor.md` | INS 读数与门控 |
-| `run/saves/.../computer/0/log/*.csv, *.txt` | 每次实跑的原始数据（att/tilt/guide/cal1/starship） |
-| `run/flight_logs/*.csv` | 模组自带 FlightDataRecorder（机体系角速度 `wb*`、喷管力矩 `propM*`）—— 交叉验证用 |
+| `memo/flight/starship15-ROUND.md` | 本轮工作卡（≤60 行，每轮覆写） |
+| `memo/flight/starship15-constants.md` | **唯一真相源**：可信常数、能力上限、控制律、黑名单 #1~#20、程序版本表 |
+| `memo/flight/starship15-catch.md` | 归档 §11~§41（含每次真机的原始曲线结论） |
+| `cc_logs_archive/*.csv` + `*.txt` | 真机原始数据归档（`flip_v15_PASS_20261118_0408.csv` 是当前的基线） |
+| `cc_logs_archive/lua_versions/computer0/` | 旧版本源码（`flip_v3/v5/v6/v7/v8/v10/v12/v13/v14`、`guide_v1`） |
+| `run/flight_logs/*.csv` | 模组记录仪（机体系 `wb*`、喷管力矩 `propM*`）—— 交叉验证用 |
 | `.tmp_luatest/harness.lua` | 桩世界干跑夹具 |
+| `temp/flip_stub_v15c.lua` | 桩内验尾部相位的副本（`flipAlt 120 / floorH -400`） |
