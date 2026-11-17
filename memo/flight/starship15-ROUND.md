@@ -6,44 +6,45 @@
 
 ## 0. 本轮目标（只做这一件，不扩）
 
-**F · 云端平台「横躺 → 竖直」单段验证**（`flip.lua` v6 的 `flip back` 模式）：
-机体现在**横躺停靠在云端平台**（`cosVert≈0`、y≈212.5、没有塔、没有 fixture 电脑）。
-判据：`ch5/ch6` 本地脱落 → 锥角闭环把 θ 90→0 在 ≤3 s 内、峰值角速度 ≤1.4 rad/s、**不越过 170°**、
-随后 `ARREST` 把 vy 收住、`HOVER` 稳在 `capH`。
-做法：脱落（无通信）→ `DAMP` 泄残余转速 → `ctrlConeAtt(0)`（θ̇ 反馈 + 探测式方向锁）→ 差动 PD 接管竖直保持。
+**C 步已收口（2026-11-18 02:30 真机 PASS）**：云端平台横躺 → 脱落 → 锥角闭环回翻 → 竖直悬停。
+本轮**只做文档收尾**（用户指令：做完这轮停下来，记录更新，说明下一步计划）。
 
-## 1. 只读清单（本轮最多三个；超了就不许动手，先问）
+**下一轮候选（一次只做一条，按性价比排序）**：
+
+1. **F1 · 同一个 V 全程锥角**：`FLIP1` 从差动换成 `ctrlConeAtt(+90)`。现在整条 V ≈ 12 s
+   （差动 6.25 s + 回程 3.7 s），换完预计 ~5 s、省 40~70 m 落差，且是「翻转→着陆」连做的前提。
+2. **F2 · 接落地剖面**：竖直后接 `guide` v4 的竖直+横向环（`A_REF=4 / KV=6 / A_BRK_MAX=5 / VY_TOUCH`），
+   做出完整 **belly-flop → 回翻 → 软着陆**（SN15 直播的核心动作）。
+3. **F3 · `BRAKE` 改比例式**：`leanTgt = clamp(k·vh, ±brakeMax)`，消掉固定 22° 造成的反向过冲（实测 +28.9 m）。
+4. **F4 · 加入 ch0**（`setInverted(true)`）：推力/力矩各 +25%，但先验证 4 台同向差动对称性不被破坏。
+5. **F5（可选）· RCS**：只在需要「2~3 s 回翻 + 零漂移」时才做（§26 结构卡住，别轻易重启）。
+
+## 1. 只读清单（下一轮开工时最多三个；超了就不许动手，先问）
 
 1. 本卡 + `memo/flight/starship15-constants.md`
-2. `computer/0/flip.lua` 的 `ctrlConeAtt` / `main` 的 `MODE == "back"` 分支
-   —— 先 `grep -n` 找锚点再 `read offset/limit ≤80 行`，禁止整篇读
-3. 数据：`run/flight_logs/*.csv` **只走** `tools/digest_csv.ps1`（大文件必须给 `-T0/-T1`）
+2. 要改的程序（`computer/0/flip.lua` 或 `guide.lua`）—— 先 `grep -n` 找锚点再 `read offset/limit ≤80 行`
+3. 数据：`run/flight_logs/*.csv` 与 `/log/*.csv` **只走** `tools/digest_csv.ps1`（大文件必须给 `-T0/-T1`）
 
-## 2. 上轮结论（§28/§29 + 本轮 §30）
+## 2. 上轮结论（§32/§33，已写进 catch + constants）
 
-- **锥角 = 主姿态执行器**：满偏 + 满推力 **α≈2.5 rad/s²**、峰值 7.30 rad/s、90° 只要 ~1.2 s / 55 m（差动 0.33 的 7~8 倍）。
-- **开环定角必滚圈**（实测 2 圈+）⇒ 必须闭环；**锥角与差动不能同刻并联**（满推力 `room=0`，见 constants §3 末）。
-- `flip` 完整剖面在云端平台**不可用**：v5 第一行预检就 `!! fixture unreachable` 直接 return（02:02 那次喷口没动）；
-  v6 已把夹具改为可选 + 新增 `back` 模式（横躺停机起步）。
+- **锥角 = 主姿态执行器**：满偏+满推力 α≈2.5 rad/s²（差动 0.33 的 7~8 倍）；真机回翻 θ 90→2.8、
+  峰值 **90.0°（无过冲）**、`wMax 0.96`、**drop 53.7 m（总 71.3）**、**drift 26.2 m**（v7 是 257.5）。
+- **「不飞远」的唯一开关是推力封顶** `coneUCap=0.45`：vh 从 33.6 降到 12.3 m/s。用户实测确认
+  **不需要故意过冲刹车**；固定 22° 的 `BRAKE` 反而会刹过头（HOVER 反向滑回 +28.9 m）。
+- **程序传参必须用变参**：`local ARGV = { ... }`（`args` 全局在本环境是 nil，黑名单 #16）。
+- 夹具可选：`ping` 不通就只做本地 `ch5/ch6` 脱落（云端平台没有 fixture 电脑）。
 
-## 3. 本轮改动（改完填，3~5 行，一行一条）
+## 3. 本轮改动（只文档，无代码）
 
-- [x] `flip.lua` **v6**：夹具预检改为**可选**（`ping` 不通就只做本地 `ch5/ch6` 脱落，不再 abort）
-- [x] `flip.lua` **v6**：新增 **`MODE == "back"`** 分支 —— 跳过 FALL/CLIMB/FLIP1/HOLD，直接 DAMP→FLIPBACK→ARREST→HOVER，
-      `capH = max(floorH+20, h0−40)`；桩内 `VERDICT PASS` 跑通
-- [x] 常数补记「锥角+差动分时分工」；catch §30
-- [ ] 上机 `computer/0` → **`flip back`**，测完归档 `cc_logs_archive/<日期>_flipback_v6/`
+- [x] `starship15-catch.md` §30~§33（漏斗式记录：文档查证 / 参数真相 / 真机 PASS / 漂移治理数据）
+- [x] `starship15-constants.md`：锥角实测常数、推力封顶、`BRAKE` 过冲、黑名单 #14/#15/#16
+- [x] `starship15-handover.md`：状态表 C 行改写 + §9 下一步改成 F1~F5
+- [x] 本卡整篇覆写为「收口 + 下一步计划」
 
-## 4. 交给你（两步）
+## 4. 交给你（下一轮开工时）
 
-1. 机体**横躺**停在云端平台（`ch5/ch6` 上电即可；`fixture` 不需要，也不要有塔）
-2. `computer/0` 执行 **`flip`**（**不要加 `back`** —— v7 按起始姿态自动判定；参数在本世界不可靠，见 §31）
-
-**预期**：`MODE back (start cosVert≈0)` → `DISK free=... KB` → `FIXTURE unreachable -- local release only`
-→ `RELEASE ch5/ch6` → `DAMP` → `FLIPBACK theta 90→0`（~2~3 s、`tiltMax` 满 15°）→ `ARREST vy→0` → `HOVER`。
-**磁盘**：`/log` 满 1 MB 会 out of space（已做软着陆：<120 KB 自动跳过 CSV，只写 status）。
-上一轮日志已归档成 `cc_logs_archive/log.zip`（120 KB）。我直接从磁盘读 `/log/flip_<epoch>.csv` + `status_flip.txt`。
-**只有 `!! ERROR` / `!! ABORT` 才需要口述那一行。**
+按上面 F1~F5 挑一条告诉我，我按「先报读单 → 改 → 干跑 → 你上机」的老流程走。
+本轮到此结束，**我不再动代码**。
 
 ## 5. 每轮硬规矩
 
