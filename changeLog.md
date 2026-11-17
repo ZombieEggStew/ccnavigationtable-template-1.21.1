@@ -189,3 +189,6 @@
 
 - **Changed** the `getEngine` scope added above to a **single physics body**: `ss.getEngine()` now only looks at the one Sable sub-level the computer sits on (the constraint chain's other sub-levels no longer count). 
 
+
+# 1.2.6
+
