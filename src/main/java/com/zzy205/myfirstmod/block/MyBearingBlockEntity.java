@@ -947,10 +947,19 @@ public class MyBearingBlockEntity extends KineticBlockEntity implements IDisplay
     /**
      * 应力影响（Create 网络按 {@code impact × |输入转速|} 计费，转速越高消耗越大）：
      * 背面半个传动杆接入应力网络驱动从动物理体旋转，消耗应力（impact 同 swivel 注册值 4.0）。
+     * <p><b>必须同写 {@code lastStressApplied}</b>（基类 {@link KineticBlockEntity#calculateStressApplied()}
+     * 的契约）：Create 存档时把它写进 {@code Network/AddedStress}，读档
+     * {@code initialize → KineticNetwork#addSilently} 要拿它减去本 BE 的旧贡献
+     * （{@code unloadedStress -= lastStress × |theoreticalSpeed|}）。漏写 → 旧贡献永远减不掉，
+     * 每次进存档都把这 {@code 4 × 转速} 的应力额外残留进网络 → 负载逐次上升。
+     * <p>参考实现 {@code simulated:swivel_bearing} 返回 0（passthrough 不计费），所以它不写也没事；
+     * 本项目改成 4.0 计费后必须补上这一行。</p>
      */
     @Override
     public float calculateStressApplied() {
-        return 4.0f;
+        float impact = 4.0f;
+        this.lastStressApplied = impact;
+        return impact;
     }
 
     // ═══════════════ Create 应力网络：贯通传动（同 swivel 753-770 行） ═══════════════

@@ -164,6 +164,18 @@ PD 伺服（`updateServoCoefficients`，同 swivel 357-401 行）：
   故 sub-level 内在顶盘正面接上的传动杆/机械拿到的转速 = 轴承输入转速
 - 生效时机：plate BE 新建时 `updateSpeed = true`（`KineticBlockEntity` 82 行）→ 首 tick `attachKinetics()`
   → `RotationPropagator.handleAdded` 扫到轴承；轴承侧 `calculateStressApplied()` 保持 4.0（用户要求保留）
+- **履约坑（2026-11 修复）：覆写 `calculateStressApplied()` 必须同时写 `this.lastStressApplied`。**
+  参考实现 `SwivelBearingBlockEntity` 返回 `0`（注释 `// passthrough shaft should not cost stress`），
+  所以它不写也没问题；本项目改成 **4.0 计费**后漏写，导致：
+  `write()` 的 `Network/AddedStress`（值为 0 就整个省略）永远为空 → 读档
+  `initialize → KineticNetwork#addSilently` 的 `unloadedStress -= lastStress × |theoreticalSpeed|`
+  减 0 → 上一份 `4 × 转速` 应力残留为 `unloadedStress`，**每进一次存档负载就涨一次**
+  （两个轴承 256 RPM = 2048 SU/次；实测 38%→50%→63%，每次 +12.5% = 2048/16384）。
+  修法一行：`float impact = 4.0f; this.lastStressApplied = impact; return impact;`
+  对照：`TransmissionPeripheralBlockEntity#calculateStressApplied()` 一直有写这一行（正例）；
+  引擎侧同理的 `lastCapacityProvided`/`lastStressApplied` 见 `engine-module.md` §7.4/§7.12。
+  **已污染存档不会自愈**（残留存在网络存档总量里，靠各 BE 的 `AddedStress` 才能被减掉）：
+  需把该应力网络整条拆掉重放（新 BE 无 `Network` 标签 → `initFromTE(0,0,*)` 归零）。
 - 风险点（需实测）：sub-level plot chunk 未加载时 `findConnectedNeighbour` 的 `level.getBlockState(platePos)` 取不到 plate；
   Sable 靠两边 `sable$getConnectionDependencies` 维持 sub-level 常驻加载
 
