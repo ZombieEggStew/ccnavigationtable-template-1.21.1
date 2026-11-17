@@ -203,21 +203,28 @@ ss.hasPressureSensor()   -- boolean
 
 - **Lua 方法**：`ss.getEngine()` → `ccpe:engine` 外设（挂在引擎 controller 上，包裹任意核心节同一实例；
   非 controller 委托逻辑见 `EngineCoreBlockEntity.getPeripheral()`）。`mainThread = true`，**调用时解析**：
-  `resolveSubLevel()` → `chainUuidsOf(sub)` → 注册表查询 → `controller.getPeripheral()`。
-- **门控（保守语义）**：电脑不在物理体上 / 机体（含约束链）上没有引擎 / **≥2 个引擎**（歧义，如双发）→ `nil`；
+  `resolveSubLevel()` → `SableCompat.getSubLevelUUID(sub)` → 注册表查询（单个 sub-level）→ `controller.getPeripheral()`。
+- **门控（保守语义）**：电脑不在物理体上 / 该物理体上没有引擎 / 该物理体上 **≥2 个引擎**（歧义，如双发）→ `nil`；
   多发机体继续用 `peripheral.wrap(...)` 按外设名控制。**不缓存外设引用**（引擎拆解/重组/延长后自然返回 nil，
   不会拿到失效对象）；**不新增任何 `update()` 缓存字段**。
+- **作用域变更（后续修订）**：原实现按「所在物理体 + 约束链」（`chainUuidsOf(sub)` 遍历整条约束链的全部
+  sub-level）判定引擎数量，现改为**只看电脑所在的那一个物理体（单个 sub-level，不含约束链）**——链上其它
+  sub-level（轴承连接的另一段机体）的引擎不参与判定；要控制那段机体的引擎，用它自己的电脑调 `getEngine()`。
+  相应把 `singleEngineControllerOnChain(Collection<UUID>)` 改为 `singleEngineController(@Nullable UUID)`，
+  查询从「链遍历 + 哈希查」降为**一次哈希查**；登记逻辑未变（本来就是按单个 sub-level UUID 存）。
 - **登记者**：新建 `compat/cc/BodyEngineRegistry.java`（物理体作用域，
   `ConcurrentHashMap<UUID, Set<EngineCoreBlockEntity>>`，照 `ShortRangeLinkerRegistry` 的小型注册表模式）。
   引擎核心节在 **`onLoad`**、**`updateConnectivity()`（放置/延长组网后）** 各尝试登记一次，**`invalidate()`** 注销
   （Create `SmartBlockEntity.setRemoved()` 是 `final`，只能在它内部调用的 `invalidate()` 里挂注销——踩坑）。
-  查询 `singleEngineControllerOnChain` 按 `getControllerBE()` 的 **BE 身份**去重成引擎组，所以 controller
+  查询 `singleEngineController` 按 `getControllerBE()` 的 **BE 身份**去重成引擎组，所以 controller
   易主/延长**不需要重登记**（登记的是所有核心节，不只 controller）。
-- **成本账**：登记 = 每个核心节生命周期事件一次 `getContainingSubLevel` + HashMap put；查询 = 链遍历（轴承链通常
-  1~3 个 sub-level）+ 哈希查 + 一次 BE 解析；**每 tick 新增开销 = 一个 boolean 读**（`!bodyRegistered && retries > 0`
+- **成本账**：登记 = 每个核心节生命周期事件一次 `getContainingSubLevel` + HashMap put；查询 = 一次哈希查
+  （`UUID → 引擎节集合`，**无约束链遍历**）+ 一次 BE 解析；**每 tick 新增开销 = 一个 boolean 读**（`!bodyRegistered && retries > 0`
   守卫，登记成功后永久停手；非物理体引擎最多重试 20 tick 后彻底放弃，不再产生开销）。
 - **组网瞬态**：未组网完成（`controller == null`）的孤立核心节各自算作一个引擎组 → 瞬态期间可能返回 `nil`，
   下一 tick 恢复。
 - **未做**：`getEngines()` 列表 / 索引 / 最近选择（用户当前只要单引擎场景，保持最小 API；将来要加时复用同一注册表）。
 - **待进游戏验证**：① 单引擎机体上 `print(ss.getEngine())` 能拿到外设且 `setThrottle` 生效；
-  ② 放第二个引擎后立即返回 `nil`；③ 拆掉引擎后返回 `nil`（不会拿到失效对象）。
+  ② 放第二个引擎后立即返回 `nil`；③ 拆掉引擎后返回 `nil`（不会拿到失效对象）；
+  ④ **新作用域**：用轴承连成两段，引擎装在 B 段、电脑装在 A 段 → A 段电脑 `getEngine()` 必须返回 `nil`，
+  把电脑移到 B 段（或把引擎装到 A 段）→ 必须能拿到；⑤ 同一 sub-level 上「引擎 + 电脑」的常规场景行为不变。

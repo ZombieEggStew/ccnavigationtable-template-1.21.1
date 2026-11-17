@@ -57,10 +57,13 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 | `screen-render-rework.md` | 屏幕渲染重构需求分析与方案决策 + **「实施状态」**（方案三格子模型已落地清单、与计划差异、待游戏内验证 13 项） | 修改屏幕数据模型/同步/渲染平面或 API 时 |
 | `short-range link.md` | 短程信号链接器（ccpe:short_range_linker）实现方案（物理体作用域频道注册表、链上共享加载开关、Lua API ccpe.link、频道唯一性语义） | 实现/修改短程信号链接器时，先读本文 |
 | `engine-module.md` | 引擎模块（engine_core 排排坐组网 + 零缓存抽储罐 + 燃烧室并入 + 冷却过热约束 + 末段 Lua 控制）方案设计（CDG modular + Create ConnectivityHandler/SteamEngine 参考） | 实现/修改 engine_core / 燃烧室 / cooling_duct 的组网、燃料消耗、冷却、Lua 控制时，先读本文 |
+| `cc-rednet-communication.md` | **CC:T 两台电脑通信方案**：rednet API 速查（1.118.0 源码核实、频道常量 65535/65533/65500、消息可序列化约束）、有线/无线 modem 连线、worker（命令表 dispatch + pcall）与 caller（关联码 + 超时）完整 Lua 脚本对、坑清单（不排队/常驻/关联码/host 重名/rednet 无安全性）、与项目内直连通道（`CCPeripheralCapabilities` / `GlobalChannelRegistry` / `SensorSystemAPI.getPeripheral` / `ShortRangeLinkerRegistry`）的边界区分 | 要让两台电脑互发请求/远程触发动作，或确认「能不能直接调对方函数」时，先读本文 |
 | `thrust-nozzle.md` | 定向喷管（`ccpe:thrust_nozzle`）工作记录：无 mixin 的 Sable 点力推力器、纯轴向恒定推力标定（800 pN/管 @256RPM、REVERSE_SIGN 实测值）、六向碰撞盒生成、粒子三次迭代（`create:air` vs `air_flow` + `fan_transparent` 标签的坑）与遮挡射线 | 修改喷管出力/符号/粒子/碰撞盒，或要参考"自研方块 + Sable 力组"的最短路径时 |
 | `advanced-thrust-nozzle.md` | **矢量喷管**（`ccpe:advanced_thrust_nozzle`，**已定稿**）：固定底板（含并入的 4 个活塞头）+ 绕枢轴 **`(8,5,8)px`**（= 活塞头中面）在锥角 15° 内倾斜的喷口本体 + 四活塞随动（**活塞杆 = body 子件、只沿 body 轴滑移**；v1–v6 各版自由度/枢轴错误的记录 + "`piston_pole` 局部原点 = 杆底面中心"的模型定位约定）、只走 BER 的绕枢轴渲染链、**两盒选择框**、物理体作用域频道（复用 `ShortRangeLinkerRegistry`）+ 右键 GUI、CC:T 外设 `setDeflection/setDirection/setThrustScale`、父类 `nozzleAxis`/`thrustScale` 钩子、`rotationYXZ` 模型旋转映射、**§12.6 枢轴高度/越界核算表**、§13 交付状态与常量一览 | 修改矢量喷管的倾斜/活塞动画/枢轴/频道/GUI/Lua API，或要为别的方块做"物理体频道 + 外设"时 |
 | `pitot-selection-box.md` | 皮托管选择框调试记录（VoxelShaper 旋转坑：单位混用/基准朝向/end_rod 风格下 Catnip 与原版 X 旋转方向相反，水平四向绕 Y 180°；新增方块选择框的 checklist） | 新增或修改 6 向 FACING 方块的选择框/碰撞框，或排查选择框"不可见/差 90°/水平反了"时 |
 | `neoforge-debugging.md` | 本项目 F5 启动事实 | 调试启动配置或 classpath 时 |
+| `flip-autopilot.md` | **CC:T 飞行自动驾驶复刻实战总账（特斯拉飞车）**：已验证的落地剖面（`A_REF/KV/FF_BAND`、触地 0.65~0.70 m/s）、四元数姿态环与 `COS_MIN` 门控、**写预算不变量（每周期一个 `parallel.waitForAll` 块 ⇒ 20 Hz）**、吸附/翻滚/横向制导的全部实测常量与踩坑 | 写任何 CC:T 飞行/落地控制环（推力标定、下降剖面、姿态、频率）时，先读本文 |
+| `starship15-catch.md` | **星舰助推器回收复刻（进行中）**：实测常量（G=11、`F=N×256×2.04×p×scale`、TWR 3.53、`u_hover` 28.4%）、五个程序 `probe/cal1/att/starship/fixture` 与用法、火箭+夹具频道表、**9 条实机踩坑（顺序写红石不同步、锥角偏转产生俯仰力矩等）**、Flight 15 真机时间线、§18 直播轨迹 `0°→90°→115°→90°` 与"机体倾斜才是主矢量手段"的架构结论 | 继续做火箭降落/姿态/夹取时；开头「当前状态一页纸」即进度总览 |
 | `registrate-datagen.md` | **Registrate + datagen 新增方块完整流程**（红色航行灯实战；含三个坑：datagen 生成 lang 会盖手写文件、Registrate 自动 .tab(SEARCH) 导致服务器启动崩溃及修复、datagen 环境需最小化 mod） | 用 Registrate 注册新方块/跑 runData/排查创造标签崩溃时 |
 
 ## 最小上下文原则

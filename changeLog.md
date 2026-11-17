@@ -182,3 +182,10 @@
 - Added `getEngine` to the `ccpe.sensor_system` Lua API: `local e = ss.getEngine()` hands you the engine's `ccpe:engine` peripheral directly by body scope — no `peripheral.wrap`, no wired-network reachability needed, so an engine far from the computer is fine. It only returns a peripheral when the body (constraint chain included) has **exactly one** engine; with no engine or with several engines (e.g. a twin-engine craft) it returns `nil`. Resolved at call time and cached nowhere, so grab it once at the top of your script and keep it in a local. Costs nothing per tick.
 
 - Added `setInverted(bool)` / `isInverted()` to the Advanced Thrust Nozzle: instant thrust ⇄ suction reversal. The sign of the force along the tilted axis flips (strength, deflection and output scale untouched), exhaust particles switch to intake in the same step, and the state is stored in NBT / blueprints.
+
+# 1.2.5
+- Fixed the **Aero Bearing making the stress load climb on every save and load**.
+  Saves that were already hit by this keep the leftover until **that** stress network is rebuilt: break and re-place the blocks on it (the bearings, plus the shaft connecting them — and the engine core as well if it sits on the same network). Freshly placed blocks start from a clean slate, so the load drops back to its true value. 
+
+- **Changed** the `getEngine` scope added above to a **single physics body**: `ss.getEngine()` now only looks at the one Sable sub-level the computer sits on (the constraint chain's other sub-levels no longer count). 
+

@@ -12,11 +12,12 @@ local e = peripheral.wrap("front")
 
     ```lua
     local ss = require("ccpe.sensor_system")
-    local e = ss.getEngine()   -- 机体（含约束链）上恰好一个引擎 → 该引擎外设；否则 nil
+    local e = ss.getEngine()   -- 电脑所在单个物理体（不含约束链）上恰好一个引擎 → 该引擎外设；否则 nil
     ```
 
+    - **作用域 = 电脑所在的那一个物理体**（一个 Sable sub-level），**不含约束链**：链上其它 sub-level（轴承连接的另一段机体）上的引擎不参与判定，也不会被返回——要控制那段机体上的引擎，就在那段机体的电脑上调用本方法。
     - **不依赖外设网络可达性**：引擎离电脑多远都能拿到（外设网络够不着的引擎也能控制）。
-    - **只在机体上恰好一个引擎时返回**；没有引擎、或 ≥2 个引擎（双发/多发）返回 `nil`——多发机体请继续用 `peripheral.wrap` / `peripheral.find` 逐台控制。
+    - **只在该物理体上恰好一个引擎时返回**；那里没有引擎、或 ≥2 个引擎（双发/多发）返回 `nil`——多发机体请继续用 `peripheral.wrap` / `peripheral.find` 逐台控制。
     - **调用时解析**（`mainThread = true`，每次调用过一次主线程、最多滞后 1 tick），且**不缓存外设引用**：引擎拆解/重组/延长后返回 `nil`，不会拿到已失效的对象。脚本开头调一次、把结果存进局部变量即可。
 
 ## [示例——温度与混合比控制](../examples/trainer_aircraft_2.zh.md)
