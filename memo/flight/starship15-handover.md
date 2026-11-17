@@ -17,7 +17,7 @@
 | 竖直（定高/剖面） | `cal1` §16 | ✅ PASS | `A_REF=4 / A_BRK_MAX=5 / KV=6` 可用，定高 h ±0.06 m |
 | 力矩通道标定 | `att` v2 §20 | ✅ 闭合 | pairA→body X（负）、pairB→body Z（正）、`α=1.0 rad/s²/单位D`、`I≈15.9 kg·m²`、力臂≈1.0 m |
 | 姿态环（四元数 PD） | `tilt` §21 | ✅ PASS | KP=3.0 KD=2.5；±6°/±9° 阶跃误差 ≤0.8°；被撞后 1.5 s 恢复 cos 1.00 |
-| 横向环（位置+速度） | `guide` v2 §23 | 🔶 参数已收尾 / **待实跑验收** | 三处改完（`MOV/RET` 7 s、`VMAX` 1.2、`DB_POS` 0.08）+ 干跑 PASS；v1 实跑末端 0.11~1.19 m |
+| 横向环（位置+速度） | `guide` v3 §23 | 🔶 v2 实飞 PASS / 末端 0.84 m 未达标 ⇒ v3 待实跑 | 悬停 0.03 m、`cosMin` 0.996、`slow=0`、末端无抖动；末端 err 5 s→1.19、7 s→0.84（**时长线性相关**） |
 | 大角度翻转 0→90→115→90 | — | ❌ **未做** | 下一步 |
 | 任务集成 + 夹取 | `starship.lua` | ❌ 旧版缺姿态环，需按 §20/§21/§23 重写 | 再下一步 |
 
@@ -90,7 +90,7 @@ theta   = atan(|aDes|/G) ≤18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | `cal1.lua` | `cal1` / `cal1 zero` | 释放→落体→满推力脉冲→定高悬停→锥角探针 | `/log/cal1.csv` | ✅ 已跑（§16） |
 | `att.lua` | `att` / `att zero` | 悬停工作点上的正反差动对 + 开环回正 | `/log/att.csv` | ✅ 已跑（§20） |
 | `tilt.lua` | `tilt` / `tilt zero` | 姿态 PD 跟踪 ±6°/±9° 倾角阶跃 | `/log/tilt.csv` | ✅ 已跑（§21） |
-| `guide.lua` | `guide` / `guide zero` | 横向闭环：悬停保持 + 沿 −Z 平移 6 m 再回来 | `/log/guide.csv` | 🔶 v2 参数已收尾（§23.6），待实跑 |
+| `guide.lua` | `guide` / `guide zero` | 横向闭环：悬停保持 + 沿 −Z 平移 6 m 再回来 | `/log/guide.csv` | 🔶 v3（`MOV/RET` 9 s），待实跑 |
 | `starship.lua` | `starship` | 任务程序（**旧版，缺姿态环**） | `/log/starship.csv` | ❌ 待重写 |
 | `fixture.lua`（在 `computer/1`） | `fixture` 常驻；`status`/`release`/`clamp`/`arms <deg>`/`open`/`close` | 夹具命令端 | `/log/fixture_1.txt` | ✅ 可用 |
 
@@ -164,7 +164,8 @@ tools/digest_csv.ps1   把 50 KB~60 MB 的 CSV 压成 ≤30 行看板
 | 横向环增益按"位置误差"直接给大 | 倾角爬升慢 ⇒ 速度超调、过冲数米 | `LAT_KP≈0.3 / LAT_VMAX≤1.5 / LAT_AMAX≤2.0` |
 | 开环 ±对称倾斜当"居中测试" | 每步 1.5 s 爬坡 ⇒ 横向冲量不对称，净漂 5~9 m | 一律走**速度闭环**给倾角 |
 | 悬停高度设在平台/塔附近 | 实测在 z≈+6 撞平台（ω 被踹 0.2 rad/s） | 只在 −Z 活动；`capH` 用 −8（y≈85） |
-| `pcall(fs.open(path,"w"))` | `fileH` 恒 nil，status 文件 0 字节 | 写 `pcall(fs.open, path, "w")` |
+| 看 `computer/<id>/log/*` 是 0 字节就判"没写" | 游戏运行时那只是**内存镜像**，磁盘副本滞后到退出世界才落盘（`fsprobe` 实测 A~E 全 `wr=Y`，`pcall(fs.open, …, "w")` 也正常 ⇒ 旧结论「pcall 恒 nil」已推翻） | 先「保存并退到标题」再看；游戏内查用 `fs.getSize(path)` |
+| 忘了电脑磁盘有上限 | `cap=1,000,000`、`free=581,811`；一次 `guide` 就吃 78 KB，撞满后 `fs.open("w")` 会返回 nil | 实跑前清掉 `/log` 里不要的 csv |
 | CSV 相位名带逗号（`A(1,3)+`） | 整行错位，解析全崩 | `ph:gsub(",","")` |
 | 顺序写红石 / connector | 释放瞬间倾斜 → 推力侧漏 → 漂移翻车 | 全部塞进**同一个** `parallel` 块 |
 | 锥角偏转当横向阻尼 | 俯仰耦合正反馈，被掀翻（cosVert 0.06） | **先有姿态环**再用横向；阻尼交给 PD |
@@ -178,8 +179,8 @@ tools/digest_csv.ps1   把 50 KB~60 MB 的 CSV 压成 ≤30 行看板
 
 1. **大角度翻转**（0°→90°→115°→90°）：PD 只在小角度（±9°）验证过；90° 时 `cosVert≈0`，
    竖直通道必须关掉/降权，翻转靠倾角+差动；**掉高预算**：纯差动 4.3 s ⇒ 100 m（释放点到夹持点有 122 m，够用）。
-2. **横向环末端精度**：`DB_POS` 0.08 m、`MOV` 时长 7 s、`LAT_VMAX` 1.2 —— **代码已改完并干跑 PASS（§23.6），只差一次实跑**；
-   实跑重点看 `MOV/RET` 末端是否 ≤0.5 m，以及末端有无 ±10 cm 抖动（死区收紧的已知风险，坏就改回 0.20）。
+2. **横向环末端精度**：v2 实飞末端 **0.84 m**（判据 0.5）⇒ **v3 已把 `MOV/RET` 时长 7→9 s**（干跑 0.41），只差一次实跑；
+   末端无抖动（x 摆幅 7 mm），`DB_POS` 0.08 可保留。
 3. **跨相位衔接**：`starship.lua` 里 `FALL→FLIP→LAND→HOLD` 的切换判据（"越过目标高度"误判是已知缺陷 §18.3）。
 4. **夹取闭环**：`close` + 关推力验证是否真被夹住（代码在 `fixture.lua`，未联调）。
 5. **锥角精修**：现在锥角通道完全没用；`frameYawOff=180°` 已在 §16 复现三次，可用于 ±15° 精修。
@@ -192,7 +193,7 @@ tools/digest_csv.ps1   把 50 KB~60 MB 的 CSV 压成 ≤30 行看板
 
 | 步 | 做什么 | 验收标准 | 风险 |
 |---|---|---|---|
-| **A** | `guide` 参数收尾（MOV 7 s、VMAX 1.2、末端死区 0.08） | `MOV/RET` 末端 ≤0.5 m、`HOLD` ≤0.15 m | 低 —— ✅ 改动完成，**待实跑** |
+| **A** | `guide` 参数收尾（v3：`MOV/RET` 9 s、`VMAX` 1.2、`DB_POS` 0.08） | `MOV/RET` 末端 ≤0.5 m、`HOLD` ≤0.15 m | 低 —— v2 实飞 0.84 未达标，v3 干跑 0.41，**待实跑** |
 | **B** | 新程序 `flip.lua`：**下落中**做 0→90° 翻转（集合推力按 cosVert 门控，抬起角速度用 PD） | 到达 90±5°、cosVert ≥0.95、掉高 ≤100 m、落地不死 | 中高（可能砸，但机体不坏） |
 | **C** | `flip.lua` 加 115° 过冲段（用倾斜消横向速度） | 横向速度被压到 ≤2 m/s、姿态回到 90° | 中 |
 | **D** | 重写 `starship.lua`：`FALL→FLIP→LAND（竖直剖面+横向环）→HOLD→CLOSE` | 悬停到 (11,95,0) ±0.5 m，`close` 后不坠 | 高 |

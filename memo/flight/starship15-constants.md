@@ -52,6 +52,7 @@ vTarget = clamp(LAT_KP*posErr, ±LAT_VMAX)            LAT_KP=0.30  LAT_VMAX=1.2�
 aDes    = clamp(LAT_KV*(vTarget-vHoriz), ±LAT_AMAX)  LAT_KV=1.00  LAT_AMAX=2.0
 theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 死区 |posErr| < 0.08 m（v2，v1 是 0.20）且 |vh| < 0.08 m/s ⇒ 不给倾角；|aDes| < 0.08 m/s² 也不给倾角
+相位时长 MOV/RET = 9 s（v3）／7 s（v2）／5 s（v1）；对应末端 err ≈0.2~0.4 ／0.84 ／1.19 m（实飞）
 ```
 
 **三条硬道理（都是撞出来的）**
@@ -89,7 +90,7 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | `cal1.lua` | 0 | ✅ 已跑（§16），竖直通道标定 | v5 |
 | `att.lua` | 0 | ✅ 已跑并闭合（§20），力矩通道 | v2 |
 | `tilt.lua` | 0 | ✅ PASS（§21），姿态 PD ±6°/±9° | 待补 |
-| `guide.lua` | 0 | 🔶 v2 参数已收尾（§23.6），**待实跑验收** | v2 |
+| `guide.lua` | 0 | 🔶 v3 = v2 + `MOV/RET dur 9 s`，**待实跑验收** | v3 |
 | `starship.lua` | 0 | ❌ 旧版缺姿态环，待按 §20/§21/§23 重写 | v1(旧) |
 | `fixture.lua` | 1 | ✅ 命令端：`fixture` 常驻 / `status` / `release` / `clamp` / `arms <deg>` / `open` / `close` | 待补 |
 
@@ -100,6 +101,7 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | `.tmp_luatest/harness.lua` | `lua54 harness.lua <程序> [τ=0.08]` | 桩世界干跑（桩外设 + 桩物理 + 虚拟时钟），**改完 Lua 必跑** |
 | `tools/digest_csv.ps1` | `powershell -File tools/digest_csv.ps1 <log.csv> [-Cols a,b,c] [-T0 -T1 -Win] [-HeaderOnly]` | 把 50 KB~60 MB 的 CSV 压成 ≤30 行看板（相位 min/max/avg/last + 自动判据 `SLOW/GAP/ATT_DIP/SAT/SINK/ERR_END/COL_SHIFT`），并顺带打印 `status_*.txt` |
 | `tools/digest_csv.ps1`（记录仪） | `... <run/flight_logs/*.csv> -T0 12 -T1 20 -Win 0.5` | 70 MB 记录仪按时间片均值（大文件必须给 `T0/T1`） |
+| `computer/0/fsprobe.lua` | 在游戏内 computer 0 执行 `fsprobe` | 文件写入门禁取证：A~E 五种 open 写法 + `free/cap`（结果同时写 `/fsprobe_report.txt`，退出世界后读） |
 
 > ⚠️ `tools/digest_csv.ps1` **正文必须保持纯 ASCII**：PowerShell 5.1 读无 BOM 的 UTF-8 时按 ANSI 解码，
 > 中文注释会吞掉后续代码行（已踩过一次，症状是"循环体没执行、数据为 0"）。
