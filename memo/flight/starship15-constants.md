@@ -19,7 +19,7 @@
 | 控制频率 | **20 Hz**（dt 中位 0.050 s），每周期**只有一个** `parallel.waitForAll` 写块 | §15.5/§16/§23 |
 | 锥角坐标系 | `setDirection(1,0)` 的 model +X → 世界 **(yaw+180°)**（三次复现） | §13/§14/§16 |
 | 推力方向 | 严格沿**机体上方向**（机体系 `|Fh| = 0`，无寄生横向力） | §23.5（记录仪） |
-| 场地 | 超平坦；地面 **Y=63**，云层 ≈**Y=195**；塔 x≈11 / z≈12 | §22 |
+| 场地 | 超平坦；地面 **Y=63**，云层 ≈**Y=195**；塔 x≈11 / z≈12；**夹持点实测 (11.50, 93.05, −0.49)**（probe 电脑 0、夹住时、mass 61，2026-11-18 14:30）⇒ `h=0` 就在夹臂里。⚠️ `computer/1/log/target.txt` 存的是**平台体**（mass 133.75、z=+11.2），不是机体 | §22 + probe |
 | 阻力模型 | **没有空气阻力/升力模型**。只有 **通用阻力**：`F = −m·d·v`，**d = 0.09**（Sable `DimensionPhysics.DEFAULT_UNIVERSAL_DRAG`，可被维度 `dimension_physics` 覆盖）；等价于每子步 `v ← v/(1+d·Δt)` 的连续近似 `dv/dt = −d·v` ⇒ **减速度 `a = d·v` 与质量无关**（质量在力与加速度里抵消）。API：`ss.getUniversalDragForce(m, V)` | `wiki/docs/sensor-system/fmc.zh.md` L298-327 |
 | 由此推出 | 自由落体终端速度 **`G/d ≈ 122 m/s`**（154 m 落差内根本到不了，实测 8.6 s 只有 ~48 m/s）；速度衰减时间常数 **τ = 1/d ≈ 11 s** ⇒ 横向漂移与残余角速度**几乎不会自然衰减**，必须主动刹/主动倾 | 同上 |
 
@@ -47,8 +47,11 @@
 ★ 刹车段的**真实权限**：`u=0.80` 时 4 台在 p≈0.82 给 net 11.9 m/s²；`u=1.0` 给 **17.3**、加 ch0 约 **24** ⇒
   `arrestBrk` 12 只用了硬件的一半多；43 m/s 入口：12 m/s² ⇒ 65 m，16 ⇒ 54 m，24 ⇒ 38 m
 ★ 反推刹车（`BRAKE`）固定 22° 会给**反向过冲**：实测 HOVER 段反向滑回 **+28.9 m**（v8）；
-  **v14 实测 dz −103.0 → drift 82.3 ⇒ 回滑 20.7 m，方向朝塔，用户裁定「这就是 SN15 直播的签名，保留」**
-  ⇒ **不要**再拿「比例式反推」去消它（v15 试过并回退：比例式尾部刹不住，桩内 BRAKE 5.25→9.00 s、drift 140.9→169.2）
+  **v14 实测 dz −103.0 → drift 82.3 ⇒ 回滑 20.7 m，方向朝塔**（这就是 SN15 直播的签名，`run` 模式保留）
+  ⇒ **2026-11-18 用户改判：允许用比例式反推去消它**（「可以用，做好备份，看效果，不好就回退」）。
+  v16 实现：`a_lat = clamp(brakeKV·|vh|, 0, brakeAMax=tan22°·G)`、`lean = atan(a_lat/G)`，`CFG.brakeProp=true`；
+  回退口径 = `brakeProp=false`（v15 固定 22° 与源码备份都在）。
+  旧否决证据仍留档：v15 的「硬」比例式（不随 vh 归一）会把 BRAKE 从 5.25 s 拖到 9.00 s、drift 140.9→169.2 —— 那是**尾部刹不住**的版本，不是 v16 这个。
 ★ 完整 V 落差预算（2026-11-18 v9 真机实测）：`FLIP1` 起点 → 竖直 = **163.5 m**（h 149.5→−14），
   其中 `FLIPBACK` 一腿 **129.5 m**、入口 vy **−23 m/s**（峰值 −36.5）；`BRAKE`@12 m/s² 还要 ~30 m
   ⇒ 整条 V 需 **~240 m** 房间 ⇒ `flipAlt = 190`（y≈283，build limit 320）+ `BRAKE` 用 `arrestBrk = 12`
@@ -57,7 +60,15 @@
   HOLD 0.10 s / 1.4 m｜FLIPBACK 3.25 s / **92.8 m**（峰 109.3°、vy −34.8、vh 25.2）｜BRAKE 3.20 s / **47.6 m**（vh→2.1）｜
   ARREST 0.00 s｜HOVER 6.0 s ⇒ **到 BRAKE 结束只花 149.8 m**、距 `floorH=-20` 还剩 **~60 m**（v11 是余量 ~0）。
   **刹车段 `u` 均值 0.832 且瞬时打到 1.00 ⇒ 真的开满了**；drift 89.1（Z 回滑为用户指定的 SN15 签名，保留）。
-  ⚠️ `HOVER` 6 s 内降不到 `capH=-8`（刹车后停在 ~40 m、按 3 m/s 剖面要 16 s）⇒ 这一段交给 F2 落地剖面。
+  ⚠️ `HOVER` 6 s 内降不到 `capH=-8`（刹车后停在 ~40 m、按 3 m/s 剖面要 16 s）⇒ **不要**再按「软着陆触地」去做：
+  用户 2026-11-18 明确 **目标是夹臂**（夹持点 (11,95,0)、`target.txt` 的 y=93.047 ⇒ h=0），不是地面。
+★ **任务剖面 `flip dock`（v16，2026-11-18）**：腹部朝下释放 → 自由落体 → 锥角回翻 → 反推刹车 → 回夹持点 → 悬停等合臂。
+  常数：`dockUCap=1.0`（u=0.6 时回翻腿 3.25 s/93 m，从云层高度起翻会在刹车前落地；1.0 ⇒ α=2.0、近横躺竖直分量 ≈0.6 G ⇒ 腿 ~1.5~2 s）；
+  `dockReserve=100 m`（回翻+刹车+末段所需高度）、自由落体深度 `fallPlan=clamp(h0-0-100, 0, 22)`（**按实测高度截断，不写死云层**）；
+  `RETURN` 用 guide v4 环，`retVmax=2.0`、容差 5 m（**docking connector 有短距吸力，用户 2026-11-18**）。
+  ✅ **真机 PASS ×2（2026-11-18 14:23 / 14:40）**：FALL 2.00 s/20.8 m（vy −19.9）｜FLIPBACK **1.85 s/46.4 m**（vh 24.0、wMax 1.22）｜
+  BRAKE 6.15 s/dz −87.0（vh 24→2.4、u 均值 0.497）｜RETURN 11.9 s（gap 17.7→err 2.0）｜ARMS 5 s（err 0.2、cos 1.000）
+  ⇒ 停在 (11.50, −0.69, h=0)。**高度预算实测够**：release h=119.5 全部用完仍停在 h=0，未触发 FLOOR GUARD。
   ⚠️ **但「提速」实测无效**（v12）：75°/s 让交班角动量 0.85→1.1 rad/s，多出来的动量把省下的落差全吃回去（208.7 vs 207.1，
   且 `BRAKE` 入口更深、`HOLD` 过冲到 100.1°）。**1.31 rad/s 的刹车距离 `w²/(2α)` ≈ 54° ⇒「快翻」与「停在 90°」不能兼得**。
   真正有效的余量手段是**加高度**（v13 `flipAlt 200`）+ 最终净空 ≥10 m（v12 就是擦地 `COS_ABORT`）。
@@ -142,7 +153,8 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | `att.lua` | 0 | ✅ 已跑并闭合（§20），力矩通道 | v2 |
 | `tilt.lua` | 0 | ✅ PASS（§21），姿态 PD ±6°/±9° | 待补 |
 | `guide.lua` | 0 | ✅ 已跑 PASS（v4，末端 0.42 m，§23.9） | v4 |
-| `flip.lua` | 0 | **v15 真机 PASS（全量 CSV，149.8 m 到 BRAKE 结束、余量 ~60 m）**：`coneUCap 0.60` + `arrestBrk 16` + ARREST 边界收口 | v15 |
+| `flip.lua` | 0 | **v20 = `dock` 任务剖面 + 合臂握手**（腹部朝下→自由落体→回翻→比例式反推→回夹持点→发 `dock` →**0.25 s 控制 + 0.5 s 收信**轮询，收到 `clamped` 立刻开 ch5/ch6=15 → 2 s → 关喷口）：**真机 PASS ×3（2026-11-18）**；`run`/`back` 保持 v15 行为 | v20 |
+| `catch.lua` | **1** | 平台合臂序列（`catch`）：复位臂 ±90 + conn ch7/8/9=0 → 等火箭 `dock` 请求（或按键）→ 合臂 0 @2rpm + conn=15（一个 parallel 块）→ **用 `getTargetAngle()` 判到位**（`getRotationSpeed` 返回的是配置转速常量，不可用）→ 回 `clamped`（**每 0.1 s** 重试 15 s：rednet 不排队 + 发/收周期拍频） | v1.3 |
 | `thruststress.lua` | 0 | 一次性测（v4）：**默认就断 ch5/ch6 脱落**（含 `setStrongPower(6,false)`）再测 REL/FULL/DPOS/DNEG/OFF（6.6 s，无需通信）；`measure` 只测不脱落、`cone` 追加锥角 4 朝向、`fixture` 才走 rednet；写 `/log/usts_<epoch>.csv` + `status_usts.txt` | v4 |
 | `dropall.lua` | 0 | 一次性脱落（v3）：`ch5`+`ch6` 输出清零（sh5=上方固定 connector、ch6=下方燃料 connector），单 parallel 块、写后回读；`dropall show` 只读打印 0..15 的 out/in/strong/device；写 `/log/status_drop.txt` | v3 |
 | `startup.lua` | 0 | **用户自写**极限测试（§28）：锁 `ch5/ch6` → 5 台 `setDirection(0,-1)` 满锥角 + `ch0 setInverted(true)` → 清 0 脱落 → 2 s 后满推力；证明锥角偏转 = 主翻转执行器（α≈2.5 rad/s²） | 用户版 |

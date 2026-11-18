@@ -19,7 +19,7 @@
 | 姿态环（四元数 PD） | `tilt` §21 | ✅ PASS | KP=3.0 KD=2.5；被撞后 1.5 s 恢复 cos 1.00 |
 | 横向环（位置+速度） | `guide` v4 §23 | ✅ PASS | `MOV/RET` 末端 0.42 / 0.42 m，`HOLD` 0.03 m |
 | **完整 V（0→90→0 + 反推刹车）** | **`flip` v15 §35~§41** | ✅ **真机 PASS ×3（v15 有全量 CSV）** | FLIP1 2.15 s/5.4 m｜FLIPBACK 3.25 s/92.8 m｜BRAKE 3.20 s/47.6 m（vh 25.2→2.1）⇒ 到刹车结束只用 **149.8 m**，余量 **~60 m** |
-| 软着陆（用那 60 m） | — | ❌ **下一步 F2** | `BRAKE` 后机体停在 h≈40、离塔 ~90 m，`HOVER` 6 s 降不到 `capH=-8` |
+| **任务剖面 `flip dock`（腹部朝下 → 自由落体 → 回翻 → 回夹臂）** | **`flip` v16** | ✅ **真机 PASS ×2（2026-11-18 14:23 / 14:40；err 0.2 m）** | FALL 2.00 s/20.8 m｜FLIPBACK 1.85 s/46.4 m（u=1.0、vh 24.0）｜BRAKE 6.15 s/dz −87.0｜RETURN gap 17.7→err 2.0｜ARMS err 0.2、cos 1.000；预算实测够、无 FLOOR GUARD |
 | 任务集成 + 夹取 | `starship.lua` | ❌ 旧版缺姿态环，须按 §20/§21/§23/§40 重写 | handover §9 的 D/E 步 |
 
 ---
@@ -90,7 +90,8 @@ DIRCMD = {0, -CONE_SGN*tilt}   ← 极性是喷管映射属性，跨腿共享（
 | `att.lua` | `att` / `att zero` | ✅ §20 力矩通道 |
 | `tilt.lua` | `tilt` / `tilt zero` | ✅ §21 姿态 PD |
 | `guide.lua` | `guide` / `guide zero` | ✅ v4 PASS（横向环 + 落地剖面的竖直环） |
-| **`flip.lua`** | `flip` / `flip back` / `flip zero` | ✅ **v15 真机 PASS**：爬升到 h=190 → 0→90（锥角）→ 0.05 s → 锥角回翻 → 反推刹车(arrestBrk 16) → 竖直；`flip back` = 横躺起点直接回翻 |
+| **`flip.lua`** | `flip` / `flip back` / `flip dock` / `flip zero` | ✅ **v20**：`dock` = 腹部朝下释放 → 自由落体 → 锥角回翻(u=1.0) → 比例式反推 → 回夹持点 → `dock` 请求 → **0.25 s 控制 + 0.5 s 收信轮询**（收到 `clamped` 立刻）开 ch5/ch6 → 2 s → 关喷口；**真机 PASS ×3（2026-11-18）**。`run`/`back` 仍是 v15 剖面 |
+| **`catch.lua`（`computer/1`）** | `catch`（常驻等待；Ctrl+T 停） | ✅ **v1.3 真机 PASS（2026-11-18 15:08/15:17）**：复位臂 ±90 + conn off → 等 `dock` 请求/按键 → 合臂 0 @2rpm + conn 15 → **`getTargetAngle()` 到 0 判到位** → 回 `clamped`（每 0.1 s 重试 15 s） |
 | `spin.lua` | `spin` | ✅ §25.1 角阻尼≈0（气动件对小转速无效） |
 | `thruststress.lua` / `dropall.lua` | 一次性 | ✅ 脱落/推力取证工具 |
 | `starship.lua` | `starship` | ❌ **旧版缺姿态环**，须重写 |
@@ -124,7 +125,7 @@ DIRCMD = {0, -CONE_SGN*tilt}   ← 极性是喷管映射属性，跨腿共享（
 | 项 | 值 |
 |---|---|
 | 世界 | 超平坦；**地面 Y=63**；云层 ≈Y=195；build limit 320 |
-| 回收塔 | x≈11，Y 63~102，**z≈+12**；夹持点 ≈**(11,95,0)**；`dockY=93.047` 是机体原点 |
+| 回收塔 | x≈11，Y 63~102，**z≈+12**；**夹持点实测 (11.50, 93.05, −0.49)**（probe 电脑 0 夹住时、mass 61 ⇒ `h=0` 在此）；旧电脑 1 的 target 是**平台体**（mass 133.75、z=+11.2），别当机体用 |
 | 夹臂 | X 两侧，臂高 ≈Y 95；夹持平台边界到 z≈+6（去那儿必撞） |
 | 释放点（实际用的） | ≈**(10,217,70)** ⇒ 程序里 `h=122.7` 起步，`flipAlt 190` ⇒ y≈283 |
 | 安全方向 | `−Z` 无限 ✅｜`±X` 只要 y<93 ⚠️｜`+Z` 悬停高度禁止 ❌｜`h ≥ −30` 是地面，`floorH=-20` |

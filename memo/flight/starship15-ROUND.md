@@ -1,63 +1,68 @@
 # 星舰复刻 · 本轮工作卡（唯一开工入口）
 
-> 用法：**每轮整篇覆写本文，永远 ≤60 行**。开工只读本卡 + `starship15-constants.md`。
-> 细节不在这里：`starship15-catch.md` 是归档 —— 需要时用 `grep` 定位 §N 再 `read offset`，
-> **禁止整篇读**（77 KB，一次就吃掉半张上下文）。
+> 用法：**每轮整篇覆写**；开工只读本卡 + `starship15-constants.md`。细节按 §N grep `starship15-catch.md`，禁止整篇读。
 
-## 0. 本轮目标（只做这一件，不扩）
+## 0. 本轮目标 + 现状
 
-**`flip` 这条 V 已收官**：v15 真机 PASS + 全量 CSV（`cc_logs_archive/flip_v15_PASS_20261118_0408.csv`）。
-整条 V 从 FLIP1 起点到「竖直 + 横向刹停」只花 **149.8 m**，距地板还剩 **~60 m** —— 这段空间就是下一步的落地缓冲。
+**用户 2026-11-18 修正两处旧目标**：① 主线不是「0→90→0」整条 V（只用于测执行器）；
+② F2 不是「软着陆触地」——目标是**夹臂**（h=0 = `target.txt` 夹持点），不是地面。
+**真实需求**：90° 腹部朝下自由落体 → 锥角回翻竖直 → 落回夹臂附近。
 
-**下一段主线（等你选，我按下面顺序推荐）**：
+**`flip dock` v16：真机 PASS ×2（2026-11-18 14:23 / 14:40）**
+`RELEASE(ch5/ch6=0、无平台电脑) → FALL → DAMP → FLIPBACK(u=1.0) → BRAKE(比例反推) → RETURN → ARMS`
 
-1. **F2 · 落地剖面**（推荐）：`BRAKE` 之后接 `guide` v4 的竖直+横向环做**软着陆**。
-   现状：刹车结束机体停在 h≈39.7、位置偏塔 ~90 m、`HOVER` 6 s 内降不到 `capH=-8`（3 m/s 剖面要 16 s）。
-   F2 要做的是：`A_REF/VY_TOUCH` 竖直剖面 + 位置保持，把 ~60 m 余量用在「降高度 + 收位置」上。
-2. **F4 · 加 ch0**（`setInverted(true)`）：全段 +25%（刹车 24 m/s²、回翻 α +25%）⇒ 余量再抬一档；先验差动对称性。
-3. **爬升加速**（用户提的）：`VY_CLIMB≈8` + sqrt 减速曲线，只省时间（当前 CLIMB 28~32 s）。
-4. **串任务程序**（handover §9 D 步）：`FALL→FLIP→LAND→HOLD→CLOSE` 进 `starship.lua`。
+| 腿 | 真机（release h=119.5 / y=212.5 / p=0.5495） | 桩 |
+|---|---|---|
+| FALL | 2.00 s / 20.8 m（vy −19.9） | 1.75 / 20.4 |
+| FLIPBACK | **1.85 s / 46.4 m**（vh 24.0、wMax 1.22、u=1.00） | 1.75 / 48.4 |
+| BRAKE | 6.15 s、vh 24→2.4、dz −87.0（u 均值 0.497） | 7.9 / −98.8 |
+| RETURN | 11.9 s，gap 17.7 → **err 2.0 m**、h=0 | 19.4 / 1.6 |
+| ARMS | 5.0 s，**err 0.2 m**、vh 0.2、cos 1.000 | 5 / 0.2 |
 
-真机验收判据（F2 落地段）：`VY_TOUCH` 落地时 `|vy| ≤ 0.8`、水平 `|vh| ≤ 2`、`cosVert ≥ 0.95`、位置误差 ≤ 3 m、不撞地板。
+⇒ 停点 **(11.50, −0.69, h=0)**、`VERDICT PASS`、`aborted=nil`。**高度预算实测够**（119.5 m 用完仍在 h=0，无 FLOOR GUARD）。
+首飞（14:23）唯一缺陷是电脑 0 缺 `target.txt`（RETURN 原地停在 z≈−18.4）；已由 `probe`（夹住时）实测夹持点
+**(11.50, 93.05, −0.49)** 写入 `/log/target.txt` + CFG 兜底（`clampX=11.5 / clampZ=−0.492`）。⚠️ 电脑 1 的旧 target 是**平台体**（mass 133.75、z=+11.2）。
 
-## 1. 只读清单（下一轮开工时最多三个；超了就不许动手，先问）
+**合臂序列（v20 / `catch.lua` v1.3 在电脑 1）**：复位臂 ±90 + conn ch7/8/9=0（臂速 **2 rpm**，90°≈7.5 s）
+→ 等火箭 `dock` 请求（或按键）→ 合臂 0 @2rpm + conn=15（一个 parallel 块）→ **`getTargetAngle()` 到 0 判到位**
+→ 回 `clamped`（重试 15 s：rednet 消息不排队）→ 火箭在 `armHoldT` 上限内 **0.25 s 控制 + 0.5 s 收信** 轮询（平台每 0.1 s 重试，避免发/收拍频），
+拿到回信立刻开 ch5/ch6=15 → 2 s → 关喷口（平台+火箭已连成刚体）。收不到回信时退回 `ARM HOLD`。
 
+## 1. 只读清单（最多三个；超了先问）
 1. 本卡 + `memo/flight/starship15-constants.md`
-2. 要改的程序（`computer/0/flip.lua` / `guide.lua` / `starship.lua`）—— **改前先把当前版 copy 到主机侧 `cc_logs_archive/lua_versions/computer0/`（不要放电脑磁盘）**
-3. 数据：`run/flight_logs/*.csv` 与 `/log/*.csv` **只走** `tools/digest_csv.ps1`（大文件必须给 `-T0/-T1`）
+2. 要改的程序（改前 copy 到 `cc_logs_archive/lua_versions/computer0/`）
+3. 数据只走 `tools/digest_csv.ps1`（大文件给 `-T0/-T1`）
 
-## 2. 上轮结论（§41，已写进 constants §2 与 handover）
+## 2. 本轮结论（细节见 constants §2 / catch §42~44）
 
-- **v15 真机 PASS（全量 CSV）**：`FLIP1 2.15 s / 5.4 m`（u=0.600）｜`HOLD 0.10 s`｜`FLIPBACK 3.25 s / 92.8 m`（峰 109.3°、vy −34.8）｜
-  `BRAKE 3.20 s / 47.6 m`（vh 25.2→2.1，**u 均值 0.832、瞬时 1.00 ⇒ 刹车真开满**）｜`ARREST 0.00 s`（新退出条件）｜`HOVER 6.0 s`。
-- **余量口径**：FLIP1 起点 189.5 → BRAKE 结束 **39.7 m** ⇒ 只用 149.8 m，到 `floorH=-20` 还剩 **~60 m**（v11 曾经余量 ~0）。
-- **保留的签名**：Z 回滑（`BRAKE` 结束 dz −101.5、最终 drift 89.1，回滑 ~12 m 朝塔）。**不要再拿比例式反推去消它**。
-- 已否决：v12 提速（角动量反噬）、v13 加高度（推力∝气压，净赚 1.5 m/10 m）、v15 比例式刹车（用户裁定保留过冲）。
-- belly-flop 峰 109.3° 属过冲同源（`Δθ=w²/2α`），用户认可；桩世界升限 ~h150，190 m 只能真机验。
-- **磁盘纪律**：CC 盘 1 MB，旧版本一律存主机侧；跑前看 `DISK free`（现在 ~600 KB 空闲）。
+- **比例式反推已解禁且实测有效**（`brakeProp=true`）：尾部 lean 自动收到 +2.5°/实际 +4.3°，不再拿 22° 硬推；`false` = v15 固定 22°（备份 `flip_v15.lua`）。
+- **`dockUCap` 必须 1.0**（真机回翻腿 1.85 s / 46.4 m；0.6 是 3.25 s / 93 m，从云层起翻会撞地）。
+- **自由落体不写死**：`fallPlan=clamp(h0-clampH-dockReserve,0,22)`；首飞预算 19.5、实掉 20.8 m。
+- **两段式回程有效**：RETURN 在 5 m 容差处退出（2.0 m），ARMS 5 s 继续收到 0.2 m。
+- 桩踩出两个 bug 已修（`driftMax` 要在 ARMS 后恢复；FALL 腿 `flipping=true`）；`run`/`back` 保持 v15。
 
-## 3. 本轮改动（代码 + 文档）
+## 3. 本轮改动
 
-- [x] 无代码改动（v15 已在上一轮写完并上机 PASS）
-- [x] `starship15-catch.md` §41、`constants` §2 剖面数字更新 + 程序表 + 磁盘纪律警告
-- [x] **`starship15-handover.md` 整篇重做为「V 收官」版交接文档**：现状表 / 常数摘要 / 四条控制律 / 程序清单 /
-      硬件频道 / 世界几何 / 工具与磁盘纪律 / 13 条坑 / 未解决项 / D~F 步 + 下一轮候选 F2·F4·爬升·串任务
-- [x] `memo/README.md` 索引里的 handover / catch 描述同步（catch 已涨到 116 KB）
-- [x] CSV/status 归档 `cc_logs_archive/flip_v15_PASS_20261118_0408.csv`
-- [x] 本卡整篇覆写为「V 收官 + 选下一段主线」
+- [x] `flip.lua` v16（dock 模式 + 比例式反推 + target.txt x/z + 夹持点 CFG 兜底 + ARM_HOLD 收尾）
+- [x] 备份 `flip_v15.lua`；桩夹具 `temp/harness_dock.lua`、`temp/flip_stub_dock.lua`
+- [x] `constants`（黑名单 #6、§2 dock 真机 PASS、夹持点实测、程序表）｜`handover` 状态/几何｜`catch` §42~44
 
-## 4. 交给你
+## 4. 下一步（自动合臂 → 串任务）
 
-告诉我下一段做哪个：**F2 落地剖面（推荐）/ F4 ch0 / 爬升加速 / 直接串 `starship.lua`**。
+1. 电脑 1 跑 **`catch`**（常驻：先复位臂 ±90 + connector 关）；电脑 0 跑 **`flip dock`**。
+2. 火箭到位后自动发 `dock` ⇒ 电脑 1 合臂 + 开 connector ⇒ 回 `clamped` ⇒ 火箭开 ch5/ch6 ⇒ 2 s ⇒ 关喷口。
+   日志 `SECURED` = 夹取闭环完成；`ARM HOLD` = 没收到回信（保持悬停，安全）。
+3. 然后把这套并进 `starship.lua`（handover E 步）；可选 F4（ch0 +25%）、爬升加速。
+4. 每趟结束：CSV + status 立刻归档 `cc_logs_archive/`。
 
 ## 5. 每轮硬规矩
 
 | # | 规矩 |
 |---|---|
-| 1 | 原始 CSV / 原始长日志**不进对话**；只吃 digest 输出（≤30 行）或定向流式抽样 |
-| 2 | 改 Lua 用 `edit` 局部替换，**禁止整篇 write 重写**；新文件除外；改完必跑干跑 |
-| 3 | 程序头必须有 `-- VER vN @date  CHANGELOG:...`；**旧版本存主机侧 `cc_logs_archive/lua_versions/computer0/`，绝不能放电脑磁盘** |
-| 4 | 每轮收尾三件事：memo 只追加 ≤15 行增量 §N（不重复旧结论）｜覆写本卡｜`handover.md` 只改"状态表"那一行 |
-| 5 | 常数只认 `starship15-constants.md`；新数实测到了就改那一行，别在 memo 其它地方复制 |
-| 6 | 开工先报"本轮读哪几个文件"，没报不许动手；每轮工具调用预算 ≈3 次定位 + 1 次改 + 1 次干跑 |
-| 7 | 日志三条铁律：**结尾必须 close**｜**每轮独立文件名**｜**测完立刻归档到 `cc_logs_archive/`**；磁盘上限 1 MB、主机侧删文件无效 |
+| 1 | 原始 CSV / 长日志不进对话；只吃 digest（≤30 行）或定向抽样 |
+| 2 | 改 Lua 用 `edit` 局部替换，禁止整篇 write；改完必跑干跑 |
+| 3 | 程序头写 `-- VER vN @date CHANGELOG:`；旧版存主机侧，绝不进电脑盘 |
+| 4 | 每轮收尾：memo 追加 ≤15 行 §N｜覆写本卡｜handover 改状态行 |
+| 5 | 常数只认 constants；新实测只改那一行 |
+| 6 | 开工先报读哪几个文件；预算 ≈3 读 + 1 改 + 1 干跑 |
+| 7 | 日志：结尾 close｜每轮独立文件名｜测完立刻归档；磁盘 1 MB |

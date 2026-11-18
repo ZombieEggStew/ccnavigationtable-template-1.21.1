@@ -1648,3 +1648,83 @@ need=20° 时仍要 0.4 rad/s），只有越过 92° 才切成纯阻尼 ⇒ 总�
   （对比 v11：BRAKE 结束在 −16.4 ⇒ 余量 ~0）。`VERDICT PASS`、drift 89.1（Z 过冲按用户要求保留）、`aborted=nil`。
 - **遗留（都不算失败）**：①`HOVER` 跑满 6 s 仍未降到 `capH=-8`（刹车后机体停在 ~40 m，按 3 m/s 剖面下降要 16 s）⇒
   这段正是 F2 落地剖面要接的位置；②belly-flop 峰 109.3°（过横 19°，与过冲同源，用户认可）。
+
+## 42. `flip dock` v16 —— 任务剖面（腹部朝下 → 自由落体 → 回翻 → 回夹持点，2026-11-18）
+- **用户修正目标**（此前文档两处写错）：主线不是「0→90→0」的整条 V（那只是执行器能力测试）；
+  F2 也不是「软着陆触地」；真实需求 = **90° 腹部朝下自由落体 → 锥角回翻竖直 → 落回夹臂附近**。
+- 剖面：`RELEASE → FALL(腹部朝下、深度按实测高度截断) → DAMP → FLIPBACK(u=dockUCap=1.0) → BRAKE(比例式反推) → RETURN(guide 环回 target.txt 夹持点) → ARMS(悬停 5 s 等合臂)`。
+- 三个新常数：`dockUCap=1.0`（u=0.6 的回翻腿 3.25 s/93 m，从云层高度起翻会在刹车前落地）、`dockReserve=100 m`、
+  `fallPlan=clamp(h0-clampH-dockReserve, 0, 22)`（不写死云层高度）；`brakeProp=true` = 用户改判后的比例式反推（回退 = false）。
+- 桩（真实几何：释放 z≈65.5/h≈123、夹持 z≈−0.5）：FALL 1.75 s/20.4 m｜FLIPBACK 1.75 s/48.4 m（vh 23.6）｜
+  BRAKE 7.9 s/dz −98.8（vh→2.4、h 15.3）｜RETURN 19.4 s（gap 32.8→err 1.6）｜ARMS 5 s（err 0.2）⇒ **PASS**。
+- 桩暴露两个真 bug（已修）：`driftMax` 在 RETURN 后立即恢复 ⇒ ARMS 首周期 `DRIFT` 中止；FALL 腿必须 `flipping=true`，否则腹部朝下起点直接 `COS_ABORT`。
+- ⚠️ 桩的 FLIPBACK 1.75 s 偏乐观（真机 u=0.6 实测 3.25 s/93 m）：真机若在 BRAKE 触发 `FLOOR GUARD` ⇒ 抬释放点 或 先做 F4（ch0 +25%）。
+
+## 43. `flip dock` v16 首飞 + 夹持点实测（2026-11-18 14:23 / 14:30）
+- 首飞真机（release y=212.5 / h=119.5 / p=0.5495，CSV `flip_1794983014147.csv`，484 行）：
+  FALL 2.00 s / 20.8 m（vy −19.9）｜FLIPBACK **1.85 s / 46.4 m**（vh 23.9、wMax 1.23、u=1.00）｜
+  BRAKE 6.20 s（h 50.7→25.2、vh 23.9→2.4、dz −87.4、u 均值 0.496）｜RETURN 8.8 s（h 25.2→0.7）｜ARMS 5 s
+  ⇒ `VERDICT PASS`、`aborted=nil`、cos 1.000。**高度预算验证 OK**：119.5 m 用完仍停在 h=0，未触发 FLOOR GUARD；BRAKE 权限富余。
+- **首飞唯一缺陷**：电脑 0 没有 `/log/target.txt` ⇒ `clamp=(x nil, z nil)`，RETURN 只能保持刹车位置、停在 z≈−18.4（离夹臂 17.9 m）；`PASS` 是相对错误目标算的。
+- **夹持点实测**（`probe` 在电脑 0、夹住时，2026-11-18 14:30）：`pos (11.50, 93.05, −0.49)`、mass 61、chain 219、q=identity、vel≈0；
+  `/log/target.txt` 已重写为该点，并写进 `flip.lua` 的 CFG 兜底（`clampX=11.5 / clampZ=−0.492`）。
+- ⚠️ **旧 `computer/1/log/target.txt` 是平台体**（mass 133.75、z=+11.2、y=93.44）：`probe` 读的是"自己所在物理体"的位置。以后只认电脑 0（火箭上）的记录。
+- 桩复跑（真夹持点）：RETURN gap 32.8→err 1.6 m、ARMS 0.2 m ⇒ PASS。下一趟只需把机体重新腹朝天放回云端平台再跑 `flip dock`。
+
+
+## 44. ✅ `flip dock` v16 第二趟真机 —— 带回夹臂完整 PASS（2026-11-18 14:40）
+- CSV `flip_1794983983187.csv`（544 行 / 72 KB），`target.txt` 已就位 ⇒ `DOCK` 行打印 `clamp=(x 11.5, z -0.49, h=0)`。
+- 剖面：FALL 2.00 s / 20.8 m（vy −19.9）｜FLIPBACK 1.85 s / **46.4 m**（vh 24.0、wMax 1.22）｜
+  BRAKE 6.15 s（vh 24→2.4、dz −87.0、u 均值 0.497）｜**RETURN 11.9 s**（gap **17.7 m** → err **2.0 m**、vh 1.0、h=0）｜
+  **ARMS 5 s**（err **0.2 m**、vh 0.2）⇒ `VERDICT PASS`、`aborted=nil`、cos 1.000，停在 **(11.50, −0.69, h=0)**。
+- 两段式回程（RETURN 粗定位 5 m 容差 + ARMS 精定位）按设计工作：RETURN 在 2.0 m 处退出，ARMS 继续收到 0.2 m = 夹持点本体。
+- 其余：`FIXTURE skipped`（dock 不碰平台电脑）、释放只写 ch5/ch6=0、`ARM HOLD` 保留悬停推力；磁盘 free 516 KB。
+- 下一步：合臂 → `flip zero` 验证「不掉」；然后把该剖面并入 `starship.lua`（handover E 步）。
+
+
+## 45. `catch.lua`（电脑 1）+ `flip` v17 合臂握手（2026-11-18）
+- 用户规格（2026-11-18）：① 电脑 1 复位臂 ±90、connector 关；② 等火箭靠近或**主动请求**；③ 合臂 0 + 开 connector；
+  ④ 火箭打开所有 connector；⑤ 等 2 s 关喷口（连成刚体后不会掉）。
+- 落地：平台侧 `computer/1/catch.lua`（v1），火箭侧 `flip.lua` v17。
+  - 平台：`apply(90,16,0)` 一个 parallel 块 → `os.pullEvent` 等 `rednet_message` 的 `cmd="dock"`（或按键）→
+    `apply(0,16,15)`（臂 0 @16rpm + conn 7/8/9=15 同块）→ 回 `{replyTo=reqId, ok=true, result="clamped"}`。
+  - 火箭：ARMS 保持**前**发 `dock`（`CFG.peer=1`），保持 5 s 后收 `clamped`；收到才写 ch5/ch6=15、`sleep(2)`
+    （喷口保持最后悬停 scale）、`commitZero()`；收不到则 `ARM HOLD`（保持悬停，绝不掉）。
+- 桩：`temp/harness_catch.lua`（注入 `dock` 请求）⇒ RESET/WAIT/REQUEST/CLOSE/REPLY 全对；
+  `temp/harness_dock.lua`（加了 `sleep` + `dock` 回信）⇒ 火箭侧 `CATCH request → ARMS → reply clamped → CONNECT → 2 s → SECURED`。
+- 未上机；上机顺序：电脑 1 `catch`（常驻）→ 电脑 0 `flip dock`。
+
+
+## 46. 合臂握手第一趟失败 → 根因「rednet 不排队」（2026-11-18 15:01）
+- 现象：平台侧日志 `REPLY "clamped" -> computer 0 sent=true`，火箭侧 15 s 后打 `!! NO clamp reply`，connector 从未打开。
+- 根因（`memo/peripherals/cc-rednet-communication.md` §6.1）：**rednet 消息不排队**——目标不在 `rednet.receive` 时直接丢，
+  `rednet.send` 仍返回 true。火箭当时在 ARMS 保持循环里（5 s），平台 1.5 s 就回了 ⇒ 回信被丢弃。
+- 同时用户反馈：夹臂 16 rpm 关得太快 ⇒ 改 `ARMS_RPM=2`（90° ≈7.5 s）。
+- 修法（`flip` v18 / `catch` v1.1）：
+  1) 平台：合臂后**等两臂真正停住**（`getRotationSpeed` 之和 <0.1，最多 12 s）再回 `clamped`，避免"臂还在动就宣布夹好"；
+  2) 平台：回信**重试 15 s、每 0.5 s 一次**（覆盖火箭回到 receive 的窗口）；
+  3) 火箭：`armHoldT` 5 → **12 s**（保持位置直到臂关完），保持结束后再进 15 s 的 receive 窗口。
+- 桩：catch `RESET @2rpm → REQUEST → CLOSE @2rpm → SETTLE ok → REPLY retried 15 s`；
+  flip `ARMS 12.0 s → reply clamped → CONNECT → WAIT 2 s → SECURED`。
+
+
+## 47. 合臂间隙 ~5 s 的来历 + 修法（2026-11-18 15:08 真机）
+- 现象（用户）：链路跑通，但「夹臂完全闭合 → 火箭打开 connector」之间空了约 5 s。
+- 拆开算：`armHoldT`（v18）= **12 s 固定保持**，而 2 rpm 合臂只需 **7.5 s** ⇒ 4.5 s 空等；
+  再叠上平台侧 `SETTLE TIMEOUT after 12.0 s`（catch 日志）——回信被推迟到 12 s 之后。
+- **SETTLE 超时的根因**：`getRotationSpeed()` 返回的是**配置转速常量**（停着也显示 2.00），拿它当"停稳"判据永不成立。
+  正确判据是 **`getTargetAngle()`（伺服参考角）**：日志里 88.8 → **0**，正好 7.5 s ⇒ **轴承本身没问题**
+  （2 rpm 是 Create 转速，90° = 0.25 转 = 7.5 s；`setRotationSpeed` 钳 0~96 rpm）。
+- v19 / catch v1.2：平台用 `|getTargetAngle()| ≤ 0.5°` 判到位；火箭把"固定 12 s 保持"改成
+  **0.5 s 控制切片 + 0.4 s 收信窗口**循环，收到 `clamped` 立刻退出并开 connector（12 s 只作兜底上限）。
+- 预期新时间线：请求 t=0 → 合臂 7.5 s → 平台回信 → 火箭 0.4 s 窗口内收到（≤1 s 后）→ 开 ch5/ch6 → 2 s → 关喷口。
+
+
+## 48. 又剩 ~3 s：发信周期 / 收信窗口拍频（2026-11-18 15:17 真机）
+- 实测：平台 `SETTLE ok after 5.3 s`，火箭 `ARMS 5.8 s`（`reply=true`），程序层只差 0.5 s；
+  但用户看到「臂闭合 → 开 connector」还有 **~3 s**。
+- 根因：平台 **每 0.5 s** 回一次，火箭的保持循环是 **0.5 s 控制 + 0.4 s 收信（周期 0.9 s）**；
+  0.5 与 0.9 会拍频，平台发送时刻常落在控制切片里 ⇒ 被丢（rednet 不排队），要等下一个窗口，几次错位叠加 ≈3 s。
+- 修法（v20 / catch v1.3）：平台 **每 0.1 s** 重试（15 s 窗口）；火箭 **0.25 s 控制 + 0.5 s 收信**（周期 ~0.75 s）
+  ⇒ 每个窗口内必有 ≥4 次发送，臂到位后的第一个窗口就能收到。
+- 预期：臂到位 → 开 connector 的间隔 **~0.2~0.5 s**（原来是 ~3 s）。焊接等待仍按用户规格 2 s。
