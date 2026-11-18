@@ -430,7 +430,8 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * 悬停不动的飞机不会在原地堆出一团云。按距离发射顺带解决性能问题（静止时零发射），
      * 也是用户定稿（悬停完全不出尾迹）。
      * <p>
-     * 温度不够冷时间距被放大：{@code 实际间距 = trailSpacing() / max(s, TRAIL_SPACING_S_FLOOR)}。
+     * 温度不够冷时间距被放大：{@code 实际间距 = trailSpacing() / max(s, TRAIL_SPACING_S_FLOOR)}；
+     * 实际发射还会再按<b>有效油门</b>放大间距（见 {@code tickContrail}），两者是独立的两项。
      */
     private static double trailSpacing() {
         return Config.CONTRAIL_SPACING.get();
@@ -820,7 +821,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * 只乘在<b>排气</b>与<b>进气</b>这两条与出力同源的链路上（{@link #tickClient} 里的「有效油门」=
      * 油门 × 本系数），所以系数一变，<b>数量、排气速度、进气漏斗长度一起变</b>，0 = 完全不出粒子。
      * <p>
-     * <b>高空尾迹不受它影响</b>：尾迹按移动位移与高度发射，与出力无关（{@link #tickContrail}，用户定稿）。
+     * <b>高空尾迹也受它影响，但只影响发射密度</b>（{@link #tickContrail}：间距 ∝ 1/系数）：
+     * 系数 0 = 完全不出尾迹（2026-11 用户定稿），系数 0.5 = 尾迹更稀；
+     * 尾迹的<b>寿命</b>仍只由高度适宜度决定，不随出力缩短。
      */
     protected float particleIntensityScale() {
         return 1.0F;
@@ -963,9 +966,10 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         final SubLevel own = Sable.HELPER.getContaining(this);
 
         // 有效油门 = 油门（|转速| / 256）× 子类粒子强度系数（矢量喷管的出力系数，默认 1.0）。
-        // 它<b>只喂排气与进气</b>两条链路：数量、排气速度、进气漏斗长度都按这一个数缩放
-        // ⇒ 出力减半 ≈ 转速减半的观感、出力 0 = 完全不出粒子（用户定稿 2026-11）。
-        // 高空尾迹不走这条线（tickContrail 按位移与高度发射），所以不受出力系数影响。
+        // 它<b>喂给排气、进气与高空尾迹</b>三条链路：
+        //   · 排气 / 进气 —— 数量、排气速度、进气漏斗长度都按这一个数缩放
+        //     ⇒ 出力减半 ≈ 转速减半的观感、出力 0 = 完全不出粒子（用户定稿 2026-11）；
+        //   · 高空尾迹 —— 只缩放发射密度（出力 0 = 不出尾迹，寿命仍看高度），见 tickContrail。
         final float particleThrottle = Mth.clamp(
                 Math.min(Math.abs(speed) / 256.0F, 1.0F) * this.particleIntensityScale(), 0.0F, 1.0F);
 
@@ -980,8 +984,9 @@ public class ThrustNozzleBlockEntity extends BlockEntity
             return;
         }
 
-        // 高空尾迹：与排气<b>互相独立</b>的一条链路（只在冷空气里有、按位移发射、不做碰撞），见 tickContrail
-        this.tickContrail(level, own, mouth, flowDir);
+        // 高空尾迹：与排气<b>互相独立</b>的一条链路（只在冷空气里有、按位移发射、不做碰撞），见 tickContrail。
+        // 但它的<b>发射密度</b>同样乘有效油门 ⇒ 风扇在转、出力系数为 0 时也不该有尾迹（2026-11 用户定稿）。
+        this.tickContrail(level, own, mouth, flowDir, particleThrottle);
 
         // 密度随有效油门线性变化（= 转速 × 出力系数）；不足一颗就不生成
         final int count = (int) Math.round(exhaustParticlesPerTick() * particleThrottle);
@@ -1074,6 +1079,11 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * 与排气粒子<b>完全独立</b>：不查遮挡射线（尾迹在 3 格外才生成，且用户要的是"高空一条云带"），
      * 也不做扫掠碰撞（那是冰晶而不是烟，见 {@code ContrailParticle}）。
      * <p>
+     * <b>发射密度 ∝ 有效油门</b>（{@code |转速| / 256 × 出力系数}）：出力的水汽才是尾迹的来源，
+     * 所以出力系数 0（风扇在转但 {@code setThrustScale(0)}）⇒ 完全没有尾迹；系数 0.5 ⇒ 间距翻倍、尾迹更稀
+     * （2026-11 用户定稿。此前尾迹刻意与出力解耦，导致"不出力却有尾迹"）。
+     * <b>寿命只看高度 s</b>，不随油门缩短 —— 出力小只是"排得少"，不是"冰晶更快消失"。
+     * <p>
      * 坑位提醒（都是本 memo 踩过的）：
      * <ul>
      * <li>出生点必须走 {@link #projectToWorld}，否则粒子钉在机体坐标系里跟着车跑（§3.5）；</li>
@@ -1081,10 +1091,21 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      *     7 参数那个照样被原版 32 格限制丢掉（§3.7）；</li>
      * <li>瞬移（装配/传送/刚加载）时单 tick 位移极大，必须丢弃，否则会拖出一条笔直的假尾迹。</li>
      * </ul>
+     *
+     * @param intensity 有效油门 0~1（{@code |转速| / 256 × 出力系数}）：只决定<b>发射密度</b>，
+     *                  0 时整条链路不发射（寿命仍由高度 s 决定）
      */
     private void tickContrail(final Level level, final @Nullable SubLevel own,
-                              final Vec3 mouth, final Vec3 flowDir) {
+                              final Vec3 mouth, final Vec3 flowDir, final float intensity) {
         if (!useContrail()) {
+            return;
+        }
+
+        // 出力 0（风扇在转但 setThrustScale(0)）⇒ 不排任何水汽 ⇒ 高空也没有尾迹。
+        // 必须清累积量，否则再开出力那一刻会把前面积累的位移一次性吐成一串粒子。
+        if (intensity <= 0.0F) {
+            this.contrailAnchorWorld = null;
+            this.contrailAccum = 0.0D;
             return;
         }
 
@@ -1133,10 +1154,13 @@ public class ThrustNozzleBlockEntity extends BlockEntity
             return;
         }
 
-        // 温度不够冷 ⇒ 间距被放大（尾迹更稀），但有下限：s 太小只是"该淡、该短命"，
-        // 不能靠抽走粒子来表达，否则中低空看起来就是"断断续续、分布很散"
+        // 间距 = 基础间距 ÷ 适宜度 ÷ 有效油门：
+        //   · 温度不够冷 ⇒ 间距被放大（尾迹更稀），但有下限：s 太小只是"该淡、该短命"，
+        //     不能靠抽走粒子来表达，否则中低空看起来就是"断断续续、分布很散"；
+        //   · 出力小 ⇒ 间距按比例放大（密度 ∝ 有效油门）；出力 0 已被上面的早退挡掉。
         final double spacing = Math.max(0.01D,
-                trailSpacing() / Math.max(s, Math.max(TRAIL_SPACING_S_FLOOR, 1.0E-4F)));
+                trailSpacing() / Math.max(s, TRAIL_SPACING_S_FLOOR)
+                        / Math.max(intensity, 1.0E-3F));
         final Vec3 dir = flowWorld.normalize();
         final RandomSource random = level.random;
         int emitted = 0;

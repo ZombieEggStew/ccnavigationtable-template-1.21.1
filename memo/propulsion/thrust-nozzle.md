@@ -672,6 +672,7 @@ protected void setLocationFromBoundingbox() {
 | `ThrustNozzleBlockEntity#(BlockEntityType, BlockPos, BlockState)` 构造器 | — | 子类注册成自己的 BE 类型 |
 | `ThrustNozzleBlockEntity#nozzleAxis(BlockState)` | `FACING` 法线 | 推力（`sable$physicsTick` 冲量）与**全部粒子链路**（喷口位置 / 粒子基向量 / 遮挡射线 / 进气漏斗 / 尾迹锚点）的唯一方向来源；矢量喷管覆盖它返回倾斜轴 ⇒ 一处改、全链路生效 |
 | `ThrustNozzleBlockEntity#thrustScale()` | `1.0` | 乘在「转速 × 气压」上的额外出力系数（矢量喷管的 Lua `setThrustScale`） |
+| `ThrustNozzleBlockEntity#particleIntensityScale()` | `1.0` | **粒子强度系数**：乘进「有效油门 = `\|转速\|/256` × 本系数」⇒ 排气数量/速度、进气漏斗长度、**尾迹发射密度**一起缩放，0 = 三种粒子全不出（2026-11 第六轮把尾迹也纳入，见 `advanced-thrust-nozzle.md` §16；尾迹寿命仍只由高度决定） |
 
 > ⚠️ **两种喷管的出力口径不同（2026-11 用户定稿）**：本文表格里的「1 RPM = 1 pN / 256 RPM = 256 pN」
 > 只针对**定向喷管** `ccpe:thrust_nozzle`；矢量喷管在 `thrustScale()` 里还乘了

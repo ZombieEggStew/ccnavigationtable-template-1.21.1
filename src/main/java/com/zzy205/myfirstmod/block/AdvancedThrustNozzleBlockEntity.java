@@ -610,9 +610,9 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
     /**
      * 覆盖父类钩子：<b>出力系数也决定粒子</b>（用户定稿 2026-11）。
      * <p>
-     * 父类把「有效油门 = 油门 × 本系数」喂给排气与进气 ⇒ 系数 0.5 的观感约等于转速减半
-     * （数量、排气速度、进气漏斗长度一起缩），系数 0 = 排气/进气完全不出。
-     * 高空尾迹不在此列（按位移与高度发射，见 {@code tickContrail}）。
+     * 父类把「有效油门 = 油门 × 本系数」喂给排气、进气与高空尾迹 ⇒ 系数 0.5 的观感约等于转速减半
+     * （数量、排气速度、进气漏斗长度一起缩），系数 0 = 三种粒子完全不出
+     * （尾迹只缩发射密度，寿命仍由高度决定，见父类 {@code tickContrail}）。
      * <p>
      * 客户端要在这里<b>本地补一步渐变</b>：同步包只在命令时发一次（不逐 tick 广播），
      * 客户端拿到的是「命令那一刻的值 + 目标」，而服务端那份 {@code value} 是每 tick 推进的。
@@ -798,8 +798,9 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
          * <p>
          * 满出力 = <b>2 pN/RPM</b>（{@link #THRUST_OUTPUT_MULTIPLIER}，用户定稿；定向喷管仍是 1 pN/RPM）
          * ⇒ 气压 1.0、256 RPM 时 512 pN/喷管。
-         * <b>同时决定排气与进气粒子</b>：有效油门 = 转速 × 本系数 ⇒ 数量、排气速度、进气漏斗长度一起变，
-         * 系数 0 时排气/进气完全不出（高空尾迹不受影响，它按位移与高度发射）。
+         * <b>同时决定排气、进气与高空尾迹粒子</b>：有效油门 = 转速 × 本系数 ⇒ 排气/进气的数量、排气速度、
+         * 进气漏斗长度一起变，<b>高空尾迹按同一系数缩放发射密度</b>（系数 0 时三种粒子完全不出，
+         * 寿命仍看高度）。
          * 推力与粒子都按同一条运动曲线渐变（0.2s 走完 0→1）。
          */
         @LuaFunction(mainThread = true)
