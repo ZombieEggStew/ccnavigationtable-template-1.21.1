@@ -191,4 +191,6 @@
 
 
 # 1.2.6
+- Fixed high-altitude contrails still being emitted while an Advanced Thrust Nozzle is running with `setThrustScale(0)`. 
 
+- Widened the contrail altitude band from **Y 160 and above** to **Y 100–320**.
