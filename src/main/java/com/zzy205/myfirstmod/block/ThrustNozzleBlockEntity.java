@@ -359,8 +359,8 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * <p>
      * 尾迹的现实依据（memo §8.2）：飞机尾迹是<b>排气水汽在高空冷空气里结成的冰晶云</b>，不是烟。
      * 三个独立物理量各管一件事 —— 温度阈值决定<b>有没有</b>、环境过饱和决定<b>多长命</b>、
-     * 光学厚度决定<b>多浓多大</b>。本项目不用湿度，全部退化成"高度 → 环境温度"的纯函数
-     * （{@link #TRAIL_T_START} / {@link #TRAIL_T_FULL}），并遵守两条设计规则：
+     * 光学厚度决定<b>多浓多大</b>。本项目不用湿度，全部退化成<b>纯高度</b>的适宜度曲线
+     * （{@link #TRAIL_Y_RISE_START} 起的三段线性，2026-11 起不再经过温度模型），并遵守两条设计规则：
      * <ul>
      * <li>气压<b>不参与</b>判定（气压只是高度的代理变量，且现有曲线是 1.5→0 单调，不能当尾迹强度）；</li>
      * <li>尺寸与透明度<b>必须成对</b>算（{@code alpha ∝ 1/宽度}），否则"散开"和"变淡"会互相打架。</li>
@@ -373,55 +373,44 @@ public class ThrustNozzleBlockEntity extends BlockEntity
     /**
      * 只在主世界出尾迹（<b>现行 true</b>，用户定稿）。
      * <p>
-     * 理由：地狱按 {@link EngineCoreBlockEntity#T_AMB_NETHER}=155°C 恒温，适宜度天然为 0，本来就没有；
-     * 末地恒 {@link EngineCoreBlockEntity#T_AMB_END}=0°C ⇒ 适宜度 ≈ 0.10，会蹭出一层淡淡的尾迹。
-     * 这个开关把末地也直接关掉，语义干净。置 {@code false} 则末地也会有 10% 强度的淡尾迹。
+     * 理由：现在适宜度是<b>纯高度</b>曲线（见 {@link #TRAIL_Y_RISE_START}），末地地形基本在 Y&lt;100
+     * ⇒ 本来就不会出尾迹；这个开关仍然保留，是为了将来末地出现高 Y 结构时也不会蹭出尾迹。
+     * 地狱更直接：地形在 Y≈32~120，绝大部分低于 100 ⇒ 天然没有。
+     * 置 {@code false} 则末地高 Y 处也会有尾迹。
      */
     public static final boolean CONTRAIL_OVERWORLD_ONLY = true;
 
     /**
-     * 尾迹<b>适宜度曲线</b>：从"单调爬升"改成<b>峰值曲线</b>（用户定稿）。
-     * <p>
-     * 现实依据：尾迹要冷（会结冰）+ 要有水汽（能持久）。冷这条随高度单调，但水汽随高度是<b>先增后减</b>
-     * —— 到了对流层顶以上（平流层）空气极干，反而很难有尾迹。所以"越高越浓"是错的，
-     * 正确的形状是：<b>某个高度带最浓，往上变稀、往下消失</b>。
-     * <p>
-     * 本曲线的三段（全部以环境温度 { 用温度而不是裸 Y，好处是以后改引擎的
-     * {@link EngineCoreBlockEntity#T_AMB_*} 曲线时，尾迹带会自动跟着平移 }）：
+     * 尾迹<b>适宜度曲线</b>（2026-11 用户定稿：<b>纯高度、分段线性</b>，不再走温度模型）。
      * <pre>
-     * 上升段  s_rise = smoothstep01((T_START − T) / (T_START − T_FULL))
-     * 变稀段  s_fade = smoothstep01((T_FADE_START − T) / (T_FADE_START − T_FADE_END))
-     * s = s_rise × (1 − (1 − S_CEILING) · s_fade)        // 峰值 = 1.0，世界顶 = S_CEILING
+     * Y ≤ 100     ⇒ s = 0                    完全没有尾迹
+     * 100 → 180   ⇒ s 由 0 线性升到 1       密度（单位航程的粒子数）= s ÷ 间距 ⇒ <b>严格线性增大</b>
+     * 180 → 240   ⇒ s = 1                   峰带（60 格宽，主世界云层 200 正落在中间）
+     * 240 → 320   ⇒ s 由 1 线性降到 0       密度线性减少，世界顶正好归零
+     * Y ≥ 320     ⇒ s = 0
      * </pre>
-     * 落点（主世界，Y ↔ 温度见 {@code T_AMB_*} 分段线性）：
-     * <table border="1">
-     * <tr><th>节点</th><th>温度</th><th>Y</th><th>作用</th></tr>
-     * <tr><td>{@code TRAIL_T_START}</td><td>+10 °C</td><td>≈132</td><td>上升段起点（实际被下面的 Y 硬门挡住）</td></tr>
-     * <tr><td>{@code TRAIL_Y_MIN}</td><td>+5.8 °C</td><td><b>160</b></td><td><b>硬门</b>：以下完全没有尾迹；一过 160 就有 s≈0.58（≈42 s 寿命）</td></tr>
-     * <tr><td>{@code TRAIL_T_FULL}</td><td>+2.5 °C</td><td>≈183</td><td>上升段拉满 ⇒ 从云层下方开始就是最浓</td></tr>
-     * <tr><td>{@code TRAIL_T_FADE_START}</td><td>−8 °C</td><td>≈224</td><td>峰带结束（云层 ~200 正好落在峰内），开始变稀</td></tr>
-     * <tr><td>{@code TRAIL_T_FADE_END}</td><td>−40 °C</td><td>320</td><td>世界顶，只剩 {@code S_CEILING}</td></tr>
-     * </table>
-     * 用户要求"Y160 左右就要看见大概清晰的尾迹"：靠 <b>上升段陡 + Y 硬门</b> 实现 ——
-     * 159 → 完全没有；160 → s=0.58（间距 2.1 格、寿命 42 s）；175 → s=0.94。
-     */
-    public static final float TRAIL_T_START = 10.0F;
-    /** 上升段拉满的温度（≈Y183）；见 {@link #TRAIL_T_START} 的表格 */
-    public static final float TRAIL_T_FULL = 2.5F;
-    /** 高空变稀段的起点温度（≈Y224，云层 ~200 之上一小段）：越往上越干 ⇒ 尾迹越淡 */
-    public static final float TRAIL_T_FADE_START = -8.0F;
-    /** 变稀段终点温度（= 世界顶 −40 °C） */
-    public static final float TRAIL_T_FADE_END = -40.0F;
-    /** 世界顶（Y≈320）残余强度：不归零，避免爬到限高时尾迹"突然消失" */
-    public static final float TRAIL_S_CEILING = 0.15F;
-
-    /**
-     * 尾迹的<b>高度硬门</b>（Y，现 160）：低于它完全不出尾迹（用户定稿：低空 Y&lt;160 没有尾迹）。
+     * 原文（温度模型，已被本轮取代）：s 由"引擎高度→温度"曲线 + 两个 smoothstep 组成，
+     * 峰值带约 Y183~224、Y160 有硬门、世界顶留 0.15 残余。用户要的是可读的线性高度区间，
+     * 所以改成上面这张表 —— <b>不要再把温度塞回来</b>（两个模型混用会很难解释"密度为什么不是线性"）。
      * <p>
-     * 硬门是"阶跃"而不是平滑过渡：因为用户要的是"160 左右就有清晰尾迹"，
-     * 而平滑曲线做不到"0 和明显"在同一高度同时成立 —— 所以让它 160 以下为 0、一过 160 立刻 s≈0.58。
+     * 适宜度 s 同时决定两件事（口径一致）：
+     * <ul>
+     * <li><b>发射密度</b>：间距 = {@link #trailSpacing()} ÷ s ⇒ 每格粒子数与 s 成正比；</li>
+     * <li><b>寿命</b>：{@link #trailLifeMin()} → {@link #trailLifeMax()} 按 s 线性插值 ⇒ 峰带最耐久。</li>
+     * </ul>
+     * 现实对应：真实判据是 Schmidt-Appleman（冷 + 湿）。冷随高度单调，湿是<b>先增后减</b>
+     * （对流层顶最湿、平流层极干）⇒ 所以"越高越浓"是错的，尾迹本来就有一个最浓的高度带。
+     * <p>
+     * 注意<b>不要</b>用 {@code SensorSystemAPI.getPressureForEngine} 当强度：气压曲线是 1.5 → 0 单调，
+     * 越高越小，和"有没有尾迹"不是一回事。
      */
-    public static final double TRAIL_Y_MIN = 160.0D;
+    public static final double TRAIL_Y_RISE_START = 100.0D;
+    /** 密度拉满的高度（Y=180，用户定稿）：线性上升段的终点 */
+    public static final double TRAIL_Y_FULL = 180.0D;
+    /** 峰带结束、开始变稀的高度（Y=240，用户定稿） */
+    public static final double TRAIL_Y_FADE_START = 240.0D;
+    /** 密度归零的高度（Y=320 = 世界顶，用户定稿） */
+    public static final double TRAIL_Y_FADE_END = 320.0D;
 
     /**
      * 尾迹的<b>发射间距</b>（格）：机体每飞这么远吐一颗（在适宜度 s=1 时）。
@@ -430,7 +419,8 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * 悬停不动的飞机不会在原地堆出一团云。按距离发射顺带解决性能问题（静止时零发射），
      * 也是用户定稿（悬停完全不出尾迹）。
      * <p>
-     * 温度不够冷时间距被放大：{@code 实际间距 = trailSpacing() / max(s, TRAIL_SPACING_S_FLOOR)}；
+     * 适宜度 s 低时间距被放大：{@code 实际间距 = trailSpacing() / s}（纯高度曲线，见
+     * {@link #TRAIL_Y_RISE_START}）⇒ <b>密度与高度严格线性</b>；
      * 实际发射还会再按<b>有效油门</b>放大间距（见 {@code tickContrail}），两者是独立的两项。
      */
     private static double trailSpacing() {
@@ -438,17 +428,8 @@ public class ThrustNozzleBlockEntity extends BlockEntity
     }
 
     /**
-     * 计算间距时给适宜度 s 的<b>下限</b>（现 0.35）。
-     * <p>
-     * 原来的公式是 {@code trailSpacing() / s}：Y≈200 处 s≈0.1 ⇒ <b>12 格才吐一颗</b>，
-     * 视觉上就是"断断续续、分布很散"。但"不够冷"本来就该靠<b>寿命/透明度</b>体现，
-     * 不该靠抽走粒子（粒子少了只会看起来断线，而不是变淡）。
-     * 加下限后密度最多稀到 1/0.35 ≈ 2.9 倍（间距 ≤ 3.4 格），强度差异交给寿命。
-     */
-    public static final float TRAIL_SPACING_S_FLOOR = 0.35F;
-
-    /**
-     * 适宜度 s 决定尾迹寿命（tick）：s=0 用 MIN、s=1 用 MAX（<b>越冷越耐久</b>，对齐"过饱和"那条现实规律）。
+     * 适宜度 s 决定尾迹寿命（tick）：s=0 用 MIN、s=1 用 MAX（<b>适宜度越高越耐久</b>，对齐"过饱和"那条现实规律；
+     * 2026-11 起 s 是纯高度曲线 ⇒ 峰带 180~240 最耐久，往两端线性缩短）。
      * <p>
      * 迭代：60/300（3~15 s）→ 180/600（9~30 s）→ 用户自己试到 12000/18000（10~15 分钟）
      * → 现行 <b>360/1200（18~60 s，"1 分钟左右"）</b>。保留约 1:3.3 的 MIN/MAX 比例，
@@ -509,14 +490,15 @@ public class ThrustNozzleBlockEntity extends BlockEntity
     public static final double TRAIL_TURB_CLOUD_Y = 200.0D;
 
     /**
-     * 云层<b>以下</b>（Y 200 → {@link #TRAIL_Y_MIN}=160）飘荡距离的放大倍数上限（现 2.5）。
+     * 云层<b>以下</b>（Y 200 → {@link #TRAIL_Y_RISE_START}=100）飘荡距离的放大倍数上限（现 2.5）。
      * <p>
      * 物理：对流层的湍流/垂直对流随高度下降而增强（云就是这样长起来的），所以越低空，
      * 尾迹被搅得越散。线性映射：
      * <pre>
-     * 系数(Y) = 1 + (本值 − 1) · (CLOUD_Y − Y) / (CLOUD_Y − TRAIL_Y_MIN)     // 200 → 1.0，160 → 本值
+     * 系数(Y) = 1 + (本值 − 1) · (CLOUD_Y − Y) / (CLOUD_Y − TRAIL_Y_RISE_START)
      * </pre>
-     * 于是 Y≈160 处粒子能飘 2×2.5 = 5 格，Y≈200 以上只飘 2 格 —— 低空尾迹显得蓬松、云层以上紧实。
+     * 于是 Y≈100 处粒子能飘 2×2.5 = 5 格，Y≈200 以上只飘 2 格 —— 低空尾迹显得蓬松、云层以上紧实。
+     * 下限跟着尾迹带一起从 160 挪到 100（2026-11 拓宽高度区间时同步改的）。
      * 置 1.0 = 与高度无关。
      */
     public static final double TRAIL_TURB_LOW_GAIN = 2.5D;
@@ -1138,10 +1120,10 @@ public class ThrustNozzleBlockEntity extends BlockEntity
 
         this.contrailAccum += moved;
 
-        final float s = contrailSuitability(level, mouthWorld.y);
+        final float s = contrailSuitability(mouthWorld.y);
 
         if (s <= 0.0F) {
-            this.contrailAccum = 0.0D; // 不够冷 ⇒ 完全不出尾迹（也顺便把累积量清掉）
+            this.contrailAccum = 0.0D; // Y 不在 100~320 区间 ⇒ 完全不出尾迹（也顺便清掉累积量）
             return;
         }
 
@@ -1155,11 +1137,12 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         }
 
         // 间距 = 基础间距 ÷ 适宜度 ÷ 有效油门：
-        //   · 温度不够冷 ⇒ 间距被放大（尾迹更稀），但有下限：s 太小只是"该淡、该短命"，
-        //     不能靠抽走粒子来表达，否则中低空看起来就是"断断续续、分布很散"；
+        //   · 适宜度 s 是纯高度线性曲线（TRAIL_Y_RISE_START 起的四段，见 {@link #contrailSuitability}）
+        //     ⇒ 密度（每格粒子数）与高度严格线性：100 格处 0、180 拉满、240 开始线性回落、320 归零；
+        //     这里<b>不再给 s 低下限</b>（旧版有 TRAIL_SPACING_S_FLOOR，会把低空的线性压成台阶）；
         //   · 出力小 ⇒ 间距按比例放大（密度 ∝ 有效油门）；出力 0 已被上面的早退挡掉。
         final double spacing = Math.max(0.01D,
-                trailSpacing() / Math.max(s, TRAIL_SPACING_S_FLOOR)
+                trailSpacing() / Math.max(s, 1.0E-4F)
                         / Math.max(intensity, 1.0E-3F));
         final Vec3 dir = flowWorld.normalize();
         final RandomSource random = level.random;
@@ -1329,7 +1312,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
 
     /**
      * 飘荡距离的<b>高度湍流系数</b>（≥1）：云层（{@link #TRAIL_TURB_CLOUD_Y}=200）及以上为 1.0，
-     * 往下线性放大到 {@link #TRAIL_Y_MIN}=160 处的 {@link #TRAIL_TURB_LOW_GAIN}。
+     * 往下线性放大到 {@link #TRAIL_Y_RISE_START}=100 处的 {@link #TRAIL_TURB_LOW_GAIN}。
      * <p>
      * 物理依据：对流层越往下湍流/垂直对流越强（云本身就是这么长出来的），
      * 所以低空的尾迹更容易被搅散；再往上（云层以上）没有观测依据支持继续变化，就保持 1.0 ——
@@ -1340,7 +1323,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
             return 1.0D;
         }
 
-        final double span = TRAIL_TURB_CLOUD_Y - TRAIL_Y_MIN;
+        final double span = TRAIL_TURB_CLOUD_Y - TRAIL_Y_RISE_START;
 
         if (span <= 0.0D) {
             return 1.0D;
@@ -1351,46 +1334,35 @@ public class ThrustNozzleBlockEntity extends BlockEntity
     }
 
     /**
-     * 尾迹适宜度 s（0~1，纯高度函数）：用户定稿"不计算湿度"，所以温度阈值就是唯一的判据。
-     * <p>
-     * <b>峰值曲线</b>（用户定稿，取代原来的单调爬升）：上升段 × 高空变稀段，
-     * 三段节点与落点见 {@link #TRAIL_T_START} 上方的表格，Y160 另有硬门 {@link #TRAIL_Y_MIN}。
-     * 温度 T 直接复用引擎那条"高度 → 环境温度"曲线（{@link EngineCoreBlockEntity#ambientTempAt}），
-     * 所以以后改 {@code T_AMB_*} 时整条尾迹带会跟着平移，不用同步改两处。
-     * <p>
-     * 现实对应：真实判据是 Schmidt-Appleman（冷 + 湿）。冷随高度单调，湿是<b>先增后减</b>
-     * （对流层顶最湿、平流层极干）⇒ 所以"越高越浓"是错的，尾迹本来就有一个最浓的高度带。
+     * 尾迹适宜度 s（0~1，<b>纯高度分段线性</b>）：2026-11 用户定稿，节点与密度口径见
+     * {@link #TRAIL_Y_RISE_START} 上方的表。
+     * <pre>
+     * Y ≤ 100 ⇒ 0        100 → 180 ⇒ (Y−100)/80
+     * 180 → 240 ⇒ 1      240 → 320 ⇒ (320−Y)/80       Y ≥ 320 ⇒ 0
+     * </pre>
+     * s 同时管<b>发射密度</b>（间距 = 基础间距 ÷ s）与<b>寿命</b>（MIN → MAX 线性插值）⇒
+     * 用户要的"密度线性增大 / 线性减少"就是这一条，不用再乘别的系数。
      * <p>
      * 注意<b>不要</b>用 {@code SensorSystemAPI.getPressureForEngine} 当强度：气压曲线是 1.5 → 0 单调，
      * 越高越小，和"有没有尾迹"不是一回事。
      */
-    public static float contrailSuitability(final Level level, final double y) {
-        // 硬门：Y < TRAIL_Y_MIN 完全不出（用户定稿的低空规则）
-        if (y < TRAIL_Y_MIN) {
+    public static float contrailSuitability(final double y) {
+        final double riseSpan = TRAIL_Y_FULL - TRAIL_Y_RISE_START;
+        final double fadeSpan = TRAIL_Y_FADE_END - TRAIL_Y_FADE_START;
+
+        if (y <= TRAIL_Y_RISE_START || y >= TRAIL_Y_FADE_END) {
             return 0.0F;
         }
 
-        final float temperature = EngineCoreBlockEntity.ambientTempAt(level, (float) y);
+        if (y < TRAIL_Y_FULL) {
+            return riseSpan <= 0.0D ? 1.0F : (float) ((y - TRAIL_Y_RISE_START) / riseSpan);
+        }
 
-        // 上升段：温度够冷才开始（s_rise 0 → 1）
-        final float riseSpan = TRAIL_T_START - TRAIL_T_FULL;
-        final float rise = riseSpan <= 0.0F
-                ? 1.0F
-                : smoothstep01((TRAIL_T_START - temperature) / riseSpan);
+        if (y <= TRAIL_Y_FADE_START) {
+            return 1.0F;
+        }
 
-        // 变稀段：越往上空气越干（s_fade 0 → 1），把峰值往下压到 S_CEILING
-        final float fadeSpan = TRAIL_T_FADE_START - TRAIL_T_FADE_END;
-        final float fade = fadeSpan <= 0.0F
-                ? 0.0F
-                : smoothstep01((TRAIL_T_FADE_START - temperature) / fadeSpan);
-
-        return rise * (1.0F - (1.0F - TRAIL_S_CEILING) * fade);
-    }
-
-    /** 0~1 的 smoothstep（超出范围自动钳位） */
-    private static float smoothstep01(final float value) {
-        final float t = Mth.clamp(value, 0.0F, 1.0F);
-        return t * t * (3.0F - 2.0F * t);
+        return fadeSpan <= 0.0D ? 0.0F : (float) ((TRAIL_Y_FADE_END - y) / fadeSpan);
     }
 
     /**

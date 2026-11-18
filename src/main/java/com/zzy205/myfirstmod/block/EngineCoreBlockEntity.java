@@ -1886,8 +1886,11 @@ public class EngineCoreBlockEntity extends GeneratingKineticBlockEntity implemen
     /**
      * 上一条曲线的<b>静态版</b>：给定维度与高度，返回同一套分段线性曲线上的环境温度（°C）。
      * <p>
-     * 抽出来的原因：别的系统也要用同一条"高度→温度"（定向喷管的高空尾迹，见
-     * {@code ThrustNozzleBlockEntity#contrailSuitability}），不能再各写一套、以后调曲线还要改两处。
+     * 抽出来的原因：同一条"高度→温度"曲线有多个读法（实例方法 {@link #ambientTemp()} 只是取维度 + 取自身高度），
+     * 而且它天然是<b>静态可复用</b>的纯函数，不能再各写一套、以后调曲线还要改两处。
+     * <p>
+     * 注意：定向喷管的高空尾迹<b>已经不用温度</b>了（2026-11 用户定稿改成纯高度分段线性，
+     * 见 {@code ThrustNozzleBlockEntity#contrailSuitability}）—— 所以改 {@code T_AMB_*} 不再影响尾迹带。
      * 实例方法 {@link #ambientTemp()} 现在只是"取维度 + 取自身高度"再委托到本方法，<b>行为零变化</b>。
      *
      * @param level 只用来判维度（地狱 155°C 恒温 / 末地 0°C 恒温）；{@code null} 时按主世界曲线算
