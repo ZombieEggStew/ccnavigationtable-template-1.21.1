@@ -7,6 +7,11 @@
 -- Purpose: catch nil / logic / reporting bugs before the in-game run.
 --===========================================================================
 local SRC = arg[1] or [[D:\aMyMCMods\ccnavigationtable-template-1.21.1\run\saves\New World\computercraft\computer\0\att.lua]]
+-- Optional scenario overrides (all backward compatible):
+--   lua54 harness.lua <prog> <tau> <phase> <stride> <progArg> <y0> <att>
+--   <progArg> is passed to the program as its first vararg (e.g. "dock")
+--   <y0>      start world Y (default: the dock Y)
+--   <att>     "belly" starts the body belly-flopped (cosVert 0)
 
 local VT = 1794911300.000            -- virtual epoch seconds
 local G, MASS, PN = 11.0, 61.0, 2.05
@@ -46,11 +51,36 @@ end
 local function upVec() return qrot(S.q, { 0, 1, 0 }) end
 
 local CHANNELS = { 0, 1, 2, 3, 4 }
-local FIRING = { 1, 2, 3, 4 }
+-- v23: ch0 is part of the firing set now (F4).  It contributes 0 thrust while the program
+-- keeps its scale at 0 (CFG.ch0On=false), so including it is backwards compatible; when F4
+-- is on it adds the real +25% thrust AND the matching +25% cone torque (which the stub
+-- derives from thrFrac).
+local FIRING = { 0, 1, 2, 3, 4 }
 
-local function pressureAt(y)          -- measured anchors: p(93)=0.8866, p(69)=0.9757
-  local p = 1.0 - 0.00371 * (y - 63.0)
-  return math.max(0.05, math.min(1.05, p))
+-- REAL atmosphere instead of the old linear fit (which gave p(300)=0.12; the game gives
+-- 0.306 there).  Piecewise cubic Hermite over the dimension_physics anchors, base 1.0,
+-- sea level Y=63 -- same model as wiki/docs/sensor-system/fmc.zh.md L159-181.
+local ATM = {
+  { -38.37, 1.5000, -0.006000 },
+  {  63.00, 1.0000, -0.004000 },
+  { 263.00, 0.4493, -0.001797 },
+  { 280.00, 0.4198, -0.001679 },
+  { 320.00, 0.0000, -0.020990 },
+}
+local function pressureAt(y)
+  if y <= ATM[1][1] then return ATM[1][2] end
+  if y >= ATM[#ATM][1] then return ATM[#ATM][2] end
+  local i = 1
+  while i < #ATM - 1 and y > ATM[i + 1][1] do i = i + 1 end
+  local a, b = ATM[i], ATM[i + 1]
+  local dy = b[1] - a[1]
+  local t = (y - a[1]) / dy
+  local t2, t3 = t * t, t * t * t
+  local h00 = 2 * t3 - 3 * t2 + 1
+  local h10 = t3 - 2 * t2 + t
+  local h01 = -2 * t3 + 3 * t2
+  local h11 = t3 - t2
+  return h00 * a[2] + h10 * (a[3] * dy) + h01 * b[2] + h11 * (b[3] * dy)
 end
 
 -- one physics tick (20 Hz)
@@ -222,11 +252,30 @@ parallel.waitForAll = function(...)
   VT = VT + 0.05
 end
 
+-- CC's `sleep` global is provided by the OS, not by the program: stub it as a clock+physics
+-- wait, otherwise any `sleep(n)` in the tail turns into "attempt to call a nil value".
+function sleep(sec)
+  local n = math.max(0, math.floor((tonumber(sec) or 0) / 0.05))
+  for _ = 1, n do physicsStep(0.05); VT = VT + 0.05 end
+end
+
 -- -------------------- run --------------------
 args = nil
+local Y0 = tonumber(arg[6])
+if Y0 then S.y = Y0 end
+local Z0 = tonumber(arg[8])
+if Z0 then S.lz = Z0 end      -- initial z offset (real geometry: release ~+67 m from the clamp)
+if (tostring(arg[7] or ""):lower() == "belly") then
+  local s = math.sqrt(0.5)
+  -- 90 deg about -X: the body's up-vector points at -Z, which is what the real ship does
+  -- (the field CSV shows the drift going to -Z, i.e. the tilted thrust pushes that way).
+  S.q = { -s, 0, 0, s }
+end
 local chunk, err = loadfile(SRC)
 if not chunk then print("LOAD ERROR: " .. tostring(err)); os.exit(1) end
-local ok, err2 = pcall(chunk)
+local PARG = {}
+if arg[5] and tostring(arg[5]) ~= "" then PARG[1] = tostring(arg[5]) end
+local ok, err2 = pcall(chunk, table.unpack(PARG))
 if not ok then print("RUNTIME ERROR: " .. tostring(err2)) end
 
 print("---- log files ----")

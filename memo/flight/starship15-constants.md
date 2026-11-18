@@ -69,6 +69,17 @@
   ✅ **真机 PASS ×3（2026-11-18 14:23 / 14:40 / 15:29）**：FALL 2.00 s/20.8 m（vy −19.9）｜FLIPBACK **1.85 s/46.4 m**（vh 24.0、wMax 1.25）｜
   BRAKE **6.20 s**/dz −87.4（vh 24→2.4、u 均值 0.497）｜RETURN 12.1 s（gap 18→err 2.1）｜ARMS 2.7 s（err 0.0、cos 1.000）
   ⇒ 停在 (11.50, −0.5, h=0)。**高度预算实测够**：release h=119.5 全部用完仍停在 h=0，未触发 FLOOR GUARD。
+★ **任务剖面 `flip dock` v30（2026-11-18，当前版本）**：投放点改成高空 **≈(9.5, 306.5, +66.9)**，横距 **67 m**。
+  - `dockReserve=140`（数值上 = 翻转点 h；y≈233、p≈0.507、TWR≈1.96）、`dockFallDrop=80`、`dockFallVy=−45`、`dockFallMaxT=5.0`
+  - **F4 已开**（`ch0On=true`）：ch0 加入集合推力 = 5 台，`FmaxFiring` 按 5 台折算，全剖面 u 降 20%；`setInverted(true)` 在 `discover()` 里
+  - α 随气压：`alphaNow = coneAlphaDeg·u·(p/0.5495)`（`coneAlphaRefP` 就是 v20 PASS 的气压）
+  - **交班用惯性**（v26）：FLIPBACK 目标 = `brakeLean(vh)` 函数，越过竖直 `flipHandoverDeg=2°` 即交给 BRAKE（不再停死在 0°）
+  - **锥角必须在只靠差动的腿前打直**（v27）：`DIRCMD={0,0}`（`nil` 不写 setDirection，见黑名单 #21）
+  - 接近段：`apVmax=3.5 / apAMax=3.5 / apKP=0.45 / apKV=1.3 / apVyMax=6.0 / apVySqrtA=3.0`；竖直 `vyRef=−min(VY,√(2·apVySqrtA·|dh|))`（符号随 dh，#22）
+  - ✅ 真机 PASS 连续 9 轮（v22~v30）：FALL 3.95 s/76.5 m｜FLIPBACK 1.90 s/73.7 m｜BRAKE 6.5 s 停 z=−24.9｜RETURN 10.5 s/err 0.8｜ARMS err 0.1
+  - ⚠️ **过冲对 `dockBrakeAMax` 极敏感**（塔压在停止距离边缘）：`2.6 ⇒ 1.6 m`、`1.5 ⇒ 24.4 m`；实测有效横向减速度 ≈ **`2.7 + 1.0·dockBrakeAMax`**（锥角自身贡献 ~2.7，倾角只 ~2.6）
+  - ⚠️ 横向反向实测：vh 0 → 4.86 m/s 用 **2.3 s（≈2.1 m/s²）**；18° 上限本应给 3.57 ⇒ 差距来自"环在目标附近提前收力 + 倾角 ≈1.3 s 摆动滞后"
+  - ⚠️ 末端 6 s 在目标附近 **limit-cycle**（vh 2~4 m/s 来回、posErr 0.8），TRIM 因此跑满 4 s
 ★ **合臂/抓取时序（`catch.lua` v1.3，2026-11-18 定型）**：复位臂 ±90 + conn 7/8/9=0 → 等 `dock` 请求（或按键）
   → 合臂 0 **@2rpm**（伺服参考 ~5.3 s；16 rpm 太快，用户裁定）+ conn=15（一个 parallel 块）
   → 用 **`|getTargetAngle()| ≤ 0.5°`** 判到位（`getRotationSpeed()` 是配置转速常量，停着也 2.00，不能当判据）
@@ -146,6 +157,10 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | 18 | 锥角环分母用满推力 α、或用差动（u=0）做横躺段阻尼 | 前者以为力矩是 2.2 倍 ⇒ 过冲；后者 u=0 时差动几乎无权限（0.33 rad/s²），刹不住 1 rad/s ⇒ 翻过 90°（桩 114.7° OVERFLIP） | §36 |
 | 19 | 「把翻转点抬高就有余量」 | **v13 实测否掉**：推力 ∝ 气压 ⇒ 高 10 m 反让锥角腿多掉 **8.5 m**（FLIPBACK 128→136.5），净赚只有 ~1.5 m/10 m | §39 |
 | 20 | 用「更温的速率曲线」治「翻过 90°」的过冲 | 过冲 `Δθ=w²/(2α)`，α=2·u 由推力封顶决定；实测循环一直钉在速率帽、**根本没跟曲线** ⇒ 压需求无效，唯一出路是提高 α（`coneUCap` 或 ch0） | §39 |
+| 21 | `DIRCMD = nil` 以为能把锥角打直 | `commitTable()` 收到 `dx=nil` **不写 setDirection** ⇒ 喷口保持上次偏转。RETURN 段 5.4° 锥角 ≈ **0.83 rad/s²**，而差动只有 0.29 ⇒ `dA` 满舵也压不住，机体 +8°→−30° 触发 COS_ABORT | §50（v26 事故） |
+| 22 | 平方根下降剖面写成 `max(dh,0)` | `dh=capH−h` 在目标**上方**是负数 ⇒ 目标下沉速度恒 0，机体 25 m 悬停 55 s 不降（TRIM 硬拽到 −0.8） | §50（v29 事故） |
+| 23 | 程序参数打错（`flip fock`）当小事 | 未知 MODE 落到 `run` 分支：**先脱落再 COS_ABORT**，306 m 白掉、零数据 | §50（v23 事故）；v24 起入口校验，非法**不脱落** |
+| 24 | 过冲量按线性直觉调 | 塔压在停止距离边缘 ⇒ `dockBrakeAMax` 2.6→1.5 让过冲 1.6→24.4 m | 一次只动 0.2，用 `有效a ≈ 2.7+1.0·dockBrakeAMax` 预估（§2） |
 
 ## 5. 程序清单与版本锚点（维护这张表，别在别处记）
 
@@ -160,7 +175,7 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | `att.lua` | 0 | ✅ 已跑并闭合（§20），力矩通道 | v2 |
 | `tilt.lua` | 0 | ✅ PASS（§21），姿态 PD ±6°/±9° | 待补 |
 | `guide.lua` | 0 | ✅ 已跑 PASS（v4，末端 0.42 m，§23.9） | v4 |
-| `flip.lua` | 0 | **v20 = `dock` 任务剖面 + 合臂握手**（腹部朝下→自由落体→回翻→比例式反推→回夹持点→发 `dock` →**0.25 s 控制 + 0.5 s 收信**轮询，收到 `clamped` 立刻开 ch5/ch6=15 → 2 s → 关喷口）：**真机 PASS ×3（2026-11-18）**；`run`/`back` 保持 v15 行为 | v20 |
+| `flip.lua` | 0 | **v30 = `dock` 任务剖面（高空投放 y=306.5 → 自由落体 73.5 m → 翻转 h=140 → 反推 → 过冲 → 回夹持点 → 合臂握手）**：F4/ch0 已开、α 随气压、交班用惯性、锥角打直、√ 下降剖面、MODE 校验；**v22~v30 连续 9 轮真机 PASS**；`run`/`back` 保持 v15 行为 | v30 |
 | `catch.lua` | **1** | 平台合臂序列（`catch`）：复位臂 ±90 + conn ch7/8/9=0 → 等火箭 `dock` 请求（或按键）→ 合臂 0 @2rpm + conn=15（一个 parallel 块）→ **用 `getTargetAngle()` 判到位**（`getRotationSpeed` 返回的是配置转速常量，不可用）→ 回 `clamped`（**每 0.1 s** 重试 15 s：rednet 不排队 + 发/收周期拍频） | v1.3 |
 | `thruststress.lua` | 0 | 一次性测（v4）：**默认就断 ch5/ch6 脱落**（含 `setStrongPower(6,false)`）再测 REL/FULL/DPOS/DNEG/OFF（6.6 s，无需通信）；`measure` 只测不脱落、`cone` 追加锥角 4 朝向、`fixture` 才走 rednet；写 `/log/usts_<epoch>.csv` + `status_usts.txt` | v4 |
 | `dropall.lua` | 0 | 一次性脱落（v3）：`ch5`+`ch6` 输出清零（sh5=上方固定 connector、ch6=下方燃料 connector），单 parallel 块、写后回读；`dropall show` 只读打印 0..15 的 out/in/strong/device；写 `/log/status_drop.txt` | v3 |
@@ -173,7 +188,7 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 
 | 工具 | 用法 | 作用 |
 |---|---|---|
-| `.tmp_luatest/harness.lua` | `lua54 harness.lua <程序> [τ=0.08]` | 桩世界干跑（桩外设 + 桩物理 + 虚拟时钟），**改完 Lua 必跑** |
+| `.tmp_luatest/harness.lua` | `lua54 harness.lua <程序> [τ=0.08] [相位] [stride] [程序参数] [y0] [belly\|""] [z0]` | 桩世界干跑（桩外设 + 桩物理 + 虚拟时钟），**改完 Lua 必跑**。v23+ 用真实大气 Hermite 曲线（`p(300)=0.306`，旧线性拟合给 0.12）；新增 `sleep` 桩、程序参数透传、起始高度/姿态/z 偏移；`FIRING` 含 ch0 |
 | `tools/digest_csv.ps1` | `powershell -File tools/digest_csv.ps1 <log.csv> [-Cols a,b,c] [-T0 -T1 -Win] [-HeaderOnly]` | 把 50 KB~60 MB 的 CSV 压成 ≤30 行看板（相位 min/max/avg/last + 自动判据 `SLOW/GAP/ATT_DIP/SAT/SINK/ERR_END/COL_SHIFT`），并顺带打印 `status_*.txt` |
 | `tools/digest_csv.ps1`（记录仪） | `... <run/flight_logs/*.csv> -T0 12 -T1 20 -Win 0.5` | 70 MB 记录仪按时间片均值（大文件必须给 `T0/T1`） |
 | `computer/0/fsprobe.lua` | 在游戏内 computer 0 执行 `fsprobe` | 文件写入门禁取证：A~E 五种 open 写法 + `free/cap`（结果同时写 `/fsprobe_report.txt`，退出世界后读） |
@@ -192,4 +207,4 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 - `memo/propulsion/advanced-thrust-nozzle.md`（58 KB）：喷管 Lua API 与推力模型
 - `memo/peripherals/cc-rednet-communication.md`（10 KB）：跨电脑命令协议
 - `memo/peripherals/my_aero_sensor.md`（12 KB）：INS 读数与门控
-- `memo/flight/starship15-catch.md`（77 KB）：**归档**，按 §N 定向 grep
+- `memo/flight/starship15-catch.md`（126 KB）：**归档**，按 §N 定向 grep（§50 = v21~v30 演进链）

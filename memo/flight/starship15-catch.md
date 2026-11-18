@@ -1741,3 +1741,18 @@ need=20° 时仍要 0.4 rad/s），只有越过 92° 才切成纯阻尼 ⇒ 总�
 - 判据（用户 2026-11-18）：腹部朝下自由落体 → 回翻竖直 → 落回夹臂；`|vy|≤0.8`、`|vh|≤2`、`cos≥0.95`、位置误差 ≤3 m（connector 有短距吸力，实际用 ≤5 m 容差 + ARMS 精定位到 0.0~0.2 m）、不撞地板 ⇒ **全部满足**。
 - 归档：`cc_logs_archive/flip_dock_v20_PASS_20261118_1529.csv`（+ status）、`catch_v1.3_PASS_20261118_1528.txt`。
 - 剩余（都是打磨级）：① 把链路并进 `starship.lua`（handover E 步）；② 可选 F4（ch0 +25%）买余量；③ 收尾清理（电脑盘只留运行版、旧版在主机侧）。
+
+## 50. v21~v30 演进链（2026-11-18 20:00~21:36，投放点抬到 y=306.5，长落体 + 视觉剖面）
+
+- **几何**：投放点 **(9.5, 306.5, +66.9)**，横距 67 m；`h0=213.5`。气压：`p(306.5)=0.230`（TWR 0.89，**只够掉、不够悬停**）、`p(300)=0.306`（TWR 1.19）、`p(233)=0.507`（翻转点，TWR 1.96）。
+- **v21 长落体**：真闸门是 `dockFallVy`（−20 让 FALL 永远只落 20.8 m，`dockFallDrop` 改了没用）⇒ −45 + `dockFallMaxT 5.0` + `dockFallDrop 80`。
+- **v22 低翻转点**：`dockReserve 170→140`（数值上就是翻转点高度）；`RETURN` 补 `|h−clampH|≤0.3` 判据 + `TRIM` 腿（v21 停在 h=0.4 导致"夹空"）。
+- **v23 F4**：ch0 入集合推力（5 台），`setInverted(true)`；α 随气压 `coneAlphaDeg·u·(p/0.5495)`。实测 FLIPBACK 落差 78.6→73.2 m、vh 22.5→26.5。
+- **v24 MODE 校验**：`flip fock` 打错字落到 `run` 分支，先脱落再 COS_ABORT（306 m 白掉）⇒ 非法模式**不脱落**。
+- **v26 交班用惯性**：FLIPBACK 目标由常数 0° 改成 `brakeLean(vh)` 函数、越过竖直 2° 即交接；数据证据是交班处锥角 50 ms 内从 −15° 甩到 +12.5°（27° 反向）＝"停一下再歪"。
+- **v27 锥角打直**：`DIRCMD=nil` 不写 setDirection ⇒ 刹车锥角带进 RETURN，0.83 rad/s² vs 差动 0.29 ⇒ 机体 +8°→−30°、COS_ABORT 0.859。修：`DIRCMD={0,0}`。
+- **v28/v29 过冲与下降剖面**：`dockBrakeAMax 4.45→2.6→1.5`；实测**有效横向减速度 ≈ 2.7+1.0·dockBrakeAMax**（锥角自贡献 ~2.7），过冲 1.6→24.4 m。v29 的 √ 下降剖面误写 `max(dh,0)`（dh 在上方为负）⇒ 25 m 悬停 55 s 不降。
+- **v30 定型并 PASS**：FALL 3.95 s/76.5 m｜FLIPBACK 1.90 s/73.7 m｜BRAKE 6.5 s 停 z=−24.9（过塔 24.4 m）｜RETURN 10.5 s/err 0.8｜TRIM 4.05 s｜ARMS err 0.1 → PASS。
+- **待办证据**：① 过冲回调 2.0（预估 ~8 m，注意极度敏感）② 横向反向实测只有 2.1 m/s²（18° 上限 3.57）③ 末端 6 s limit-cycle（vh 2~4 m/s）。
+- 归档：`flip_v27_dock_PASS_20261118_2021.csv`、`flip_v28_dock_PASS_20261118_2103.csv`、`flip_v29_dock_RETURN_HOVER_20261118_2118.csv`、`flip_v26_dock_COSABORT_20261118_2012.csv`；源码 `lua_versions/computer0/flip_v21…v30.lua`。
+- **夹具同步**（v23+）：真实大气 Hermite（p(300)=0.306）、`sleep` 桩、程序参数/起始高度/姿态/z 偏移透传、`FIRING` 含 ch0。
