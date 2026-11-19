@@ -793,17 +793,39 @@ protected void setLocationFromBoundingbox() {
 
 | 配置键 | 默认 | 说明 |
 |---|---|---|
-| `contrailBurstSpeedMin` | 0.08 | 初速度下限（格/tick），每颗在 [下限, 上限] 随机；0 = 关闭喷出 |
-| `contrailBurstSpeedMax` | 0.25 | 初速度上限（格/tick）；与下限相等 = 所有粒子同速 |
+| `contrailBurstSpeedMin` | **0.25** | 初速度下限（格/tick），每颗在 [下限, 上限] 随机；0 = 关闭喷出 |
+| `contrailBurstSpeedMax` | **1.0** | 初速度上限（格/tick）；与下限相等 = 所有粒子同速 |
 | `contrailBurstSpread` | 25 | 方向锥半角（度），0 = 严格沿排气、180 = 整球 |
 | `contrailBurstDamp` | 0.94 | 每 tick 速度保留比例；越小衰减越快、喷得越短 |
 
-- 默认值下：单颗附加位移 ≈ 0.08×16.7 ≈ **1.3 格** 到 0.25×16.7 ≈ **4.2 格**，
-  与原飘荡距离（默认 4 格 × 0.55~1.6 随机）同量级 ⇒ 尾迹会从喷口"喷出来一段再散开"。
-- 想要更明显的"喷出去"：抬 `contrailBurstSpeedMax`（例如 0.5）或把 `contrailBurstDamp` 抬到 0.96
-  （总位移 ≈ 25 倍初速度）；想要更"短促一冲"：把 damp 降到 0.85~0.90。
+- **默认值 2026-11-19 由用户上调**（原 0.08 / 0.25）：现为单颗附加位移 ≈ 0.25×16.7 ≈ **4.2 格**
+  到 1.0×16.7 ≈ **16.7 格** ⇒ 尾迹会明显从喷口"喷出去一大段再散开"，
+  比原飘荡距离（默认 4 格 × 0.55~1.6 随机）大一个量级，是用户要的形态。
+- 想要更明显：抬 `contrailBurstSpeedMax` 或把 damp 抬到 0.96（总位移 ≈ 25 倍初速度）；
+  想要更"短促一冲"：把 damp 降到 0.85~0.90（总位移 ≈ 6.7~10 倍初速度）。
 
-### 18.3 实现位置
+### 18.3 语言文件（配置界面文案）
+
+NeoForge 的 `ConfigurationScreen` 按 **`ccpe.configuration.<toml 键名>`（标题）** 与
+**`ccpe.configuration.<toml 键名>.tooltip`（说明）** 取文案（见 `Config` 顶部注释与
+`IConfigScreenFactory` 注册）⇒ 每加一个配置项都要在两份 lang 里补一对，否则界面显示原始键名。
+
+2026-11-19 补齐的 8 项（en_us / zh_cn 各 16 行，已用 `ConvertFrom-Json` 验证两份文件各 363 个键、无缺项）：
+
+| 配置键 | 标题（zh_cn） |
+|---|---|
+| `contrailBurstSpeedMin` | 尾迹喷出初速下限 (格/tick) |
+| `contrailBurstSpeedMax` | 尾迹喷出初速上限 (格/tick) |
+| `contrailBurstSpread` | 尾迹喷出方向锥半角 (度) |
+| `contrailBurstDamp` | 尾迹喷出衰减比例 (每 tick) |
+| `exhaustAlpha` | 排气不透明度上限 |
+| `exhaustAlphaMin` | 排气不透明度下限 |
+| `intakeAlpha` | 进气不透明度上限 |
+| `intakeAlphaMin` | 进气不透明度下限 |
+
+（`exhaustAlpha*` / `intakeAlpha*` 是 §17 加的键，当时漏了 lang，这次一起补上。）
+
+### 18.4 实现位置
 
 - `Config`：`contrailBurstSpeedMin/Max/Spread/Damp` 四项（都在 CLIENT_BUILDER）。
 - `particle/ContrailParticleData`：record 新增 `burstX/burstY/burstZ`（3 个 float），
@@ -813,6 +835,7 @@ protected void setLocationFromBoundingbox() {
   与撒点用的正交基同一套取法）。
 - `client/particle/ContrailParticle`：构造时缓存 `burstDamp`、读入 `burst`；
   `tick` 里先 `setPos(x + 飘荡 + burst)` 再 `burst *= damp`。
+- `assets/ccpe/lang/{en_us,zh_cn}.json`：8 个配置键的标题 + tooltip（见 §18.3）。
 - 编译：`./gradlew.bat classes` ✅ 通过；**待用户进游戏实测**（重点看尾迹从喷口喷出后的形状，
   以及"喷出段"与后面匀速飘荡段的衔接是否自然）。
 
