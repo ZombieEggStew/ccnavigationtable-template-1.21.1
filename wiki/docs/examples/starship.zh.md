@@ -4,6 +4,9 @@
 
 ![starship](../img/starship.png)
 
+[演示视频](https://www.bilibili.com/video/BV18tsa66Ebe/)
+
+
 ## [> 存档下载 <](https://wwbbt.lanzout.com/iYi8f4gmrneh) 密码:f1k5
 
 !!! tip "说明"
