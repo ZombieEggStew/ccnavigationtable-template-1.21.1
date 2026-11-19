@@ -137,12 +137,22 @@
   ⇒ **两个成因（记死）**：
   ① **固定悬停高度**对齐门 `hTgt = capH + apClear`（v33 设计）；
   ② **√ 剖面在 dh 小时太凶**：`apVySqrtA 3.0` ⇒ dh=0.5 m 就命令 **1.7 m/s** ⇒ 悬停必然上下荡。**连续下降时无害，一旦"停住"就振荡**。
-  ⇒ 待实施（v38）：`hTgt = capH + apClearK·perr`（`apClearK≈0.35`）+ 小 dh 改线性/降 `apVySqrtA`；**验收：RETURN 期间 h 单调下降，不允许 h 恒定 ≥1 s 的平台段**。
-★ **合臂/抓取时序（`catch.lua` v1.4，2026-11-19 起连接器提前通电）**：复位臂 ±90 + conn 7/8/9=0 → **conn=15 提前（v1.4，等请求期间就有吸力）** → 等 `dock` 请求（或按键）
-  → 合臂 0 **@2rpm**（伺服参考 ~5.3 s；16 rpm 太快，用户裁定）+ conn=15（一个 parallel 块）
-  → 用 **`|getTargetAngle()| ≤ 0.5°`** 判到位（`getRotationSpeed()` 是配置转速常量，停着也 2.00，不能当判据）
-  → 回 `clamped`（**每 0.1 s 重试 15 s**：rednet 消息不排队 + 发/收周期拍频）→ 火箭在保持里 **0.25 s 控制 + 0.5 s 收信**
-  → 收到立刻开 ch5/ch6=15 → `sleep 2 s` → 关喷口。**臂到位 → 开 connector ≈0.2~0.5 s**；焊接等待 2 s（用户规格）。
+  ⇒ **v38 已实施**：`hTgt = capH + apClearK(0.35)·perr` + `apHFloor` 棘轮（只取历史最小、首帧夹到 `st.h` ⇒ 绝不先升）；竖直剖面 `vyRef = min(vyCap, √(2·3.0·|dh|), apLinK(2.0)·|dh|)`（两曲线在 dh=1.5 m / 3.0 m/s 相交，无缝）。
+  ⇒ **v38 真机（2026-11-19 13:06 PASS，err 0.0）**：RETURN 7.8 s、h **23.25→0 单调**（回升 0.001 m）、**vy 换向 0 次**（v37 是 6）、TRIM 0.00 s、ARMS err 0.0；
+     但 `apGateMaxT` 秒表在 +4 s 切断斜线（最后 4.2 m 贴点位高度横移）⇒ **v39 = 失速检测**（`apStallEps 0.20`）。
+  ⇒ **v39 真机（2026-11-19 13:15 PASS）**：RETURN 8.5 s / err 0.2 / `tgt=+0.09`、h **回升 0.000 m**、**最长平台 0.10 s**、vy 换向 0、
+     **h<0.5 m 时横向只剩 0.63 m**（v38 是 4.2 m）、TRIM 0.25 s / err 0.00、ARMS err 0.0 ⇒ 末端"斜着贴上去"成立（catch §62）。
+  ⇒ **验收（v38 起）**：RETURN 期间 h **单调下降**，**末段不得"贴点位高度横移"**（v38 实测的最后 4.2 m）。
+★ **合臂/抓取时序（`catch.lua` v1.5 起：臂连接器主固定、加油口后接，2026-11-19 用户裁定）**：
+  **分工**：臂连接器 = 火箭 **ch5** ↔ 塔 **ch8/ch9**（主固定）；加油口 = 火箭 **ch6** ↔ 塔 **ch7**（锁上之后才接）。
+  **锁定判据**：`simulated:docking_connector.getConnectedName()`（`""`=未锁，否则对面物理体名；`references/Simulated-Project-main` `DockingConnectorPeripheral.java`）；
+  容差 **0.5 格 / 20°**（`SimPhysics.dockingConnectorDistanceTolerance/AngleTolerance`）。读取路径自动探测：邻近外设 → `ss.getPeripheral(0..15)`（短程链接器贴连接器）。
+  **提前合臂**：RETURN 里 `|h|≤earlyReqH` **或** `perr≤earlyReqPerr(2.0)`（OR，谁先满足谁触发）就发 `dock` 请求、船继续飞；臂 90°→0 @2rpm **实测 5.3 s**（`SETTLE ok after 5.3 s`）。`earlyReqH` 与提前量的实测曲线（v42 场次，请求在 h=7.8 发出）：**8→5.35 s、10→5.70、12→6.05、14→6.40、16→6.70、18→7.05、20→7.40**；v43 取 **14.0（≈6.40 s，臂 5.3 s ⇒ 余量 1.1 s）**。回执早到会带速度关喷口 ⇒ v43 起 `replySettleT 1.5 s`（`|vh|,|vy|≤0.30` 才放行）。
+  ⚠️ v40 用 `AND`（1.5/1.5）时直到 `h=+0.8` 才发请求 ⇒ 臂在船停稳后才动（§64）。
+  ⚠️ **锁定探针只许读臂通道 8/9**：v1.5 扫 0..15 命中了 ch7（加油口，故意不通电）⇒ 永远 `NOT DETECTED`（§64）。
+  时序：复位臂 ±90 + arm/fuel=0 → **arm=15、fuel=0**（待命吸力）→ 等 `dock` 请求 → 合臂 0（同一 parallel 块）→ **`getConnectedName()≠""` 才算锁上**
+  → 才 `fuel ch7=15` → 回 `clamped`（**未锁不发回执**，火箭保持悬停）→ 火箭收到后才 `ch6=15` + `setStrongPower(6,true)` → `sleep 2 s` → 关喷口。
+  ⚠️ 旧口径（v1.4 及以前）是 ch5/ch6 与 7/8/9 **一起通电**，导致加油口在"抱"火箭 ⇒ 已废。
   ⚠️ 诊断三连（都已在 memo §46~§48）：① rednet 不排队（目标不在 receive 就丢，send 仍返回 true）；
   ② `getRotationSpeed` ≠ 实际转动；③ 0.5 s 发 / 0.9 s 收的拍频会凭空多出 ~3 s。
   ⚠️ **但「提速」实测无效**（v12）：75°/s 让交班角动量 0.85→1.1 rad/s，多出来的动量把省下的落差全吃回去（208.7 vs 207.1，
@@ -219,8 +229,9 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | 22 | 平方根下降剖面写成 `max(dh,0)` | `dh=capH−h` 在目标**上方**是负数 ⇒ 目标下沉速度恒 0，机体 25 m 悬停 55 s 不降（TRIM 硬拽到 −0.8） | §50（v29 事故） |
 | 23 | 程序参数打错（`flip fock`）当小事 | 未知 MODE 落到 `run` 分支：**先脱落再 COS_ABORT**，306 m 白掉、零数据 | §50（v23 事故）；v24 起入口校验，非法**不脱落** |
 | 24 | 过冲量按线性直觉调 | 塔压在停止距离边缘 ⇒ `dockBrakeAMax` 2.6→1.5 让过冲 1.6→24.4 m | 用 `有效a ≈ 2.7+1.0·dockBrakeAMax` + `s=vh²/(2a)` 预估（§2）；**一次 ≤0.3**（v31 例外：两模型一致 + 用户裁定，1.5→2.2，§51） |
-| 25 | 用"固定悬停高度 + 等待对齐"做末端（v33~v37 的对齐门） | 用户 2026-11-19 明确否决："在点位上方停住、上下晃悠、平移过去"。而且 `apVySqrtA 3.0` 让 dh=0.5 m 就命令 1.7 m/s ⇒ 一停就荡（实测 3.6 s 内 vy 换向 6 次） | 改**比例净空** `hTgt = capH + apClearK·perr`（斜着连续降），小 dh 用线性；验收＝h 单调下降、无 ≥1 s 平台（§59） |
+| 25 | 用"固定悬停高度 + 等待对齐"做末端（v33~v37 的对齐门） | 用户 2026-11-19 明确否决："在点位上方停住、上下晃悠、平移过去"。而且 `apVySqrtA 3.0` 让 dh=0.5 m 就命令 1.7 m/s ⇒ 一停就荡（实测 3.6 s 内 vy 换向 6 次） | 改**比例净空** `hTgt = capH + apClearK·perr`（斜着连续降），小 dh 用线性（**v38 已实施**：`apClearK 0.35` / `apLinK 2.0` / `apHFloor` 棘轮 / 首帧夹到 `st.h`，§60）；验收＝h 单调下降、无 ≥1 s 平台（§59） |
 | 26 | 把 `brakeVh` 收紧来减小 RETURN 开头的残余漂移 | 桩扫描：2.5→1.0 让 BRAKE 6.2→**9.0 s**（撞 cap）、停点再远 **4.8 m**、RETURN 反而 16.3→17.9 s | 保持 `brakeVh = 2.5`；那 1.6 s 的残余漂移刹车属于"过冲→回程"拓扑的固有代价（§58） |
+| 27 | 把"永不停住"的安全阀做成**固定秒表**（v36~v38 的 `apGateMaxT` 纯计时） | 它会在**正常下降途中**触发：v38 真机在 RETURN +4 s（perr 7.9 m、h 3.5 m、vy −1.4 正在跟剖面）就把目标压到夹持点，`0.35·perr` 斜线被切断 ⇒ 最后 4.2 m 变成"贴点位高度横移" | 安全阀按**没有进展**判：`apHMark` 记最低 h + `apStallEps 0.20`，单调下降永不触发（§61） |
 
 ## 5. 程序清单与版本锚点（维护这张表，别在别处记）
 
@@ -235,8 +246,8 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | `att.lua` | 0 | ✅ 已跑并闭合（§20），力矩通道 | v2 |
 | `tilt.lua` | 0 | ✅ PASS（§21），姿态 PD ±6°/±9° | 待补 |
 | `guide.lua` | 0 | ✅ 已跑 PASS（v4，末端 0.42 m，§23.9） | v4 |
-| `flip.lua` | 0 | **v30 = `dock` 任务剖面（高空投放 y=306.5 → 自由落体 73.5 m → 翻转 h=140 → 反推 → 过冲 → 回夹持点 → 合臂握手）**：F4/ch0 已开、α 随气压、交班用惯性、锥角打直、√ 下降剖面、MODE 校验；**v22~v30 连续 9 轮真机 PASS**；`run`/`back` 保持 v15 行为；**v31 = 2.2 PASS；v32~v34 末端撞；v35/v36/v37 连续 PASS（err 0.0）；但 v37 的末端"停住+上下晃"被用户否决 ⇒ 待做 v38（比例净空连续下降）** | v37 |
-| `catch.lua` | **1** | 平台合臂序列（`catch`）：复位臂 ±90 + conn ch7/8/9=0 → 等火箭 `dock` 请求（或按键）→ 合臂 0 @2rpm + conn=15（一个 parallel 块）→ **用 `getTargetAngle()` 判到位**（`getRotationSpeed` 返回的是配置转速常量，不可用）→ 回 `clamped`（**每 0.1 s** 重试 15 s：rednet 不排队 + 发/收周期拍频）**；v1.4：RESET 之后立即 `conn 7/8/9 = 15`（等请求期间平台连接器就通电，配合 flip v34 的 `PRECONN`）** | v1.4 |
+| `flip.lua` | 0 | **v30 = `dock` 任务剖面（高空投放 y=306.5 → 自由落体 73.5 m → 翻转 h=140 → 反推 → 过冲 → 回夹持点 → 合臂握手）**：F4/ch0 已开、α 随气压、交班用惯性、锥角打直、√ 下降剖面、MODE 校验；**v22~v30 连续 9 轮真机 PASS**；`run`/`back` 保持 v15 行为；**v31 = 2.2 PASS；v32~v34 末端撞；v35/v36/v37 连续 PASS（err 0.0）；但 v37 的末端"停住+上下晃"被用户否决 ⇒ 真机 **v39 PASS**（RETURN 8.5 s / err 0.2 / h 回升 0.000 / 平台 0.10 s / vy 零换向 / **h<0.5 m 时横向仅 0.63 m**、TRIM 0.25 s、ARMS err 0.0）⇒ **`flip dock` 剖面收官（v35~v39 连续 PASS）**；**v40 = 臂连接器主固定 + 提前请求（`earlyReqH/Perr 1.5`）+ 收到锁回执才开 ch6；**v41 = AND→OR + 提前量 4.0（§64）；v42 = `earlyReqH 8.0`（§65）；v43 = `earlyReqH 14.0` + `replySettleT 1.5`（无速度才关喷口），待真机（§66）** | v43 |
+| `catch.lua` | **1** | 平台合臂序列（`catch`）：复位臂 ±90 + conn ch7/8/9=0 → 等火箭 `dock` 请求（或按键）→ 合臂 0 @2rpm + conn=15（一个 parallel 块）→ **用 `getTargetAngle()` 判到位**（`getRotationSpeed` 返回的是配置转速常量，不可用）→ 回 `clamped`（**每 0.1 s** 重试 15 s：rednet 不排队 + 发/收周期拍频）**；v1.4 起 RESET 后连接器提前通电；**v1.5：arm(8/9) 与 fuel(7) 分开写 —— 待命只开 8/9，`getConnectedName()≠""` 才算锁上，锁上后才开 ch7 并回 `clamped`（未锁不发回执），读取路径自动探测（邻近外设 / `ss.getPeripheral(ch)`）；**v1.6 = 探针只读臂通道 8/9、LOCK 行打印每通道状态、DONE 区分成败 —— 真机全绿（`ch8=[S42] ch9=[S42]`、FUEL 在锁后，§65/§66）** | v1.6 |
 | `thruststress.lua` | 0 | 一次性测（v4）：**默认就断 ch5/ch6 脱落**（含 `setStrongPower(6,false)`）再测 REL/FULL/DPOS/DNEG/OFF（6.6 s，无需通信）；`measure` 只测不脱落、`cone` 追加锥角 4 朝向、`fixture` 才走 rednet；写 `/log/usts_<epoch>.csv` + `status_usts.txt` | v4 |
 | `dropall.lua` | 0 | 一次性脱落（v3）：`ch5`+`ch6` 输出清零（sh5=上方固定 connector、ch6=下方燃料 connector），单 parallel 块、写后回读；`dropall show` 只读打印 0..15 的 out/in/strong/device；写 `/log/status_drop.txt` | v3 |
 | `startup.lua` | 0 | **用户自写**极限测试（§28）：锁 `ch5/ch6` → 5 台 `setDirection(0,-1)` 满锥角 + `ch0 setInverted(true)` → 清 0 脱落 → 2 s 后满推力；证明锥角偏转 = 主翻转执行器（α≈2.5 rad/s²） | 用户版 |

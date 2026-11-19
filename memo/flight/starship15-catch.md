@@ -1868,3 +1868,97 @@ need=20° 时仍要 0.4 rad/s），只有越过 92° 才切成纯阻尼 ⇒ 总�
   3. 保留 `apCaptureR 1.0` / 捕获区 / 门锁存 / 吸力提前（它们是防撞的结构，不产生悬停）；
   4. 若"斜着下降"在低空仍会蹭到臂结构 ⇒ 恢复一个**很小的**净空下限（0.5~1.0 m），但**永不停住**。
 - 验收口径（用户视角）：RETURN 期间 **h 必须单调下降**（允许极小回弹 <0.2 m），不允许出现"h 恒定 ≥1 s"的平台段。
+
+## §60 v38 实施（2026-11-19 · 比例净空 + 小 dh 线性；代码+干跑完成，**待真机**）
+
+- 按 §59 计划实施，只改 `flip.lua` 一处逻辑（其余常数一个没动）：
+  1. **比例净空 + 棘轮**：`hTgt = capH + apClearK(0.35)·perr`；`apHFloor` 只取**历史最小值**，横向摆动只能压低目标、不能抬高（取代 v35 的 latch 作为"不许弹回去"的保证）。表里 `tgt=` 已加到 RETURN 汇总行，真机可直接看目标。
+  2. **首帧夹地板**：`apHFloor` 初值 = `min(hTgtProp, st.h)`。桩里 `BRAKE` 结束在 h=0.2、perr=29 m ⇒ 裸比例律会先飞到 **+10.5 m**（"先升后降"，用户否决的同一观感）；夹住后**任何场景**下的目标都不高于当前高度。顺带覆盖 v32 的"低空远距"情形：低空就不升、平移过去，到点已经对齐。
+  3. **小 dh 线性**：`vyRef = min(vyCap, √(2·apVySqrtA(3.0)·|dh|), apLinK(2.0)·|dh|)`。取 2.0（不是计划里的 `K_POS 0.9`）是因为 `2.0·dh` 与 `√(2·3·dh)` **恰在 dh=1.5 m / 3.0 m/s 相交** ⇒ min() **无台阶**；末段 dh 0.5→1.0 m/s、0.2→0.4 m/s（旧 √ 是 1.73 / 1.10）。
+  4. **门退化为安全阀**：`apClearTol` 进 1.5 m 只记 commit（决定 `vyCap→apCommitVyMax` 与诊断），`apGateMaxT` 超时把地板压到 `capH`（只降不升）。`apClear 2.5` 现在只当开关。
+- **数值复核**（同一套常数、竖直一阶跟踪、`perr` 走真实横向律，h0=23 / perr0=8.8 / vy0=−4.4）：h **23 → 0.04 全程单调**（0 次回升）、**最长平台 0.25 s**、不越过 capH、约 5 s 收敛 ⇒ 机械上满足验收口径。
+- **桩干跑**（`lua54 harness.lua flip.lua 0.08 __x__ 1 dock 306.5 belly 66.9`）：exit 0、跑到 `done`；RETURN 16.5 s / err 1.5 / `tgt=+0.00`、TRIM 7.00 s（桩里本就不收敛）、ARMS err 1.5 → `VERDICT CHECK`（v37 同夹具 PASS；差异在末端 vh 噪声）。**桩测不到本轮要验的东西**：桩的 BRAKE 直接停在夹持点高度，RETURN 起点 h=0.2，竖直剖面退化为平移。
+- 回归：`flip back` `VERDICT PASS`；`flip run` 的 `COS_ABORT cosVert=0.000` 是 belly 起始的既有桩现象（v37 逐字相同）。
+- **待真机**：`flip dock` 后回填 BRAKE / PRECONN / RETURN（**带 tgt=**）/ TRIM / ARMS / DOCK REPORT / VERDICT + catch 终端；验收看 RETURN 段 h 有无 ≥1 s 平台。
+
+## §61 v38 真机（2026-11-19 13:06 **PASS，err 0.0，vy 零换向**）+ v39：秒表切断了斜线
+
+- 段表：FALL 3.95 s/76.5 m｜FLIPBACK 1.90 s（vh 26.7）｜BRAKE 5.15 s/过冲 10.2 m（h=23.5、vy −4.4）｜`PRECONN` ✅｜
+  RETURN **7.8 s** / err 0.4 / **`tgt=+0.00`**｜**TRIM 0.00 s**｜ARMS 2.6 s / **err 0.0** / `reply=true` ⇒ **DOCK REPORT err 0.0 / VERDICT PASS**。
+- **验收数据（RETURN 158 行）**：h **23.25 → 0 单调**（最大回升 **0.001 m**）、**vy 换向 0 次**（v37 是 6 次）、
+  `max|vy|` 7.36、`max|lean|` 13.4°。⇒ §59 的两个根因（固定悬停 + √ 在 dh 小时太凶）都治掉了。
+- ❌ **但动画仍有一条尾巴**：最后 **2.2 s** h 停在 0.02~0.13 m（已贴点位高度），横向还差 **4.2 m** 在滑。
+  根因：**`apGateMaxT = 4.0 s` 的秒表**在 RETURN 第 4 秒触发（当时 perr 7.9 m、h 3.5 m、vy −1.4 = 正在跟剖面），
+  把目标直接压到夹持点 ⇒ `0.35·perr` 斜线被切断。**教训：安全阀要按"没有进展"判，不能按"过了多少秒"判**（黑名单 #27）。
+- **v39（2026-11-19，代码+干跑完成，待真机）**：**失速检测**代替秒表 —— `apHMark` 记最低 h，
+  只有 h 未刷新低 by `apStallEps(0.20)` 累计 `apGateMaxT` 才强制压到夹持点；**单调下降永不触发**。
+  数值复核（场次初值 h0=23.5 / perr0=10.39 / vy0=−4.4）：`forcedAt=never`、h 23.27→0.04 单调、最长平台 0.35 s、约 5 s 收敛（perr 与 h 同时归零）。
+- 桩：`dock` 与 v38 逐字相同（桩里 BRAKE 就停在夹持点高度、h 不动 ⇒ 失速检测照常触发），`back` VERDICT PASS。
+- 待真机：`flip dock`（**v39**），验收 = h 单调到点 **且** 末段不再"贴高度横移"（CSV 里 h 与 perr 应同时收到 0）。
+
+## §62 v39 真机（2026-11-19 13:15 **PASS，斜线走到底**）：失速检测取代秒表
+
+- 段表：FALL 3.95 s/76.5 m｜FLIPBACK 1.90 s（vh 26.6）｜BRAKE 5.25 s（h=23.1、vy −4.4、dz −78.5）｜`PRECONN` ✅｜
+  RETURN **8.5 s** / err 0.2 / `tgt=+0.09`｜TRIM **0.25 s** / err 0.00｜ARMS 2.7 s / **err 0.0** / `reply=true` ⇒ **DOCK REPORT err 0.0 / VERDICT PASS**。
+- **验收（RETURN 171 行）全绿**：
+
+  | 指标 | v37 | v38 | **v39** |
+  |---|---|---|---|
+  | h 最大回升 | — | 0.001 m | **0.000 m** |
+  | 最长 h 平台段 | 3.6 s | 2.2 s | **0.10 s** |
+  | vy 换向 | 6 次 | 0 次 | **0 次** |
+  | **h<0.5 m 时的横向误差** | — | **4.2 m** | **0.63 m** |
+
+- 末段形状（每 0.3 s 抽样）：h **2.67→0.41** 与 perr **6.37→0.46** 同步，vy −0.6~−0.8 ⇒ 最后几米是**浅斜线**，不是"贴高度横移"。跟踪误差 `h − 0.35·perr` 末段 0.3~0.45 m（起点那次 18.9 m 是 dh 本身大，正常）。
+- RETURN 退出时 `tgt=+0.09`（perr 0.26 ⇒ 比例目标 0.09），TRIM 用 0.25 s 把剩下 0.3 m 收干 ⇒ **两段配合正常**，不需要收紧 RETURN 容差。
+- 结论：**末端手感整改完成**（v38 治"晃动"、v39 治"横移"）。下一步＝handover E 步，把 `flip dock` 并进 `starship.lua`。
+
+## §63 连接器分工改判（2026-11-19 用户）：臂连接器主固定、加油口后接 + 合臂提前
+
+- 用户裁定：**ch6(火箭)/ch7(塔) 是加油口**，却一直当主连接器用，演示视频不好看 ⇒ **臂连接器（火箭 ch5 ↔ 塔 ch8/ch9）作主固定，锁上之后才接加油口**；并要求**合臂提前**。
+- **测量方法（本轮查实，来源 `references/Simulated-Project-main`）**：`simulated:docking_connector` 外设只有
+  `getConnectedName() -> string`：**锁定后返回对面物理体名，未锁返回 `""`**（`DockingConnectorPeripheral.java:19-29` 读 `otherConnectorPosition`）。
+  锁定容差 `SimPhysics.java:18-19`：**距离 0.5 格、角度 20°**。另有"比较器读对接进度"的官方口径可作备用。
+  平台侧无需写死频道：`findConnProbe()` 先扫邻近 `peripheral.getNames()`，再扫 `ss.getPeripheral(0..15)`（短程链接器贴连接器时命中，见 `SensorSystemAPI.getPeripheral`）。
+- **新时序（flip v40 + catch v1.5，代码+干跑/桩完成，待真机）**：
+  | 时刻 | 火箭 ch5(臂) | 火箭 ch6(油) | 塔 ch8/9(臂) | 塔 ch7(油) |
+  |---|---|---|---|---|
+  | `PRECONN`（BRAKE 后） | 15 | **0** | — | — |
+  | 塔 `RESET`/`PRECONN` | — | — | 0 / **15** | **0** |
+  | 塔 `CLOSE`（臂 0） | 15 | 0 | 15 | 0 |
+  | 塔 `LOCK ok` → `FUEL` | 15 | 0 | 15 | **15** |
+  | 火箭收到 `clamped` | 15 | **15**（+`setStrongPower(6,true)`） | — | — |
+- **提前请求**：RETURN 环里 `|h|≤earlyReqH(1.5) 且 perr≤earlyReqPerr(1.5)` 即发 `dock` 请求、船继续飞；臂 90°→0 @2rpm ≈**7.5 s**，`armHoldT 12 s` 覆盖。TRIM 后的发送保留为幂等兜底。
+- **回执语义变了**：catch 只在 `getConnectedName()≠""`（或读不到时的"角度+1 s"退路）才回 `clamped`；**未锁 → 不发回执**，火箭保持悬停、加油口保持关闭。
+- 桩验证（`temp/catch_stub.lua`）：红石写序 `ch8/9=0,ch7=0 → ch8/9=15 → ch7=15`，`SETTLE 7.5 s`、`LOCK ok`、`FUEL` 在锁后 ⇒ 顺序正确。
+- 待真机：先起 `catch`（第一行会打印 `PROBE ...`，据此确定读取路径），再 `flip dock`。
+
+## §64 v40/v1.5 真机（2026-11-19 13:34）：探针读到加油口 + 提前量不足
+
+- catch 日志：`PROBE connector lock readable via ss-channel:7` → `SETTLE ok after 5.3 s` → **`LOCK NOT DETECTED`** → `FUEL SKIPPED` → `REPLY withheld` → `done`；flip 日志：`CATCH request (early: h=+0.8 perr=1.5)`，TRIM 后 `!! ERROR: Terminated`（用户手动停）。
+- **根因 1（程序 bug）**：`findConnProbe` 扫 0..15 取第一个有 `getConnectedName` 的通道，命中的是 **ch7 = 加油口**的连接器 —— 它本轮故意不通电，**永远读不到锁定**。修法（catch v1.6）：**先只探 `CONN_ARM(8/9)`**，回退才是"邻近外设"；`LOCK` 行现在打印 `ch8=[..] ch9=[..]` 原始状态。
+- **根因 2（提前量）**：`earlyReqH≤1.5` 与 `earlyReqPerr≤1.5` 是 **AND**，而 perr 比 h 收得慢 ⇒ 直到 `h=+0.8 m` 才发请求，臂 **5.3 s**（本轮实测，与旧口径一致）跑完时船早就停稳。修法（flip v41）：`earlyReqH 4.0`、`earlyReqPerr 2.0`，且两者 **OR**（谁先满足谁触发）。按 v39 场次轨迹 `h=4.1` 时 `perr=9.4` ⇒ 请求提前约 **4~5 s** 发出，臂与船大致同时到位。
+- 桩回归（`temp/catch_stub.lua`）：`PROBE ... arm channels 8/9` → `LOCK ok (ch8=[starship-body] ch9=[starship-body])` → 写序 `ch8/9=0,ch7=0 → ch8/9=15 → ch7=15`（锁后才加油）。
+- ⚠️ 未验证项：臂在 `h=4 m` 且横向 ~9 m 时就闭合，之后船 **降进已闭合的夹臂**——几何上是否顺畅要看真机；若不顺，把 `earlyReqH` 往回调（3.0 / 2.0），改一个数即可。
+
+## §65 v41/v1.6 真机（2026-11-19 13:39）：**新时序首次全绿**，并把"提前量"量成了曲线
+
+- catch：`PROBE ... arm channels 8/9` ✅｜`SETTLE ok after 5.3 s`｜**`LOCK ok after 0.0 s  arm state: ch8=[S42] ch9=[S42]`**（两个臂连接器都真锁上，S42 = 火箭体；`0.0 s` 说明臂在 TRIM 期间就已合好）｜`FUEL arm 15/15 fuel ch7=15`（**在 LOCK 之后**）。
+- flip：`CATCH request (early: h=+4.0 perr=9.0)`｜RETURN 8.8 s / err 1.1｜TRIM 2.5 s / err 0.22｜ARMS 0.3 s / **err 0.0** / `reply=true`｜`DOCK REPORT err=0.0 cos=1.000` → **PASS**｜`FUEL ch6=15 + strong power` → `SECURED`。
+  ⇒ 用户要的顺序全部成立：**臂先抱 → 连接器锁上 → 加油口接上 → 关喷口**。
+- **提前量实测（同轮 CSV，177 行 RETURN）**：请求在 `h=3.99` 发出，船 `h≤0.2` 是 **4.60 s** 之后；臂需 **5.3 s** ⇒ 臂比船晚 ~0.7 s。
+  同轨迹的"触发高度 → 提前量"：**4.0→4.60 s、5.4→5.10 s、7.1→5.50 s、9.4→5.90 s**（高空下降快，2 m 只换 ~0.4 s）。
+- 用户："夹臂闭合时机再提前一点点" ⇒ **flip v42：`earlyReqH 4.0 → 8.0`（只改这一个数）**，按曲线约 **+1.1 s**，臂在船停稳前约 1 s 锁好。
+  干跑 `dock` 到 `done`、`back` `VERDICT PASS`。**待真机**。
+- 若要更早：按上表继续加（10.0 → ≈+0.4 s，12.0 → ≈+0.7 s）；**别再动别的数**。
+
+## §66 v42 真机（2026-11-19 13:44）+ v43：提前量曲线重测、回执早到导致"带速度关喷口"
+
+- catch：`PROBE arm channels 8/9`｜`SETTLE 5.3 s`｜**`LOCK ok  ch8=[S42] ch9=[S42]`**｜`FUEL ch7=15`（锁后）—— 与 §65 一致，**时序本身已稳**。
+- flip：`early: h=+7.8 perr=11.3`｜RETURN 8.4 s / err 0.9｜TRIM 1.85 s / err 0.23｜ARMS 0.3 s / err 0.0 → `DOCK REPORT err 0.0`，但 **`VERDICT CHECK`**（不是 PASS）。
+- **CHECK 的根因**：回执来得更早，`ARMS` 快照里 **`vh=1.3 m/s`** 就结束了保持并关喷口（v39/v41 那两轮是 `vh=0.0`）。判据要求 `vh ≤ retVhTol` ⇒ 只是"关喷口时还在横向移动"，不是没抱住（`LOCK ok` 已成立）。
+- **提前量重测**（v42 场次，170 行 RETURN，请求在 h=7.8 发出）：`h 8→5.35 s、10→5.70、12→6.05、**14→6.40**、16→6.70、18→7.05、20→7.40`。
+- **v43（2026-11-19，代码+干跑完成，待真机）**：
+  1. `earlyReqH 8.0 → 14.0`（用户"再将夹臂开始闭合的时间点提前一点"）⇒ 提前量 **6.40 s**，臂 5.3 s ⇒ **留 1.1 s 余量**，连接器在船停稳前就锁好；
+  2. **ARMS settle hold**（`replySettleT 1.5 s`）：收到回执后继续保持，直到 `|vh|,|vy| ≤ 0.30` 或到 1.5 s 上限，**绝不带残余速度关喷口** ⇒ 恢复 `VERDICT PASS`。
+- 干跑：`dock` 到 `done`（`ARMS 1.9 s` 即 settle 生效）、`back` `VERDICT PASS`。备份：`flip_v42.lua` / `catch_v1.6.lua` 已归档。
