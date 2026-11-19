@@ -48,12 +48,14 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
     // ── 视觉常量（对应参考实现的 ThrusterSmokeParticle，可按观感调） ──
 
     /**
-     * 不透明度上限：<b>出生时</b>最不透明的值，之后随寿命单调变透明、死亡时归零。
+     * 不透明度默认值（= 配置 {@code exhaustAlpha} 的默认值）。实际数值构造时从配置读一次，
+     * 缓存进 {@link #alphaMax}（与 {@link #sinkAccel} 同口径）。
      * <p>
+     * 含义：<b>出生时</b>最不透明的值，之后随寿命单调变透明、死亡时归零。
      * 比旧值（0.46）高，是因为再也没有"中间一大段恒定 0.46"的平台期了 —— 整条寿命都在衰减，
      * 平均不透明度更低，上限得抬上来才不至于整片排气看不见。
      */
-    private static final float ALPHA_MAX = 0.62F;
+    private static final float DEFAULT_ALPHA_MAX = 0.62F;
     /** 寿命最前面这一小段做淡入（避免出生瞬间硬切出一颗实心方块） */
     private static final float FADE_IN_END = 0.08F;
     /**
@@ -229,6 +231,21 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
      * （那是原版 {@code Particle#tick} 用的字段，我们整个 tick 自己实现、不用它）。
      */
     private final double sinkAccel;
+    /**
+     * 不透明度上限（配置 {@code exhaustAlpha}，默认见 {@link #DEFAULT_ALPHA_MAX}），构造时读一次缓存。
+     * <p>
+     * 只乘在 {@link #tick()} 的透明度曲线上（见 {@code ALPHA_FALLOFF}），淡入/衰减形状不变；
+     * 撞墙变大、颜色、尺寸都不受影响。设 0 = 排气完全看不见（此时可以直接把排气密度调 0 更省）。
+     */
+    private final float alphaMax;
+    /**
+     * 不透明度<b>下限</b>（配置 {@code exhaustAlphaMin}，默认 0 = 旧行为）：寿命末期衰到的最淡值。
+     * <p>
+     * 曲线 = {@code (下限 + (上限−下限) × (1−life)^ALPHA_FALLOFF) × 淡入} ⇒ 出生仍从 0 淡入，
+     * 之后一路向<b>下限</b>收敛而不是向 0。&gt;0 时尾段不会淡没，粒子到寿命结束才被移除。
+     * 构造时已夹到不超过 {@link #alphaMax}（配置写反了自动按上限处理）。
+     */
+    private final float alphaMin;
     /** 临时调试：本颗粒子是否被抽样跟踪，以及它的编号（只在 {@link #DEBUG_TRACE} 时有意义） */
     private final boolean debugTrace;
     private final int debugIndex;
@@ -280,6 +297,10 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
         // 这里缓存只是为了写法更直观（也避免每 tick 一次字段读取）。
 
         this.sinkAccel = Math.max(0.0D, Config.EXHAUST_GRAVITY.get());
+        // 配置 defineInRange(0~1) 已保证范围，这里再夹一次防止手改 toml 写越界值
+        this.alphaMax = Mth.clamp(Config.EXHAUST_ALPHA.get().floatValue(), 0.0F, 1.0F);
+        this.alphaMin = Math.min(Mth.clamp(Config.EXHAUST_ALPHA_MIN.get().floatValue(), 0.0F, 1.0F),
+                this.alphaMax);
         this.friction = 1.0F;
         // 碰撞完全由下面的 move() 自己处理，别让原版 Particle#move 再算一遍
         this.hasPhysics = false;
@@ -302,9 +323,9 @@ public class ExhaustParticle extends SimpleAnimatedParticle {
 
         // 透明度：短淡入之后随寿命 单调变透明（旧版是 10%~75% 恒定 0.46 再突然淡出，
         // 中间那一大段完全看不出"存在越久越淡"）。
-        this.alpha = ALPHA_MAX
-                * smoothstep(0.0F, FADE_IN_END, life)
-                * (float) Math.pow(1.0F - life, ALPHA_FALLOFF);
+        this.alpha = (this.alphaMin
+                + (this.alphaMax - this.alphaMin) * (float) Math.pow(1.0F - life, ALPHA_FALLOFF))
+                * smoothstep(0.0F, FADE_IN_END, life);
         // 尺寸：随寿命 单调变大
         this.quadSize = this.baseScale * (SIZE_START + life * SIZE_GROWTH) * this.impactGrowth;
 

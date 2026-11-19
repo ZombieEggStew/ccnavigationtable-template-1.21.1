@@ -320,7 +320,7 @@ mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题�
 | `EXHAUST_SPREAD` | 0.05 | 横向散开初速度上限 |
 | `EXHAUST_RED/GREEN/BLUE` | 0.86/0.90/0.96 | 冷白偏蓝 |
 
-粒子内部常量（`ExhaustParticle`）：`ALPHA_MAX 0.62`、`FADE_IN_END 0.08`、`ALPHA_FALLOFF 1.0`、
+粒子内部常量（`ExhaustParticle`）：`alphaMax`（= 配置 `exhaustAlpha`，默认 0.62）、`FADE_IN_END 0.08`、`ALPHA_FALLOFF 1.0`、
 `SIZE_START 0.35` / `SIZE_GROWTH 1.15`、`SPEED_SLOW 0.28`、
 水平阻尼 0.935 / 垂直 0.965、浮力 0.0008+0.0009×life、正弦摆动 0.0018、
 碰撞半径 = `quadSize × 0.2`（夹到 0.08~0.35，视觉尺寸与碰撞半径分开）。
@@ -333,12 +333,13 @@ mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题�
 |---|---|---|---|
 | 越来越大 | `quadSize = baseScale × (SIZE_START + life × SIZE_GROWTH) × impactGrowth` | `SIZE_START` / `SIZE_GROWTH` | 0.35 → 1.50（约 4.3 倍） |
 | 越来越慢 | 每 tick 阻尼 = 固定阻尼 × `(1 − SPEED_SLOW × life)` | `SPEED_SLOW` | 0.28；寿命末期水平每 tick 实际 ×0.67、末期几乎停住 |
-| 越来越透明 | `alpha = ALPHA_MAX × smoothstep(0, FADE_IN_END, life) × (1 − life)^ALPHA_FALLOFF` | `ALPHA_MAX` / `ALPHA_FALLOFF` | 0 → 0.62 → 0，**全寿命单调变淡** |
+| 越来越透明 | `alpha = (alphaMin + (alphaMax − alphaMin) × (1 − life)^ALPHA_FALLOFF) × smoothstep(0, FADE_IN_END, life)` | `exhaustAlpha`（`alphaMax`）/ `exhaustAlphaMin`（`alphaMin`）/ `ALPHA_FALLOFF` | 0 → 0.62 → **下限**（默认 0），**全寿命单调变淡** |
 
 - 旧版 alpha 是「10% 淡入 → 10%~75% 恒定 0.46 → 后 25% 淡出」（memo 早期写的 18%/62% 是再早的一版），
   中间那一大段完全不透明恒定 ⇒ 看不出"存在越久越淡"。现在改成出生后一路衰减到 0，
-  所以 `ALPHA_MAX` 从 0.46 抬到 **0.62** 补偿平均值变淡（嫌整片排气太淡就继续加 `ALPHA_MAX`，
-  嫌前段太浓就加 `ALPHA_FALLOFF`）。
+  所以 `ALPHA_MAX` 从 0.46 抬到 **0.62** 补偿平均值变淡（嫌整片排气太淡就加配置 `exhaustAlpha`（默认 0.62），
+  嫌前段太浓就加 `ALPHA_FALLOFF`）。**2026-11 起上限/下限都进配置**（`exhaustAlpha` / `exhaustAlphaMin`，见 §17），
+  下面"衰减到 0"与"到 0 才可见"的描述在默认下限 0 时仍然成立。
 - `SPEED_SLOW` 的副作用：总射程变短（同样寿命下轨迹短约一半），尾段会在原地"停住并散开"。
   嫌短就降到 0.15，嫌不够慢就加到 0.5。
 - 撞墙的 `impactGrowth` / 散射仍叠加在这三条曲线之上（撞地变大和"随寿命变大"是两回事，互不冲突）。
@@ -593,7 +594,7 @@ protected void setLocationFromBoundingbox() {
 - **粒子可见距离 = `MAX_EXHAUST_DISTANCE` = 64 格**（§3.7）。原版对 `addParticle` 的硬限制是 32 格，
   已用 9 参数 `addAlwaysVisibleParticle(..., ignoreRange = true)` 绕过；但超过 64 格我们主动不生成（省扫掠碰撞）。
   远处的可见度还受"粒子本身很小很淡"影响（`EXHAUST_SCALE=0.3` ⇒ 出生仅 0.1 格），
-  真嫌远处看不见就得放大 `EXHAUST_SCALE`/`ALPHA_MAX`，而不是再改生成逻辑。
+  真嫌远处看不见就得放大 `EXHAUST_SCALE`/`exhaustAlpha`（默认 0.62），而不是再改生成逻辑。
 - 排气粒子是纯客户端计算：各客户端看到的撞墙点/散射方向各自独立（原版粒子行为，未做服务端广播）。
 - **重力只作用于排气粒子**（`exhaustGravity`，默认 0.02，§3.6.1），尾迹仍然完全无重力（它是冰晶云）。
   重力让"撞地"变频繁 ⇒ `IMPACT_GROWTH` 触发更多、粒子整体更大；嫌大就降 `IMPACT_GROWTH`（现 2.0）。
@@ -612,9 +613,9 @@ protected void setLocationFromBoundingbox() {
 
 1. 定合成配方材料（并补 `recipe/`）。
 2. 排气粒子（`ccpe:exhaust`，§3.6）若要继续调手感：
-   密度/寿命/尺寸/初速/重力/距离 = **配置项** `exhaustParticlesPerTick / exhaustLifetime / exhaustScale / exhaustSpeed / exhaustGravity / exhaustMaxDistance`（§11）；
+   密度/寿命/尺寸/初速/重力/距离/透明度上下限 = **配置项** `exhaustParticlesPerTick / exhaustLifetime / exhaustScale / exhaustSpeed / exhaustGravity / exhaustMaxDistance / exhaustAlpha / exhaustAlphaMin`（§17）；
    撞墙与视觉细节（`BOUNCE / TANGENT_KEEP / SPREAD_KEEP / ENERGY_KEEP / IMPACT_GROWTH`、
-   `ALPHA_MAX / ALPHA_FALLOFF / SIZE_START / SIZE_GROWTH / SPEED_SLOW / COLLISION_COOLDOWN`）
+   `ALPHA_FALLOFF / SIZE_START / SIZE_GROWTH / SPEED_SLOW / COLLISION_COOLDOWN`）
    仍在 `ExhaustParticle` 顶部（代码常量，改完热重载即看）。
    `PARTICLES_BLOCKED_BY_OTHER_BODIES` 仍决定其它物理体是否挡粒子（现 true）。
 3. 回到 `flip-autopilot.md`：用新喷管重做落地/倒挂调参（悬停油门 **43%**（气压 1.0），
@@ -734,4 +735,36 @@ protected void setLocationFromBoundingbox() {
 ② Y≈200 最浓；
 ③ Y≈280 明显变稀、Y≈315 只剩一点点、Y≈320 以上完全消失；
 ④ 与旧版相比"160 以下不再是一刀切"。
+
+## 17. 粒子透明度配置项（上限 + 下限，2026-11）
+
+需求：给 **喷射（排气）粒子** 和 **吸入（进气）粒子** 的透明度各加可调条目，并且**上限与下限都要能改**
+（用户确认：上限 = 最浓值，下限 = 寿命末期保留的残余不透明度）。
+
+| 配置键（`config/ccpe-client.toml`） | 默认 | 范围 | 作用位置 | 含义 |
+|---|---|---|---|---|
+| `exhaustAlpha` | 0.62 | 0.0 ~ 1.0 | `client/particle/ExhaustParticle` | 排气不透明度**上限**（淡入后最浓的值） |
+| `exhaustAlphaMin` | 0.0 | 0.0 ~ 1.0 | 同上 | 排气不透明度**下限**（寿命末期衰到的最淡值） |
+| `intakeAlpha` | 0.55 | 0.0 ~ 1.0 | `client/particle/IntakeParticle` | 进气不透明度**上限** |
+| `intakeAlphaMin` | 0.0 | 0.0 ~ 1.0 | 同上 | 进气不透明度**下限**（到口面时衰到的最淡值） |
+
+- 曲线（形状不变，只把"衰向 0"改成"衰向下限"）：
+  排气 `alpha = (下限 + (上限−下限)×(1−life)^ALPHA_FALLOFF) × smoothstep(0, 0.08, life)`；
+  进气 `alpha = (下限 + (上限−下限)×(1−life)^0.7) × 2 tick 淡入`。
+  ⇒ 出生仍从 0 淡入（不会硬切），之后向**下限**收敛而不是向 0。
+  尺寸、速度、密度、颜色、碰撞全部不受影响。
+- **默认下限 = 0 ⇒ 与改动前完全等价**（旧行为：淡到完全透明后粒子才被移除）。
+  下限 > 0 时尾段不会淡没，粒子一直可见到寿命结束才被移除 ⇒ 尾段可能出现轻微"硬切"，
+  这是下限量本身的代价；嫌硬切就把下限调小或加长 `exhaustLifetime`。
+  下限 > 上限时按"夹到上限"处理（`alphaMin = min(下限, 上限)`）。
+- 设上限 = 0 = 该粒子完全看不见。但**真想把粒子关掉**更省性能的做法是把对应的密度调 0
+  （`exhaustParticlesPerTick` / `intakeParticlesPerTick`），那样连粒子对象都不生成。
+- 实现：`Config` 里四个 `defineInRange(..., 0.0, 1.0)`；粒子**构造时**各读一次存进 `alphaMax` / `alphaMin`
+  字段（与 `exhaustGravity` 同口径 ⇒ 改完 toml 后**新生成**的粒子立刻生效，不需要重启/重载区块）。
+  旧常量 `ALPHA_MAX` 降级为 `DEFAULT_ALPHA_MAX`，只作默认值说明与 javadoc 引用。
+- 矢量喷管（`ccpe:advanced_thrust_nozzle`）复用同样两个粒子类型 ⇒ 四项对它同样生效。
+- 编译：`./gradlew.bat classes` ✅ 通过。**待用户进游戏实测**：
+  ① 上限：`exhaustAlpha` 0 / 0.3 / 0.62 / 1.0、`intakeAlpha` 0 / 0.3 / 0.55 / 1.0
+  （重点看"排气整片会不会糊住视野"、"进气在车底阴影里还看不看得见"）；
+  ② 下限：`exhaustAlphaMin` 取 0.05~0.2 看尾段"挂住"的观感、`intakeAlphaMin` 取 0.05~0.2 看口面会不会留下白点。
 

@@ -1,5 +1,6 @@
 package com.zzy205.myfirstmod.client.particle;
 
+import com.zzy205.myfirstmod.Config;
 import com.zzy205.myfirstmod.particle.IntakeParticleData;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.Particle;
@@ -29,7 +30,7 @@ import org.jetbrains.annotations.Nullable;
  * <ul>
  * <li>位置：{@code t²} 加速靠近（见上）；</li>
  * <li>尺寸：{@code baseScale × (1.0 → 0.30)} 缩小；</li>
- * <li>透明度：短淡入后一路衰减到 0（{@code (1−t)^0.7}），在口面上彻底看不见。</li>
+ * <li>透明度：短淡入后一路衰减到<b>配置下限 {@code intakeAlphaMin}</b>（默认 0 ⇒ 到口面彻底看不见）；</li>
  * </ul>
  * <b>不碰撞</b>（{@code hasPhysics = false}，只 {@code setPos}）：进气粒子是"空气被卷进来"的视觉，
  * 若撞到车身/方块反弹反而会露馅；前方是否被堵由喷管侧的一条射线决定（没有可吸的空气就不生成）。
@@ -39,8 +40,11 @@ import org.jetbrains.annotations.Nullable;
  */
 public class IntakeParticle extends SimpleAnimatedParticle {
 
-    /** 不透明度上限（进气比排气更"稀"，别盖住喷口） */
-    private static final float ALPHA_MAX = 0.55F;
+    /**
+     * 不透明度默认值（= 配置 {@code intakeAlpha} 的默认值）。实际数值构造时从配置读一次，
+     * 缓存进 {@link #alphaMax}。进气比排气更"稀"，别盖住喷口。
+     */
+    private static final float DEFAULT_ALPHA_MAX = 0.55F;
 
     /**
      * 淡入长度（<b>固定 tick</b>，不是寿命的比例）。
@@ -74,12 +78,30 @@ public class IntakeParticle extends SimpleAnimatedParticle {
     /** 基准尺寸（配置 {@code intakeScale} × 随机倍率，由喷管算好传进来） */
     private final float baseScale;
 
+    /**
+     * 不透明度上限（配置 {@code intakeAlpha}，默认见 {@link #DEFAULT_ALPHA_MAX}），构造时读一次缓存。
+     * 只乘在 {@link #tick()} 的透明度曲线上，淡入/衰减形状与尺寸收小都不受影响。
+     */
+    private final float alphaMax;
+
+    /**
+     * 不透明度<b>下限</b>（配置 {@code intakeAlphaMin}，默认 0 = 旧行为）：被吸到口面时衰到的最淡值。
+     * <p>
+     * 曲线 = {@code (下限 + (上限−下限) × (1−life)^0.7) × 淡入} ⇒ 出生仍从 0 淡入、之后向<b>下限</b>收敛。
+     * 构造时已夹到不超过 {@link #alphaMax}。
+     */
+    private final float alphaMin;
+
     protected IntakeParticle(final ClientLevel level, final double x, final double y, final double z,
                              final double xd, final double yd, final double zd,
                              final IntakeParticleData data, final SpriteSet sprites) {
         super(level, x, y, z, sprites, 0.0F);
 
         this.baseScale = Math.max(0.01F, data.scale());
+        // 配置 defineInRange(0~1) 已保证范围，这里再夹一次防止手改 toml 写越界值
+        this.alphaMax = Mth.clamp(Config.INTAKE_ALPHA.get().floatValue(), 0.0F, 1.0F);
+        this.alphaMin = Math.min(Mth.clamp(Config.INTAKE_ALPHA_MIN.get().floatValue(), 0.0F, 1.0F),
+                this.alphaMax);
         this.spawnX = x;
         this.spawnY = y;
         this.spawnZ = z;
@@ -136,9 +158,10 @@ public class IntakeParticle extends SimpleAnimatedParticle {
                 this.spawnY + this.towardY * progress,
                 this.spawnZ + this.towardZ * progress);
 
-        // 透明度：2 tick 淡入，之后一路衰减到 0（t=1 时归零，口面上不会留下一颗硬切的白点）
+        // 透明度：2 tick 淡入，之后一路向「下限」收敛（默认 0 = 旧行为，t=1 时归零，口面上不会留白点）
         final float fadeIn = smoothstep(0.0F, 1.0F, this.age / (float) FADE_IN_TICKS);
-        this.alpha = ALPHA_MAX * fadeIn * (float) Math.pow(1.0F - life, 0.7F);
+        this.alpha = (this.alphaMin
+                + (this.alphaMax - this.alphaMin) * (float) Math.pow(1.0F - life, 0.7F)) * fadeIn;
     }
 
     /** 全亮渲染：进气粒子常在车底/阴影里，吃 lightmap 会变成一团深灰 */
