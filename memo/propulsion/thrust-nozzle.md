@@ -793,18 +793,19 @@ protected void setLocationFromBoundingbox() {
 
 | 配置键 | 默认 | 说明 |
 |---|---|---|
-| `contrailBurstSpeedMin` | **0.25** | 初速度**软下界**（格/tick），截断正态的截断点；0 = 关闭喷出 |
-| `contrailBurstSpeedMax` | **1.0** | 初速度**软上界**（格/tick）；与下限相等 = 所有粒子同速 |
-| `contrailBurstSpeedPeak` | **0.35** | 正态峰值位置（占 [下限, 上限] 区间的比例）：0 = 贴下限、0.5 = 正中（§19） |
-| `contrailBurstSpeedSigma` | **0.125** | 正态标准差（占区间长度的比例）：越大越扁平，≈0.4 以上基本等于旧的均匀分布（§19） |
+| `contrailBurstSpeedMean` | **0.5125** | 喷出初速度**均值**（格/tick，绝对值）；≤0 = 关闭喷出（§19） |
+| `contrailBurstSpeedSigma` | **0.09375** | **标准差**（格/tick，绝对值）；0 = 所有粒子同速；内部在 ±3σ 截断（§19） |
 | `contrailBurstSpread` | 25 | 方向锥半角（度），0 = 严格沿排气、180 = 整球 |
 | `contrailBurstDamp` | 0.94 | 每 tick 速度保留比例；越小衰减越快、喷得越短 |
 
-- **默认值 2026-11-19 由用户上调**（原 0.08 / 0.25）：现为单颗附加位移 ≈ 0.25×16.7 ≈ **4.2 格**
-  到 1.0×16.7 ≈ **16.7 格** ⇒ 尾迹会明显从喷口"喷出去一大段再散开"，
-  比原飘荡距离（默认 4 格 × 0.55~1.6 随机）大一个量级，是用户要的形态。
-- 想要更明显：抬 `contrailBurstSpeedMax` 或把 damp 抬到 0.96（总位移 ≈ 25 倍初速度）；
-  想要更"短促一冲"：把 damp 降到 0.85~0.90（总位移 ≈ 6.7~10 倍初速度）。
+- **2026-11-19 两轮调整**：先由用户把速度范围上调到 0.25~1.0，随后改成**方案 B**
+  （绝对均值 + 绝对标准差，去掉 min/max/peak 三个键，见 §19.2）。
+- 最新默认等价于原来的 `min 0.25 / max 1.0 / peak 0.35 / sigma 0.125`：
+  均值 0.5125、σ 0.09375，截断在 **3.9 ~ 13.2 格**（原均匀版的 4.2~16.7 中，
+  12.5 格以外那 ~0.3% 的尾巴被 3σ 截掉了，视觉上几乎无差别）。
+- 典型喷出距离 ≈ `mean ÷ (1 − damp)`；`damp` 0.94 ⇒ ×16.7。
+- 想要更明显：抬 `mean` 或把 damp 抬到 0.96（≈ ×25）；
+  想要更"短促一冲"：把 damp 降到 0.85~0.90（≈ ×6.7~10）。
 
 ### 18.3 语言文件（配置界面文案）
 
@@ -812,14 +813,12 @@ NeoForge 的 `ConfigurationScreen` 按 **`ccpe.configuration.<toml 键名>`（�
 **`ccpe.configuration.<toml 键名>.tooltip`（说明）** 取文案（见 `Config` 顶部注释与
 `IConfigScreenFactory` 注册）⇒ 每加一个配置项都要在两份 lang 里补一对，否则界面显示原始键名。
 
-2026-11-19 补齐的 10 项（en_us / zh_cn 各 20 行，已用 `ConvertFrom-Json` 验证两份文件各 367 个键、无缺项）：
+2026-11-19 补齐并随后按方案 B 收敛为 8 项（en_us / zh_cn 各 16 行，已用 `ConvertFrom-Json` 验证两份文件各 **363** 个键、无旧键残留、无缺项）：
 
 | 配置键 | 标题（zh_cn） |
 |---|---|
-| `contrailBurstSpeedMin` | 尾迹喷出初速下限 (格/tick) |
-| `contrailBurstSpeedMax` | 尾迹喷出初速上限 (格/tick) |
-| `contrailBurstSpeedPeak` | 尾迹喷出初速峰值位置 |
-| `contrailBurstSpeedSigma` | 尾迹喷出初速分布宽度 |
+| `contrailBurstSpeedMean` | 尾迹喷出初速均值 (格/tick) |
+| `contrailBurstSpeedSigma` | 尾迹喷出初速标准差 (格/tick) |
 | `contrailBurstSpread` | 尾迹喷出方向锥半角 (度) |
 | `contrailBurstDamp` | 尾迹喷出衰减比例 (每 tick) |
 | `exhaustAlpha` | 排气不透明度上限 |
@@ -827,11 +826,13 @@ NeoForge 的 `ConfigurationScreen` 按 **`ccpe.configuration.<toml 键名>`（�
 | `intakeAlpha` | 进气不透明度上限 |
 | `intakeAlphaMin` | 进气不透明度下限 |
 
-（`exhaustAlpha*` / `intakeAlpha*` 是 §17 加的键，当时漏了 lang，这次一起补上。）
+（`exhaustAlpha*` / `intakeAlpha*` 是 §17 加的键，当时漏了 lang，这次一起补上。
+ `contrailBurstSpeedMin/Max/Peak` 三键在方案 B 里已删除，lang 里也一并删掉 —— 旧 toml 里残留的这几行会被 NeoForge 当成未知键忽略。）
 
 ### 18.4 实现位置
 
-- `Config`：`contrailBurstSpeedMin/Max/Peak/Sigma/Spread/Damp` 六项（都在 CLIENT_BUILDER）。
+- `Config`：`contrailBurstSpeedMean/Sigma/Spread/Damp` 四项（都在 CLIENT_BUILDER，
+  方案 B 去掉了 min/max/peak 三个键）。
 - `particle/ContrailParticleData`：record 新增 `burstX/burstY/burstZ`（3 个 float），
   `CODEC` 与 `STREAM_CODEC` 同步加字段。飘荡速度仍走 `addAlwaysVisibleParticle` 的 velocity 参数，
   喷出初速度走 data ⇒ 两者在粒子内部分开，才能单独衰减。
@@ -861,22 +862,37 @@ NeoForge 的 `ConfigurationScreen` 按 **`ccpe.configuration.<toml 键名>`（�
 任意时刻位置 = 飘荡向量×(t/T) + 喷出向量×衰减，高斯×常数 + 高斯仍然是高斯，
 所以整个寿命里都是"中心密、边缘趋近 0"；而均匀分布无论在哪个时刻都只能得到壳层。
 
-### 19.2 本步做了什么（第一步，只改喷出幅度）
+### 19.2 做了什么（两小步，最终为方案 B）
 
-`ThrustNozzleBlockEntity#sampleBurstSpeed`：在 `[min, max]` 上取**截断正态**。
+**第一小步（中间版本，已废弃）**：幅度从均匀换成"区间比例正态"——`min/max` 当截断点、
+`peak/sigma` 都是"区间长度的比例"。实测前就发现一个坑：`peak` 和 `sigma` 都是派生量，
+一改 `min/max`，σ 的实际大小就跟着变，"喷多远"和"多胖"耦合在一起，无法单独调。
+
+**现行 = 方案 B（2026-11-19 用户定稿）**：只暴露**绝对量**，截断点固定为 ±3σ。
 
 ```
-mean  = min + peak × (max − min)        // peak = 0.35（用户定：峰值略偏下限）
-sigma = sigmaShare × (max − min)        // sigmaShare = 0.125 ⇒ 下限距峰 2.8σ、上限 5.2σ
-拒绝采样 8 次（越界重取，不夹到边界；极端配置才退回均匀）
+mean = contrailBurstSpeedMean        // 格/tick（绝对值）
+sigma = contrailBurstSpeedSigma      // 格/tick（绝对值）
+low  = max(0, mean − 3σ)             // 速度不能为负
+high = mean + 3σ
+拒绝采样 8 次（越界重取，绝不夹到边界）；8 次都失败才兜底取 mean
+mean ≤ 0 ⇒ 关闭喷出；sigma = 0 ⇒ 所有粒子同速
 ```
 
-- **必须拒绝采样、不能 clamp**：把越界值夹到端点会让被拒样本堆在边界上，等于又造一条硬边。
-- 默认值下密度：峰值在 0.25 + 0.35×0.75 = **0.5125 格/tick**（≈ 8.5 格位移），
-  两端密度 ≈ 0 ⇒ 外圈边界由"一刀切"变成"渐隐"；内圈（≥0.25）也变软。
-- 新增两个配置：`contrailBurstSpeedPeak`（默认 0.35）、`contrailBurstSpeedSigma`（默认 0.125）；
-  `contrailBurstSpeedMin/Max` 的注释改称"软边界"，并补了 lang（§18.3）。
-- 性能：每颗粒子多一次 `nextGaussian()`（通过率 >99%，几乎不会重试），可忽略。
+- **为什么固定在 3σ 截断、不把上下限交给用户**：正态尾巴无界，不截断会偶发 4σ/5σ 的粒子
+  飞出很远（"掉队的白点"）；而 3σ 处密度只剩峰值的 1%，肉眼等价于"没有上限"。
+  这也是回答"能不能不限制最大最小值"的正确做法 —— **限制发生在内部、且落在看不见的地方**。
+- **必须拒绝采样、不能 clamp**：夹到边界会把被拒样本堆在端点，等于又造一条硬边。
+- 默认值（mean 0.5125 / σ 0.09375，damp 0.94）：截断在 **3.9 ~ 13.2 格**，峰值在 8.5 格附近。
+  离线 20 万样本、12 等宽 bin 的直方图：中间两 bin 各 **19.2%**，±1.25σ ≈ 15%、±1.75σ ≈ 4.4%、
+  ±2.25σ ≈ 1.6%、±2.75σ ≈ 0.5%（对照旧版 `U[0.25,1.0]` 每 bin 全是 10%、16.7 格处断崖）。
+- 默认值与上一版"min 0.25 / max 1.0 / peak 0.35 / sigma 0.125"**数值等价**（同均值同 σ），
+  唯一差别是 12.5 格以外那 ~0.3% 的尾巴被 3σ 截掉，视觉几乎无差别。
+- 性能：每颗粒子 1 次 `nextGaussian()`（通过率 100%，不重试），可忽略。
+- **调参换算**（`distance = speed ÷ (1 − damp)`）：
+  - 想典型距离 X 格 ⇒ `mean = X × (1 − damp)`；
+  - 想 ±W 格的波动 ⇒ `sigma = W × (1 − damp)`；
+  - 想"无上下限" ⇒ 把 `sigma` 调大（`mean/3` 以内都不会被 0 截断）。
 
 ### 19.3 还没做（第二步 C，等本步实测确认后再改）
 

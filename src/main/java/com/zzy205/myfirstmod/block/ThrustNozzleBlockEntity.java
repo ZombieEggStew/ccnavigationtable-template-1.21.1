@@ -1201,12 +1201,10 @@ public class ThrustNozzleBlockEntity extends BlockEntity
 
         // 喷出初速度（2026-11）：在恒定飘荡之外，再沿<b>排气方向</b>给一个初速度，
         // 由粒子每 tick 乘 contrailBurstDamp 指数衰减（速度大小逐渐减小，最终只剩飘荡）。
-        //   · 大小：在 [contrailBurstSpeedMin, contrailBurstSpeedMax] 上取<b>截断正态</b>（软边界，见 sampleBurstSpeed）
+        //   · 大小：均值 = contrailBurstSpeedMean、标准差 = contrailBurstSpeedSigma 的截断正态（§19）
         //   · 方向：排气方向周围 contrailBurstSpread 度的锥内均匀取（见 randomConeDirection）
-        final double burstMin = Math.max(0.0D, Config.CONTRAIL_BURST_SPEED_MIN.get());
-        final double burstMax = Math.max(burstMin, Config.CONTRAIL_BURST_SPEED_MAX.get());
-        final double burstSpeed = sampleBurstSpeed(random, burstMin, burstMax,
-                Config.CONTRAIL_BURST_SPEED_PEAK.get(), Config.CONTRAIL_BURST_SPEED_SIGMA.get());
+        final double burstSpeed = sampleBurstSpeed(random,
+                Config.CONTRAIL_BURST_SPEED_MEAN.get(), Config.CONTRAIL_BURST_SPEED_SIGMA.get());
         final Vec3 burst = burstSpeed <= 0.0D
                 ? Vec3.ZERO
                 : randomConeDirection(random, dir,
@@ -1254,46 +1252,54 @@ public class ThrustNozzleBlockEntity extends BlockEntity
                 .normalize();
     }
 
-    /** 截断正态的拒绝采样尝试上限（σ 取到配置上限时单次通过率仍 &gt;80%，8 次足够；失败才退回均匀） */
+    /** 喷出初速度截断在「均值 ± 本值 × σ」处：3σ ⇒ 边界处密度只剩峰值的 1%，肉眼看不到硬边 */
+    private static final double BURST_SPEED_TRUNCATE_SIGMA = 3.0D;
+    /** 拒绝采样尝试上限（3σ 截断的单次通过率 ≈ 99.7%，8 次绰绰有余） */
     private static final int BURST_SPEED_SAMPLE_ATTEMPTS = 8;
 
     /**
-     * 按<b>截断正态分布</b>在 {@code [min, max]} 里取一个喷出初速度（格/tick）。
+     * 取一个喷出初速度（格/tick）：均值 {@code mean}、标准差 {@code sigma} 的<b>截断正态</b>。
      * <p>
-     * 为什么不用均匀采样（旧版）：均匀会把「速度区间」原样变成一条<b>密度恒定</b>的条带，
-     * 两端是硬边 —— 玩家看到的"边界清晰的条带"就是它（memo §19）。正态采样让密度在两端
-     * 趋近 0，边缘变成渐变；峰值位置 {@code peak}（0~1 的区间比例）用来把大多数粒子留在喷口附近。
+     * 为什么用正态而不是旧的均匀分布：均匀会把「速度区间」原样变成一条<b>密度恒定</b>的条带，
+     * 两端是硬边 —— 玩家看到的"边界清晰的条带"就是它（memo §19）。正态的密度在两端趋近 0，
+     * 边缘自然渐隐。
      * <p>
-     * 用<b>拒绝采样</b>而不是把越界值夹到边界：夹边界会把被拒的样本全部堆在端点，
-     * 又人为造出一条硬边（正是这次要消掉的东西）。夹到边界只在极端配置下作为兜底。
+     * 为什么配置是<b>绝对量</b>（均值 + σ）而不是"区间比例"：区间比例下 min/max 一动，σ 的实际
+     * 大小跟着变，"喷多远"和"多胖"耦合在一起。现在两者独立：{@code mean} 只管距离、
+     * {@code sigma} 只管胖瘦（用户 2026-11-19 定稿的方案 B）。
+     * <p>
+     * 截断点固定为 {@code mean ± 3σ}（不是用户配置）：正态尾巴无界，不截断会偶发 4σ/5σ 的
+     * 粒子飞出很远，像掉队的白点；而 3σ 处密度只剩 1%，视觉上等价于"没有上限"。
+     * 下限还会被 0 夹住（速度不能为负）。
+     * <p>
+     * 用<b>拒绝采样</b>而不是把越界值夹到边界：夹边界会把被拒样本全堆在端点，
+     * 又人为造出一条硬边（正是要消掉的东西）。
      *
-     * @param min   软下界（密度在这里已趋近 0）
-     * @param max   软上界
-     * @param peak  峰值位置，按区间长度的比例（0 = 贴着 min，0.5 = 正中）
-     * @param sigma 标准差，按区间长度的比例
+     * @param mean  均值（格/tick）；≤ 0 视为<b>关闭喷出</b>
+     * @param sigma 标准差（格/tick）；0 = 所有粒子同速
      */
-    private static double sampleBurstSpeed(final RandomSource random,
-                                           final double min, final double max,
-                                           final double peak, final double sigma) {
-        final double range = max - min;
-
-        if (range <= 1.0E-6D) {
-            return Math.max(0.0D, min); // 上下限相等（或都是 0）= 关闭喷出
+    private static double sampleBurstSpeed(final RandomSource random, final double mean, final double sigma) {
+        if (mean <= 0.0D) {
+            return 0.0D; // 关闭喷出（回到旧版纯匀速飘荡）
         }
 
-        final double mean = min + Mth.clamp(peak, 0.0D, 1.0D) * range;
-        final double sd = Math.max(1.0E-4D, Mth.clamp(sigma, 0.0D, 1.0D) * range);
+        if (sigma <= 0.0D) {
+            return mean; // 没有散布 = 所有粒子同速
+        }
+
+        final double low = Math.max(0.0D, mean - BURST_SPEED_TRUNCATE_SIGMA * sigma);
+        final double high = mean + BURST_SPEED_TRUNCATE_SIGMA * sigma;
 
         for (int attempt = 0; attempt < BURST_SPEED_SAMPLE_ATTEMPTS; attempt++) {
-            final double sampled = mean + random.nextGaussian() * sd;
+            final double sampled = mean + random.nextGaussian() * sigma;
 
-            if (sampled >= min && sampled <= max) {
+            if (sampled >= low && sampled <= high) {
                 return sampled;
             }
         }
 
-        // 极端配置下的兜底（σ 取到上限、峰又贴近某端）：退回均匀，保证一定能出粒子
-        return min + random.nextDouble() * range;
+        // 极端配置的兜底（均值很接近 0 时下限 0 会切掉约一半样本，但仍有一半通过率）
+        return mean;
     }
 
     /**
