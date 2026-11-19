@@ -14,7 +14,8 @@
 > 2. **排气 `ccpe:exhaust`**（§3.6）：世界坐标、扫掠碰撞 + 撞墙反弹 + 沿面滑行、越老越大/越慢/越淡；
 >    **轻微重力**由配置 `exhaustGravity`（默认 0.02）控制，设 0 = 失重；撞地分裂按用户要求关闭；
 > 3. **高空尾迹 `ccpe:contrail`**（§9）：按移动距离发射、**纯高度分段线性**适宜度（Y100 起线性变浓 / 180~240 满 / 240~320 线性归零）、
->    匀速直线飘荡（速度 = 总飘荡距离 ÷ 寿命，§9.10）、无碰撞无重力、9 参数 `addAlwaysVisibleParticle` 远处可见；
+>    匀速直线飘荡（速度 = 总飘荡距离 ÷ 寿命，§9.10）+ **沿排气方向的喷出初速度**（大小/方向随机、指数衰减，§18）、
+>    无碰撞无重力、9 参数 `addAlwaysVisibleParticle` 远处可见；
 > 4. **染料染色**（§10）：手持染料右键喷口 ⇒ 只染**尾迹**粒子，护目镜 tooltip 显示当前染色；
 > 5. **配置 + tooltip**（§11、§12）：17 个参数进 `config/ccpe-client.toml`（改完即时生效）；物品 tooltip 走 Create `ItemDescription`；
 > 6. **扳手拆除**（§15）：`IWrenchable` ⇒ `create:wrench` **潜行右键快速拆除**（掉落直接进背包）、普通右键不旋转。
@@ -38,7 +39,7 @@
 | mixin | **不需要**（见 §1） |
 | 尾迹高度窗口 | **Y 100~320**（2026-11 拓宽）：Y≤100 与 Y≥320 完全没有；100→180 密度线性增大、180~240 满、240→320 密度线性减少（纯高度模型，不再走温度），见 §9 |
 | 尾迹发射 | **按移动距离**发射（悬停不动 ⇒ 零发射），见 §9.3 |
-| 尾迹飘荡 | **匀速直线**：速度 = 总飘荡距离 ÷ 寿命，方向随机；云层以上 ×1、越低越散（模拟对流层湍流），见 §9.10 |
+| 尾迹飘荡 | **匀速直线**：速度 = 总飘荡距离 ÷ 寿命，方向随机；云层以上 ×1、越低越散（模拟对流层湍流），见 §9.10；**另加**沿排气方向的喷出初速度（大小/方向随机、指数衰减，§18） |
 | 湿度 | **不计算**，全部退化为高度/温度函数 |
 | 染色 | 手持**染料**右键喷口 ⇒ 只染**尾迹**粒子；护目镜显示当前色；**无清除入口**（潜行空手清除已删除），见 §10 |
 | 性能参数 | **17 项全部进配置** `ccpe-client.toml`，见 §11 |
@@ -320,7 +321,7 @@ mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题�
 | `EXHAUST_SPREAD` | 0.05 | 横向散开初速度上限 |
 | `EXHAUST_RED/GREEN/BLUE` | 0.86/0.90/0.96 | 冷白偏蓝 |
 
-粒子内部常量（`ExhaustParticle`）：`ALPHA_MAX 0.62`、`FADE_IN_END 0.08`、`ALPHA_FALLOFF 1.0`、
+粒子内部常量（`ExhaustParticle`）：`alphaMax`（= 配置 `exhaustAlpha`，默认 0.62）、`FADE_IN_END 0.08`、`ALPHA_FALLOFF 1.0`、
 `SIZE_START 0.35` / `SIZE_GROWTH 1.15`、`SPEED_SLOW 0.28`、
 水平阻尼 0.935 / 垂直 0.965、浮力 0.0008+0.0009×life、正弦摆动 0.0018、
 碰撞半径 = `quadSize × 0.2`（夹到 0.08~0.35，视觉尺寸与碰撞半径分开）。
@@ -333,12 +334,13 @@ mixin 仍会再投一次；此时姿态≈单位阵所以通常看不出问题�
 |---|---|---|---|
 | 越来越大 | `quadSize = baseScale × (SIZE_START + life × SIZE_GROWTH) × impactGrowth` | `SIZE_START` / `SIZE_GROWTH` | 0.35 → 1.50（约 4.3 倍） |
 | 越来越慢 | 每 tick 阻尼 = 固定阻尼 × `(1 − SPEED_SLOW × life)` | `SPEED_SLOW` | 0.28；寿命末期水平每 tick 实际 ×0.67、末期几乎停住 |
-| 越来越透明 | `alpha = ALPHA_MAX × smoothstep(0, FADE_IN_END, life) × (1 − life)^ALPHA_FALLOFF` | `ALPHA_MAX` / `ALPHA_FALLOFF` | 0 → 0.62 → 0，**全寿命单调变淡** |
+| 越来越透明 | `alpha = (alphaMin + (alphaMax − alphaMin) × (1 − life)^ALPHA_FALLOFF) × smoothstep(0, FADE_IN_END, life)` | `exhaustAlpha`（`alphaMax`）/ `exhaustAlphaMin`（`alphaMin`）/ `ALPHA_FALLOFF` | 0 → 0.62 → **下限**（默认 0），**全寿命单调变淡** |
 
 - 旧版 alpha 是「10% 淡入 → 10%~75% 恒定 0.46 → 后 25% 淡出」（memo 早期写的 18%/62% 是再早的一版），
   中间那一大段完全不透明恒定 ⇒ 看不出"存在越久越淡"。现在改成出生后一路衰减到 0，
-  所以 `ALPHA_MAX` 从 0.46 抬到 **0.62** 补偿平均值变淡（嫌整片排气太淡就继续加 `ALPHA_MAX`，
-  嫌前段太浓就加 `ALPHA_FALLOFF`）。
+  所以 `ALPHA_MAX` 从 0.46 抬到 **0.62** 补偿平均值变淡（嫌整片排气太淡就加配置 `exhaustAlpha`（默认 0.62），
+  嫌前段太浓就加 `ALPHA_FALLOFF`）。**2026-11 起上限/下限都进配置**（`exhaustAlpha` / `exhaustAlphaMin`，见 §17），
+  下面"衰减到 0"与"到 0 才可见"的描述在默认下限 0 时仍然成立。
 - `SPEED_SLOW` 的副作用：总射程变短（同样寿命下轨迹短约一半），尾段会在原地"停住并散开"。
   嫌短就降到 0.15，嫌不够慢就加到 0.5。
 - 撞墙的 `impactGrowth` / 散射仍叠加在这三条曲线之上（撞地变大和"随寿命变大"是两回事，互不冲突）。
@@ -593,7 +595,7 @@ protected void setLocationFromBoundingbox() {
 - **粒子可见距离 = `MAX_EXHAUST_DISTANCE` = 64 格**（§3.7）。原版对 `addParticle` 的硬限制是 32 格，
   已用 9 参数 `addAlwaysVisibleParticle(..., ignoreRange = true)` 绕过；但超过 64 格我们主动不生成（省扫掠碰撞）。
   远处的可见度还受"粒子本身很小很淡"影响（`EXHAUST_SCALE=0.3` ⇒ 出生仅 0.1 格），
-  真嫌远处看不见就得放大 `EXHAUST_SCALE`/`ALPHA_MAX`，而不是再改生成逻辑。
+  真嫌远处看不见就得放大 `EXHAUST_SCALE`/`exhaustAlpha`（默认 0.62），而不是再改生成逻辑。
 - 排气粒子是纯客户端计算：各客户端看到的撞墙点/散射方向各自独立（原版粒子行为，未做服务端广播）。
 - **重力只作用于排气粒子**（`exhaustGravity`，默认 0.02，§3.6.1），尾迹仍然完全无重力（它是冰晶云）。
   重力让"撞地"变频繁 ⇒ `IMPACT_GROWTH` 触发更多、粒子整体更大；嫌大就降 `IMPACT_GROWTH`（现 2.0）。
@@ -612,9 +614,9 @@ protected void setLocationFromBoundingbox() {
 
 1. 定合成配方材料（并补 `recipe/`）。
 2. 排气粒子（`ccpe:exhaust`，§3.6）若要继续调手感：
-   密度/寿命/尺寸/初速/重力/距离 = **配置项** `exhaustParticlesPerTick / exhaustLifetime / exhaustScale / exhaustSpeed / exhaustGravity / exhaustMaxDistance`（§11）；
+   密度/寿命/尺寸/初速/重力/距离/透明度上下限 = **配置项** `exhaustParticlesPerTick / exhaustLifetime / exhaustScale / exhaustSpeed / exhaustGravity / exhaustMaxDistance / exhaustAlpha / exhaustAlphaMin`（§17）；
    撞墙与视觉细节（`BOUNCE / TANGENT_KEEP / SPREAD_KEEP / ENERGY_KEEP / IMPACT_GROWTH`、
-   `ALPHA_MAX / ALPHA_FALLOFF / SIZE_START / SIZE_GROWTH / SPEED_SLOW / COLLISION_COOLDOWN`）
+   `ALPHA_FALLOFF / SIZE_START / SIZE_GROWTH / SPEED_SLOW / COLLISION_COOLDOWN`）
    仍在 `ExhaustParticle` 顶部（代码常量，改完热重载即看）。
    `PARTICLES_BLOCKED_BY_OTHER_BODIES` 仍决定其它物理体是否挡粒子（现 true）。
 3. 回到 `flip-autopilot.md`：用新喷管重做落地/倒挂调参（悬停油门 **43%**（气压 1.0），
@@ -734,4 +736,170 @@ protected void setLocationFromBoundingbox() {
 ② Y≈200 最浓；
 ③ Y≈280 明显变稀、Y≈315 只剩一点点、Y≈320 以上完全消失；
 ④ 与旧版相比"160 以下不再是一刀切"。
+
+## 17. 粒子透明度配置项（上限 + 下限，2026-11）
+
+需求：给 **喷射（排气）粒子** 和 **吸入（进气）粒子** 的透明度各加可调条目，并且**上限与下限都要能改**
+（用户确认：上限 = 最浓值，下限 = 寿命末期保留的残余不透明度）。
+
+| 配置键（`config/ccpe-client.toml`） | 默认 | 范围 | 作用位置 | 含义 |
+|---|---|---|---|---|
+| `exhaustAlpha` | 0.62 | 0.0 ~ 1.0 | `client/particle/ExhaustParticle` | 排气不透明度**上限**（淡入后最浓的值） |
+| `exhaustAlphaMin` | 0.0 | 0.0 ~ 1.0 | 同上 | 排气不透明度**下限**（寿命末期衰到的最淡值） |
+| `intakeAlpha` | 0.55 | 0.0 ~ 1.0 | `client/particle/IntakeParticle` | 进气不透明度**上限** |
+| `intakeAlphaMin` | 0.0 | 0.0 ~ 1.0 | 同上 | 进气不透明度**下限**（到口面时衰到的最淡值） |
+
+- 曲线（形状不变，只把"衰向 0"改成"衰向下限"）：
+  排气 `alpha = (下限 + (上限−下限)×(1−life)^ALPHA_FALLOFF) × smoothstep(0, 0.08, life)`；
+  进气 `alpha = (下限 + (上限−下限)×(1−life)^0.7) × 2 tick 淡入`。
+  ⇒ 出生仍从 0 淡入（不会硬切），之后向**下限**收敛而不是向 0。
+  尺寸、速度、密度、颜色、碰撞全部不受影响。
+- **默认下限 = 0 ⇒ 与改动前完全等价**（旧行为：淡到完全透明后粒子才被移除）。
+  下限 > 0 时尾段不会淡没，粒子一直可见到寿命结束才被移除 ⇒ 尾段可能出现轻微"硬切"，
+  这是下限量本身的代价；嫌硬切就把下限调小或加长 `exhaustLifetime`。
+  下限 > 上限时按"夹到上限"处理（`alphaMin = min(下限, 上限)`）。
+- 设上限 = 0 = 该粒子完全看不见。但**真想把粒子关掉**更省性能的做法是把对应的密度调 0
+  （`exhaustParticlesPerTick` / `intakeParticlesPerTick`），那样连粒子对象都不生成。
+- 实现：`Config` 里四个 `defineInRange(..., 0.0, 1.0)`；粒子**构造时**各读一次存进 `alphaMax` / `alphaMin`
+  字段（与 `exhaustGravity` 同口径 ⇒ 改完 toml 后**新生成**的粒子立刻生效，不需要重启/重载区块）。
+  旧常量 `ALPHA_MAX` 降级为 `DEFAULT_ALPHA_MAX`，只作默认值说明与 javadoc 引用。
+- 矢量喷管（`ccpe:advanced_thrust_nozzle`）复用同样两个粒子类型 ⇒ 四项对它同样生效。
+- 编译：`./gradlew.bat classes` ✅ 通过。**待用户进游戏实测**：
+  ① 上限：`exhaustAlpha` 0 / 0.3 / 0.62 / 1.0、`intakeAlpha` 0 / 0.3 / 0.55 / 1.0
+  （重点看"排气整片会不会糊住视野"、"进气在车底阴影里还看不看得见"）；
+  ② 下限：`exhaustAlphaMin` 取 0.05~0.2 看尾段"挂住"的观感、`intakeAlphaMin` 取 0.05~0.2 看口面会不会留下白点。
+
+## 18. 尾迹「喷出初速度」（2026-11-19，v6）
+
+需求（用户原话）：长时间留下的**尾迹粒子**要加一个**沿喷出方向**的初速度，大小与方向在一定范围内随机，
+之后**速度大小逐渐减小**。
+
+### 18.1 模型
+
+```
+初始速度 = 恒定飘荡速度（旧行为，不变） + 喷出初速度
+喷出初速度 = randomConeDirection(排气方向, 半角) × randomIn[min, max]
+每 tick：先按（飘荡 + 当前喷出速度）推进 → 再 喷出速度 *= damp
+```
+
+- **恒定飘荡部分完全不动**：仍然严格等于「飘荡距离 ÷ 寿命」，所以 `contrailDriftDistance`
+  的可读语义（一生飘多远）没被破坏。喷出是**叠加**的第二项。
+- 总位移 = `飘荡距离 + 初速度 ÷ (1 − damp)`（等比级数求和；damp = 0.94 ⇒ 约 ×16.7）。
+- 方向：在排气方向周围的**球冠内面积均匀**取（`cosθ` 在 `[cosθmax, 1]` 上均匀，不是"角度均匀"，
+  否则粒子会堆在轴线上像一束光）。半角 0 = 严格沿排气；180 = 整球随机。
+- 衰减：**指数**（每 tick 乘 damp），所以出生那一两秒"喷出去"，之后越来越慢，最后只剩匀速飘荡。
+
+### 18.2 配置（`ccpe-client.toml`）
+
+| 配置键 | 默认 | 说明 |
+|---|---|---|
+| `contrailBurstSpeedMean` | **0.6** | 喷出初速度**均值**（格/tick，绝对值）；≤0 = 关闭喷出（§19） |
+| `contrailBurstSpeedSigma` | **0.18** | **标准差**（格/tick，绝对值）；0 = 所有粒子同速；内部在 ±3σ 截断（§19） |
+| `contrailBurstSpread` | 25 | 方向锥半角（度），0 = 严格沿排气、180 = 整球 |
+| `contrailBurstDamp` | 0.94 | 每 tick 速度保留比例；越小衰减越快、喷得越短 |
+
+- **2026-11-19 两轮调整**：先由用户把速度范围上调到 0.25~1.0，随后改成**方案 B**
+  （绝对均值 + 绝对标准差，去掉 min/max/peak 三个键，见 §19.2），
+  最后由用户进游戏实测把默认值定为 **mean 0.6 / sigma 0.18**（原 0.5125 / 0.09375）。
+- 现值：典型喷出距离 = 0.6 × 16.7 ≈ **10 格**，σ ≈ **3 格**，截断在 **1.0 ~ 19.0 格**（±3σ）。
+- 想要更明显：抬 `mean` 或把 damp 抬到 0.96（≈ ×25）；
+  想要更"短促一冲"：把 damp 降到 0.85~0.90（≈ ×6.7~10）。
+
+### 18.3 语言文件（配置界面文案）
+
+NeoForge 的 `ConfigurationScreen` 按 **`ccpe.configuration.<toml 键名>`（标题）** 与
+**`ccpe.configuration.<toml 键名>.tooltip`（说明）** 取文案（见 `Config` 顶部注释与
+`IConfigScreenFactory` 注册）⇒ 每加一个配置项都要在两份 lang 里补一对，否则界面显示原始键名。
+
+2026-11-19 补齐并随后按方案 B 收敛为 8 项（en_us / zh_cn 各 16 行，已用 `ConvertFrom-Json` 验证两份文件各 **363** 个键、无旧键残留、无缺项）：
+
+| 配置键 | 标题（zh_cn） |
+|---|---|
+| `contrailBurstSpeedMean` | 尾迹喷出初速均值 (格/tick) |
+| `contrailBurstSpeedSigma` | 尾迹喷出初速标准差 (格/tick) |
+| `contrailBurstSpread` | 尾迹喷出方向锥半角 (度) |
+| `contrailBurstDamp` | 尾迹喷出衰减比例 (每 tick) |
+| `exhaustAlpha` | 排气不透明度上限 |
+| `exhaustAlphaMin` | 排气不透明度下限 |
+| `intakeAlpha` | 进气不透明度上限 |
+| `intakeAlphaMin` | 进气不透明度下限 |
+
+（`exhaustAlpha*` / `intakeAlpha*` 是 §17 加的键，当时漏了 lang，这次一起补上。
+ `contrailBurstSpeedMin/Max/Peak` 三键在方案 B 里已删除，lang 里也一并删掉 —— 旧 toml 里残留的这几行会被 NeoForge 当成未知键忽略。）
+
+### 18.4 实现位置
+
+- `Config`：`contrailBurstSpeedMean/Sigma/Spread/Damp` 四项（都在 CLIENT_BUILDER，
+  方案 B 去掉了 min/max/peak 三个键）。
+- `particle/ContrailParticleData`：record 新增 `burstX/burstY/burstZ`（3 个 float），
+  `CODEC` 与 `STREAM_CODEC` 同步加字段。飘荡速度仍走 `addAlwaysVisibleParticle` 的 velocity 参数，
+  喷出初速度走 data ⇒ 两者在粒子内部分开，才能单独衰减。
+- `block/ThrustNozzleBlockEntity#spawnContrail`：随机大小（§19 起走 `sampleBurstSpeed` 截断正态）
+  + `randomConeDirection`（新增私有静态方法，与撒点用的正交基同一套取法）。
+- `client/particle/ContrailParticle`：构造时缓存 `burstDamp`、读入 `burst`；
+  `tick` 里先 `setPos(x + 飘荡 + burst)` 再 `burst *= damp`。
+- `assets/ccpe/lang/{en_us,zh_cn}.json`：10 个配置键的标题 + tooltip（见 §18.3）。
+- 编译：`./gradlew.bat classes` ✅ 通过；**待用户进游戏实测**（重点看尾迹从喷口喷出后的形状，
+  以及"喷出段"与后面匀速飘荡段的衔接是否自然）。
+
+## 19. 尾迹分布从「均匀」改为「正态」（2026-11-19，第一步 = 只改喷出幅度）
+
+### 19.1 用户看到的问题与根因
+
+现象：喷出初速停下来之后，所有粒子落在一条**边界清晰、内部均匀**的条带里。
+
+根因是两处**均匀采样**（详细推导见当轮讨论）：
+
+1. `burstSpeed ~ U[min, max]` ⇒ 位移 = `speed × 1/(1−damp)` 也均匀 ⇒ 密度在
+   **4.2 ~ 16.7 格**上是一条平线，两端是硬边（≈ 现象里最外圈那条边）；
+2. `driftDistance ~ U[0.55, 1.6]` + 球面均匀方向 ⇒ 半径均匀的**空心球壳**，
+   投影后边缘密度反而更高（arcsine），这是第二层"壳感"；
+3. 方向锥内均匀取 ⇒ 25° 处还有一条**角向硬边**。
+
+关键数学事实：**唯一能把三条边同时消掉的做法是让"位移向量"服从高斯** —— 因为
+任意时刻位置 = 飘荡向量×(t/T) + 喷出向量×衰减，高斯×常数 + 高斯仍然是高斯，
+所以整个寿命里都是"中心密、边缘趋近 0"；而均匀分布无论在哪个时刻都只能得到壳层。
+
+### 19.2 做了什么（两小步，最终为方案 B）
+
+**第一小步（中间版本，已废弃）**：幅度从均匀换成"区间比例正态"——`min/max` 当截断点、
+`peak/sigma` 都是"区间长度的比例"。实测前就发现一个坑：`peak` 和 `sigma` 都是派生量，
+一改 `min/max`，σ 的实际大小就跟着变，"喷多远"和"多胖"耦合在一起，无法单独调。
+
+**现行 = 方案 B（2026-11-19 用户定稿）**：只暴露**绝对量**，截断点固定为 ±3σ。
+
+```
+mean = contrailBurstSpeedMean        // 格/tick（绝对值）
+sigma = contrailBurstSpeedSigma      // 格/tick（绝对值）
+low  = max(0, mean − 3σ)             // 速度不能为负
+high = mean + 3σ
+拒绝采样 8 次（越界重取，绝不夹到边界）；8 次都失败才兜底取 mean
+mean ≤ 0 ⇒ 关闭喷出；sigma = 0 ⇒ 所有粒子同速
+```
+
+- **为什么固定在 3σ 截断、不把上下限交给用户**：正态尾巴无界，不截断会偶发 4σ/5σ 的粒子
+  飞出很远（"掉队的白点"）；而 3σ 处密度只剩峰值的 1%，肉眼等价于"没有上限"。
+  这也是回答"能不能不限制最大最小值"的正确做法 —— **限制发生在内部、且落在看不见的地方**。
+- **必须拒绝采样、不能 clamp**：夹到边界会把被拒样本堆在端点，等于又造一条硬边。
+- **默认值（用户进游戏实测后定稿，2026-11-19）**：`mean 0.6` / `sigma 0.18`，damp 0.94
+  ⇒ 典型喷出 **10 格**、σ ≈ **3 格**、截断在 **1.0 ~ 19.0 格**（±3σ）。
+- 离线 20 万样本、12 等宽 bin 的换算是：中间两 bin 各 **19.2%**、±1.25σ ≈ 15%、
+  ±1.75σ ≈ 4.4%、±2.25σ ≈ 1.6%、±2.75σ ≈ 0.5%（高斯解析值，不随 mean/sigma 变）——
+  外圈从"密度平顶 + 硬边"变成"平滑渐隐"；旧版 `U[0.25,1.0]` 是每 bin 10% + 16.7 格处断崖。
+- 性能：每颗粒子 1 次 `nextGaussian()`（通过率 100%，不重试），可忽略。
+- **调参换算**（`distance = speed ÷ (1 − damp)`）：
+  - 想典型距离 X 格 ⇒ `mean = X × (1 − damp)`；
+  - 想 ±W 格的波动 ⇒ `sigma = W × (1 − damp)`；
+  - 想"无上下限" ⇒ 把 `sigma` 调大（`mean/3` 以内都不会被 0 截断）。
+
+### 19.3 还没做（第二步 C，等本步实测确认后再改）
+
+- **飘荡位移向量高斯化**：`σ = driftDistance × 湍流系数 × k`，截断 2.5σ；
+  这条会消掉第二层"空心球壳"，并让任一时刻的截面都是高斯（老的 `contrailDriftDistance`
+  语义从"均匀上限"变成"σ 尺度"，需要重新标定默认值）。
+- **软锥**：方向从"锥内均匀"改成"轴 + 切向二维高斯"（`k = tan(半角)/2.5`），
+  消掉 25° 的角向硬边。
+- 届时可能要配合调 `contrailAlpha` / `contrailWidth`：高斯化后核心更密 ⇒ 亮度更集中，
+  可能糊成实心白团（用户已同意**不做自动 alpha 补偿**，保持各项独立、手动调）。
+- 备选（不推荐单独用）：只按粒子位移大小压 alpha（纯视觉伪装，位置分布仍均匀）。
 

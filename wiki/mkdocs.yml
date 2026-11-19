@@ -85,6 +85,7 @@ plugins:
             trainer aircraft v2: 教练机 v2
             Aerodynamics: 气动模型
             Tesla Roadster: 特斯拉 Roadster
+            Starship Flight 15: 星舰 Flight 15
             Channel Setup: 频道设置
             Block NBT Reading: 方块 NBT 读取
             Peripheral Proxy: 外设代理
@@ -182,4 +183,5 @@ nav:
     - trainer aircraft v2: examples/trainer_aircraft_2.md
     - Aerodynamics: examples/aerodynamics.md
     - Tesla Roadster: examples/roadster.md
+    - Starship Flight 15: examples/starship.md
   - FAQ: faq.md

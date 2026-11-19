@@ -165,6 +165,36 @@ public class Config {
             .comment("单颗粒子一生飘荡距离（格）：速度 = 本值 ÷ 寿命，方向随机、匀速直线。越大尾迹越蓬松。默认: 4.0")
             .defineInRange("contrailDriftDistance", 4.0, 0.0, 64.0);
 
+    // ── 尾迹「喷出初速度」：沿排气方向的额外初速度，大小/方向随机，之后指数衰减 ──
+    //
+    // 分布式 = 截断正态：均值/标准差都是<b>绝对量</b>（格/tick），内部在 均值 ± 3σ 处截断。
+    // 为什么不用"区间比例"：那样 min/max 一动 σ 的实际值就跟着变，调参时无法单独控制胖瘦；
+    // 现在「喷多远」只看 Mean、「多胖」只看 Sigma，互不干扰（memo §19）。
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPEED_MEAN = CLIENT_BUILDER
+            .comment("尾迹粒子的<b>喷出初速度均值</b>（格/tick，1 = 20 格/秒）：出生时除了随机飘荡，"
+                    + "再沿<b>排气方向</b>额外获得一个初速度；之后按 contrailBurstDamp 逐渐减小。"
+                    + "典型喷出距离 ≈ 本值 ÷ (1 − contrailBurstDamp)（0.94 ⇒ ×16.7 ⇒ 本默认值约 10 格）。"
+                    + "设 0 = 关闭喷出（回到旧版纯匀速飘荡；此时 sigma 无效）。默认: 0.6")
+            .defineInRange("contrailBurstSpeedMean", 0.6, 0.0, 8.0);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPEED_SIGMA = CLIENT_BUILDER
+            .comment("喷出初速度的<b>标准差</b>（格/tick，绝对值）：0 = 所有粒子同速、没有散布；越大分布越宽、"
+                    + "边缘越稀。粒子速度在 均值 ± 3σ 处截断（该处密度只剩峰值的 1%，肉眼看不到硬边），"
+                    + "所以\"不设上下限\"的实际效果就是把它调大 —— 超过均值/3 时下限会被 0 截住。"
+                    + "默认: 0.18（≈ 3.0 格标准差；用户进游戏实测定稿）")
+            .defineInRange("contrailBurstSpeedSigma", 0.18, 0.0, 4.0);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPREAD = CLIENT_BUILDER
+            .comment("喷出初速度的<b>方向锥半角</b>（度，0~180）：0 = 全部严格沿排气方向；"
+                    + "20 = 在排气方向周围 20° 的锥内随机（球冠内均匀取）；180 = 整个球面随机。默认: 25")
+            .defineInRange("contrailBurstSpread", 25.0, 0.0, 180.0);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_DAMP = CLIENT_BUILDER
+            .comment("喷出初速度的<b>每 tick 保留比例</b>（0.5~0.999）：v → v × 本值，所以速度大小逐渐减小。"
+                    + "越小衰减越快、喷出距离越短；0.94 ⇒ 每秒剩约 29%、总喷出距离 ≈ 初速度 × 16.7。默认: 0.94")
+            .defineInRange("contrailBurstDamp", 0.94, 0.5, 0.999);
+
     public static final ModConfigSpec.IntValue EXHAUST_PARTICLES_PER_TICK = CLIENT_BUILDER
             .comment("排气粒子在满转速（256 RPM）时每 tick 生成的颗数，按 |转速|/256 线性缩放。<b>性能主旋钮</b>。默认: 10")
             .defineInRange("exhaustParticlesPerTick", 10, 0, 128);
@@ -176,6 +206,18 @@ public class Config {
     public static final ModConfigSpec.DoubleValue EXHAUST_SCALE = CLIENT_BUILDER
             .comment("排气粒子出生尺寸（格）。默认: 0.3")
             .defineInRange("exhaustScale", 0.3, 0.01, 8.0);
+
+    public static final ModConfigSpec.DoubleValue EXHAUST_ALPHA = CLIENT_BUILDER
+            .comment("排气粒子的不透明度<b>上限</b>（0~1，0 = 完全透明/看不见）。这是出生淡入后最浓的值，"
+                    + "之后随寿命单调变淡、死亡时降到 <b>exhaustAlphaMin</b>（见那一项的说明）。"
+                    + "曲线 = (下限 + (本值−下限) × (1−寿命进度)^衰减指数) × 淡入。整体调浓/调淡都改这里。默认: 0.62")
+            .defineInRange("exhaustAlpha", 0.62, 0.0, 1.0);
+
+    public static final ModConfigSpec.DoubleValue EXHAUST_ALPHA_MIN = CLIENT_BUILDER
+            .comment("排气粒子的不透明度<b>下限</b>（0~1）：寿命末期会衰减到的最淡值，也就是\"残留下限\"。"
+                    + "0 = 旧行为（一路淡到完全透明）；>0 时尾段不会淡没，粒子一直可见到寿命结束才被移除"
+                    + "（因此尾段可能看到轻微\"硬切\"）。会自动夹到不超过 exhaustAlpha。默认: 0.0")
+            .defineInRange("exhaustAlphaMin", 0.0, 0.0, 1.0);
 
     public static final ModConfigSpec.DoubleValue EXHAUST_SPEED = CLIENT_BUILDER
             .comment("排气粒子出生速度（格/tick，1 = 20 格/秒），实际再乘 (0.65 + 0.35×油门)。默认: 2.0")
@@ -216,6 +258,18 @@ public class Config {
     public static final ModConfigSpec.DoubleValue INTAKE_SCALE = CLIENT_BUILDER
             .comment("进气粒子出生尺寸（格），寿命内缩小到 0.3 倍后消失。默认: 0.28")
             .defineInRange("intakeScale", 0.28, 0.01, 8.0);
+
+    public static final ModConfigSpec.DoubleValue INTAKE_ALPHA = CLIENT_BUILDER
+            .comment("进气粒子的不透明度<b>上限</b>（0~1，0 = 完全透明/看不见）。这是淡入后最浓的值，"
+                    + "之后随寿命一路变淡、到口面降到 <b>intakeAlphaMin</b>。"
+                    + "曲线 = (下限 + (本值−下限) × (1−寿命进度)^0.7) × 2 tick 淡入。默认: 0.55")
+            .defineInRange("intakeAlpha", 0.55, 0.0, 1.0);
+
+    public static final ModConfigSpec.DoubleValue INTAKE_ALPHA_MIN = CLIENT_BUILDER
+            .comment("进气粒子的不透明度<b>下限</b>（0~1）：被吸到口面时衰减到的最淡值。"
+                    + "0 = 旧行为（到口面前完全透明、像被吞掉）；>0 时口面上会留下一小片淡淡的粒子。"
+                    + "会自动夹到不超过 intakeAlpha。默认: 0.0")
+            .defineInRange("intakeAlphaMin", 0.0, 0.0, 1.0);
 
     public static final ModConfigSpec.DoubleValue INTAKE_MAX_DISTANCE = CLIENT_BUILDER
             .comment("进气粒子发射距离上限（格，0 = 不限）：离最近玩家超过它就不再发射。默认: 64")

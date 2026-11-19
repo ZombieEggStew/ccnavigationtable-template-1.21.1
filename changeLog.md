@@ -194,3 +194,9 @@
 - Fixed high-altitude contrails still being emitted while an Advanced Thrust Nozzle is running with `setThrustScale(0)`. 
 
 - Widened the contrail altitude band from **Y 160 and above** to **Y 100–320**.
+
+# 1.2.7
+- Contrail particles now leave the nozzle with a **burst of initial velocity along the exhaust direction** (random magnitude, direction randomized inside a configurable cone) that decays every tick, so the trail shoots out and then settles into its slow drift. New config: `contrailBurstSpeedMean`, `contrailBurstSpeedSigma`, `contrailBurstSpread`, `contrailBurstDamp`.
+
+
+
