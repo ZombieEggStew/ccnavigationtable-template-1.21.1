@@ -1962,3 +1962,15 @@ need=20° 时仍要 0.4 rad/s），只有越过 92° 才切成纯阻尼 ⇒ 总�
   1. `earlyReqH 8.0 → 14.0`（用户"再将夹臂开始闭合的时间点提前一点"）⇒ 提前量 **6.40 s**，臂 5.3 s ⇒ **留 1.1 s 余量**，连接器在船停稳前就锁好；
   2. **ARMS settle hold**（`replySettleT 1.5 s`）：收到回执后继续保持，直到 `|vh|,|vy| ≤ 0.30` 或到 1.5 s 上限，**绝不带残余速度关喷口** ⇒ 恢复 `VERDICT PASS`。
 - 干跑：`dock` 到 `done`（`ARMS 1.9 s` 即 settle 生效）、`back` `VERDICT PASS`。备份：`flip_v42.lua` / `catch_v1.6.lua` 已归档。
+
+## §67 ★ 任务完成（2026-11-19 13:52 用户实飞判定）：`earlyReqH = 20.0`，夹取时序收官
+
+- 用户把 `flip` 的 **`earlyReqH` 14.0 → 20.0**（自己在游戏里改）后判定：**"现在完美了，任务完成"**。
+  提前量按实测曲线 **7.40 s** vs 臂行程 **5.3 s** ⇒ **余量 ~2.1 s**，臂在船还很远时就合到位、连接器提前锁好。
+- **最终时序（定稿，别再改）**：`PRECONN ch5=15（ch6 加油口=0）` → RETURN 里 `|h|≤20` 发 `dock` 请求、船继续飞
+  → 塔合臂（火箭 ch5 ↔ 塔 ch8/9）→ `getConnectedName()≠""` 确认锁定（`ch8=[S42] ch9=[S42]`）→ 塔开加油口 `ch7=15`
+  → 回 `clamped` → 火箭 `ch6=15 + setStrongPower(6,true)` → `replySettleT 1.5 s`（`|vh|,|vy|≤0.30`）→ 关喷口。
+- **版本定稿**：`flip` **v44**（v43 的 `earlyReqH 14.0` 被用户改为 20.0；v44 只对齐注释/版本号，代码数值就是用户那一版）
+  + `catch` **v1.6**。成品归档 `cc_logs_archive/lua_versions/computer0/flip_v44.lua`、`computer1/catch_v1.6.lua`。
+- 真机证据链：§65（首次全绿，`h≤4` 触发）→ §66（`h≤8` 触发、`VERDICT CHECK` 因带速关喷口）→ 本轮（`h≤20` + settle，用户判定完美）。
+- 后续（非本任务）：并进 `starship.lua`（handover E 步）、清理 computer/0 的 `log/`。
