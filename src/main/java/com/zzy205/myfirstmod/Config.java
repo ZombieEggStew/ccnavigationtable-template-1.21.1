@@ -174,16 +174,16 @@ public class Config {
     public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPEED_MEAN = CLIENT_BUILDER
             .comment("尾迹粒子的<b>喷出初速度均值</b>（格/tick，1 = 20 格/秒）：出生时除了随机飘荡，"
                     + "再沿<b>排气方向</b>额外获得一个初速度；之后按 contrailBurstDamp 逐渐减小。"
-                    + "典型喷出距离 ≈ 本值 ÷ (1 − contrailBurstDamp)（0.94 ⇒ ×16.7 ⇒ 本默认值约 8.5 格）。"
-                    + "设 0 = 关闭喷出（回到旧版纯匀速飘荡；此时 sigma 无效）。默认: 0.5125")
-            .defineInRange("contrailBurstSpeedMean", 0.5125, 0.0, 8.0);
+                    + "典型喷出距离 ≈ 本值 ÷ (1 − contrailBurstDamp)（0.94 ⇒ ×16.7 ⇒ 本默认值约 10 格）。"
+                    + "设 0 = 关闭喷出（回到旧版纯匀速飘荡；此时 sigma 无效）。默认: 0.6")
+            .defineInRange("contrailBurstSpeedMean", 0.6, 0.0, 8.0);
 
     public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPEED_SIGMA = CLIENT_BUILDER
             .comment("喷出初速度的<b>标准差</b>（格/tick，绝对值）：0 = 所有粒子同速、没有散布；越大分布越宽、"
                     + "边缘越稀。粒子速度在 均值 ± 3σ 处截断（该处密度只剩峰值的 1%，肉眼看不到硬边），"
                     + "所以\"不设上下限\"的实际效果就是把它调大 —— 超过均值/3 时下限会被 0 截住。"
-                    + "默认: 0.09375（≈ 1.56 格标准差）")
-            .defineInRange("contrailBurstSpeedSigma", 0.09375, 0.0, 4.0);
+                    + "默认: 0.18（≈ 3.0 格标准差；用户进游戏实测定稿）")
+            .defineInRange("contrailBurstSpeedSigma", 0.18, 0.0, 4.0);
 
     public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPREAD = CLIENT_BUILDER
             .comment("喷出初速度的<b>方向锥半角</b>（度，0~180）：0 = 全部严格沿排气方向；"
