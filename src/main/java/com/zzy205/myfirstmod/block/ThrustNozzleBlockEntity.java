@@ -1201,11 +1201,12 @@ public class ThrustNozzleBlockEntity extends BlockEntity
 
         // 喷出初速度（2026-11）：在恒定飘荡之外，再沿<b>排气方向</b>给一个初速度，
         // 由粒子每 tick 乘 contrailBurstDamp 指数衰减（速度大小逐渐减小，最终只剩飘荡）。
-        //   · 大小：在 [contrailBurstSpeedMin, contrailBurstSpeedMax] 内均匀随机
+        //   · 大小：在 [contrailBurstSpeedMin, contrailBurstSpeedMax] 上取<b>截断正态</b>（软边界，见 sampleBurstSpeed）
         //   · 方向：排气方向周围 contrailBurstSpread 度的锥内均匀取（见 randomConeDirection）
         final double burstMin = Math.max(0.0D, Config.CONTRAIL_BURST_SPEED_MIN.get());
         final double burstMax = Math.max(burstMin, Config.CONTRAIL_BURST_SPEED_MAX.get());
-        final double burstSpeed = burstMin + random.nextDouble() * (burstMax - burstMin);
+        final double burstSpeed = sampleBurstSpeed(random, burstMin, burstMax,
+                Config.CONTRAIL_BURST_SPEED_PEAK.get(), Config.CONTRAIL_BURST_SPEED_SIGMA.get());
         final Vec3 burst = burstSpeed <= 0.0D
                 ? Vec3.ZERO
                 : randomConeDirection(random, dir,
@@ -1251,6 +1252,48 @@ public class ThrustNozzleBlockEntity extends BlockEntity
                 .add(sideX.scale(sinTheta * Math.cos(phi)))
                 .add(sideY.scale(sinTheta * Math.sin(phi)))
                 .normalize();
+    }
+
+    /** 截断正态的拒绝采样尝试上限（σ 取到配置上限时单次通过率仍 &gt;80%，8 次足够；失败才退回均匀） */
+    private static final int BURST_SPEED_SAMPLE_ATTEMPTS = 8;
+
+    /**
+     * 按<b>截断正态分布</b>在 {@code [min, max]} 里取一个喷出初速度（格/tick）。
+     * <p>
+     * 为什么不用均匀采样（旧版）：均匀会把「速度区间」原样变成一条<b>密度恒定</b>的条带，
+     * 两端是硬边 —— 玩家看到的"边界清晰的条带"就是它（memo §19）。正态采样让密度在两端
+     * 趋近 0，边缘变成渐变；峰值位置 {@code peak}（0~1 的区间比例）用来把大多数粒子留在喷口附近。
+     * <p>
+     * 用<b>拒绝采样</b>而不是把越界值夹到边界：夹边界会把被拒的样本全部堆在端点，
+     * 又人为造出一条硬边（正是这次要消掉的东西）。夹到边界只在极端配置下作为兜底。
+     *
+     * @param min   软下界（密度在这里已趋近 0）
+     * @param max   软上界
+     * @param peak  峰值位置，按区间长度的比例（0 = 贴着 min，0.5 = 正中）
+     * @param sigma 标准差，按区间长度的比例
+     */
+    private static double sampleBurstSpeed(final RandomSource random,
+                                           final double min, final double max,
+                                           final double peak, final double sigma) {
+        final double range = max - min;
+
+        if (range <= 1.0E-6D) {
+            return Math.max(0.0D, min); // 上下限相等（或都是 0）= 关闭喷出
+        }
+
+        final double mean = min + Mth.clamp(peak, 0.0D, 1.0D) * range;
+        final double sd = Math.max(1.0E-4D, Mth.clamp(sigma, 0.0D, 1.0D) * range);
+
+        for (int attempt = 0; attempt < BURST_SPEED_SAMPLE_ATTEMPTS; attempt++) {
+            final double sampled = mean + random.nextGaussian() * sd;
+
+            if (sampled >= min && sampled <= max) {
+                return sampled;
+            }
+        }
+
+        // 极端配置下的兜底（σ 取到上限、峰又贴近某端）：退回均匀，保证一定能出粒子
+        return min + random.nextDouble() * range;
     }
 
     /**

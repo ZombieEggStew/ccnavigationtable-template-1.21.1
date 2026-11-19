@@ -170,14 +170,27 @@ public class Config {
     public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPEED_MIN = CLIENT_BUILDER
             .comment("尾迹粒子的<b>喷出初速度下限</b>（格/tick，1 = 20 格/秒）：出生时除了随机飘荡，"
                     + "再沿<b>排气方向</b>额外获得一个初速度，之后按 contrailBurstDamp 逐渐减小。"
-                    + "每颗粒子的初速度大小在本项与 contrailBurstSpeedMax 之间随机。"
+                    + "每颗粒子的初速度大小在本项与 contrailBurstSpeedMax 之间<b>按截断正态分布</b>随机（峰值/宽度见 "
+                    + "contrailBurstSpeedPeak / contrailBurstSpeedSigma），两端只是软边界。"
                     + "0.94 衰减下总喷出距离 ≈ 初速度 × 16.7。0 = 关闭喷出（回到旧版纯匀速飘荡）。默认: 0.25")
             .defineInRange("contrailBurstSpeedMin", 0.25, 0.0, 8.0);
 
     public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPEED_MAX = CLIENT_BUILDER
-            .comment("尾迹粒子的<b>喷出初速度上限</b>（格/tick）：每颗粒子随机取 [下限, 上限]。"
+            .comment("尾迹粒子的<b>喷出初速度上限</b>（格/tick）：截断正态的软上界（密度在这里已趋近 0，不会出现硬边）。"
                     + "与下限相等 = 所有粒子同速。默认 0.94 衰减下总喷出距离 ≈ 4.2 ~ 16.7 格。默认: 1.0")
             .defineInRange("contrailBurstSpeedMax", 1.0, 0.0, 8.0);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPEED_PEAK = CLIENT_BUILDER
+            .comment("喷出初速度正态分布的<b>峰值位置</b>（0~1，按 [下限, 上限] 区间的比例）："
+                    + "0 = 贴着下限（几乎所有粒子都最慢）、0.35 = 偏下限（默认，大多数粒子留在喷口附近）、"
+                    + "0.5 = 正中。默认: 0.35")
+            .defineInRange("contrailBurstSpeedPeak", 0.35, 0.0, 1.0);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPEED_SIGMA = CLIENT_BUILDER
+            .comment("喷出初速度正态分布的<b>标准差</b>（按 [下限, 上限] 区间长度的比例）：越小越集中、边缘越干净；"
+                    + "越大越扁平，接近旧版均匀分布（≈0.4 以上基本就是均匀）。默认: 0.125"
+                    + "（峰值 0.35 时下限距峰约 2.8σ、上限约 5.2σ，两端密度几乎为 0）")
+            .defineInRange("contrailBurstSpeedSigma", 0.125, 0.01, 0.5);
 
     public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPREAD = CLIENT_BUILDER
             .comment("喷出初速度的<b>方向锥半角</b>（度，0~180）：0 = 全部严格沿排气方向；"

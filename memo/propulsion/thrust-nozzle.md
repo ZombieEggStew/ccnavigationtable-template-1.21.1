@@ -793,8 +793,10 @@ protected void setLocationFromBoundingbox() {
 
 | 配置键 | 默认 | 说明 |
 |---|---|---|
-| `contrailBurstSpeedMin` | **0.25** | 初速度下限（格/tick），每颗在 [下限, 上限] 随机；0 = 关闭喷出 |
-| `contrailBurstSpeedMax` | **1.0** | 初速度上限（格/tick）；与下限相等 = 所有粒子同速 |
+| `contrailBurstSpeedMin` | **0.25** | 初速度**软下界**（格/tick），截断正态的截断点；0 = 关闭喷出 |
+| `contrailBurstSpeedMax` | **1.0** | 初速度**软上界**（格/tick）；与下限相等 = 所有粒子同速 |
+| `contrailBurstSpeedPeak` | **0.35** | 正态峰值位置（占 [下限, 上限] 区间的比例）：0 = 贴下限、0.5 = 正中（§19） |
+| `contrailBurstSpeedSigma` | **0.125** | 正态标准差（占区间长度的比例）：越大越扁平，≈0.4 以上基本等于旧的均匀分布（§19） |
 | `contrailBurstSpread` | 25 | 方向锥半角（度），0 = 严格沿排气、180 = 整球 |
 | `contrailBurstDamp` | 0.94 | 每 tick 速度保留比例；越小衰减越快、喷得越短 |
 
@@ -810,12 +812,14 @@ NeoForge 的 `ConfigurationScreen` 按 **`ccpe.configuration.<toml 键名>`（�
 **`ccpe.configuration.<toml 键名>.tooltip`（说明）** 取文案（见 `Config` 顶部注释与
 `IConfigScreenFactory` 注册）⇒ 每加一个配置项都要在两份 lang 里补一对，否则界面显示原始键名。
 
-2026-11-19 补齐的 8 项（en_us / zh_cn 各 16 行，已用 `ConvertFrom-Json` 验证两份文件各 363 个键、无缺项）：
+2026-11-19 补齐的 10 项（en_us / zh_cn 各 20 行，已用 `ConvertFrom-Json` 验证两份文件各 367 个键、无缺项）：
 
 | 配置键 | 标题（zh_cn） |
 |---|---|
 | `contrailBurstSpeedMin` | 尾迹喷出初速下限 (格/tick) |
 | `contrailBurstSpeedMax` | 尾迹喷出初速上限 (格/tick) |
+| `contrailBurstSpeedPeak` | 尾迹喷出初速峰值位置 |
+| `contrailBurstSpeedSigma` | 尾迹喷出初速分布宽度 |
 | `contrailBurstSpread` | 尾迹喷出方向锥半角 (度) |
 | `contrailBurstDamp` | 尾迹喷出衰减比例 (每 tick) |
 | `exhaustAlpha` | 排气不透明度上限 |
@@ -827,15 +831,61 @@ NeoForge 的 `ConfigurationScreen` 按 **`ccpe.configuration.<toml 键名>`（�
 
 ### 18.4 实现位置
 
-- `Config`：`contrailBurstSpeedMin/Max/Spread/Damp` 四项（都在 CLIENT_BUILDER）。
+- `Config`：`contrailBurstSpeedMin/Max/Peak/Sigma/Spread/Damp` 六项（都在 CLIENT_BUILDER）。
 - `particle/ContrailParticleData`：record 新增 `burstX/burstY/burstZ`（3 个 float），
   `CODEC` 与 `STREAM_CODEC` 同步加字段。飘荡速度仍走 `addAlwaysVisibleParticle` 的 velocity 参数，
   喷出初速度走 data ⇒ 两者在粒子内部分开，才能单独衰减。
-- `block/ThrustNozzleBlockEntity#spawnContrail`：随机大小 + `randomConeDirection`（新增私有静态方法，
-  与撒点用的正交基同一套取法）。
+- `block/ThrustNozzleBlockEntity#spawnContrail`：随机大小（§19 起走 `sampleBurstSpeed` 截断正态）
+  + `randomConeDirection`（新增私有静态方法，与撒点用的正交基同一套取法）。
 - `client/particle/ContrailParticle`：构造时缓存 `burstDamp`、读入 `burst`；
   `tick` 里先 `setPos(x + 飘荡 + burst)` 再 `burst *= damp`。
-- `assets/ccpe/lang/{en_us,zh_cn}.json`：8 个配置键的标题 + tooltip（见 §18.3）。
+- `assets/ccpe/lang/{en_us,zh_cn}.json`：10 个配置键的标题 + tooltip（见 §18.3）。
 - 编译：`./gradlew.bat classes` ✅ 通过；**待用户进游戏实测**（重点看尾迹从喷口喷出后的形状，
   以及"喷出段"与后面匀速飘荡段的衔接是否自然）。
+
+## 19. 尾迹分布从「均匀」改为「正态」（2026-11-19，第一步 = 只改喷出幅度）
+
+### 19.1 用户看到的问题与根因
+
+现象：喷出初速停下来之后，所有粒子落在一条**边界清晰、内部均匀**的条带里。
+
+根因是两处**均匀采样**（详细推导见当轮讨论）：
+
+1. `burstSpeed ~ U[min, max]` ⇒ 位移 = `speed × 1/(1−damp)` 也均匀 ⇒ 密度在
+   **4.2 ~ 16.7 格**上是一条平线，两端是硬边（≈ 现象里最外圈那条边）；
+2. `driftDistance ~ U[0.55, 1.6]` + 球面均匀方向 ⇒ 半径均匀的**空心球壳**，
+   投影后边缘密度反而更高（arcsine），这是第二层"壳感"；
+3. 方向锥内均匀取 ⇒ 25° 处还有一条**角向硬边**。
+
+关键数学事实：**唯一能把三条边同时消掉的做法是让"位移向量"服从高斯** —— 因为
+任意时刻位置 = 飘荡向量×(t/T) + 喷出向量×衰减，高斯×常数 + 高斯仍然是高斯，
+所以整个寿命里都是"中心密、边缘趋近 0"；而均匀分布无论在哪个时刻都只能得到壳层。
+
+### 19.2 本步做了什么（第一步，只改喷出幅度）
+
+`ThrustNozzleBlockEntity#sampleBurstSpeed`：在 `[min, max]` 上取**截断正态**。
+
+```
+mean  = min + peak × (max − min)        // peak = 0.35（用户定：峰值略偏下限）
+sigma = sigmaShare × (max − min)        // sigmaShare = 0.125 ⇒ 下限距峰 2.8σ、上限 5.2σ
+拒绝采样 8 次（越界重取，不夹到边界；极端配置才退回均匀）
+```
+
+- **必须拒绝采样、不能 clamp**：把越界值夹到端点会让被拒样本堆在边界上，等于又造一条硬边。
+- 默认值下密度：峰值在 0.25 + 0.35×0.75 = **0.5125 格/tick**（≈ 8.5 格位移），
+  两端密度 ≈ 0 ⇒ 外圈边界由"一刀切"变成"渐隐"；内圈（≥0.25）也变软。
+- 新增两个配置：`contrailBurstSpeedPeak`（默认 0.35）、`contrailBurstSpeedSigma`（默认 0.125）；
+  `contrailBurstSpeedMin/Max` 的注释改称"软边界"，并补了 lang（§18.3）。
+- 性能：每颗粒子多一次 `nextGaussian()`（通过率 >99%，几乎不会重试），可忽略。
+
+### 19.3 还没做（第二步 C，等本步实测确认后再改）
+
+- **飘荡位移向量高斯化**：`σ = driftDistance × 湍流系数 × k`，截断 2.5σ；
+  这条会消掉第二层"空心球壳"，并让任一时刻的截面都是高斯（老的 `contrailDriftDistance`
+  语义从"均匀上限"变成"σ 尺度"，需要重新标定默认值）。
+- **软锥**：方向从"锥内均匀"改成"轴 + 切向二维高斯"（`k = tan(半角)/2.5`），
+  消掉 25° 的角向硬边。
+- 届时可能要配合调 `contrailAlpha` / `contrailWidth`：高斯化后核心更密 ⇒ 亮度更集中，
+  可能糊成实心白团（用户已同意**不做自动 alpha 补偿**，保持各项独立、手动调）。
+- 备选（不推荐单独用）：只按粒子位移大小压 alpha（纯视觉伪装，位置分布仍均匀）。
 
