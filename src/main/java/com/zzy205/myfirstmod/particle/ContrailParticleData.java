@@ -24,9 +24,13 @@ import org.jetbrains.annotations.NotNull;
  * <li>{@code lifetime} —— 寿命（tick），由温度适宜度决定（越冷越长，见
  *     {@code ThrustNozzleBlockEntity#tickContrail}）；</li>
  * <li>{@code r/g/b} —— 冰晶白偏冷，出生时再乘一点随机明暗差。</li>
+ * <li>{@code burstX/burstY/burstZ} —— <b>喷出初速度</b>（格/tick，世界系）：沿排气方向、
+ *     大小与方向在配置范围内随机，粒子每 tick 按 {@code contrailBurstDamp} 指数衰减到 0，
+ *     叠加在 via velocity 参数传进来的<b>恒定飘荡速度</b>之上（见 {@code ContrailParticle#tick}）。</li>
  * </ul>
  */
-public record ContrailParticleData(float width, int lifetime, float r, float g, float b)
+public record ContrailParticleData(float width, int lifetime, float r, float g, float b,
+                                   float burstX, float burstY, float burstZ)
         implements ParticleOptions {
 
     public static final MapCodec<ContrailParticleData> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -34,7 +38,10 @@ public record ContrailParticleData(float width, int lifetime, float r, float g, 
             Codec.INT.fieldOf("lifetime").forGetter(ContrailParticleData::lifetime),
             Codec.FLOAT.fieldOf("r").forGetter(ContrailParticleData::r),
             Codec.FLOAT.fieldOf("g").forGetter(ContrailParticleData::g),
-            Codec.FLOAT.fieldOf("b").forGetter(ContrailParticleData::b)
+            Codec.FLOAT.fieldOf("b").forGetter(ContrailParticleData::b),
+            Codec.FLOAT.fieldOf("burstX").forGetter(ContrailParticleData::burstX),
+            Codec.FLOAT.fieldOf("burstY").forGetter(ContrailParticleData::burstY),
+            Codec.FLOAT.fieldOf("burstZ").forGetter(ContrailParticleData::burstZ)
     ).apply(instance, ContrailParticleData::new));
 
     /** 手写编解码（与 {@link ExhaustParticleData} 同一写法，避免依赖 composite 重载上限） */
@@ -45,10 +52,16 @@ public record ContrailParticleData(float width, int lifetime, float r, float g, 
                 buf.writeFloat(data.r());
                 buf.writeFloat(data.g());
                 buf.writeFloat(data.b());
+                buf.writeFloat(data.burstX());
+                buf.writeFloat(data.burstY());
+                buf.writeFloat(data.burstZ());
             },
             buf -> new ContrailParticleData(
                     buf.readFloat(),
                     buf.readVarInt(),
+                    buf.readFloat(),
+                    buf.readFloat(),
+                    buf.readFloat(),
                     buf.readFloat(),
                     buf.readFloat(),
                     buf.readFloat())

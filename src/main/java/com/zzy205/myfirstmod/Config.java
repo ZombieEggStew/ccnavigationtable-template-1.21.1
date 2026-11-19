@@ -165,6 +165,30 @@ public class Config {
             .comment("单颗粒子一生飘荡距离（格）：速度 = 本值 ÷ 寿命，方向随机、匀速直线。越大尾迹越蓬松。默认: 4.0")
             .defineInRange("contrailDriftDistance", 4.0, 0.0, 64.0);
 
+    // ── 尾迹「喷出初速度」：沿排气方向的额外初速度，大小/方向随机，之后指数衰减 ──
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPEED_MIN = CLIENT_BUILDER
+            .comment("尾迹粒子的<b>喷出初速度下限</b>（格/tick，1 = 20 格/秒）：出生时除了随机飘荡，"
+                    + "再沿<b>排气方向</b>额外获得一个初速度，之后按 contrailBurstDamp 逐渐减小。"
+                    + "每颗粒子的初速度大小在本项与 contrailBurstSpeedMax 之间随机。"
+                    + "总喷出距离 ≈ 初速度 ÷ (1 − contrailBurstDamp)。0 = 关闭喷出（回到旧版纯匀速飘荡）。默认: 0.08")
+            .defineInRange("contrailBurstSpeedMin", 0.08, 0.0, 8.0);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPEED_MAX = CLIENT_BUILDER
+            .comment("尾迹粒子的<b>喷出初速度上限</b>（格/tick）：每颗粒子随机取 [下限, 上限]。"
+                    + "与下限相等 = 所有粒子同速。默认: 0.25")
+            .defineInRange("contrailBurstSpeedMax", 0.25, 0.0, 8.0);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_SPREAD = CLIENT_BUILDER
+            .comment("喷出初速度的<b>方向锥半角</b>（度，0~180）：0 = 全部严格沿排气方向；"
+                    + "20 = 在排气方向周围 20° 的锥内随机（球冠内均匀取）；180 = 整个球面随机。默认: 25")
+            .defineInRange("contrailBurstSpread", 25.0, 0.0, 180.0);
+
+    public static final ModConfigSpec.DoubleValue CONTRAIL_BURST_DAMP = CLIENT_BUILDER
+            .comment("喷出初速度的<b>每 tick 保留比例</b>（0.5~0.999）：v → v × 本值，所以速度大小逐渐减小。"
+                    + "越小衰减越快、喷出距离越短；0.94 ⇒ 每秒剩约 29%、总喷出距离 ≈ 初速度 × 16.7。默认: 0.94")
+            .defineInRange("contrailBurstDamp", 0.94, 0.5, 0.999);
+
     public static final ModConfigSpec.IntValue EXHAUST_PARTICLES_PER_TICK = CLIENT_BUILDER
             .comment("排气粒子在满转速（256 RPM）时每 tick 生成的颗数，按 |转速|/256 线性缩放。<b>性能主旋钮</b>。默认: 10")
             .defineInRange("exhaustParticlesPerTick", 10, 0, 128);

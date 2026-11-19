@@ -1199,6 +1199,18 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         final double vy = cosTheta * speed;
         final double vz = ring * Math.sin(phi) * speed;
 
+        // 喷出初速度（2026-11）：在恒定飘荡之外，再沿<b>排气方向</b>给一个初速度，
+        // 由粒子每 tick 乘 contrailBurstDamp 指数衰减（速度大小逐渐减小，最终只剩飘荡）。
+        //   · 大小：在 [contrailBurstSpeedMin, contrailBurstSpeedMax] 内均匀随机
+        //   · 方向：排气方向周围 contrailBurstSpread 度的锥内均匀取（见 randomConeDirection）
+        final double burstMin = Math.max(0.0D, Config.CONTRAIL_BURST_SPEED_MIN.get());
+        final double burstMax = Math.max(burstMin, Config.CONTRAIL_BURST_SPEED_MAX.get());
+        final double burstSpeed = burstMin + random.nextDouble() * (burstMax - burstMin);
+        final Vec3 burst = burstSpeed <= 0.0D
+                ? Vec3.ZERO
+                : randomConeDirection(random, dir,
+                        Math.toRadians(Config.CONTRAIL_BURST_SPREAD.get())).scale(burstSpeed);
+
         final float width = trailWidth() * (0.75F + random.nextFloat() * 0.5F);
         // 染色：未染色时 trailRgb() 返回 TRAIL_RED/GREEN/BLUE 打包的默认色
         final int rgb = this.trailRgb();
@@ -1207,10 +1219,38 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         // 照样被原版 32 格限制丢掉 —— 见 exhaustMaxDistance() 的注释与 memo §3.7。
         level.addAlwaysVisibleParticle(
                 new ContrailParticleData(width, lifetime,
-                        dyeChannel(rgb, 16), dyeChannel(rgb, 8), dyeChannel(rgb, 0)),
+                        dyeChannel(rgb, 16), dyeChannel(rgb, 8), dyeChannel(rgb, 0),
+                        (float) burst.x, (float) burst.y, (float) burst.z),
                 true,
                 start.x, start.y, start.z,
                 vx, vy, vz);
+    }
+
+    /**
+     * 在 {@code axis} 周围、半角 {@code halfAngleRad} 的<b>圆锥内</b>均匀随机取一个单位向量。
+     * <p>
+     * 用 {@code cosθ} 在 {@code [cos(半角), 1]} 上<b>均匀</b>取值（球冠面积均匀），
+     * 而不是"角度均匀"—— 后者会让粒子都堆在轴线附近，看起来像一束光而不是一团。
+     * 半角 ≤ 0 ⇒ 直接返回 axis；半角 ≥ π ⇒ 整个球面均匀随机。
+     *
+     * @param axis         单位向量（喷管传进来的是已归一化的排气方向）
+     * @param halfAngleRad 锥的半角（弧度）
+     */
+    private static Vec3 randomConeDirection(final RandomSource random, final Vec3 axis, final double halfAngleRad) {
+        final double cosMax = Mth.clamp(Math.cos(halfAngleRad), -1.0D, 1.0D);
+        final double cosTheta = cosMax + (1.0D - cosMax) * random.nextDouble();
+        final double sinTheta = Math.sqrt(Math.max(0.0D, 1.0D - cosTheta * cosTheta));
+        final double phi = random.nextDouble() * Math.PI * 2.0D;
+
+        // axis 的任意一对正交基（与 spawnContrail 里撒点用的是同一种取法）
+        final Vec3 guide = Math.abs(axis.y) > 0.9D ? new Vec3(1.0D, 0.0D, 0.0D) : new Vec3(0.0D, 1.0D, 0.0D);
+        final Vec3 sideX = axis.cross(guide).normalize();
+        final Vec3 sideY = sideX.cross(axis).normalize();
+
+        return axis.scale(cosTheta)
+                .add(sideX.scale(sinTheta * Math.cos(phi)))
+                .add(sideY.scale(sinTheta * Math.sin(phi)))
+                .normalize();
     }
 
     /**

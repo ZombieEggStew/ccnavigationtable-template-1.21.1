@@ -24,6 +24,10 @@ import org.jetbrains.annotations.Nullable;
  *     <b>总飘荡距离 ÷ 寿命</b>（喷管算好传进来）。于是「30 s 寿命、2 格飘荡距离」的粒子
  *     在死亡那一刻恰好离出生点 2 格 —— 位移完全由这两个可见的量决定，不再有随机游走、
  *     阻尼、边界这些间接环节。</li>
+ * <li><b>喷出初速度</b>（2026-11 新增，v6）：在恒定飘荡速度<b>之外</b>再叠一个沿排气方向的初速度，
+ *     大小与方向由喷管在配置范围内随机（{@code contrailBurstSpeedMin/Max}、{@code contrailBurstSpread}），
+ *     粒子每 tick 乘 {@code contrailBurstDamp} 指数衰减 ⇒ 出生时"喷出去一下"，之后越来越慢、
+ *     最终只剩恒定飘荡。附加位移 = 初速度 ÷（1 − damp）；damp ≥ 1 时视为不衰减（配置上限已限制 &lt; 1）。</li>
  * </ul>
  * 形状与透明度<b>成对</b>演变（质量守恒，现实里"前段细亮、后段宽淡"就是这个）：
  * <pre>
@@ -61,6 +65,20 @@ public class ContrailParticle extends SimpleAnimatedParticle {
     /** 扩散时间常数（配置 {@code contrailWidthTau}，构造时缓存；越大散得越慢） */
     private final int widthTau;
 
+    /**
+     * 喷出初速度（格/tick，世界系），来自粒子数据：
+     * 沿排气方向、大小/方向由喷管在配置范围内随机。每 tick 推进一次后乘 {@link #burstDamp} 衰减。
+     */
+    private double burstX;
+    private double burstY;
+    private double burstZ;
+
+    /**
+     * 喷出初速度的每 tick 保留比例（配置 {@code contrailBurstDamp}，构造时缓存）。
+     * 1.0 = 不衰减（配置范围上限 0.999，实际不会取到）；越小衰减越快。
+     */
+    private final float burstDamp;
+
     protected ContrailParticle(final ClientLevel level, final double x, final double y, final double z,
                                final double xd, final double yd, final double zd,
                                final ContrailParticleData data, final SpriteSet sprites) {
@@ -69,7 +87,13 @@ public class ContrailParticle extends SimpleAnimatedParticle {
         this.baseWidth = Math.max(0.02F, data.width());
         this.alpha0 = Config.CONTRAIL_ALPHA.get().floatValue();
         this.widthTau = Math.max(1, Config.CONTRAIL_WIDTH_TAU.get());
+        this.burstDamp = Mth.clamp(Config.CONTRAIL_BURST_DAMP.get().floatValue(), 0.0F, 1.0F);
         ContrailBudget.onSpawn();
+
+        // 喷出初速度：喷管已按配置随机好大小与方向（沿排气方向的锥内），这里只负责衰减
+        this.burstX = data.burstX();
+        this.burstY = data.burstY();
+        this.burstZ = data.burstZ();
 
         // 恒定速度：喷管按「总飘荡距离 ÷ 寿命」算好，方向随机。之后永远不改（匀速直线）。
         this.xd = xd;
@@ -101,12 +125,16 @@ public class ContrailParticle extends SimpleAnimatedParticle {
      * （只要 {@code hasPhysics}）并做 y 方向的贴地判停；尾迹既不该被挡、也不该有"站住"的概念，
      * 直接 {@code setPos} 最干净（{@code setPos} 会顺带重建包围盒）。
      * <p>
-     * 速度<b>刻意不做任何衰减/抖动</b>：位移必须严格等于「速度 × 寿命 = 预定的飘荡距离」，
-     * 否则"2 格飘荡距离"这个可读参数会失真。想要"越老越散"的观感，靠的是
+     * 飘荡速度（{@code xd/yd/zd}）<b>刻意不做任何衰减/抖动</b>：位移必须严格等于
+     * 「速度 × 寿命 = 预定的飘荡距离」，否则"2 格飘荡距离"这个可读参数会失真。想要"越老越散"的观感，靠的是
      * <ul>
      * <li>每颗粒子的飘荡<b>方向与距离都随机</b>（有的 1 格、有的 3 格、方向各异）⇒ 尾迹整体越铺越宽；</li>
      * <li>粒子自身尺寸随 age 按 sqrt(t) 变大、同时 alpha 同步变淡。</li>
      * </ul>
+     * <p>
+     * <b>唯一会衰减的是喷出初速度</b>（{@link #burstX}/{@link #burstY}/{@link #burstZ}，2026-11）：
+     * 每 tick 推进一次，然后乘 {@link #burstDamp}。它和恒定飘荡相加，所以总位移 =
+     * 飘荡距离 + 初速度 ÷（1 − damp）。
      */
     @Override
     public void tick() {
@@ -134,8 +162,15 @@ public class ContrailParticle extends SimpleAnimatedParticle {
                 * fadeIn
                 * (1.0F - smoothstep(FADE_OUT_START, 1.0F, life));
 
-        // 恒定速度 ⇒ 直接线性推进。累计位移在寿命结束时 = 速度 × 寿命 = 预定的飘荡距离。
-        this.setPos(this.x + this.xd, this.y + this.yd, this.z + this.zd);
+        // 恒定飘荡速度 + 正在衰减的喷出初速度 ⇒ 直接线性推进（不走 move()，见类注释）。
+        // 初速度先参与本 tick 位移，再乘 burstDamp 衰减：速度大小逐渐减小，最终只剩飘荡。
+        this.setPos(this.x + this.xd + this.burstX,
+                this.y + this.yd + this.burstY,
+                this.z + this.zd + this.burstZ);
+
+        this.burstX *= this.burstDamp;
+        this.burstY *= this.burstDamp;
+        this.burstZ *= this.burstDamp;
     }
 
     /**
