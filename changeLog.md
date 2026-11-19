@@ -198,5 +198,4 @@
 # 1.2.7
 - Contrail particles now leave the nozzle with a **burst of initial velocity along the exhaust direction** (random magnitude, direction randomized inside a configurable cone) that decays every tick, so the trail shoots out and then settles into its slow drift. New config: `contrailBurstSpeedMean`, `contrailBurstSpeedSigma`, `contrailBurstSpread`, `contrailBurstDamp`.
 
-
-
+- Improved the [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/examples/starship/)
