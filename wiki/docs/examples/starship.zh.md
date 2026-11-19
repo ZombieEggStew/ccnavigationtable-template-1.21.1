@@ -4,9 +4,7 @@
 
 ![starship](../img/starship.png)
 
-## [> 存档下载 <](#)
-
-<!-- TODO: 存档下载链接占位，替换 "#" 为实际链接 -->
+## [> 存档下载 <](https://wwbbt.lanzout.com/iYi8f4gmrneh) 密码:f1k5
 
 !!! tip "说明"
     需求模组：

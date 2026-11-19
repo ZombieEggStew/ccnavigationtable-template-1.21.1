@@ -4,9 +4,7 @@
 
 ![starship](../img/starship.png)
 
-## [> Download Save <](#)
-
-<!-- TODO: replace "#" with the save download link -->
+## [> Download Save <](https://drive.google.com/file/d/1Gsv2WK7fHYYxessZFwcspR20blYbuhIq/view?usp=sharing)
 
 !!! tip "Note"
     Required mods:
