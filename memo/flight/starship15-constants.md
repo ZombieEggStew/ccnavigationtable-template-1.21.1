@@ -69,7 +69,7 @@
   ✅ **真机 PASS ×3（2026-11-18 14:23 / 14:40 / 15:29）**：FALL 2.00 s/20.8 m（vy −19.9）｜FLIPBACK **1.85 s/46.4 m**（vh 24.0、wMax 1.25）｜
   BRAKE **6.20 s**/dz −87.4（vh 24→2.4、u 均值 0.497）｜RETURN 12.1 s（gap 18→err 2.1）｜ARMS 2.7 s（err 0.0、cos 1.000）
   ⇒ 停在 (11.50, −0.5, h=0)。**高度预算实测够**：release h=119.5 全部用完仍停在 h=0，未触发 FLOOR GUARD。
-★ **任务剖面 `flip dock` v30（2026-11-18，当前版本）**：投放点改成高空 **≈(9.5, 306.5, +66.9)**，横距 **67 m**。
+★ **任务剖面 `flip dock` v30（2026-11-18，最新真机 PASS 的版本）**：投放点改成高空 **≈(9.5, 306.5, +66.9)**，横距 **67 m**。
   - `dockReserve=140`（数值上 = 翻转点 h；y≈233、p≈0.507、TWR≈1.96）、`dockFallDrop=80`、`dockFallVy=−45`、`dockFallMaxT=5.0`
   - **F4 已开**（`ch0On=true`）：ch0 加入集合推力 = 5 台，`FmaxFiring` 按 5 台折算，全剖面 u 降 20%；`setInverted(true)` 在 `discover()` 里
   - α 随气压：`alphaNow = coneAlphaDeg·u·(p/0.5495)`（`coneAlphaRefP` 就是 v20 PASS 的气压）
@@ -78,9 +78,67 @@
   - 接近段：`apVmax=3.5 / apAMax=3.5 / apKP=0.45 / apKV=1.3 / apVyMax=6.0 / apVySqrtA=3.0`；竖直 `vyRef=−min(VY,√(2·apVySqrtA·|dh|))`（符号随 dh，#22）
   - ✅ 真机 PASS 连续 9 轮（v22~v30）：FALL 3.95 s/76.5 m｜FLIPBACK 1.90 s/73.7 m｜BRAKE 6.5 s 停 z=−24.9｜RETURN 10.5 s/err 0.8｜ARMS err 0.1
   - ⚠️ **过冲对 `dockBrakeAMax` 极敏感**（塔压在停止距离边缘）：`2.6 ⇒ 1.6 m`、`1.5 ⇒ 24.4 m`；实测有效横向减速度 ≈ **`2.7 + 1.0·dockBrakeAMax`**（锥角自身贡献 ~2.7，倾角只 ~2.6）
+  - 灵敏度：**在 D≈2.0 处，D 每 +0.1 ≈ 过冲 −1.5~2 m**；**一次别动超过 0.3**。真正的自变量是**刹车入口 vh**（见下）
   - ⚠️ 横向反向实测：vh 0 → 4.86 m/s 用 **2.3 s（≈2.1 m/s²）**；18° 上限本应给 3.57 ⇒ 差距来自"环在目标附近提前收力 + 倾角 ≈1.3 s 摆动滞后"
   - ⚠️ 末端 6 s 在目标附近 **limit-cycle**（vh 2~4 m/s 来回、posErr 0.8），TRIM 因此跑满 4 s
-★ **合臂/抓取时序（`catch.lua` v1.3，2026-11-18 定型）**：复位臂 ±90 + conn 7/8/9=0 → 等 `dock` 请求（或按键）
+★ **v31 真机（2026-11-19 11:55 PASS，`dockBrakeAMax=2.2`）**：过冲 **4.6 m**（v30 的 24.4 m → 4.6 m）
+  FALL 3.95 s/76.5 m｜FLIPBACK 1.90 s（h 135.1→61.9、**vh 26.6**）｜BRAKE 4.55 s/横向 **72.0 m**（结束仍 h=31.0）｜
+  RETURN **6.8 s**/err 0.2（垂直降 30.9 m）｜TRIM **0.50 s**（v30 是 4.05 s 超时）｜ARMS err 0.1 → PASS。
+  ✅ **`a_eff = 2.7 + 1.0·D` 被精确证实**：`26.6²/(2×72.0) = 4.91 = 2.7 + 2.2`。
+  ⇒ **过冲 = `vh²/(2·(2.7+D)) − 67.4`，vh ±1 m/s ⇒ 过冲 ±6~7 m**（D=2.0：25.6→2.3、26.6→7.9、27.6→13.6 m）。
+    调 D 之前**先看 FLIPBACK 的 vh 有没有变**，D 的"最优值"是 vh 的函数（v30/v31 两轮都是 26.6，可信）。
+  ⚠️ 顺带：本剖面下**末端 limit-cycle 不复现**（TRIM 0.5 s），§50 第 ③ 条在这个入口 vh 下自愈。
+★ **v32 真机（2026-11-19 11:59 撞塔 COS_ABORT，`dockBrakeAMax=2.0`）**：过冲 **9.8 m** ✅（目标 8~10 命中）
+  ⇒ **`dockBrakeAMax = 2.0` 定稿**（1.5→24.4 m、2.2→4.6 m、2.0→9.8 m，公式三连中）。
+  ❌ **但末端撞了**：RETURN 把它降到 **h=−0.1 时横向仍差 1.1 m**（＝在臂的高度、臂的结构里）⇒ TRIM 全程无收敛
+  （posErr 1.1→3.3→0.07→2.0、lean ±16°、vh 4.5）⇒ ARMS 荡到 x=2.6（离目标 9 m）再以 **vh 7.1 / lean −21.8°** 冲回 ⇒ `COS_ABORT`。
+  判读：**接触**（跟臂/塔架剐蹭的冲量）把这个环越推越大，不是制导律自己发散；v31 只是恰好落在正中心（err 0.2）才幸存。
+★ **v33（2026-11-19，代码+干跑完成，待真机）：末端"对齐门"** —— 只加一条调度规则，不动任何环的增益
+  `ctrlGuide` 里：横向误差 > `apClearTol(0.45 m)` 时竖直目标 = `capH + apClear(2.5 m)`（在臂**上方**对齐，不碰结构），
+  进 0.45 m 才提交下降、下沉封顶 `apCommitVyMax(1.0 m/s)`、回差 `apClearRelease(0.90 m)`。
+  只对带横向目标的腿（RETURN/TRIM/ARMS）生效；HOVER 传 nil 不受影响（`back`/`run` 回归 PASS）。
+  ⚠️ 安全阀：TRIM 结束仍在夹持点上方 >1 m ⇒ **不发 `dock` 请求**、保持悬停（v21「臂夹空」的反向保护）。
+  ⚠️ 2.5 m 净空在塔架结构上够不够＝未验证；仍剐蹭则 `apClear → 3.0`。
+★ **v33 真机（2026-11-19 12:07 COS_ABORT）**：门**有效**（RETURN 全程 h 2.28~2.73 m 没降），
+  但横向环在门高度上**不收敛**：posErr 0.69→1.0→2.0→3.5→4.5→3.4→1.2→1.8→3.0→4.3 m、vh 到 **5.1**、`lean` **−26°**（指令上限 18°）、`perp` +17° ⇒ cos 0.856 撞。
+  0.45 m 的门只碰到一次（0.69）就被 0.90 m 回差顶回 ⇒ **11.5 s 悬停**（用户："反推太狠、下降太低、不连贯"）。
+★ **v34（2026-11-19，代码+干跑完成，待真机）：把最后一米交给连接器吸力**（用户 2026-11-19 定案）
+  `apClearTol 0.45→1.5`（进 1.5 m 就下降）、`apClearRelease 0.90→2.5`、`apCommitVyMax 1.0→2.0`；
+  **两侧提前通电**：flip `ch5/ch6=15`（TRIM 前，`PRECONN`）、catch v1.4 `conn 7/8/9=15`（RESET 后即通电，等请求期间就有吸力）。
+  干跑 `dock` PASS（RETURN 12.0 s/err 0.5、TRIM 7.00 s/err 0.37、ARMS err 0.2）。
+  ⚠️ 未解：真机横向环为何摆到 −26°（桩里不出）；吸力兜不住 ⇒ 降 `apKV`、近距收缩 `apVmax`。
+★ **v34 真机（2026-11-19 12:17 又 COS_ABORT）**：过冲 9.8 m ✅；RETURN `h` **到过 −0.144**（确实降到夹持点）却被横向摆动推过 2.5 m 回差 ⇒ **门把它抬回 +2.5 m**（这就是"下降太慢/一跳一跳"）。
+  火箭侧连接器没开＝**bug**：`PRECONN` 当时放在 TRIM 前，RETURN abort ⇒ 那行没执行（catch 侧的 `PRECONN` 正常）。
+★ **v35（2026-11-19，代码+干跑完成，待真机）**：`PRECONN` 移到 **BRAKE 后**；
+  `apKP 0.45→0.30` / `apKV 1.30→0.85`（闭环 ω √(KP·KV)：0.76 → **0.50 rad/s**，1.3 s 倾角执行器要求 <0.7）；
+  **捕获区** `apCaptureR 2.0`（进 2 m 只刹速度、不追位置；近距 `apTiltNear 12°`；TRIM 退出容差 = `apCaptureR×0.75`）；
+  **门锁存** `apLatch`（|h|≤0.5 后永不抬升；TRIM/ARMS 用 `initCommit` 继承提交状态）；
+  `dockBrakeVy 4.5`（BRAKE 段下沉上限，通用 `VY_HOVER` 仍是 3.0）。
+  **设计转变**：末端不追求 0 误差，1~2 m 交给连接器吸力 ⇒ DOCK REPORT err ~1 m 属正常（`retPosTol 5.0` 判 PASS）。
+★ **v35 真机（2026-11-19 12:23 PASS，末端首次全绿）**：BRAKE 5.25 s（vy −4.4、h=23.1、过冲 **10.8 m**）｜`PRECONN` 在 BRAKE 后执行 ✅
+  RETURN 10.3 s/err 0.6/`gate=true`（**无回弹**）｜TRIM 0.35 s/**err 0.00**｜ARMS 2.6 s/**err 0.0** → `DOCK REPORT err 0.0` **PASS**。
+  唯一抱怨："在点位附近晃悠好久才接近" ⇒ **元凶 `apCaptureR(2.0) > apClearTol(1.5)`**：1.5~2.0 m 这段既不追位置也不许下降。
+★ **v36（2026-11-19，代码+干跑完成，待真机）**：`apCaptureR 2.0→1.0`（**必须 < apClearTol**）、`apCommitVyMax 2.0→3.0`、
+  `apGateMaxT 4.0 s`（悬停等待超 4 s 强制提交下降，靠吸力吃 2 m 偏差）。增益一个没动。
+  ⚠️ v35 的 CSV 0 字节：程序在 `close()` 前被停 ⇒ **必须跑到 SECURED/done 再停**。
+★ **v36 真机（2026-11-19 12:27 PASS，连续第二次）**：RETURN **6.9 s**（v35 10.3 s）/ err 1.0、TRIM 0.40 s、ARMS **err 0.0** → `DOCK REPORT err 0.0` PASS。
+  仍"晃悠几下" ⇒ **接近段速度剖面太陡**：横向目标恒定 `apVmax 3.5`，实际冲到 **4.6 m/s**（1.3 s 倾角滞后 ⇒ 速度环超调 ~30%），2 m 处只能把 `lean` 从 **+16° 翻到 −9.5°** 才停。
+★ **v37（2026-11-19，代码+干跑完成，待真机）**：`apVmax 3.5→2.2` + **制动曲线**
+  `vTarget = min(apVmax, √(2·apBrakeLat·max(perr − apCaptureR, 0)))`、`apBrakeLat = 2.0` ⇒ **在捕获半径处速度归零**（不加 `−apCaptureR` 偏移会以 2 m/s 冲进捕获区再追回来）。
+  桩扫描 `apVmax` 2.2/2.5/2.8/3.0/3.5 ⇒ 末段 err 1.2/1.5/2.0/2.9/4.5（越低越准），只有 2.2 判 PASS。
+  ⚠️ 工具：**游戏运行时 CSV 被占用**（StreamReader "used by another process"）⇒ 先 copy 到 `temp/` 再 digest。
+★ **v37 真机（2026-11-19 12:31 PASS ×3，err 0.0）**：制动曲线见效——RETURN 8.1 s（v36 6.9 s，慢 1.2 s）
+  **`max|lean|` 16.2°→13.4°、`max vh` 4.65→3.03 m/s、lean 掉头反转 1 次→0 次**，末段 err 0.4→TRIM 0.00→ARMS 0.0。
+  过冲 **10.2 m**；BRAKE 5.15 s。
+  ❌ **否决**：`brakeVh 2.5→1.0`（让 BRAKE 多刹一点以减小残余漂移）——桩里 BRAKE 6.2→**9.0 s**（撞上限）、停点再远 **4.8 m**、RETURN 反而变慢 ⇒ 保持 2.5。
+  ⇒ **`flip dock` 剖面收官**（v35/v36/v37 连续三次 PASS，末端 err 0.0）。
+★ **用户对手感的裁定（2026-11-19 12:37，必须执行）**：**"在点位上方停住 + 上下晃 + 平移过去"不可接受**，要求**平滑连续下降到点位**。
+  实测（v37，RETURN 164 行）：h 在 **1.96~3.04 m 卡了 3.6 s**，`vy` **−2.7~+1.46（6 次换向）**，同时横向平移 posErr 8.8→1.5。
+  ⇒ **两个成因（记死）**：
+  ① **固定悬停高度**对齐门 `hTgt = capH + apClear`（v33 设计）；
+  ② **√ 剖面在 dh 小时太凶**：`apVySqrtA 3.0` ⇒ dh=0.5 m 就命令 **1.7 m/s** ⇒ 悬停必然上下荡。**连续下降时无害，一旦"停住"就振荡**。
+  ⇒ 待实施（v38）：`hTgt = capH + apClearK·perr`（`apClearK≈0.35`）+ 小 dh 改线性/降 `apVySqrtA`；**验收：RETURN 期间 h 单调下降，不允许 h 恒定 ≥1 s 的平台段**。
+★ **合臂/抓取时序（`catch.lua` v1.4，2026-11-19 起连接器提前通电）**：复位臂 ±90 + conn 7/8/9=0 → **conn=15 提前（v1.4，等请求期间就有吸力）** → 等 `dock` 请求（或按键）
   → 合臂 0 **@2rpm**（伺服参考 ~5.3 s；16 rpm 太快，用户裁定）+ conn=15（一个 parallel 块）
   → 用 **`|getTargetAngle()| ≤ 0.5°`** 判到位（`getRotationSpeed()` 是配置转速常量，停着也 2.00，不能当判据）
   → 回 `clamped`（**每 0.1 s 重试 15 s**：rednet 消息不排队 + 发/收周期拍频）→ 火箭在保持里 **0.25 s 控制 + 0.5 s 收信**
@@ -160,7 +218,9 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | 21 | `DIRCMD = nil` 以为能把锥角打直 | `commitTable()` 收到 `dx=nil` **不写 setDirection** ⇒ 喷口保持上次偏转。RETURN 段 5.4° 锥角 ≈ **0.83 rad/s²**，而差动只有 0.29 ⇒ `dA` 满舵也压不住，机体 +8°→−30° 触发 COS_ABORT | §50（v26 事故） |
 | 22 | 平方根下降剖面写成 `max(dh,0)` | `dh=capH−h` 在目标**上方**是负数 ⇒ 目标下沉速度恒 0，机体 25 m 悬停 55 s 不降（TRIM 硬拽到 −0.8） | §50（v29 事故） |
 | 23 | 程序参数打错（`flip fock`）当小事 | 未知 MODE 落到 `run` 分支：**先脱落再 COS_ABORT**，306 m 白掉、零数据 | §50（v23 事故）；v24 起入口校验，非法**不脱落** |
-| 24 | 过冲量按线性直觉调 | 塔压在停止距离边缘 ⇒ `dockBrakeAMax` 2.6→1.5 让过冲 1.6→24.4 m | 一次只动 0.2，用 `有效a ≈ 2.7+1.0·dockBrakeAMax` 预估（§2） |
+| 24 | 过冲量按线性直觉调 | 塔压在停止距离边缘 ⇒ `dockBrakeAMax` 2.6→1.5 让过冲 1.6→24.4 m | 用 `有效a ≈ 2.7+1.0·dockBrakeAMax` + `s=vh²/(2a)` 预估（§2）；**一次 ≤0.3**（v31 例外：两模型一致 + 用户裁定，1.5→2.2，§51） |
+| 25 | 用"固定悬停高度 + 等待对齐"做末端（v33~v37 的对齐门） | 用户 2026-11-19 明确否决："在点位上方停住、上下晃悠、平移过去"。而且 `apVySqrtA 3.0` 让 dh=0.5 m 就命令 1.7 m/s ⇒ 一停就荡（实测 3.6 s 内 vy 换向 6 次） | 改**比例净空** `hTgt = capH + apClearK·perr`（斜着连续降），小 dh 用线性；验收＝h 单调下降、无 ≥1 s 平台（§59） |
+| 26 | 把 `brakeVh` 收紧来减小 RETURN 开头的残余漂移 | 桩扫描：2.5→1.0 让 BRAKE 6.2→**9.0 s**（撞 cap）、停点再远 **4.8 m**、RETURN 反而 16.3→17.9 s | 保持 `brakeVh = 2.5`；那 1.6 s 的残余漂移刹车属于"过冲→回程"拓扑的固有代价（§58） |
 
 ## 5. 程序清单与版本锚点（维护这张表，别在别处记）
 
@@ -175,8 +235,8 @@ theta   = atan(|aDes|/G) ≤ 18°；u_cmd = normalize(cosθ·ŷ + sinθ·âDes)
 | `att.lua` | 0 | ✅ 已跑并闭合（§20），力矩通道 | v2 |
 | `tilt.lua` | 0 | ✅ PASS（§21），姿态 PD ±6°/±9° | 待补 |
 | `guide.lua` | 0 | ✅ 已跑 PASS（v4，末端 0.42 m，§23.9） | v4 |
-| `flip.lua` | 0 | **v30 = `dock` 任务剖面（高空投放 y=306.5 → 自由落体 73.5 m → 翻转 h=140 → 反推 → 过冲 → 回夹持点 → 合臂握手）**：F4/ch0 已开、α 随气压、交班用惯性、锥角打直、√ 下降剖面、MODE 校验；**v22~v30 连续 9 轮真机 PASS**；`run`/`back` 保持 v15 行为 | v30 |
-| `catch.lua` | **1** | 平台合臂序列（`catch`）：复位臂 ±90 + conn ch7/8/9=0 → 等火箭 `dock` 请求（或按键）→ 合臂 0 @2rpm + conn=15（一个 parallel 块）→ **用 `getTargetAngle()` 判到位**（`getRotationSpeed` 返回的是配置转速常量，不可用）→ 回 `clamped`（**每 0.1 s** 重试 15 s：rednet 不排队 + 发/收周期拍频） | v1.3 |
+| `flip.lua` | 0 | **v30 = `dock` 任务剖面（高空投放 y=306.5 → 自由落体 73.5 m → 翻转 h=140 → 反推 → 过冲 → 回夹持点 → 合臂握手）**：F4/ch0 已开、α 随气压、交班用惯性、锥角打直、√ 下降剖面、MODE 校验；**v22~v30 连续 9 轮真机 PASS**；`run`/`back` 保持 v15 行为；**v31 = 2.2 PASS；v32~v34 末端撞；v35/v36/v37 连续 PASS（err 0.0）；但 v37 的末端"停住+上下晃"被用户否决 ⇒ 待做 v38（比例净空连续下降）** | v37 |
+| `catch.lua` | **1** | 平台合臂序列（`catch`）：复位臂 ±90 + conn ch7/8/9=0 → 等火箭 `dock` 请求（或按键）→ 合臂 0 @2rpm + conn=15（一个 parallel 块）→ **用 `getTargetAngle()` 判到位**（`getRotationSpeed` 返回的是配置转速常量，不可用）→ 回 `clamped`（**每 0.1 s** 重试 15 s：rednet 不排队 + 发/收周期拍频）**；v1.4：RESET 之后立即 `conn 7/8/9 = 15`（等请求期间平台连接器就通电，配合 flip v34 的 `PRECONN`）** | v1.4 |
 | `thruststress.lua` | 0 | 一次性测（v4）：**默认就断 ch5/ch6 脱落**（含 `setStrongPower(6,false)`）再测 REL/FULL/DPOS/DNEG/OFF（6.6 s，无需通信）；`measure` 只测不脱落、`cone` 追加锥角 4 朝向、`fixture` 才走 rednet；写 `/log/usts_<epoch>.csv` + `status_usts.txt` | v4 |
 | `dropall.lua` | 0 | 一次性脱落（v3）：`ch5`+`ch6` 输出清零（sh5=上方固定 connector、ch6=下方燃料 connector），单 parallel 块、写后回读；`dropall show` 只读打印 0..15 的 out/in/strong/device；写 `/log/status_drop.txt` | v3 |
 | `startup.lua` | 0 | **用户自写**极限测试（§28）：锁 `ch5/ch6` → 5 台 `setDirection(0,-1)` 满锥角 + `ch0 setInverted(true)` → 清 0 脱落 → 2 s 后满推力；证明锥角偏转 = 主翻转执行器（α≈2.5 rad/s²） | 用户版 |
