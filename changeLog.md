@@ -189,3 +189,8 @@
 
 - **Changed** the `getEngine` scope added above to a **single physics body**: `ss.getEngine()` now only looks at the one Sable sub-level the computer sits on (the constraint chain's other sub-levels no longer count). 
 
+
+# 1.2.6
+- Fixed high-altitude contrails still being emitted while an Advanced Thrust Nozzle is running with `setThrustScale(0)`. 
+
+- Widened the contrail altitude band from **Y 160 and above** to **Y 100–320**.

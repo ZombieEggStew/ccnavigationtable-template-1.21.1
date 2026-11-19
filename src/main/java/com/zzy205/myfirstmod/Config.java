@@ -123,15 +123,16 @@ public class Config {
             .define("contrailEnabled", true);
 
     public static final ModConfigSpec.IntValue CONTRAIL_LIFE_MIN = CLIENT_BUILDER
-            .comment("尾迹寿命下限（tick，20 tick = 1 秒）：适宜度为 0 时用这个值。默认: 360 (18 秒)")
+            .comment("尾迹寿命下限（tick，20 tick = 1 秒）：适宜度 s 越低越接近它。默认: 360 (18 秒)")
             .defineInRange("contrailLifeMin", 360, 20, 24000);
 
     public static final ModConfigSpec.IntValue CONTRAIL_LIFE_MAX = CLIENT_BUILDER
-            .comment("尾迹寿命上限（tick）：越冷越接近它。<b>性能主旋钮</b> —— 同屏粒子数 ≈ 发射密度 × 寿命。默认: 1200 (60 秒)")
+            .comment("尾迹寿命上限（tick）：适宜度越高越接近它（Y 180~240 为满）。<b>性能主旋钮</b> —— 同屏粒子数 ≈ 发射密度 × 寿命。默认: 1200 (60 秒)")
             .defineInRange("contrailLifeMax", 1200, 20, 24000);
 
     public static final ModConfigSpec.DoubleValue CONTRAIL_SPACING = CLIENT_BUILDER
-            .comment("尾迹发射间距（格）：机体每飞这么远吐一颗（温度不够冷时会按适宜度变稀，最多稀到 1/0.35）。<b>性能主旋钮</b>。默认: 1.2")
+            .comment("尾迹基础发射间距（格，适宜度 s=1 时）：实际间距 = 本值 ÷ s ÷ 有效油门。"
+                    + "适宜度是纯高度线性曲线（Y100 起、180~240 满、320 归零）⇒ 密度与高度严格线性。<b>性能主旋钮</b>。默认: 1.2")
             .defineInRange("contrailSpacing", 1.2, 0.1, 32.0);
 
     public static final ModConfigSpec.IntValue CONTRAIL_MAX_PER_TICK = CLIENT_BUILDER

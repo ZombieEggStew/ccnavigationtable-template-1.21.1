@@ -8,7 +8,7 @@
 
 ## → [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/) ←
 
-## → [code-map](https://github.com/zombieeggstew/ccnavigationtable-template-1.21.1/blob/main/memo/code-map.md) ←
+## → [code-map](https://github.com/zombieeggstew/ccnavigationtable-template-1.21.1/blob/main/memo/project/code-map.md) ←
 
 dsh :
 - AGENTS.md

@@ -2,7 +2,7 @@
 
 > 记录 controlDesk 桌顶「棋盘网格」自由放置系统的**设计与实现**，作为后续添加新模块（throttle / monitor_2 / 新控件）的参考。
 > **背景**：monitor_2 / throttle / joystick_2 原本共用桌体后缘上方插槽（`BACK_SLOT`，整宽一条、互斥安装）——该插槽已**整体移除**，改为在桌顶显示 6×14 的 1px 棋盘网格，模块自由放置（先做显示，放置逻辑逐步落地）。
-> 本文描述的状态：**joystick_2 已完整接入**（预览 → 放置 → 存储 → 渲染 → 拆除 → 占用阻挡；**输入检测 + 倾斜动画已接入**，照抄 joystick 模块、配置/轴值独立，见 `memo/control-desk-seat.md`）；**throttle 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，只能 0°/180° 旋转）；**monitor_2 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，预览框高 12，**不面向玩家**只随桌体 FACING 旋转）；**throttle_2 已接入放置/拆卸/静态渲染**（占地 14×6 → 唯一合法位 (8,12)，预览框高 6，安装朝向照抄 throttle 只能 0°/180°，模型旋转中心 (8,0,8)；输入检测/档位动画/配置 GUI/Lua 后续接入）。四者互斥已全部改为纯占地判定。
+> 本文描述的状态：**joystick_2 已完整接入**（预览 → 放置 → 存储 → 渲染 → 拆除 → 占用阻挡；**输入检测 + 倾斜动画已接入**，照抄 joystick 模块、配置/轴值独立，见 `memo/cockpit/control-desk-seat.md`）；**throttle 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，只能 0°/180° 旋转）；**monitor_2 已完整接入**（占地 14×6 全占桌顶网格 → 唯一合法位 (8,12)，预览框高 12，**不面向玩家**只随桌体 FACING 旋转）；**throttle_2 已接入放置/拆卸/静态渲染**（占地 14×6 → 唯一合法位 (8,12)，预览框高 6，安装朝向照抄 throttle 只能 0°/180°，模型旋转中心 (8,0,8)；输入检测/档位动画/配置 GUI/Lua 后续接入）。四者互斥已全部改为纯占地判定。
 
 ## 一句话
 
@@ -141,10 +141,10 @@ shift = ( (placeX-8)/16, (8-0)/16, (placeZ-8)/16 )   // 模型坐桌面 y8（MOD
 
 ## 当前状态与已知边界
 
-- ✅ joystick_2 完整接入：桌顶网格 + 4×9×4 预览盒 + 半透明实物 + 位置存储/渲染 + 4×4 占用阻挡 + 扳手拆除 + **输入检测/倾斜动画**（照抄 joystick，配置/轴值独立，枢轴 (8,1,8)，见 `memo/control-desk-seat.md`）
+- ✅ joystick_2 完整接入：桌顶网格 + 4×9×4 预览盒 + 半透明实物 + 位置存储/渲染 + 4×4 占用阻挡 + 扳手拆除 + **输入检测/倾斜动画**（照抄 joystick，配置/轴值独立，枢轴 (8,1,8)，见 `memo/cockpit/control-desk-seat.md`）
 - ✅ throttle 完整接入：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×6 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + 只能 0°/180° 旋转 + 14×6 占用阻挡 + 扳手拆除
 - 🔶 throttle_2 已接入放置/拆卸/静态渲染：占地 14×6 → 唯一合法位 (8,12) + 14×6×6 预览盒（固定位置）+ 半透明实物 + 位置存储/静态渲染（底座+手柄，安装朝向照抄 throttle 只能 0°/180°）+ 14×6 占用阻挡 + 扳手拆除；模型旋转中心 (8,0,8)（Blockbench 单位）；**输入检测 / 档位动画 / 配置 GUI / Lua 后续接入**
-- 🔶 throttle_2 输入 + 总距杆动画已接入（见 `memo/control-desk-seat.md`）：写死键 空格=上抬 / 左Ctrl=下拉（与 throttle 默认键相同但输入字段独立 `inputThrottle2Up/Down`，`SeatInputPayload` 扩到 13 字段）；数值 = BE `throttle2Angle`（0..+30°，服务端权威，`simulateThrottle2` 每 tick 线性累加 15°/tick、锁存不回正，`getUpdatePacket` 同步）；动画 = 手柄绕枢轴 (4,2,8) 旋转（`Throttle2Motion` 单一实现，Flywheel/BER 指数逼近）
+- 🔶 throttle_2 输入 + 总距杆动画已接入（见 `memo/cockpit/control-desk-seat.md`）：写死键 空格=上抬 / 左Ctrl=下拉（与 throttle 默认键相同但输入字段独立 `inputThrottle2Up/Down`，`SeatInputPayload` 扩到 13 字段）；数值 = BE `throttle2Angle`（0..+30°，服务端权威，`simulateThrottle2` 每 tick 线性累加 15°/tick、锁存不回正，`getUpdatePacket` 同步）；动画 = 手柄绕枢轴 (4,2,8) 旋转（`Throttle2Motion` 单一实现，Flywheel/BER 指数逼近）
 - ✅ monitor_2 完整接入（已进游戏验证）：占地 14×6 全占桌顶网格 → 唯一合法位 (8,12) + 14×6×12 预览盒（固定位置）+ 半透明实物 + 位置存储/渲染 + **不面向玩家**（仅随桌体 FACING）+ 14×6 占用阻挡 + 扳手拆除
 - ✅ **monitor_2 表面小 Monitor（完整接入：网格 + 放置 + 交互 + 渲染 + Lua；Lua 全链路已进游戏验证通过）**：
   - **网格**：10×8 格（屏幕面 12×10 内缩 1px，`MONITOR_2_GRID_WIDTH/HEIGHT`），**GridState 已参数化**（构造器传宽高，Monitor 保持 12×10 / monitor_2 用 10×8，`getWidth/getHeight`）

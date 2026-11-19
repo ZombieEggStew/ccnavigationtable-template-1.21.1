@@ -3,7 +3,7 @@
 > 状态（2026-08 末）：**推力 / 排气（含轻微重力）/ 高空尾迹 / 染料染色 / 配置化 / tooltip / 扳手拆除 全部完成，
 > `gradlew classes` 通过；斜喷穿墙已修复并经用户多角度实测确认**。
 >
-> **矢量喷管 `ccpe:advanced_thrust_nozzle`（加强版）已独立成 `memo/advanced-thrust-nozzle.md`**（已实测通过）；
+> **矢量喷管 `ccpe:advanced_thrust_nozzle`（加强版）已独立成 `memo/propulsion/advanced-thrust-nozzle.md`**（已实测通过）；
 > 本文只保留定向喷管本体，以及为子类加的那几个钩子（见 §8）。
 > **交接速览见 §13**（文件清单、玩家可见行为、参数在哪、待办）；**穿墙修复 + 重力的完整记录见 §14**，
 > **扳手快速拆除见 §15**。
@@ -13,7 +13,7 @@
 > 1. **推力**（§2.1）：`THRUST_PER_RPM = 1` ⇒ 1 RPM = 1 pN，气压 1.0 时 256 RPM = 256 pN/管，且随气压缩放；
 > 2. **排气 `ccpe:exhaust`**（§3.6）：世界坐标、扫掠碰撞 + 撞墙反弹 + 沿面滑行、越老越大/越慢/越淡；
 >    **轻微重力**由配置 `exhaustGravity`（默认 0.02）控制，设 0 = 失重；撞地分裂按用户要求关闭；
-> 3. **高空尾迹 `ccpe:contrail`**（§9）：按移动距离发射、峰值适宜度曲线（Y160 起 / 183~224 最浓 / 320 最稀）、
+> 3. **高空尾迹 `ccpe:contrail`**（§9）：按移动距离发射、**纯高度分段线性**适宜度（Y100 起线性变浓 / 180~240 满 / 240~320 线性归零）、
 >    匀速直线飘荡（速度 = 总飘荡距离 ÷ 寿命，§9.10）、无碰撞无重力、9 参数 `addAlwaysVisibleParticle` 远处可见；
 > 4. **染料染色**（§10）：手持染料右键喷口 ⇒ 只染**尾迹**粒子，护目镜 tooltip 显示当前染色；
 > 5. **配置 + tooltip**（§11、§12）：17 个参数进 `config/ccpe-client.toml`（改完即时生效）；物品 tooltip 走 Create `ItemDescription`；
@@ -25,7 +25,7 @@
 >
 > **仍待进游戏确认**（其余已由用户实测确认）：配置**界面**的标题/说明文案、物品 tooltip 展开、
 > "潜行空手清除染色"已移除、**扳手潜行右键拆除 / 普通右键不旋转**（§15.3）、**进气粒子观感**（§16.7）。
-> 上游背景见 `memo/flip-autopilot.md`（火箭方案作废 ⇒ 自研喷管）；相关 `memo/my_sensor_system.md`、`memo/api-code-map.md`。
+> 上游背景见 `memo/flight/flip-autopilot.md`（火箭方案作废 ⇒ 自研喷管）；相关 `memo/peripherals/my_sensor_system.md`、`memo/project/api-code-map.md`。
 
 ## 0. 需求与决策链（用户定稿）
 
@@ -36,7 +36,7 @@
 | 强度 | **1 RPM = 1 pN**（`THRUST_PER_RPM = 1`）⇒ 气压 1.0 时 256 RPM 单管 **256 pN**。用户第三次定稿，图公式简单；初版 800 pN 实测"高达 750 多"过猛，200 pN 偏软 |
 | 方块名 | `ccpe:thrust_nozzle` |
 | mixin | **不需要**（见 §1） |
-| 尾迹高度窗口 | **Y 160~320**，Y<160 完全无尾迹；实际做成**峰值曲线**（Y≈183~224 最浓，往上变稀），见 §9.8 |
+| 尾迹高度窗口 | **Y 100~320**（2026-11 拓宽）：Y≤100 与 Y≥320 完全没有；100→180 密度线性增大、180~240 满、240→320 密度线性减少（纯高度模型，不再走温度），见 §9 |
 | 尾迹发射 | **按移动距离**发射（悬停不动 ⇒ 零发射），见 §9.3 |
 | 尾迹飘荡 | **匀速直线**：速度 = 总飘荡距离 ÷ 寿命，方向随机；云层以上 ×1、越低越散（模拟对流层湍流），见 §9.10 |
 | 湿度 | **不计算**，全部退化为高度/温度函数 |
@@ -171,7 +171,7 @@ pressure = DimensionPhysicsData.getAirPressure(level,
 - ⇒ **实用升限**（估算，4 管满载）：**y ≈ 273**（800 pN 版 ≈305、200 pN 版 ≈210）。
 - ⇒ 悬停油门变成高度的函数：**43% 只在海平面成立**，y≈163 时 ≈65%、y≈213 时 ≈79%、y≈263 时 ≈96%，
   y≳273 直接失去悬停能力。`flip-autopilot.md` 里按 14% 标定的控制律增益/死区**必须按高度重标**，
-  或者让脚本读 `sensor` 的气压做前馈（`SensorSystemAPI` 已暴露气压，见 `memo/my_sensor_system.md`）。
+  或者让脚本读 `sensor` 的气压做前馈（`SensorSystemAPI` 已暴露气压，见 `memo/peripherals/my_sensor_system.md`）。
 - 左右差动（各 2 管、r=2 m、I≈160 kg·m²）：**单边满速** ⇒ τ = 2×256×2 = 1024 N·m ⇒ α_roll ≈ **6.4 rad/s²
   —— 刚好压在 `flip-autopilot.md` 的翻滚预算 6.4 线上**（余量为 0，姿态机动的偏差修正会很紧）；
   想留余量就**双边反向差动**（一侧 +256、另一侧 −256）：τ = (512+512)×2 = 2048 N·m ⇒ α_roll ≈ **12.8 rad/s²**。
@@ -660,7 +660,7 @@ protected void setLocationFromBoundingbox() {
 ## 8. 矢量喷管（`ccpe:advanced_thrust_nozzle`）已独立成文档
 
 矢量喷管（加强版：可倾斜喷口 + 四活塞随动 + 物理体频道 + CC:T 外设）的全部记录见
-**`memo/advanced-thrust-nozzle.md`**，不在本文维护；本文只保留两个方块共用、以及为它加的钩子。
+**`memo/propulsion/advanced-thrust-nozzle.md`**，不在本文维护；本文只保留两个方块共用、以及为它加的钩子。
 
 关系：`AdvancedThrustNozzleBlock extends ThrustNozzleBlock`、`AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity`
 —— 推力 / 气压 / 排气·进气·尾迹粒子 / 遮挡射线 / 染料 / 扳手**全部继承本文的实现**。
@@ -672,8 +672,66 @@ protected void setLocationFromBoundingbox() {
 | `ThrustNozzleBlockEntity#(BlockEntityType, BlockPos, BlockState)` 构造器 | — | 子类注册成自己的 BE 类型 |
 | `ThrustNozzleBlockEntity#nozzleAxis(BlockState)` | `FACING` 法线 | 推力（`sable$physicsTick` 冲量）与**全部粒子链路**（喷口位置 / 粒子基向量 / 遮挡射线 / 进气漏斗 / 尾迹锚点）的唯一方向来源；矢量喷管覆盖它返回倾斜轴 ⇒ 一处改、全链路生效 |
 | `ThrustNozzleBlockEntity#thrustScale()` | `1.0` | 乘在「转速 × 气压」上的额外出力系数（矢量喷管的 Lua `setThrustScale`） |
+| `ThrustNozzleBlockEntity#particleIntensityScale()` | `1.0` | **粒子强度系数**：乘进「有效油门 = `\|转速\|/256` × 本系数」⇒ 排气数量/速度、进气漏斗长度、**尾迹发射密度**一起缩放，0 = 三种粒子全不出（2026-11 第六轮把尾迹也纳入，见 `advanced-thrust-nozzle.md` §16；尾迹寿命仍只由高度决定） |
 
 > ⚠️ **两种喷管的出力口径不同（2026-11 用户定稿）**：本文表格里的「1 RPM = 1 pN / 256 RPM = 256 pN」
 > 只针对**定向喷管** `ccpe:thrust_nozzle`；矢量喷管在 `thrustScale()` 里还乘了
 > `THRUST_OUTPUT_MULTIPLIER = 2.0` ⇒ **2 pN/RPM（256 RPM = 512 pN）**。
-> 同机混装时"同转速不同推力"是预期差异，详见 `memo/advanced-thrust-nozzle.md` §6.1 / §8。
+> 同机混装时"同转速不同推力"是预期差异，详见 `memo/propulsion/advanced-thrust-nozzle.md` §6.1 / §8。
+
+## 9. 高空尾迹：适宜度曲线（2026-11 改为纯高度线性）
+
+### 9.1 用户定稿
+
+> 「拓宽现在尾迹粒子出现的高度区间；改为高度 100 到 180 密度线性增大，240 到 320 密度线性减少。」
+
+曲线从「温度模型 + smoothstep + Y160 硬门」改成**纯高度分段线性**：
+
+| Y | 适宜度 s | 含义 |
+|---|---|---|
+| ≤ 100 | 0 | 完全不出（含 Y ≥ 320） |
+| 100 → 180 | (Y−100)/80 | 密度线性增大（100 处 0% ⇒ 180 处 100%） |
+| 180 → 240 | 1 | 峰带（60 格宽，主世界云层 200 正好居中） |
+| 240 → 320 | (320−Y)/80 | 密度线性减少（320 处归零） |
+
+代码：`ThrustNozzleBlockEntity#contrailSuitability(double y)` + 四个常量
+`TRAIL_Y_RISE_START(100)` / `TRAIL_Y_FULL(180)` / `TRAIL_Y_FADE_START(240)` / `TRAIL_Y_FADE_END(320)`。
+
+**被取代的旧实现**（全部删除，别再翻回来）：`TRAIL_T_START(10°C)` / `TRAIL_T_FULL(2.5°C)` /
+`TRAIL_T_FADE_START(−8°C)` / `TRAIL_T_FADE_END(−40°C)` / `TRAIL_S_CEILING(0.15)` / `TRAIL_Y_MIN(160)`
++ `smoothstep01`，温度取自 `EngineCoreBlockEntity.ambientTempAt`。`smoothstep01` 一并删除（避免死代码）；
+`ambientTempAt` 的 javadoc 已注明「尾迹不再用它」⇒ **以后改 `T_AMB_*` 不会再移动尾迹带**。
+
+### 9.2 「密度线性」的两个落地条件（缺一个就不是线性）
+
+1. **间距公式里不能给 s 加下限**。旧版有 `TRAIL_SPACING_S_FLOOR = 0.35`（"不够冷不该靠抽走粒子表达"），
+   它会把 100~128 格那段压成台阶、视觉上是"到点才突然出现"。现在改成
+   `spacing = trailSpacing() / max(s, 1e-4) / max(有效油门, 1e-3)` ⇒ 每格粒子数与 s 严格成正比。
+   代价：低空（s 小）确实会"很稀"，这是用户要的线性，不再是"断线"。
+2. **寿命也按同一条 s 插值**（`lifeMin 360 → lifeMax 1200`），峰带最耐久。
+   这一条不改口径：出力小只缩密度、不缩寿命（§16 的定稿），高度则同时影响密度与寿命
+   （低空本来就该又稀又短命）。
+
+### 9.3 顺带改动
+
+- `trailTurbulence` 的放大区间下限从 `TRAIL_Y_MIN(160)` 挪到 `TRAIL_Y_RISE_START(100)`
+  ⇒ 100 格处飘荡距离 ×2.5、200 格及以上 ×1.0（低空尾迹更蓬松这条语义不变）。
+- `Config` 的 `contrailLifeMin/Max`、`contrailSpacing` 注释同步改成"适宜度按高度线性"。
+- 末地/地狱的说明也改了：现在末地地形基本 Y<100 ⇒ 天然没有尾迹，`CONTRAIL_OVERWORLD_ONLY` 保留作保险。
+
+### 9.4 性能影响（同屏粒子数 ≈ 发射密度 × 寿命）
+
+- 峰值带（180~240）与旧版（183~224 满、寿命 60 s）基本相同 ⇒ **主负载不变**；
+- 新增的是 **100~160 的低空尾迹**（旧版完全没有）：160 处 s=0.75（旧版 0.58）、150 处 s=0.625，
+  寿命也按 s 缩（≈44 s）⇒ 比旧版 160 附近略多，属于用户明确要的区间；
+- 240~320 段旧版是 0.15 残余、现在线性归零 ⇒ 高段反而更少。
+- 若实测掉帧：先调 `contrailSpacing`（性能主旋钮）或 `contrailMaxLive`，别动曲线形状。
+
+### 9.5 验证
+
+`./gradlew.bat classes` ✅ 通过。**待用户实测**：
+① Y≈110 开始有极稀的尾迹、Y≈150 明显、Y≈180 起满密度；
+② Y≈200 最浓；
+③ Y≈280 明显变稀、Y≈315 只剩一点点、Y≈320 以上完全消失；
+④ 与旧版相比"160 以下不再是一刀切"。
+

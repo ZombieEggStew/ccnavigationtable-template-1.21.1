@@ -16,7 +16,7 @@
 | 客户端渲染 | `clientAngleDiff` 指数追赶 → 末端爬行 | **修复**：服务端角度直接同步 + 帧间插值 → 无爬行 |
 | plate 方块 | 无 | 无（contraption 实体不需要连接点，比 aero_bearing 少一套 plate） |
 
-对比 `aero_bearing`（`memo/my_bearing.md`）：aero_bearing 走 **Sable 物理**（RotaryConstraint PD 伺服驱动从动物理体，动力学、有惯性、气动会反馈）；servo_bearing 走 **Create contraption 实体**（运动学、角度刚性、无惯性）。两者互补：aero_bearing 适合「物理舵面/旋翼」，servo_bearing 适合「精确角度控制」。
+对比 `aero_bearing`（`memo/peripherals/my_bearing.md`）：aero_bearing 走 **Sable 物理**（RotaryConstraint PD 伺服驱动从动物理体，动力学、有惯性、气动会反馈）；servo_bearing 走 **Create contraption 实体**（运动学、角度刚性、无惯性）。两者互补：aero_bearing 适合「物理舵面/旋翼」，servo_bearing 适合「精确角度控制」。
 
 ## 总体架构
 

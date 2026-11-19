@@ -206,7 +206,7 @@ flowchart LR
 | 文件 | 改动 |
 |---|---|
 | `block/ControlDeskBlockEntity.java` | `loadAdditional` 末尾（服务端 + level 就绪时）立即 `revalidateChain()` |
-| `block/AdvancedThrustNozzleBlockEntity.java` | `loadAdditional` 末尾立即 `registerChannel()`；**另外新实现 `PartialSafeNBT.writeSafe`**（原来根本没写，所以蓝图里喷管一个字段都没有 ⇒ 频道/偏转/出力全丢，见 `memo/advanced-thrust-nozzle.md` §5.4/§8） |
+| `block/AdvancedThrustNozzleBlockEntity.java` | `loadAdditional` 末尾立即 `registerChannel()`；**另外新实现 `PartialSafeNBT.writeSafe`**（原来根本没写，所以蓝图里喷管一个字段都没有 ⇒ 频道/偏转/出力全丢，见 `memo/propulsion/advanced-thrust-nozzle.md` §5.4/§8） |
 
 ### 11.4 审计过、**故意不改**的点
 
