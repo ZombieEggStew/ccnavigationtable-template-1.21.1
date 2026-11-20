@@ -1,7 +1,7 @@
-# CCPE — CC 外设扩展器
+# CCPE — 飞行器系统
 
 !!! info "欢迎"
-    CCPE (CC Peripheral Extender) 是一个为 Minecraft NeoForge 平台设计的模组，专为 Create: Aeronautics 和 ComputerCraft: Tweaked 用户提供强大的无线外设控制能力。
+    CCPE（Aircraft Systems / 飞行器系统）是为 Create: Aeronautics 与 ComputerCraft: Tweaked 打造的 NeoForge 模组：传感器、飞行计算机、执行器与引擎，把整架飞行器交到 Lua 手里。
 
     **零 Mixin** — 本模组完全未使用 Mixin，因此大概率不会与其他模组产生兼容性问题。
 

@@ -11,7 +11,7 @@
 !!! tip "Note"
     Required mods:
 
-    - CC Peripheral Extender (this mod)
+    - CCPE — Aircraft Systems (this mod)
     - CC:Tweaked
     - Create
     - Sable

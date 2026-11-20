@@ -1,5 +1,5 @@
 {
-  "itemGroup.ccpe.my_mod_tab": "电脑外设扩展",
+  "itemGroup.ccpe.my_mod_tab": "CCPE 飞行器系统",
 
   "block.ccpe.micro_peripheral_extender": "微型外设扩展器",
   "block.ccpe.short_range_linker": "短程信号链接器",
@@ -275,9 +275,9 @@
   "gui.ccpe.load_mode.chunk.desc": "强制加载所在区块",
   "gui.ccpe.load_mode.physics.desc": "Sable 物理结构防卸载",
 
-  "ccpe.configuration.title": "CC 外设扩展 设置",
-  "ccpe.configuration.section.ccpe.common.toml": "CC 外设扩展 设置",
-  "ccpe.configuration.section.ccpe.common.toml.title": "CC 外设扩展 设置",
+  "ccpe.configuration.title": "CCPE — 飞行器系统 设置",
+  "ccpe.configuration.section.ccpe.common.toml": "CCPE — 飞行器系统 设置",
+  "ccpe.configuration.section.ccpe.common.toml.title": "CCPE — 飞行器系统 设置",
 
   "ccpe.configuration.sensorNbtPollInterval": "NBT 刷新间隔",
   "ccpe.configuration.sensorNbtPollInterval.tooltip": "传感器 GUI 自动刷新间隔（tick，20=1秒）。设为 0 禁用自动刷新。",
@@ -391,7 +391,7 @@
   "ccpe.configuration.intakeAlphaMin.tooltip": "进气粒子被吸到口面时衰减到的最淡值。0 = 完全透明（像被吞掉）；大于 0 时口面会留一小片淡淡的粒子。默认: 0.0",
   "ccpe.configuration.engineSteamPuffVolume.tooltip": "蒸汽动力室活塞'噗嗤'音效音量（0.0-2.0，0 = 关闭该音效逻辑节省性能）。默认：0.1（Create STEAM 声，每活塞周期触发一次，频率随转速）。",
 
-  "ccpe.configuration.section.ccpe.client.toml": "CC 外设扩展 设置（客户端）",
-  "ccpe.configuration.section.ccpe.client.toml.title": "CC 外设扩展 设置（客户端）"
+  "ccpe.configuration.section.ccpe.client.toml": "CCPE — 飞行器系统 设置（客户端）",
+  "ccpe.configuration.section.ccpe.client.toml.title": "CCPE — 飞行器系统 设置（客户端）"
 
 }

@@ -201,3 +201,4 @@
 - Improved the [wiki](https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/examples/starship/)
 
 # 1.2.8
+- Renamed to **CCPE — Aircraft Systems** (formerly CC Peripheral Extender). The mod has outgrown "peripheral extender": it now covers the whole chain — sensors, flight computers, actuators and engines. The mod id (`ccpe`), block/item ids, NBT and every Lua API are unchanged, so existing worlds, blueprints and scripts keep working.

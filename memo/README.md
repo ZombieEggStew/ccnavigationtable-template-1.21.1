@@ -1,6 +1,6 @@
 # memo 索引（唯一目录入口）
 
-> 39 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
+> 40 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
 > 大文件（`flight/flip-autopilot.md` 320 KB、`flight/starship15-catch.md` 126 KB）**只许按关键词/§N 定向检索**，禁止整篇读。
 
 ## 按任务找文档（阅读顺序）
@@ -17,7 +17,7 @@
 | 动屏幕渲染 | `cockpit/record_screen_text.md`、`cockpit/record_screen_module.md` | `cockpit/screen-render-rework.md` |
 | 喷管出力/粒子/频道/GUI | `propulsion/thrust-nozzle.md`（母文档） | `propulsion/advanced-thrust-nozzle.md` |
 
-## project/ —— 项目元信息与入口（5）
+## project/ —— 项目元信息与入口（6）
 
 | 文件 | 内容 | 何时读 |
 |---|---|---|
@@ -26,8 +26,9 @@
 | `ATTENTION.md` | **踩坑与注意事项合集**：Sable 坐标、变换互逆、枢轴、GridState re-key、屏幕破坏性变更、引擎门控、INS `randomNudge` | 改任何代码前先核对对应模块小节 |
 | `neoforge-debugging.md` | F5 启动事实：`-Dfml.modFolders=ccnavigationtable%%D:/.../build/classes/java/main` + preLaunchTask | 调 VS Code 启动配置时 |
 | `FIX-ME.md` | 未处理问题便签：Monitor 两套同步机制（`SyncGridPayload` vs `sendBlockUpdated`）边界、`PeripheralExtenderScreen` 轮询写法建议 | 接手待办或排查同步问题时 |
+| `control-chain-latency.md` | **红石链 vs Lua 直控的延迟/周期/精度/扰动频率调研**：逐级代码证据、宣传口径、待实测清单；结论=同样 20 Hz，红石 4-bit 且多 1~2 tick，Lua 用 double 跑全状态反馈 | 做性能宣传、对比红石控制、设计控制环时 |
 
-## flight/ —— CC:T 飞行与自动驾驶（6）
+## flight/ —— CC:T 飞行与自动驾驶（7）
 
 | 文件 | 内容 | 何时读 |
 |---|---|---|
@@ -37,6 +38,7 @@
 | `starship15-catch.md` | **归档总账（126 KB）**：§11~§16 标定飞行、§19/§20 力矩通道、§21 姿态环、§22 世界几何、§23 横向环、§24~§41 完整 V、**§42~§49 任务链闭环、§50 v21~v30、§51 v31 双模型、§52 v31 真机、§53 v32 撞塔、§54 v33/v34 连接器、§55 v34 抬升 bug、§56 v35 PASS、§57 v36 PASS、§58 v37 PASS、§59 末端"停住+上下晃"被否决与 v38 计划** | 需要某结论的原始推导/日志证据时，grep §N 定向读 ≤80 行 |
 | `flip-autopilot.md` | **飞车总账（320 KB，按关键词检索）**：落地剖面 `A_REF/KV/FF_BAND`、四元数姿态环与 `COS_MIN` 门控、**写预算与 20 Hz 不变量**、吸附/翻滚/横向制导实测常量 | 写任何 CC:T 飞行/落地控制环时的通用经验库 |
 | `flight-recorder-and-handling.md` | `FlightDataRecorder` 用法（配置、CSV 列、`flight_logs/` 落盘）+ 飞机可操纵性旧任务（phugoid、气动模型事实） | 要用 `run/flight_logs/*.csv` 交叉验证时（原名 flight.md，已改名） |
+| `two-nozzle-vehicle.md` | **两喷口（摩托式）飞行器的设计基线 + 测量计划**：锥角=桨盘/油门=总距、`v=122·tanα` 与 p/m 无关（33 m/s 无俯角上限）、两喷口恒为秩 5 与"锁死轴"、`τ_roll=h·F_横+x·F_竖` 恒等式与 CG 偏置量化、抗干扰 ⇒ 3 发、`m2probe` 测量相位 | 做/飞这台新机、或判断"某轴能不能控"时 |
 
 ## propulsion/ —— 喷管与引擎（3）
 
