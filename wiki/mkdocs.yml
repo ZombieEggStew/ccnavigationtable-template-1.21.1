@@ -4,7 +4,7 @@
 # 默认语言为英文 (en)，中文 (zh) 为第二语言
 
 site_name: CCPE Wiki
-site_description: CCPE Wiki - Documentation for the CC Peripheral Extender mod
+site_description: CCPE Wiki - Documentation for the CCPE (Aircraft Systems) mod
 site_url: https://ZombieEggStew.github.io/ccnavigationtable-template-1.21.1/
 
 theme:
@@ -40,7 +40,7 @@ plugins:
         - locale: zh
           name: 中文
           build: true
-          site_description: CC Peripheral Extender (CC 外设扩展器) Mod 文档站点
+          site_description: CCPE（Aircraft Systems / 飞行器系统）Mod 文档站点
           nav_translations:
             Home: 首页
             Overview: 概述

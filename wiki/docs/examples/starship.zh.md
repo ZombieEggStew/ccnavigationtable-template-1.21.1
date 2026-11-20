@@ -12,7 +12,7 @@
 !!! tip "说明"
     需求模组：
 
-    - CC Peripheral Extender（本模组）
+    - CCPE — Aircraft Systems（飞行器系统，本模组）
     - CC:Tweaked
     - Create
     - Sable

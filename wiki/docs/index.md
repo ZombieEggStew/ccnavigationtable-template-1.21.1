@@ -1,7 +1,7 @@
-# CCPE — CC Peripheral Extender
+# CCPE — Aircraft Systems
 
 !!! info "Welcome"
-    CCPE (CC Peripheral Extender) is a mod for Minecraft NeoForge, built for Create: Aeronautics and ComputerCraft: Tweaked users, providing powerful wireless peripheral control.
+    CCPE (Aircraft Systems) is a NeoForge mod for Create: Aeronautics and ComputerCraft: Tweaked: sensors, flight computers, actuators and engines that put the whole aircraft under Lua control.
 
     **No Mixin** — This mod does not use Mixin, so it is unlikely to cause compatibility issues with other mods.
 

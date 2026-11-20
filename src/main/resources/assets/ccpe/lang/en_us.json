@@ -1,5 +1,5 @@
 {
-  "itemGroup.ccpe.my_mod_tab": "CC Peripheral Extender",
+  "itemGroup.ccpe.my_mod_tab": "CCPE — Aircraft Systems",
 
   "block.ccpe.micro_peripheral_extender": "Micro Peripheral Extender",
   "block.ccpe.short_range_linker": "Short-Range Signal Linker",
@@ -273,9 +273,9 @@
   "gui.ccpe.load_mode.chunk.desc": "Force-load the chunk",
   "gui.ccpe.load_mode.physics.desc": "Sable physics anti-unload",
 
-  "ccpe.configuration.title": "CC Peripheral Extender Config",
-  "ccpe.configuration.section.ccpe.common.toml": "CC Peripheral Extender Config",
-  "ccpe.configuration.section.ccpe.common.toml.title": "CC Peripheral Extender Config",
+  "ccpe.configuration.title": "CCPE — Aircraft Systems Config",
+  "ccpe.configuration.section.ccpe.common.toml": "CCPE — Aircraft Systems Config",
+  "ccpe.configuration.section.ccpe.common.toml.title": "CCPE — Aircraft Systems Config",
 
   "ccpe.configuration.sensorNbtPollInterval": "NBT Poll Interval",
   "ccpe.configuration.sensorNbtPollInterval.tooltip": "Sensor GUI auto-refresh interval in ticks (20 = 1 second). Set to 0 to disable.",
@@ -389,7 +389,7 @@
   "ccpe.configuration.intakeAlphaMin.tooltip": "Lower bound of intake opacity at the nozzle mouth. 0 = fades out completely (looks swallowed); above 0 leaves a faint puff on the mouth. Default: 0.0",
   "ccpe.configuration.engineSteamPuffVolume.tooltip": "Volume of the piston 'puff' sound on steam power chambers (0.0-2.0, 0 = disable this sound logic). Default: 0.1 (Create STEAM sound, once per piston cycle; rate tied to RPM).",
 
-  "ccpe.configuration.section.ccpe.client.toml": "CC Peripheral Extender Config (Client)",
-  "ccpe.configuration.section.ccpe.client.toml.title": "CC Peripheral Extender Config (Client)"
+  "ccpe.configuration.section.ccpe.client.toml": "CCPE — Aircraft Systems Config (Client)",
+  "ccpe.configuration.section.ccpe.client.toml.title": "CCPE — Aircraft Systems Config (Client)"
 
 }

@@ -5,7 +5,7 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 /**
  * 配置文件（ccpe-common.toml / ccpe-client.toml）。
  * <p>
- * 各配置项的标题与说明在 NeoForge 配置界面（Mods → CC Peripheral Extender → Config）中
+ * 各配置项的标题与说明在 NeoForge 配置界面（Mods → CCPE — Aircraft Systems → Config）中
  * 通过 lang 文件（assets/ccpe/lang/en_us.json / zh_cn.json）本地化：
  * <ul>
  * <li>标题 = {@code ccpe.configuration.<配置路径>}</li>

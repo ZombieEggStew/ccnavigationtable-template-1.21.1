@@ -1,4 +1,4 @@
-# NeoForge mod metadata for CC Peripheral Extender (CCPE)
+# NeoForge mod metadata for CCPE — Aircraft Systems
 # See: https://docs.neoforged.net/docs/gettingstarted/modfiles
 
 modLoader = "javafml"
@@ -9,14 +9,17 @@ license = "MIT"
 [[mods]]
 modId = "ccpe"
 version = "1.2.8-1.21.1"
-displayName = "CC Peripheral Extender"
+displayName = "CCPE — Aircraft Systems"
 authors = "ZombieEggStew"
 
 description = '''
-CCPE (CC Peripheral Extender) provides CC:Tweaked peripheral extensions:
-- Micro Peripheral Extender: exposes the NBT data of attached machines to Lua
-- Redstone Transceiver: wireless redstone through Create Redstone Link networks
-- Monitor: configurable control panel with buttons, toggle switches, knobs and screens
+CCPE turns Create: Aeronautics craft into computers you can fly.
+- Sensors: static port, pitot tube, INS, flight management computer (FMC/AIC), flight data recorder
+- Actuators: servo bearing, aero bearing, electronic transmission, vector thrust nozzle
+- Engines: modular engine core with combustion / steam chambers and cooling
+- Cockpit: control desk (joystick, throttle, pedal) and modular monitor
+- Connectivity: peripheral extender, redstone transceiver, short-range signal linker
+Everything is driven from ComputerCraft: Tweaked Lua at the 20 Hz tick.
 '''
 
 # =========================================================================
