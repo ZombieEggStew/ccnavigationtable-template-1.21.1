@@ -4,6 +4,7 @@
 > 车辆：8~10 kg 级、**前后各一台矢量喷口**（前后排）、**放弃滚转**、目标 **30 m/s 平飞** + 云层低气压可用、**抗干扰优先**。
 > 常数来源：`starship15-constants.md`（G=11、d=0.09、`F=N·256·2.05·p·scale`、锥角 15°、20 Hz 写预算、`spin` 角阻尼 τ≈145 s）。
 > 本文件只管这台新机；G/d/推力模型仍以 constants 为唯一真相源，不在此复制。
+> **写程序的规范（终端 ASCII、双通道日志、骨架、安全门、通用黑名单）先读 `flight-program-standard.md`。**
 
 ## 0. 一句话
 
@@ -174,6 +175,7 @@ wrench = ( Σ f_i , Σ r_i × f_i )        （r_i 相对 CG）
 
 ## 11. 参考
 
+- `flight-program-standard.md`：**全局程序规范 + 共享常数**（终端 ASCII、`say()` 双写、CSV/磁盘纪律、骨架、安全门、通用黑名单）
 - `starship15-constants.md`：G=11、d=0.09、推力模型、锥角 15°/160°/s、20 Hz、黑名单
 - `propulsion/advanced-thrust-nozzle.md`：喷口 Lua API（`setDirection/setThrustScale/setInverted`）、2 pN/RPM、mass 0.5
 - `propulsion/thrust-nozzle.md`：点力 + "减去质心求力臂"（力矩来源的实证）

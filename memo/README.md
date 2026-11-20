@@ -1,6 +1,6 @@
 # memo 索引（唯一目录入口）
 
-> 40 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
+> 41 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
 > 大文件（`flight/flip-autopilot.md` 320 KB、`flight/starship15-catch.md` 126 KB）**只许按关键词/§N 定向检索**，禁止整篇读。
 
 ## 按任务找文档（阅读顺序）
@@ -12,6 +12,7 @@
 | 改任何代码前核对已知坑 | `project/ATTENTION.md` | 功能文档里的「坑」小节 |
 | **星舰 CC:T 飞行迭代（每一轮）** | `flight/starship15-ROUND.md` + `flight/starship15-constants.md` | 需要原始推导时才 grep `flight/starship15-catch.md` §N |
 | 换人 / 换会话 / 大阶段收尾 | `flight/starship15-handover.md` | — |
+| **写/改任何 CC:T 飞行程序（新载具开工）** | `flight/flight-program-standard.md` | `flight/two-nozzle-vehicle.md` |
 | 写 CC:T 飞行控制环（通用经验） | `flight/flip-autopilot.md`（按关键词检索） | `propulsion/advanced-thrust-nozzle.md`、`peripherals/my_aero_sensor.md` |
 | 添加控制台控件 / 表面 Monitor 模块 | `cockpit/control-desk-grid-slot.md` | `cockpit/control-desk-seat.md` |
 | 动屏幕渲染 | `cockpit/record_screen_text.md`、`cockpit/record_screen_module.md` | `cockpit/screen-render-rework.md` |
@@ -28,10 +29,11 @@
 | `FIX-ME.md` | 未处理问题便签：Monitor 两套同步机制（`SyncGridPayload` vs `sendBlockUpdated`）边界、`PeripheralExtenderScreen` 轮询写法建议 | 接手待办或排查同步问题时 |
 | `control-chain-latency.md` | **红石链 vs Lua 直控的延迟/周期/精度/扰动频率调研**：逐级代码证据、宣传口径、待实测清单；结论=同样 20 Hz，红石 4-bit 且多 1~2 tick，Lua 用 double 跑全状态反馈 | 做性能宣传、对比红石控制、设计控制环时 |
 
-## flight/ —— CC:T 飞行与自动驾驶（7）
+## flight/ —— CC:T 飞行与自动驾驶（8）
 
 | 文件 | 内容 | 何时读 |
 |---|---|---|
+| `flight-program-standard.md` | **全局程序规范 + 共享常数快照**：终端只准 ASCII / ≤15 行 / TAG 约定、`say()` 双写 `status_*.txt` + `/log/*.csv`、主机侧读取路径与 digest 纪律、程序骨架、20 Hz 一写块、7 道安全门、通用黑名单、G=11/d=0.09/K_NOZ=524.8/锥角 15°/TWR 与平飞调度公式、新机必测清单、回报模板 | **写/改任何 CC:T 飞行或测量程序前**先读它；新载具开工只需它 + 本机设计文档 |
 | `starship15-ROUND.md` | **本轮工作卡（≤60 行，每轮整篇覆写）**：目标 / 只读清单 / 上轮结论 / 改动清单 / 回报模板 / 硬规矩 | 星舰每一轮开工的**唯一入口** |
 | `starship15-constants.md` | **可信常数 + 已否决假设黑名单（唯一真相源）**：G=11、推力模型、α=1.0/单位D、pairA→X(负)、20 Hz 写预算、三条控制律、**27 条黑名单**、程序版本表（`flip` **v44 定稿** / `catch` **v1.6 定稿**）、工具 | 写/改星舰控制环、判断某个数能不能信时 |
 | `starship15-handover.md` | **一页纸交接（2026-11-19 13:52 ★ 任务完成：夹取时序收官，`flip` v44 / `catch` v1.6，用户判定"完美"）**：现状表、可信常数摘要、四条控制律、程序清单、硬件频道、世界几何（投放点 (9.5,306.5,+66.9)）、工具与磁盘纪律、坑清单、未解决项、下一步计划 | 换人 / 换会话 / 大阶段收尾通读一次 |
