@@ -331,23 +331,7 @@ ss.getPeripheral(ch)           --> 外设或 nil（ch 0..15）
 
 ---
 
-## 9. 每轮回报模板（给用户 ≤ 20 行）
-
-```
-ROUND 2026-11-20  <craft>  <prog> vN
-READ    flight-program-standard.md / two-nozzle-vehicle.md / <file>
-CHANGE  1) <one number>: <old> -> <new>  (<why>)
-RUN     log <name>  rows=N
-        PHASE ... | VERDICT PASS|CHECK
-NEXT    1) <single next step>
-```
-
-- 给用户/agent 贴的是 `digest_csv.ps1` 的 **10~20 行摘要**，或 `status_*.txt` 的尾部；**不贴整篇 CSV / 整段日志**。
-- 每个数都要带单位与出处（`constants §1/§2` / `log/xxx.csv`）。
-
----
-
-## 10. 二喷口专用提醒（本机第一轮）
+## 9. 二喷口专用提醒（本机第一轮）
 
 - **只沿"两喷口连线"缺一个力矩轴** ⇒ 前后排布局缺滚转，**滚转是自由轴**：无被动稳定、角度与角速度都是记忆量。设计目标是**不激励它**（绝对对称、`h=0`、`x=0`），不是"控住它"。
 - `h ≠ 0` 只能换来**阻尼**，换不来"可控"：`tau_roll = h·F_lat + x·F_vert` 是恒等式，常值偏置 `x·mG` 配不平。9 kg 机上 5.5 cm 的 `x` 就够 90°/0.93 s。
@@ -358,7 +342,7 @@ NEXT    1) <single next step>
 
 ---
 
-## 11. 工具
+## 10. 工具
 
 | 工具 | 用法 | 作用 |
 |---|---|---|
@@ -373,7 +357,7 @@ NEXT    1) <single next step>
 
 ---
 
-## 12. 参考
+## 11. 参考
 
 - `memo/flight/starship15-constants.md`：共享常数原始出处 + 星舰专用数 + 27 条黑名单（§4）
 - `memo/flight/two-nozzle-vehicle.md`：二喷口设计基线（秩 5、`tau_roll` 恒等式、`m2probe` 相位）
