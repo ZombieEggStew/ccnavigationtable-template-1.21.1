@@ -1,6 +1,6 @@
 # memo 索引（唯一目录入口）
 
-> 41 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
+> 43 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
 > 大文件（`flight/flip-autopilot.md` 320 KB、`flight/starship15-catch.md` 126 KB）**只许按关键词/§N 定向检索**，禁止整篇读。
 
 ## 按任务找文档（阅读顺序）
@@ -11,6 +11,7 @@
 | 查外部依赖 API（Sable / Flywheel / Catnip / Create / CC:T / JEI） | `project/api-code-map.md` | 再进 `api/` 搜源码 |
 | 改任何代码前核对已知坑 | `project/ATTENTION.md` | 功能文档里的「坑」小节 |
 | **星舰 CC:T 飞行迭代（每一轮）** | `flight/starship15-ROUND.md` + `flight/starship15-constants.md` | 需要原始推导时才 grep `flight/starship15-catch.md` §N |
+| **两喷口飞行器迭代（每一轮）** | `flight/two-nozzle-ROUND.md` + `flight/two-nozzle-constants.md` | 原始数据/推导在 `flight/two-nozzle-evidence.md`；设计在 `flight/two-nozzle-vehicle.md` |
 | 换人 / 换会话 / 大阶段收尾 | `flight/starship15-handover.md` | — |
 | **写/改任何 CC:T 飞行程序（新载具开工）** | `flight/flight-program-standard.md` | `flight/two-nozzle-vehicle.md` |
 | 写 CC:T 飞行控制环（通用经验） | `flight/flip-autopilot.md`（按关键词检索） | `propulsion/advanced-thrust-nozzle.md`、`peripherals/my_aero_sensor.md` |
@@ -18,7 +19,7 @@
 | 动屏幕渲染 | `cockpit/record_screen_text.md`、`cockpit/record_screen_module.md` | `cockpit/screen-render-rework.md` |
 | 喷管出力/粒子/频道/GUI | `propulsion/thrust-nozzle.md`（母文档） | `propulsion/advanced-thrust-nozzle.md` |
 
-## project/ —— 项目元信息与入口（6）
+## project/ —— 项目元信息与入口（5）
 
 | 文件 | 内容 | 何时读 |
 |---|---|---|
@@ -27,9 +28,8 @@
 | `ATTENTION.md` | **踩坑与注意事项合集**：Sable 坐标、变换互逆、枢轴、GridState re-key、屏幕破坏性变更、引擎门控、INS `randomNudge` | 改任何代码前先核对对应模块小节 |
 | `neoforge-debugging.md` | F5 启动事实：`-Dfml.modFolders=ccnavigationtable%%D:/.../build/classes/java/main` + preLaunchTask | 调 VS Code 启动配置时 |
 | `FIX-ME.md` | 未处理问题便签：Monitor 两套同步机制（`SyncGridPayload` vs `sendBlockUpdated`）边界、`PeripheralExtenderScreen` 轮询写法建议 | 接手待办或排查同步问题时 |
-| `control-chain-latency.md` | **红石链 vs Lua 直控的延迟/周期/精度/扰动频率调研**：逐级代码证据、宣传口径、待实测清单；结论=同样 20 Hz，红石 4-bit 且多 1~2 tick，Lua 用 double 跑全状态反馈 | 做性能宣传、对比红石控制、设计控制环时 |
 
-## flight/ —— CC:T 飞行与自动驾驶（8）
+## flight/ —— CC:T 飞行与自动驾驶（11）
 
 | 文件 | 内容 | 何时读 |
 |---|---|---|
@@ -40,7 +40,10 @@
 | `starship15-catch.md` | **归档总账（126 KB）**：§11~§16 标定飞行、§19/§20 力矩通道、§21 姿态环、§22 世界几何、§23 横向环、§24~§41 完整 V、**§42~§49 任务链闭环、§50 v21~v30、§51 v31 双模型、§52 v31 真机、§53 v32 撞塔、§54 v33/v34 连接器、§55 v34 抬升 bug、§56 v35 PASS、§57 v36 PASS、§58 v37 PASS、§59 末端"停住+上下晃"被否决与 v38 计划** | 需要某结论的原始推导/日志证据时，grep §N 定向读 ≤80 行 |
 | `flip-autopilot.md` | **飞车总账（320 KB，按关键词检索）**：落地剖面 `A_REF/KV/FF_BAND`、四元数姿态环与 `COS_MIN` 门控、**写预算与 20 Hz 不变量**、吸附/翻滚/横向制导实测常量 | 写任何 CC:T 飞行/落地控制环时的通用经验库 |
 | `flight-recorder-and-handling.md` | `FlightDataRecorder` 用法（配置、CSV 列、`flight_logs/` 落盘）+ 飞机可操纵性旧任务（phugoid、气动模型事实） | 要用 `run/flight_logs/*.csv` 交叉验证时（原名 flight.md，已改名） |
-| `two-nozzle-vehicle.md` | **两喷口（摩托式）飞行器的设计基线 + 测量计划**：锥角=桨盘/油门=总距、`v=122·tanα` 与 p/m 无关（33 m/s 无俯角上限）、两喷口恒为秩 5 与"锁死轴"、`τ_roll=h·F_横+x·F_竖` 恒等式与 CG 偏置量化、抗干扰 ⇒ 3 发、`m2probe` 测量相位 | 做/飞这台新机、或判断"某轴能不能控"时 |
+| `two-nozzle-vehicle.md` | **两喷口（摩托式）飞行器的设计基线**：坐标系（X 左右 / Y 上下 / Z 前后，机头 −Z）、锥角=桨盘/油门=总距、`v=122·tanα` 与 p/m 无关（33 m/s 无俯角上限）、两喷口恒为秩 5 与"锁死轴"、`τ_roll=h·F_横+x·F_竖` 恒等式与 CG 偏置量化、抗干扰 ⇒ 3 发、**§12 2026-11-20 实测修订（推翻/确认清单）** | 做/飞这台新机、或判断"某轴能不能控"时 |
+| `two-nozzle-ROUND.md` | **两喷口本轮工作卡（≤60 行，每轮整篇覆写）**：状态、坐标系表、上轮结论、下一步（几何定稿 → 锥角映射 `m2cone` → 俯仰配平悬停）、只读清单、硬规矩 | 两喷口每一轮开工的**唯一入口** |
+| `two-nozzle-constants.md` | **两喷口可信常数 + 9 条黑名单（唯一真相源）**：m=11.25 kg / TWR 8.32 / u_hover 0.120、**AIC 一个就够（门控表）**、**20 Hz 与写预算的真相**、姿态偏置实测（0.05 rad/s² ≈ 4 mm）、程序版本表 | 写/改两喷口控制环、判断某个数能不能信时 |
+| `two-nozzle-evidence.md` | **两喷口归档总账**：只读探针三段输出（static/power/id）、两次动态 run 的 digest 与姿态时间线、恒值偏置量级推导、`α/D` 与 `b` 的矛盾、待查清单 | 需要原始数据/推导时定向读 |
 
 ## propulsion/ —— 喷管与引擎（3）
 
@@ -100,4 +103,4 @@
 2. 文件名**英文短横线、无空格、无中文**（中文路径在 PowerShell / 工具链里有编码坑）。日期型记录进 `archive/`。
 3. 单份超过 ~100 KB 的文档（`flip-autopilot.md`）只作检索用，禁止整篇读；`starship15-catch.md` 同理。
 4. 移动或改名后必须跑一次引用校验：`grep -rn "memo/" --include=*.md`，逐条确认目标文件存在（含 `.agents/skills/*/SKILL.md`）。
-5. 同一结论只在一处维护：手法/常数写 `starship15-constants.md`，进度写 `starship15-ROUND.md`，历史证据留 `starship15-catch.md`。
+5. 同一结论只在一处维护：手法/常数写各自的 `*-constants.md`（星舰 `starship15-constants.md`、两喷口 `two-nozzle-constants.md`），进度写各自的 `*-ROUND.md`，历史证据留各自的归档总账（`starship15-catch.md` / `two-nozzle-evidence.md`）。

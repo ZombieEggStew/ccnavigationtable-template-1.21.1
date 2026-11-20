@@ -15,7 +15,7 @@
 |---|---|---|
 | 1 | **本文** | 规范 + 共享常数 |
 | 2 | `memo/flight/two-nozzle-vehicle.md` | 本机设计/测量计划 |
-| 3 | 要抄代码时才读：`run/saves/starship/.../flip.lua` 对应段 | 双通道输出、`runPhase` 骨架、门控 |
+| 3 | 要抄代码时才读：`run/saves/starship/computercraft/computer/0/flip.lua` 对应段 | 双通道输出、`runPhase` 骨架、门控、**无 sleep 的写节拍器**（见 §6） |
 
 预算：**3 读 + 1 改 + 1 干跑**。禁止整篇读 `flip-autopilot.md`(320 KB) / `starship15-catch.md`(126 KB)，按 §N 定向 grep ≤80 行。
 
@@ -239,6 +239,20 @@ ss.getPeripheral(ch)           --> 外设或 nil（ch 0..15）
 
 - 每次 `pcall` 包住、返回值 `type` 校验；缺件要能降级（`WARN`）而不是崩。
 - 气压优先静压孔，缺件时 `getPressureFromAltitude(y)` 兜底，并在打印里标 `(port)` / `(alt)` / `ASSUMED`。
+- **门控真相（源码 `SensorSystemAPI`，2026-11-20 核对，覆盖早期蓝图）**：
+
+  | 读数 | 门控 |
+  |---|---|
+  | `getAngles` / `getOrientation` / `getAngleRates` / `getPosition` / `getBodyPosition` / **`getVelocity` / `getAngularVelocity`** | **ATTITUDE（INS）** |
+  | `getPhysicsMass` / `getPhysicsCenterOfMassRel` / `getPressureFromAltitude` / `getStress*` / 气动工具 | **FMC**（AIC 等同 FMC） |
+  | `getPressure` / `getAltitude` | 静压孔 |
+  | `getSpeed` / `getAirSpeed` | 皮托管 **+** 静压孔 |
+
+  `BodySensorRegistry` 第 90 行：`AicBlockEntity → [ATTITUDE, FMC]` ⇒ **一台 AIC 就够全部姿态/速度/质量读数**，只缺气压。
+  ⚠️ 不要因为 `ss.hasSpeedSensor()` 返回 `nil` 就断定速度读数是假的（被门控的方法返回**零**，与"静止"无法区分，才是真危险；
+  要区分"方法不存在 / 传感器缺失"，用 `type(ss.getX)=="function"` + 原始返回类型 + `getSensors()` 三连查）。
+- **单位**：`getAngularVelocity()` 返回 **rad/s**（不要再 `math.rad`）；`getAngleRates()` 返回 **deg/s**。
+  角速度分量是**机体系**，欧拉角名依赖机头朝向（游戏定义：`pitch` 绕局部 X、`roll` 绕局部 Z、yaw 零位 −Z）——记录时标注物理轴。
 
 ### 4.4 常数纪律
 
@@ -285,7 +299,19 @@ ss.getPeripheral(ch)           --> 外设或 nil（ch 0..15）
   顺序写 N 条 = 每条 ~1 tick ⇒ 推力不对称 ⇒ 机体微倾 ⇒ 侧漏漂移/翻车（黑名单 #4）。
 - `setDirection(x, y)` 是**摇杆语义**：方向 = 方位角、长度 = 锥角比例（0=直出、1=满 15°）。**打直必须显式 `setDirection(0, 0)`**；传 `nil` 不会重置，喷口保持上次偏转（黑名单 #21，真实事故）。
 - `setDirection` 的长度按单位圆钳位，不要传 >1 的合成值。
-- 20 Hz 靠 `sleep(0.05)`；每轮结尾统计 `LOOP cycles / worst dt / slow count` 并打印 —— 这是判断"外设调用是否超预算"的唯一手段。
+- **20 Hz 不靠"写完再 sleep"**（2026-11-20 两喷口实测推翻）：`setThrustScale` / `setDirection` / `setInverted` 都是
+  `@LuaFunction(mainThread = true)`（`AdvancedThrustNozzleBlockEntity` 711/739/806/843 行）⇒ **一个写块本身阻塞约 1 tick**。
+  写成 `apply(); sleep(0.05)` ⇒ 一份工作两个 tick ⇒ **实测 dt 中位 0.100 s、40/73 循环 >75 ms**。
+  两种正确写法：
+  ```lua
+  -- A（星舰 flip.lua 的做法）：完全不 sleep，让写块当节拍器
+  --   runPhase 里没有任何 sleep；每循环恰好 1 tick
+  -- B（推荐，无写的 tick 也能定拍）：只补足剩余预算
+  local spent = (os.epoch("utc") - msNow) / 1000
+  local rest  = CFG.DT - spent
+  if rest > 0.004 then sleep(rest) end
+  ```
+- 每轮结尾统计 `LOOP cycles / worst dt / slow count` 并打印 —— 这是判断"外设调用是否超预算"的唯一手段。
 - 四元数：`getOrientation()` 可能返回 `w = -1` 的镜像 ⇒ **入口统一归一 `w > 0`** 再进姿态环（黑名单 #9）。
 - 锥角与差动**分时**用，不要同刻并联：差动余量 `room = min(DMAX, u-0.02, 1-u)`，满油门 `u=1 ⇒ room=0`。
 
@@ -331,13 +357,16 @@ ss.getPeripheral(ch)           --> 外设或 nil（ch 0..15）
 
 ---
 
-## 9. 二喷口专用提醒（本机第一轮）
+## 9. 二喷口专用提醒（**2026-11-20 已实测第一轮**）
 
-- **只沿"两喷口连线"缺一个力矩轴** ⇒ 前后排布局缺滚转，**滚转是自由轴**：无被动稳定、角度与角速度都是记忆量。设计目标是**不激励它**（绝对对称、`h=0`、`x=0`），不是"控住它"。
-- `h ≠ 0` 只能换来**阻尼**，换不来"可控"：`tau_roll = h·F_lat + x·F_vert` 是恒等式，常值偏置 `x·mG` 配不平。9 kg 机上 5.5 cm 的 `x` 就够 90°/0.93 s。
-- 增益不要因为"权限比星舰大 10 倍"就放大：`KP/KD` 保持 ~3.0/2.5，**要改的是分母** `GAIN = alpha per unit D`（本机预计 10 量级，必须实测）。姿态环带宽 ≲ 1.5~2 rad/s（喷管滞后 0.15 s）。
-- 抗干扰三件套：**常值配平积分项**、**角速度反馈为主**、**转动惯量做大**（I 做到 4~8 而非 1.5）。
-- 测量顺序固定：`m2probe id` → `static` → `all`。**`DPOS/DNEG` 正负不对称 ⇒ 两台标定不同步**；`LIFT` 下沉 ⇒ 装反或需 `setInverted(true)` 重跑。
+- **只沿"两喷口连线"缺一个力矩轴** ⇒ 前后排布局缺滚转，**滚转是自由轴**：无被动稳定、角度与角速度都是记忆量。设计目标是**不激励它**，不是"控住它"。
+  ⚠️ 先按坐标系说明哪一轴是自由轴：**机头 −Z（X 左右 / Y 上下 / Z 前后）时，自由轴 = 绕 Z = 滚转**；游戏 `getAngles().pitch` 是绕 X、`.roll` 是绕 Z，别再拿欧拉角名猜物理轴。
+- `h ≠ 0` 只能换来**阻尼**，换不来"可控"：`tau_roll = h·F_lat + x·F_vert` 是恒等式，常值偏置 `x·mG` 配不平。
+- **开环测量的第一条硬约束（实测）**：恒值偏置必须配平，否则 5 s 内翻到 60°。测量程序要么 ≤3 s，要么带 PD + 积分。
+- 脉冲时长按**循环速率**定：10 Hz 下 0.3 s 只有 3 个采样（不可用）；20 Hz 且 ≥0.4 s 才有 8 个。脉冲用**对称三段** `+D·T, −D·2T, +D·T`，否则角度回不到零。
+- 增益不要因为"权限比星舰大"就放大；**要改的是分母** `GAIN = α per unit D`（必须实测，一次被基线淹没的数值就是废数）。
+- 抗干扰三件套：**常值配平积分项**、**角速度反馈为主**、**转动惯量做大**。实测：0.5% 推力差 / 4 mm 重心偏移 = 0.05 rad/s² 的恒值俯仰偏置。
+- 测量顺序：`m2probe id` → `static` → `power` → `m2dyn go`。细节常数见 `two-nozzle-constants.md`，进度见 `two-nozzle-ROUND.md`。
 - 二喷口"能悬停"和"能飞 30 m/s"是两个独立条件：前者 `TWR(p) > 1`，后者 `TWR(p) > 1/cos(15°)`。
 
 ---

@@ -1,6 +1,7 @@
 # My Sensor System（速度传感器 + 气压传感器 + `ccpe.sensor_system`）— 方案设计
 
-> 状态：**方案已定稿，未实现**。本文是实施蓝图，动手前先读参考源码（见文末「参考来源」）。
+> 状态：**已实现并在实机使用**（2026-11 两喷口机只用一台 AIC 就跑通了姿态/角速度/速度/质量读数）。
+> 本文保留最初蓝图 + 末尾的实施补充；**门控以 §「门控（存在性）」的核对表为准**（与蓝图原文有出入）。
 
 ## 需求
 
@@ -59,10 +60,20 @@ Lua 模块 `ccpe.sensor_system` **直接**获取所在物理体的物理信息�
 | 质量/质心/链质量 | `SableCompat.getMass / getCenterOfMass / getChainMass`（已有） | kg |
 | 气压 | `pressure = exp(-0.004 × (y − seaLevel))` | 参考 CreateAvionics：海平面 1.0，约每 250 格降 1/e；海平面下 clamp 最大 1.5；逻辑高度顶为 0；`seaLevel = level.getSeaLevel()` |
 
-门控（存在性）：
-- 速度类（`getVelocity/getSpeed/getVerticalSpeed/getAngularVelocity`）→ 所在物理体必须有**速度传感器**
-- 高度/气压类（`getAltitude/getPressure`）→ 必须有**气压传感器**
-- 其余（`isOnBody/getBodyId/getPosition/getOrientation/getMass/getCenterOfMass/getSensors/hasSpeedSensor/hasPressureSensor`）不门控
+门控（存在性）——**2026-11-20 按 `SensorSystemAPI` 源码核对后的实现真相**（覆盖下文蓝图里"速度类需速度传感器"的说法）：
+
+| 读数 | 门控 |
+|---|---|
+| `getAngles` / `getOrientation` / `getAngleRates` / `getPosition` / `getBodyPosition` / **`getVelocity` / `getAngularVelocity`** | **ATTITUDE（INS）** |
+| `getPhysicsMass` / `getPhysicsCenterOfMassRel` / `getPressureFromAltitude` / `getStress*` / 气动换算工具 | **FMC**（AIC 等同 FMC） |
+| `getPressure` / `getAltitude` | 静压孔（PRESSURE）；缺件 nil → 用高度模型兜底 |
+| `getSpeed` / `getAirSpeed` | 皮托管（SPEED）**+** 静压孔 |
+| `isOnBody` / `getBodyId` / `getSensors` / `has*Sensor` | 不门控 |
+
+`BodySensorRegistry` 第 90 行的登记：`AicBlockEntity → [ATTITUDE, FMC]`、`InsBlockEntity → [ATTITUDE]`、
+`StaticPortBlockEntity → [PRESSURE]`、`PitotTubeBlockEntity → [SPEED]`、`FmcBlockEntity → [FMC]`。
+⇒ **一台 AIC 就够姿态/角速度/速度/位置/质量全套读数**（实测 `SENS angles=table omega=table vel=table press=nil`），只缺气压。
+⚠️ 门控不满足时方法返回 **nil 或零**，"零"与"静止"无法区分 —— 探针要同时查 `type(ss.getX)=="function"`、原始返回类型和 `getSensors()` 才能定论。
 
 ## Lua API 设计（`ccpe.sensor_system`）
 
