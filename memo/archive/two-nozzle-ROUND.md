@@ -1,5 +1,7 @@
 # 两喷口飞行器 · 本轮工作卡（唯一开工入口）
 
+> **已归档（2026-11-21）**：机体已重建为矩形四角四喷口，现行计划/常数见 `memo/flight/four-nozzle-plan.md` / `four-nozzle-constants.md`。本文只作历史。
+
 > 用法：**每轮整篇覆写**；开工只读本卡 + `two-nozzle-constants.md`。
 > 原始数据/推导按 §N 查 `two-nozzle-evidence.md`（禁止整篇读）；设计推导在 `two-nozzle-vehicle.md`；
 > 换人/换会话先读 `two-nozzle-handover.md`。

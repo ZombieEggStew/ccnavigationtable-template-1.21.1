@@ -1,10 +1,10 @@
 # CC:T 飞行程序全局规范 + 共享常数（新载具开工基线）
 
-> 适用范围：本仓**所有** CC:T 飞行/测量程序 —— 星舰（`flip`/`catch`）、二喷口（`m2probe`/后续飞控）、以及以后每台新机。
+> 适用范围：本仓**所有** CC:T 飞行/测量程序 —— 星舰（`flip`/`catch`）、四喷口（`m4probe`/后续飞控）、以及以后每台新机。
 > 唯一真相源分工（别搞混，也别三处各写一份）：
 > - **本文** = 写程序的规范（终端/日志/骨架/参数/安全门）+ **共享物理常数快照**（§4）。新载具开工只读本文 + 本机设计文档。
 > - `starship15-constants.md` = 共享常数的**原始出处**（带 §N 实测证据）+ 星舰专用实测数（α=1.0/D、I=15.9、pairA→X…）+ 27 条黑名单全集。
-> - `two-nozzle-vehicle.md` = 二喷口本机的设计基线与测量计划（秩 5、滚转牺牲、`m2probe` 相位）。
+> - `four-nozzle-plan.md` = 四喷口本机的设计/测量计划（矩形四角、`getForcePoint` 分配、`m4probe` 相位）；两发旧文档在 `memo/archive/`。
 > 本文不复制星舰的机体系映射与增益推导；那些搬不过来。
 
 ---
@@ -14,7 +14,7 @@
 | 顺序 | 读什么 | 目的 |
 |---|---|---|
 | 1 | **本文** | 规范 + 共享常数 |
-| 2 | `memo/flight/two-nozzle-vehicle.md` | 本机设计/测量计划 |
+| 2 | `memo/flight/four-nozzle-plan.md` + `four-nozzle-constants.md` | 本机设计/测量计划 + 待填常数 |
 | 3 | 要抄代码时才读：`run/saves/starship/computercraft/computer/0/flip.lua` 对应段 | 双通道输出、`runPhase` 骨架、门控、**无 sleep 的写节拍器**（见 §6） |
 
 预算：**3 读 + 1 改 + 1 干跑**。禁止整篇读 `flip-autopilot.md`(320 KB) / `starship15-catch.md`(126 KB)，按 §N 定向 grep ≤80 行。
@@ -203,7 +203,7 @@ end
 | 锥角 slew | 打角速度 | 160（8/tick） | deg/s | constants §2 |
 | 出力斜坡 | `setThrustScale` | 0.25 /tick，0→1 用 4 tick | 无量纲 | constants §2 |
 | 控制周期 | `HZ` / `DT` | **20 Hz** / 0.050 | - | constants §1 |
-| 喷口质量 | `advanced_thrust_nozzle` | 0.5 | kg | two-nozzle §7 |
+| 喷口质量 | `advanced_thrust_nozzle` | 0.5 | kg | `memo/archive/two-nozzle-vehicle.md` §7 |
 | 喷管阶跃滞后 | 实测 | **0.15** | s | constants §2 |
 
 ### 4.2 由物理常数直接推出的调度公式（任何载具通用）
@@ -370,12 +370,14 @@ ss.getPeripheral(ch)           --> 外设或 nil（ch 0..15）
 
 ---
 
-## 9. 二喷口专用提醒（**2026-11-20 首轮 → 2026-11-21 实测更正**）
+## 9. 二喷口历史提醒（**已归档；四发现行见 `four-nozzle-plan.md`**）
 
-> ⚠️ **2026-11-21 更正**：下面「滚转是自由轴、只能阻尼不能控」的结论**只成立于 h=0**。实测 h=**1.32 格**，
-> 因此 **同向锥角 → 滚转（+2.0~3.5 rad/s²/单位）**、**反向锥角 → 偏航（+1.5）**、差动推力 → 俯仰（α/D=−31.7），
-> **三轴姿态全部可控**；搭配两点配平标定（`r*=0.9562`）偏置≈0。现行做法见 `two-nozzle-handover.md` §2。
-> 下面每条保留，用来理解「为什么当初那样设计」，**不要再照它放弃滚转**。
+> ⚠️ 机体已重建为**矩形四角四喷口**（2026-11-21），本节整体只作历史：两发时代的 `m / I / α / r*` 全部作废。
+> 四发的控制分配、`getForcePoint` 用法与 P0~P5 阶段见 `memo/flight/four-nozzle-plan.md`。
+>
+> 两发实测（2026-11-21）：h=**1.32 格**，因此 **同向锥角 → 滚转（+2.0~3.5 rad/s²/单位）**、**反向锥角 → 偏航（+1.5）**、
+> 差动推力 → 俯仰（α/D=−31.7），**三轴姿态全部可控**；搭配两点配平标定（`r*=0.9562`）偏置≈0。
+> 两发做法见 `memo/archive/two-nozzle-handover.md` §2。下面每条保留，用来理解「为什么当初那样设计」。
 
 - **只沿"两喷口连线"缺一个力矩轴** ⇒ 前后排布局缺滚转，**滚转是自由轴**：无被动稳定、角度与角速度都是记忆量。设计目标是**不激励它**，不是"控住它"。
   ⚠️ 先按坐标系说明哪一轴是自由轴：**机头 −Z（X 左右 / Y 上下 / Z 前后）时，自由轴 = 绕 Z = 滚转**；游戏 `getAngles().pitch` 是绕 X、`.roll` 是绕 Z，别再拿欧拉角名猜物理轴。
@@ -384,7 +386,7 @@ ss.getPeripheral(ch)           --> 外设或 nil（ch 0..15）
 - 脉冲时长按**循环速率**定：10 Hz 下 0.3 s 只有 3 个采样（不可用）；20 Hz 且 ≥0.4 s 才有 8 个。脉冲用**对称三段** `+D·T, −D·2T, +D·T`，否则角度回不到零。
 - 增益不要因为"权限比星舰大"就放大；**要改的是分母** `GAIN = α per unit D`（必须实测，一次被基线淹没的数值就是废数）。
 - 抗干扰三件套：**常值配平积分项**、**角速度反馈为主**、**转动惯量做大**。实测：0.5% 推力差 / 4 mm 重心偏移 = 0.05 rad/s² 的恒值俯仰偏置。
-- 测量顺序：`m2probe id` → `static` → `power` → `m2dyn go`。细节常数见 `two-nozzle-constants.md`，进度见 `two-nozzle-ROUND.md`。
+- 测量顺序（两发）：`m2probe id` → `static` → `power` → `m2dyn go`。两发细节常数见 `memo/archive/two-nozzle-constants.md`；四发看 `four-nozzle-plan.md`。
 - 二喷口"能悬停"和"能飞 30 m/s"是两个独立条件：前者 `TWR(p) > 1`，后者 `TWR(p) > 1/cos(15°)`。
 
 ---
@@ -397,7 +399,8 @@ ss.getPeripheral(ch)           --> 外设或 nil（ch 0..15）
 | 同上的记录仪用法 | `... -T0 12 -T1 20 -Win 0.5` | 大文件按时间片均值 |
 | `cc_logs_archive/lua_versions/computerN/` | `Copy-Item` | 旧版程序归档（不进电脑盘） |
 | `temp/` | 一次性脚本/复制出来的 CSV | 不污染 `tools/` 与仓库数据 |
-| `.tmp_luatest/harness.lua` | `lua54 harness.lua <程序> [tau] [相位] [stride] [参数] [y0] [belly-or-empty] [z0]` | 桩世界干跑（桩外设 + 桩物理 + 虚拟时钟）；**改完 Lua 必跑**。二喷口新机无桩时用 `temp/` 自建最小桩 |
+| `.tmp_luatest/harness.lua` | `lua54 harness.lua <程序> [tau] [相位] [stride] [参数] [y0] [belly-or-empty] [z0]` | 桩世界干跑（桩外设 + 桩物理 + 虚拟时钟）；**改完 Lua 必跑** |
+| `.tmp_luatest/m4_harness.lua` | `lua54 m4_harness.lua <程序> [参数...]` | **四喷口四角桩世界**（4 台喷口带 `getForcePoint`、AIC、引擎）；`m4probe` / 后续 `m4cal`·`m4hover` 的干跑桩 |
 
 - `tools/*.ps1` **正文必须纯 ASCII**（PS 5.1 按 ANSI 读无 BOM UTF-8，中文会吞掉后续代码行）。
 - 脚本输出 ≤30 行，用退出码区分成败，并打印 `NOFILE` / `EMPTY` / `NO DATA` 这类可判定原因。
@@ -407,7 +410,9 @@ ss.getPeripheral(ch)           --> 外设或 nil（ch 0..15）
 ## 11. 参考
 
 - `memo/flight/starship15-constants.md`：共享常数原始出处 + 星舰专用数 + 27 条黑名单（§4）
-- `memo/flight/two-nozzle-vehicle.md`：二喷口设计基线（秩 5、`tau_roll` 恒等式、`m2probe` 相位）
+- `memo/flight/four-nozzle-plan.md`：四喷口控制分配（`getForcePoint` → 力臂）+ P0~P5 测量阶段
+- `memo/flight/four-nozzle-constants.md`：四喷口可信常数与新增黑名单（唯一真相源，P0 前多为待填）
+- `memo/archive/two-nozzle-vehicle.md`：两喷口历史设计基线（秩 5、`tau_roll` 恒等式、`m2probe` 相位）
 - `memo/flight/flip-autopilot.md`：CC:T 飞行控制环通用经验（320 KB，**只按关键词检索**）
 - `memo/propulsion/advanced-thrust-nozzle.md`：喷管 Lua API（`setDirection` / `setThrustScale` / `setInverted`）、2 pN/RPM、`sable:mass = 0.5`
 - `memo/peripherals/my_sensor_system.md`：`ccpe.sensor_system` 门控与读数

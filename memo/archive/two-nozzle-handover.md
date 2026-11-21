@@ -1,5 +1,7 @@
 # 两喷口飞行器 · 交接页（换人 / 换会话先读这一页）
 
+> **已归档（2026-11-21）**：机体已重建为矩形四角四喷口，现行计划/常数见 `memo/flight/four-nozzle-plan.md` / `four-nozzle-constants.md`。本文只作历史；§7 的坑与 §4 的硬件事实仍值得读。
+
 > 2026-11-21 1.:45 收尾。真相源仍是 `two-nozzle-constants.md`（常数）与 `two-nozzle-ROUND.md`（进度）。
 > 本页只做「现状 + 怎么接着干 + 别踩什么」，不复制原始数据（那些在 `two-nozzle-evidence.md`）。
 

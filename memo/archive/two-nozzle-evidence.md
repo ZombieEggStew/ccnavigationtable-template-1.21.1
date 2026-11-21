@@ -1,5 +1,7 @@
 # 两喷口飞行器 · 实测证据与推导（归档总账）
 
+> **已归档（2026-11-21）**：机体已重建为矩形四角四喷口，现行计划/常数见 `memo/flight/four-nozzle-plan.md` / `four-nozzle-constants.md`。本文只作历史。
+
 > 本文件只放**原始证据与推导过程**；结论/常数一律在 `two-nozzle-constants.md`，进度在 `two-nozzle-ROUND.md`。
 > 数据来源：`run/saves/New World/computercraft/computer/1/log/`（`status_*` 与 `m2dyn_*.csv`）。
 > 纪律：原始 CSV 不进对话，只贴 `tools/digest_csv.ps1` 的 ≤30 行摘要或定向抽样。

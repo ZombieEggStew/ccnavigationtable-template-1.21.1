@@ -1,6 +1,6 @@
 # memo 索引（唯一目录入口）
 
-> 45 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
+> 47 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
 > 大文件（`flight/flip-autopilot.md` 320 KB、`flight/starship15-catch.md` 126 KB）**只许按关键词/§N 定向检索**，禁止整篇读。
 
 ## 按任务找文档（阅读顺序）
@@ -11,9 +11,9 @@
 | 查外部依赖 API（Sable / Flywheel / Catnip / Create / CC:T / JEI） | `project/api-code-map.md` | 再进 `api/` 搜源码 |
 | 改任何代码前核对已知坑 | `project/ATTENTION.md` | 功能文档里的「坑」小节 |
 | **星舰 CC:T 飞行迭代（每一轮）** | `flight/starship15-ROUND.md` + `flight/starship15-constants.md` | 需要原始推导时才 grep `flight/starship15-catch.md` §N |
-| **两喷口飞行器迭代（每一轮）** | `flight/two-nozzle-ROUND.md` + `flight/two-nozzle-constants.md` | 原始数据/推导在 `flight/two-nozzle-evidence.md`；设计在 `flight/two-nozzle-vehicle.md` |
-| 换人 / 换会话 / 大阶段收尾 | `flight/starship15-handover.md`（星舰）、`flight/two-nozzle-handover.md`（两喷口） | — |
-| **写/改任何 CC:T 飞行程序（新载具开工）** | `flight/flight-program-standard.md` | `flight/two-nozzle-vehicle.md` |
+| **四喷口飞行器迭代（每一轮）** | `flight/four-nozzle-plan.md` + `flight/four-nozzle-constants.md` | 两发时代的数据/推导在 `archive/two-nozzle-*.md`（只作历史，不当本机常数） |
+| 换人 / 换会话 / 大阶段收尾 | `flight/starship15-handover.md`（星舰）、`archive/two-nozzle-handover.md`（两喷口历史） | — |
+| **写/改任何 CC:T 飞行程序（新载具开工）** | `flight/flight-program-standard.md` | `flight/four-nozzle-plan.md` |
 | 写 CC:T 飞行控制环（通用经验） | `flight/flip-autopilot.md`（按关键词检索） | `propulsion/advanced-thrust-nozzle.md`、`peripherals/my_aero_sensor.md` |
 | 添加控制台控件 / 表面 Monitor 模块 | `cockpit/control-desk-grid-slot.md` | `cockpit/control-desk-seat.md` |
 | 动屏幕渲染 | `cockpit/record_screen_text.md`、`cockpit/record_screen_module.md` | `cockpit/screen-render-rework.md` |
@@ -29,7 +29,7 @@
 | `neoforge-debugging.md` | F5 启动事实：`-Dfml.modFolders=ccnavigationtable%%D:/.../build/classes/java/main` + preLaunchTask | 调 VS Code 启动配置时 |
 | `FIX-ME.md` | 未处理问题便签：Monitor 两套同步机制（`SyncGridPayload` vs `sendBlockUpdated`）边界、`PeripheralExtenderScreen` 轮询写法建议 | 接手待办或排查同步问题时 |
 
-## flight/ —— CC:T 飞行与自动驾驶（12）
+## flight/ —— CC:T 飞行与自动驾驶（9）
 
 | 文件 | 内容 | 何时读 |
 |---|---|---|
@@ -40,11 +40,8 @@
 | `starship15-catch.md` | **归档总账（126 KB）**：§11~§16 标定飞行、§19/§20 力矩通道、§21 姿态环、§22 世界几何、§23 横向环、§24~§41 完整 V、**§42~§49 任务链闭环、§50 v21~v30、§51 v31 双模型、§52 v31 真机、§53 v32 撞塔、§54 v33/v34 连接器、§55 v34 抬升 bug、§56 v35 PASS、§57 v36 PASS、§58 v37 PASS、§59 末端"停住+上下晃"被否决与 v38 计划** | 需要某结论的原始推导/日志证据时，grep §N 定向读 ≤80 行 |
 | `flip-autopilot.md` | **飞车总账（320 KB，按关键词检索）**：落地剖面 `A_REF/KV/FF_BAND`、四元数姿态环与 `COS_MIN` 门控、**写预算与 20 Hz 不变量**、吸附/翻滚/横向制导实测常量 | 写任何 CC:T 飞行/落地控制环时的通用经验库 |
 | `flight-recorder-and-handling.md` | `FlightDataRecorder` 用法（配置、CSV 列、`flight_logs/` 落盘）+ 飞机可操纵性旧任务（phugoid、气动模型事实） | 要用 `run/flight_logs/*.csv` 交叉验证时（原名 flight.md，已改名） |
-| `two-nozzle-vehicle.md` | **两喷口（摩托式）飞行器的设计基线**：坐标系（X 左右 / Y 上下 / Z 前后，机头 −Z）、锥角=桨盘/油门=总距、`v=122·tanα` 与 p/m 无关（33 m/s 无俯角上限）、两喷口恒为秩 5 与"锁死轴"、`τ_roll=h·F_横+x·F_竖` 恒等式与 CG 偏置量化、抗干扰 ⇒ 3 发、**§12 2026-11-20 实测修订（推翻/确认清单）** | 做/飞这台新机、或判断"某轴能不能控"时 |
-| `two-nozzle-ROUND.md` | **两喷口本轮工作卡（≤60 行，每轮整篇覆写）**：现状（三轴姿态已可控、悬停已成立）、坐标系与控制通道表、可直接引用的结论、下一步（`m2hover` v3 上机 → 位置/航向制导）、只读清单、硬规矩 | 两喷口每一轮开工的**唯一入口** |
-| `two-nozzle-constants.md` | **两喷口可信常数 + 20 条黑名单（唯一真相源）**：m=11.00 kg、串列喷口 b_f=2.05 / b_r=1.95 / h=1.32、**配平比 r\*=0.9562（chA=前）**、**α/D=−31.7 ⇒ I_pitch≈65**、滚转/偏航权限、**欧拉-体轴符号约定**、AIC 门控表、20 Hz 与写预算、程序版本表 | 写/改两喷口控制环、判断某个数能不能信时 |
-| `two-nozzle-evidence.md` | **两喷口归档总账**：只读探针输出、首次动态测试、2026-11-21 全天七次实机（v3~v10 锥角 + hover v1/v2）的原始数据与推导、待查清单 | 需要原始数据/推导时定向读 |
-| `two-nozzle-handover.md` | **两喷口一页纸交接（2026-11-21 13:40）**：现状、必带常数、三条控制通道、程序清单与版本、硬件频道、场地与安全、工具纪律、按「下次还会再踩」排序的坑、未解决项、下一步建议、数据索引 | 换人 / 换会话 / 阶段收尾通读一次 |
+| `four-nozzle-plan.md` | **四喷口矩形飞行器本轮工作卡 + 控制分配设计**：四台 `getForcePoint` 力臂 → 俯仰/滚转（推力差）、偏航（切向锥角）、平移（共模锥角）的分配公式；4 输入 3 方程的最小范数配平；P0~P5 测量阶段与判据；与两发的本质区别 | 四喷口每一轮开工的**唯一入口** |
+| `four-nozzle-constants.md` | **四喷口可信常数与黑名单（唯一真相源）**：ch0..3 与 inv 配置、四角力臂/质量/TWR（待 P0）、四发新增 6 条黑名单、程序版本表 | 写/改四喷口控制环、判断某个数能不能信时 |
 
 ## propulsion/ —— 喷管与引擎（3）
 
@@ -92,11 +89,16 @@
 | `registrate-datagen.md` | Registrate + datagen 新增方块完整流程 + 三坑（lang 覆盖、`.tab(SEARCH)` 崩服、datagen 最小化 mod） | 新增方块/跑 runData/排查创造标签崩溃 |
 | `create-schematic-nbt.md` | Create 蓝图 NBT 经验（保存/部署时配置丢失） | 排查 PeripheralExtender / RedstoneTransceiver 在蓝图中的行为 |
 
-## archive/ —— 历史记录（1）
+## archive/ —— 历史记录（6）
 
 | 文件 | 内容 |
 |---|---|
 | `9.24.md` | 2024-09-24 日工作记录：controlDesk throttle 穿模修复、Monitor 天花板悬挂（hanging）、monitor_slab 新方块首个方案 |
+| `two-nozzle-vehicle.md` | 两喷口（串列）设计基线：坐标系、锥角=桨盘、秩 5 与"锁死轴"推导、`τ_roll` 恒等式、**§12 实测修订** —— 只作历史 |
+| `two-nozzle-ROUND.md` | 两喷口本轮工作卡（2026-11-21 收尾状态）：三轴姿态已成立、`m2hover` v4 待上机 |
+| `two-nozzle-constants.md` | 两喷口可信常数 + 21 条黑名单：m=11.00、b_f=2.05/b_r=1.95/h=1.32、r\*=0.9562、α/D=−31.7、写预算、门控表 —— **黑名单仍适用于四发** |
+| `two-nozzle-evidence.md` | 两喷口归档总账：探针输出、七次实机原始数据与推导 |
+| `two-nozzle-handover.md` | 两喷口一页纸交接：程序清单、频道、场地、按「下次还会再踩」排序的坑、数据索引 |
 
 ## 维护规则
 
@@ -104,4 +106,4 @@
 2. 文件名**英文短横线、无空格、无中文**（中文路径在 PowerShell / 工具链里有编码坑）。日期型记录进 `archive/`。
 3. 单份超过 ~100 KB 的文档（`flip-autopilot.md`）只作检索用，禁止整篇读；`starship15-catch.md` 同理。
 4. 移动或改名后必须跑一次引用校验：`grep -rn "memo/" --include=*.md`，逐条确认目标文件存在（含 `.agents/skills/*/SKILL.md`）。
-5. 同一结论只在一处维护：手法/常数写各自的 `*-constants.md`（星舰 `starship15-constants.md`、两喷口 `two-nozzle-constants.md`），进度写各自的 `*-ROUND.md`，历史证据留各自的归档总账（`starship15-catch.md` / `two-nozzle-evidence.md`）。
+5. 同一结论只在一处维护：手法/常数写各自的 `*-constants.md`（星舰 `starship15-constants.md`、四喷口 `four-nozzle-constants.md`），进度写各自的 `*-ROUND.md` / `four-nozzle-plan.md`，历史证据留各自的归档总账（`starship15-catch.md` / `archive/two-nozzle-evidence.md`）。

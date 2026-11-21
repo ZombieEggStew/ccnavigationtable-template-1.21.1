@@ -253,7 +253,7 @@ flowchart LR
 | `setInverted(enabled)` → bool | **出力反转（推力 ⇄ 吸力）**：`true` ⇒ 同一转速/出力系数下力沿轴的**符号整体翻过来**（原推力变吸力，负转速的吸力也反向）。**瞬间生效、不做渐变**（用户定稿 2026-11）；只翻符号、不动幅值与指向（大小仍由转速/气压/出力系数决定，轴朝哪仍由偏转决定）；粒子链路同步换向（**排气 ⇄ 进气**，气流永远与受力反向，见 §6.2 的 `thrustDirectionSign`）；状态进 NBT / 蓝图 |
 | `isInverted()` → bool | 出力是否已反转（`true` = 推力变吸力方向） |
 | `getChannel()` → int | 本喷嘴在物理体内的频道（-1 = 不在物理体上 / 未分配） |
-| `getForcePoint()` → `{x, y, z}` | **施力点**相对物理体原点（质心枢轴）的局部坐标，力矩计算用：`τ = r × F`（`r` = 施力点 − 质心）。取点 = **方块中心**（= 父类 `applyAndRecordPointForce(atCenterOf(worldPosition), …)` 的实际施力点，与飞行记录仪 `propM*` 同源）；喷口外端 = 本点 + 倾斜轴 × 0.55 格，但位移与力共线 ⇒ 两种取法力矩相同。坐标系 = plot 帧（与 `getSensors().pos` 同帧，那边是角点、本方法已 +0.5 取中心），物理体移动/旋转时不变；不在物理体上返回 nil。原点运行时与质心同步（`memo/flight/two-nozzle-constants.md` 实测：物理体原点就落在重心上），本值可直接当 `r` 用 |
+| `getForcePoint()` → `{x, y, z}` | **施力点**相对物理体原点（质心枢轴）的局部坐标，力矩计算用：`τ = r × F`（`r` = 施力点 − 质心）。取点 = **方块中心**（= 父类 `applyAndRecordPointForce(atCenterOf(worldPosition), …)` 的实际施力点，与飞行记录仪 `propM*` 同源）；喷口外端 = 本点 + 倾斜轴 × 0.55 格，但位移与力共线 ⇒ 两种取法力矩相同。坐标系 = plot 帧（与 `getSensors().pos` 同帧，那边是角点、本方法已 +0.5 取中心），物理体移动/旋转时不变；不在物理体上返回 nil。原点运行时与质心同步（`memo/archive/two-nozzle-constants.md` 实测：物理体原点就落在重心上），本值可直接当 `r` 用 |
 
 用法：
 

@@ -1,8 +1,10 @@
 # 两喷口飞行器 · 可信常数与黑名单（唯一真相源）
 
+> **已归档（2026-11-21）**：机体已重建为矩形四角四喷口。**§5 的 21 条黑名单仍然适用**（四发新增见 `memo/flight/four-nozzle-constants.md` §4）；本表其余实测数只对两发有效，禁止当四发常数。
+
 > **规矩**：本文件里的数都是**实机实测**（2026-11-20，`New World` 电脑 1）。
 > 不许重测、不许重推、不许在别处复制；新实测替代某个数时**只改那一行**，注明日期与出处 CSV。
-> 出处指 `memo/flight/two-nozzle-evidence.md` 的章节号；设计推导在 `memo/flight/two-nozzle-vehicle.md`。
+> 出处指 `memo/archive/two-nozzle-evidence.md` 的章节号；设计推导在 `memo/archive/two-nozzle-vehicle.md`。
 > **全局共享常数（G=11、d=0.09、K_NOZ=524.8、锥角 15°/160°/s…）不在这里复制**，见 `flight-program-standard.md` §4。
 
 ---

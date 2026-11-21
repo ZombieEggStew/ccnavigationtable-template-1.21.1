@@ -1,13 +1,13 @@
 ---
 name: minecraft-research
-description: 'Minecraft 相关调研：当需要确认 Minecraft 本体、依赖 mod（Create、CC:Tweaked、Sable、JEI 等）或参考案例 mod 的源码、API 与实现方式时使用。API/接口查询用 api/（干净源码，包级地图见 memo/api-code-map.md；Sable Companion、Flywheel、Catnip 是项目根基最常用），案例参考用 references/（完整项目），个人调研源码放 .research/；用于确认 API 方法签名、追踪调用链、调试兼容性问题或理解注册与渲染机制。'
+description: 'Minecraft 相关调研：当需要确认 Minecraft 本体、依赖 mod（Create、CC:Tweaked、Sable、JEI 等）或参考案例 mod 的源码、API 与实现方式时使用。API/接口查询用 api/（干净源码，包级地图见 memo/project/api-code-map.md；Sable Companion、Flywheel、Catnip 是项目根基最常用），案例参考用 references/（完整项目），个人调研源码放 .research/；用于确认 API 方法签名、追踪调用链、调试兼容性问题或理解注册与渲染机制。'
 ---
 
 # Minecraft 相关调研
 
 > 调研 Minecraft 本体与 mod 源码：定位 API、参考案例实现、追踪跨 mod 调用链。
 
-> **api/ 的详细包级代码地图见 `memo/api-code-map.md`**（含核心三件套重点说明、import 前缀→路径对照表、项目内使用文件清单）；需要精确的包路径或类位置时先查它，本技能只给目录级索引。
+> **api/ 的详细包级代码地图见 `memo/project/api-code-map.md`**（含核心三件套重点说明、import 前缀→路径对照表、项目内使用文件清单）；需要精确的包路径或类位置时先查它，本技能只给目录级索引。
 
 ## ⭐ 核心三件套（项目根基，最常用）
 
@@ -83,7 +83,7 @@ description: 'Minecraft 相关调研：当需要确认 Minecraft 本体、依赖
 
 ### 1. 确认目标
 
-根据用户问题或当前代码中的 import 语句确定要看哪份源码。**不确定包路径或想知道某个 api 包里有啥 → 先查 `memo/api-code-map.md`**。然后按意图分档：
+根据用户问题或当前代码中的 import 语句确定要看哪份源码。**不确定包路径或想知道某个 api 包里有啥 → 先查 `memo/project/api-code-map.md`**。然后按意图分档：
 
 - **查 API / 接口**（方法签名、接口定义、返回类型）→ 优先 `api/` 对应目录
 - **参考案例实现**（某功能整体怎么做、设计模式、行为细节）→ 进 `references/` 对应项目
