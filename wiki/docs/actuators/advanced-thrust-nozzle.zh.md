@@ -60,6 +60,7 @@ print(n.getChannel(), n.getMaxTilt()) -- 0  15
 | `setInverted(enabled)` | boolean | **出力反转（推力 ⇄ 吸力）**：`true` ⇒ 同一转速、同一出力系数下力沿轴的**符号整体翻过来**（原推力变吸力，负转速的吸力也反向）。**瞬间生效**、不做渐变；只翻符号，不动幅值与指向（大小仍由转速/气压/出力系数决定）；粒子同步换向（**排气 ⇄ 进气**）。状态进 NBT / 蓝图 |
 | `isInverted()` | boolean | 出力是否已反转（`true` = 沿轴的力反向，推力变吸力方向） |
 | `getChannel()` | number | 本喷管在物理体内的频道（`-1` = 不在物理体上 / 未分配） |
+| `getForcePoint()` | table | 本喷嘴**施力点**相对物理体原点（质心枢轴）的局部坐标 `{x, y, z}`，用于力矩 `τ = r × F`。取点 = 方块中心（= Sable 实际施力点，与飞行记录仪 `propM*` 同源）；喷口外端 = 本点 + 倾斜轴 × 0.55 格，但位移与力共线 ⇒ 对力矩等价。坐标系与 `getSensors().pos` 同帧（那边是方块角点，本方法已 +0.5 取中心）；物理体移动/旋转时不变；不在物理体上返回 `nil` |
 
 ### 示例
 
@@ -86,6 +87,10 @@ n.setDirection(0, 0)                   -- 回直出
 n.setInverted(true)                    -- 力沿轴反向
 print(n.isInverted())                  -- true
 n.setInverted(false)                   -- 恢复正方向
+
+-- 施力点（机体系，力矩用）：物理体原点≈质心 ⇒ 可直接当力臂 r
+local p = n.getForcePoint()            -- {x=…, y=…, z=…}；不在物理体上是 nil
+-- 力矩 τ = r × F：F 是该喷管的推力向量（机体系，沿倾斜轴，符号由转速 / setInverted 决定）
 ```
 
 方位角的 0° 是模型的 **+X** 方向，90° 是 **+Z** 方向（`(cos, sin)` 对应 `(x, y)`），整个坐标系随方块的 FACING 一起旋转。

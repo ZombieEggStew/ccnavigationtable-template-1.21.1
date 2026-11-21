@@ -51,7 +51,7 @@
 | 文件 | 内容 | 何时读 |
 |---|---|---|
 | `thrust-nozzle.md` | 定向喷管 `ccpe:thrust_nozzle` **母文档**：Sable 点力推力器、1 pN/RPM 标定、REVERSE_SIGN、碰撞盒、排气粒子与遮挡 | 改喷管出力/符号/粒子；它是矢量喷管的母文档 |
-| `advanced-thrust-nozzle.md` | **矢量喷管 `ccpe:advanced_thrust_nozzle`（定稿）**：枢轴 `(8,5,8)px`、15° 锥角、活塞杆 = body 子件、BER 渲染链、物理体频道、Lua `setDirection/setThrustScale/setInverted`、**2 pN/RPM** | 改矢量喷管的倾斜/活塞/频道/GUI/Lua，或为别的方块做「物理体频道 + 外设」 |
+| `advanced-thrust-nozzle.md` | **矢量喷管 `ccpe:advanced_thrust_nozzle`（定稿）**：枢轴 `(8,5,8)px`、15° 锥角、活塞杆 = body 子件、BER 渲染链、物理体频道、Lua `setDirection/setThrustScale/setInverted/getForcePoint`（施力点→力矩）、**2 pN/RPM** | 改矢量喷管的倾斜/活塞/频道/GUI/Lua，或为别的方块做「物理体频道 + 外设」 |
 | `engine-module.md` | 引擎模块 `aero_engine`（P0~P10）：engine_core 组网、零缓存抽储罐、燃烧室、冷却过热约束、末段 Lua 控制 | 改引擎组网/燃料/冷却/`ss.getEngine()` 行为 |
 
 ## peripherals/ —— 传感器、频道、通信与机械件（9）

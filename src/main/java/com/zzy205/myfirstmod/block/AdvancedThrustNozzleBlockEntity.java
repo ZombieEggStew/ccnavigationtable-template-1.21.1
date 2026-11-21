@@ -1,9 +1,11 @@
 package com.zzy205.myfirstmod.block;
 
 import com.zzy205.myfirstmod.compat.cc.ShortRangeLinkerRegistry;
+import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
 import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -861,6 +863,48 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
         @LuaFunction
         public final int getChannel() {
             return AdvancedThrustNozzleBlockEntity.this.channel;
+        }
+
+        // ── 位置（力矩计算用） ──
+
+        /**
+         * 本喷嘴的<b>施力点</b>相对所在物理体原点（质心枢轴）的局部坐标 {@code {x, y, z}}，
+         * 供脚本计算力矩 {@code τ = r × F}（{@code r} = 施力点 − 质心）。
+         * <p>
+         * <b>取点</b> = 方块中心：父类 {@code sable$physicsTick} 正是用
+         * {@code applyAndRecordPointForce(atCenterOf(worldPosition), impulse)} 施力的，
+         * 也就是 Sable 记录的点力位置（飞行记录仪的 {@code propM*} 与之同源）。
+         * 喷口外端 = 本点 + 倾斜轴 × 0.55 格，但这段位移与力<b>共线</b>，
+         * 两种取法算出的力矩完全相同。
+         * <p>
+         * <b>坐标系</b> = 物理体局部系（plot 帧，{@code 方块plot坐标 − rotationPoint}），
+         * 与 {@code sensor_system.getSensors()} 的 {@code pos} 同一帧（那边是方块角点，
+         * 本方法已加 +0.5 半格取中心）。物理体移动/旋转时该值不变；
+         * 在物理体上增删方块会改变原点（质心），数值整体漂移。
+         * <p>
+         * 物理体原点运行时与质心同步（实测原点就落在重心上），因此本值可直接当力矩臂
+         * {@code r} 用；只有刚在物理体上增删方块的那个 tick 内，质心与原点才可能瞬时错开。
+         *
+         * @return 施力点（方块中心）相对物理体原点的局部坐标；不在物理体上返回 nil
+         */
+        @LuaFunction(mainThread = true)
+        public final @Nullable Map<String, Double> getForcePoint() {
+            final AdvancedThrustNozzleBlockEntity be = AdvancedThrustNozzleBlockEntity.this;
+            if (be.level == null || be.level.isClientSide) {
+                return null;
+            }
+
+            final SubLevel sub = SableCompat.getContainingSubLevel(be);
+            // toRelativePos = plot 角点 − rotationPoint；+0.5 半格才是方块中心（实际施力点）
+            final Vec3 rel = SableCompat.toRelativePos(sub, be.worldPosition);
+            if (rel == null) {
+                return null;
+            }
+
+            return Map.of(
+                    "x", rel.x + 0.5D,
+                    "y", rel.y + 0.5D,
+                    "z", rel.z + 0.5D);
         }
     }
 

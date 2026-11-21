@@ -60,6 +60,7 @@ Peripheral type: `advanced_thrust_nozzle` (obtained via `ccpe.sensor_system.getP
 | `setInverted(enabled)` | boolean | **Output reversal (thrust ⇄ suction)**: `true` flips the **sign** of the force along the axis at the same RPM and output scale (forward thrust becomes suction; negative-RPM suction reverses too). **Instant, no animation**; only the sign flips — magnitude (RPM / pressure / output scale) and pointing direction are untouched — and the particle chain swaps with it (**exhaust ⇄ intake**). Stored in NBT / blueprints |
 | `isInverted()` | boolean | Whether output is currently reversed (`true` = force along the axis is flipped, i.e. thrust acts as suction) |
 | `getChannel()` | number | Channel of this nozzle inside the physics body (`-1` = not on a body / unassigned) |
+| `getForcePoint()` | table | The nozzle's **force application point** `{x, y, z}` in the physics body's local frame, relative to the body origin (the centre-of-mass pivot) — use it as the moment arm `r` in `τ = r × F`. The point is the **block centre**, which is exactly where Sable applies the force (`propM*` in the flight recorder uses the same point); the nozzle mouth is this point plus `axis × 0.55` blocks, but the offset is collinear with the force, so both give the same torque. Same frame as `getSensors().pos` (that one is the block corner; this method adds +0.5). Constant while the body moves/rotates; returns `nil` when not on a body |
 
 ### Example
 
@@ -86,6 +87,11 @@ n.setDirection(0, 0)                   -- back to straight
 n.setInverted(true)                    -- force flips along the axis
 print(n.isInverted())                  -- true
 n.setInverted(false)                   -- back to normal direction
+
+-- force application point (body frame, for torque): the body origin ≈ COM, so use it as r directly
+local p = n.getForcePoint()            -- {x=…, y=…, z=…}; nil when not on a body
+-- torque τ = r × F, where F is this nozzle's thrust in the body frame (along the tilted axis,
+-- sign set by RPM / setInverted)
 ```
 
 Azimuth 0° is the model's **+X** direction and 90° is **+Z** (`(cos, sin)` maps to `(x, y)`); the whole frame rotates with the block's FACING.
