@@ -1,6 +1,6 @@
 # memo 索引（唯一目录入口）
 
-> 47 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
+> 48 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
 > 大文件（`flight/flip-autopilot.md` 320 KB、`flight/starship15-catch.md` 126 KB）**只许按关键词/§N 定向检索**，禁止整篇读。
 
 ## 按任务找文档（阅读顺序）
@@ -12,7 +12,7 @@
 | 改任何代码前核对已知坑 | `project/ATTENTION.md` | 功能文档里的「坑」小节 |
 | **星舰 CC:T 飞行迭代（每一轮）** | `flight/starship15-ROUND.md` + `flight/starship15-constants.md` | 需要原始推导时才 grep `flight/starship15-catch.md` §N |
 | **四喷口飞行器迭代（每一轮）** | `flight/four-nozzle-plan.md` + `flight/four-nozzle-constants.md` | 两发时代的数据/推导在 `archive/two-nozzle-*.md`（只作历史，不当本机常数） |
-| 换人 / 换会话 / 大阶段收尾 | `flight/starship15-handover.md`（星舰）、`archive/two-nozzle-handover.md`（两喷口历史） | — |
+| 换人 / 换会话 / 大阶段收尾 | `flight/four-nozzle-handover.md`（四喷口）、`flight/starship15-handover.md`（星舰）、`archive/two-nozzle-handover.md`（两发历史） | — |
 | **写/改任何 CC:T 飞行程序（新载具开工）** | `flight/flight-program-standard.md` | `flight/four-nozzle-plan.md` |
 | 写 CC:T 飞行控制环（通用经验） | `flight/flip-autopilot.md`（按关键词检索） | `propulsion/advanced-thrust-nozzle.md`、`peripherals/my_aero_sensor.md` |
 | 添加控制台控件 / 表面 Monitor 模块 | `cockpit/control-desk-grid-slot.md` | `cockpit/control-desk-seat.md` |
@@ -29,7 +29,7 @@
 | `neoforge-debugging.md` | F5 启动事实：`-Dfml.modFolders=ccnavigationtable%%D:/.../build/classes/java/main` + preLaunchTask | 调 VS Code 启动配置时 |
 | `FIX-ME.md` | 未处理问题便签：Monitor 两套同步机制（`SyncGridPayload` vs `sendBlockUpdated`）边界、`PeripheralExtenderScreen` 轮询写法建议 | 接手待办或排查同步问题时 |
 
-## flight/ —— CC:T 飞行与自动驾驶（9）
+## flight/ —— CC:T 飞行与自动驾驶（10）
 
 | 文件 | 内容 | 何时读 |
 |---|---|---|
@@ -41,7 +41,8 @@
 | `flip-autopilot.md` | **飞车总账（320 KB，按关键词检索）**：落地剖面 `A_REF/KV/FF_BAND`、四元数姿态环与 `COS_MIN` 门控、**写预算与 20 Hz 不变量**、吸附/翻滚/横向制导实测常量 | 写任何 CC:T 飞行/落地控制环时的通用经验库 |
 | `flight-recorder-and-handling.md` | `FlightDataRecorder` 用法（配置、CSV 列、`flight_logs/` 落盘）+ 飞机可操纵性旧任务（phugoid、气动模型事实） | 要用 `run/flight_logs/*.csv` 交叉验证时（原名 flight.md，已改名） |
 | `four-nozzle-plan.md` | **四喷口矩形飞行器本轮工作卡 + 控制分配设计**：四台 `getForcePoint` 力臂 → 俯仰/滚转（推力差）、偏航（切向锥角）、平移（共模锥角）的分配公式；4 输入 3 方程的最小范数配平；P0~P5 测量阶段与判据；与两发的本质区别 | 四喷口每一轮开工的**唯一入口** |
-| `four-nozzle-constants.md` | **四喷口可信常数与黑名单（唯一真相源）**：ch0..3 与 inv 配置、四角力臂/质量/TWR（待 P0）、四发新增 6 条黑名单、程序版本表 | 写/改四喷口控制环、判断某个数能不能信时 |
+| `four-nozzle-constants.md` | **四喷口可信常数与黑名单（唯一真相源）**：ch0..3 与 inv 配置、四角力臂/质量/TWR（已实测）、P1 残余、四发新增 9 条黑名单、程序版本表 | 写/改四喷口控制环、判断某个数能不能信时 |
+| `four-nozzle-handover.md` | **四喷口一页纸交接（2026-11-21 16:15）**：现状（P0/P1 PASS、P2 v2 待上机）、必带常数、控制通道、程序清单、场地与安全、按「下次还会再踩」排序的坑、未解决项、下一步、数据索引 | 换人 / 换会话 / 阶段收尾通读一次 |
 
 ## propulsion/ —— 喷管与引擎（3）
 

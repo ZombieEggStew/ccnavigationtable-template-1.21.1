@@ -253,6 +253,9 @@ ss.getPeripheral(ch)           --> 外设或 nil（ch 0..15）
   要区分"方法不存在 / 传感器缺失"，用 `type(ss.getX)=="function"` + 原始返回类型 + `getSensors()` 三连查）。
 - **单位**：`getAngularVelocity()` 返回 **rad/s**（不要再 `math.rad`）；`getAngleRates()` 返回 **deg/s**。
   角速度分量是**机体系**，欧拉角名依赖机头朝向（游戏定义：`pitch` 绕局部 X、`roll` 绕局部 Z、yaw 零位 −Z）——记录时标注物理轴。
+  **⚠ 控制环/脉冲标定一律用 `getAngleRates()`**：`getAngularVelocity()` 是 Sable pose 差分的世界角速度再逆旋到机体系，
+  源码自己注明机动中会被世界旋转轴投影污染（`体 Z ≠ 滚转速率`、偏差可达 0.5+ rad/s）。
+  2026-11-21 四喷口 P2 v1 实测：用它测两轴增益都为负、三段互不自洽。详见 `four-nozzle-constants.md` 黑名单 #30。
 
 ### 4.4 常数纪律
 
