@@ -5,10 +5,12 @@
 
 ## 0. 一句话现状
 
-**矩形四角四喷口的 21 kg 飞行器。P0 几何与 P1 基线（抬升 → 悬停 → 软着陆）已实机 PASS，
-残余角加速度几乎为零（wx +0.000 / wz −0.010 rad/s²）。P2（俯仰/滚转权限）v1 因用了不可信的
-`getAngularVelocity` 而 FAIL，v2 已改用 `getAngleRates`、桩内 PASS，但还没上机。
-下一步就是飞 `m4axis pitch` / `m4axis roll`（v2）。**
+**矩形四角四喷口的 21 kg 飞行器。P0/P1/P2/P3 全部实测完成：**
+`g_pitch=+6.26 / I=82.4`、`g_roll=−14.97 / I=34.4`（16:40/16:41）、
+`g_yaw=+0.2535 / I_yy=78.9`（16:50）、`c_trim≈0`、`setDirection` 符号 = 文档映射。
+**P4 的结论是"横移不能单独测"**：共模锥角在重心下 1.48 m 处产生横向力 ⇒ 1.5° 就有 9 N·m 力矩
+（黑名单 #33）⇒ 必须先有姿态环。`m4trans.lua` 因此拆成 `hold`（纯姿态+高度环，桩内 PASS）
+与 `trans`（双峰，桩内还没调好）两个模式，**下一步飞 `m4trans hold`**。
 
 ## 1. 必带常数（完整表见 `four-nozzle-constants.md` §1/§2）
 
@@ -23,6 +25,11 @@
 | 传感器 | **只有一台 AIC**（INS+FMC）；无皮托管、无静压孔；`ss.getStressRemaining/Capacity` = nil |
 | 重心 ↔ AIC | AIC 在重心上方 **2.52**；电脑在 AIC 下方 1.00 |
 | P1 残余 | `wx=+0.000`、`wy=+0.000`、`wz=−0.010 rad/s²`；悬停 `w=0.054`；落地 `vy=−0.50 m/s`；漂移 0.07/0.13 |
+| 角增益 / 惯量 | **g_pitch=+6.26 rad/s²/c、I_pitch=82.4**；**g_roll=−14.97、I_roll=34.4**；`c_trim≈0`（`c` 的定义见 `m4axis` 的 `+C/−2C/+C`） |
+| 执行器滞后 | **~0.45 s 一阶**（命令边沿后 ~0.2 s 仍维持上一段角加速度）⇒ 任何姿态环带宽 ≪ 2 rad/s |
+| 偏航 | **g_yaw=+0.2535 rad/s² per γ、I_yy=78.9**；τ_y=γ·ΣL²=20γ；锥角 0.65° 就已足够 |
+| 共模锥角力矩 | |τ|=1.48·m·g·sinθ（1.5° ⇒ 9 N·m）⇒ 横移必须配姿态环 + 前馈 |
+| 机动残留 | 三段脉冲末态**角度不回零**：pitch **−14.9°**、roll **+4.7°** ⇒ 机动后必须回平（黑名单 #32） |
 
 ## 2. 控制通道
 
@@ -41,8 +48,10 @@
 | `startup.lua` | 用户脚本 | — | 引擎油门 1.0；四台 `setDirection(0,0)`、`setThrustScale(0)`；ch2/ch3 `inv=true` |
 | `m4probe.lua` | **v1.1** | 否（只读） | `geom`（四台力臂 + 矩形校验 + 分配系数）、`static`、`id`、`power` |
 | `m4cal.lua` | **v1.1** | 是 | P1 基线：竖直 PD（+1.5 m、−1.0 m/s）+ 推力差速率阻尼；`HOVER_A` 量偏置、`HOVER_B` 验阻尼 |
-| `m4axis.lua` | **v2** | 是 | P2：`pitch`/`roll` 对称三段脉冲（+C/−2C/+C）+ **`getAngleRates`** + 自动符号 `g` + `c_trim` + 残差复验 |
-| `m4axis_v1.lua` | 归档 | — | 用 `getAngularVelocity` 的错误版本（结果已作废） |
+| `m4axis.lua` | **v3** | 是 | P2（已完成）：`pitch`/`roll`，三段 **+C/−2C/+C 各 2.0 s**，只拟合末 0.55 s，双估计 + 三段一致性判据；`C=0.010/0.004` |
+| `m4yaw.lua` | **v1（16:50 PASS）** | 是 | P3：四台**切向锥角** `t_i=(z_i,−x_i)/L_i`，`F_t,i=γ·L_i` 归一化到 `u_i·K·p`，三段 `+Γ/−2Γ/+Γ` 各 1.2 s；TRIM/DOWN 带 pitch/roll 回平（用 P2 的 `g`） |
+| `m4trans.lua` | **v1** | 是 | P4/P5：`m4trans hold` = 姿态环(PD+I) + 高度环 + 共模锥角前馈，悬停 8 s；`m4trans` = 锥角双峰（桩内未稳定） |
+| `m4axis_v2.lua` | 归档 | — | 0.35 s 脉冲版本（数值作废） |
 
 桩：`.tmp_luatest/m4_harness.lua`（4 台喷口带 `getForcePoint`、m=21、矩形 1×2、ch3 +2% 推力偏置、地面 63）。
 旧程序归档：`cc_logs_archive/lua_versions/computer2/`。
@@ -64,17 +73,29 @@
 3. **用 `getAngularVelocity` 做脉冲标定/阻尼**：Sable pose 差分的 ω 在机动中被污染（源码自己写了
    “体 Z ≠ 滚转速率”、偏差可达 0.5+ rad/s）。v1 两轴增益都为负、三段互不自洽、TRIM 反而加速。
    **一律用 `getAngleRates`**（黑名单 #30）。
-4. **两发时代的 21 条黑名单仍然全部适用**：`memo/archive/two-nozzle-constants.md` §5。
-5. **下降段没有姿态环会自激**：P1 的 DOWN 段速率涨到 0.54 rad/s（两发 #9 重现）。P5 之前下降段要短。
-6. **`setDirection` 的符号未知**：P4 实测前不许开横移/偏航闭环（两发 #14）。
+4. **脉冲段比执行器滞后还短**：命令→力矩是 **~0.45 s 一阶滞后**。0.35 s 的段里前 0.2 s 还在执行
+   上一段，拟合窗口几乎全是暂态 ⇒ v2 的 `g3` 反号、`I` 大 4~9 倍，而程序只看 `abs(g)>0.2` 就
+   判 PASS ⇒ **假通过**。规矩：段长 ≥2.5τ、只拟合末段、**三段 `g_i` 必须同号**（黑名单 #31）。
+5. **机动后直接下降**：三段脉冲末态角度不回零（v3 实测 pitch −14.9° / roll +4.7°），`TRIM` 只压
+   速率 ⇒ 带倾角下降，pitch 那次在 t=11.25 翻掉（速率 1.16 rad/s、`up=0.69`）。
+   **机动后必须接一段角度保持/回平**（黑名单 #32）。
+6. **两发时代的 21 条黑名单仍然全部适用**：`memo/archive/two-nozzle-constants.md` §5。
+7. **下降段没有姿态环会自激**：P1 的 DOWN 段速率涨到 0.54 rad/s（两发 #9 重现），v3 roll 也到 0.33 rad/s。
+8. **`setDirection` 的符号**：✅ P3 已定案 —— `+t_i` ⇒ 力矩为正 ⇒ **与文档 `+x/−z` 映射一致**。
+9. **以为共模锥角只产生平移**：1.48 m 力臂 ⇒ 1.5° 就有 9 N·m 力矩（黑名单 #33）。**横移必须配姿态环 + 前馈**；
+   而零锥角的纯机体倾斜不产生力矩（`r` 与 `F` 平行）——这就是 P1 能不开姿态环悬停的原因。
 
 ## 6. 未解决 / 待验证
 
 | 项 | 现状 | 为什么重要 |
 |---|---|---|
-| `I_pitch` / `I_roll` | 待 `m4axis` v2 实测（`I = K_τ/abs(g)`） | 姿态环增益分母；两发 `I=65` 不可沿用 |
-| 俯仰/滚转的符号映射 | v2 的 `CAL g1..g3` 与 `CAL AXIS` 会直接给出 | 决定姿态环 `d` 的符号 |
-| 偏航/横移的锥角符号 | P3/P4 未测 | 不开符号前不能闭环 |
+| `I_pitch` / `I_roll` | ✅ **82.4 / 34.4 kg·m²**（P2 v3 实机，两种估计法差 1.3%） | 姿态环增益分母已定 |
+| 俯仰/滚转的符号映射 | ✅ `c>0` ⇒ pitch **增大**、roll **减小**（`g_pitch>0`、`g_roll<0`） | 姿态环 `d` 的符号已定 |
+| `I_yy` | ✅ **78.9 kg·m²**（P3 实机，两种估计法差 0.4%） | 偏航环增益分母已定 |
+| **0.45 s 滞后的来源** | 未定：`setThrustScale` 本身 0.25/tick（<1 tick 到位），所以更像风扇转速/气流惯性；v3 的 CSV 记了四台实际 `getThrustScale()` 可据此判断 | 决定 P5 姿态环的最大可用带宽 |
+| 锥角受力符号 | ✅ P3：与文档一致（推力朝命令方向） | 横移符号已知，P4 不必再测 |
+| **姿态环（实机）** | 只有桩内数据（`KP=0.4/KD=0.8/KI=0.25`，0.5% 偏置 + 0.45 s 滞后 ⇒ 0.6°）；`m4trans hold` 待上机 | 决定 P4/P5 能不能闭环 |
+| **共模锥角前馈的相位** | 前馈目标按 `FF_TAU=0.45` 一阶滤波；桩内在 `LAG=0` 时反而晃（前馈跟不上），`LAG=0.45` 时又没完全对上 ⇒ 等 hold 的实机数据定 τ | 横移双峰能不能测准 |
 | 下降段自激 | 0.54 rad/s，未闭环 | P5 必须带三轴姿态环 |
 | `m4cal` 的阻尼信号 | 仍是 `getAngularVelocity`（低速率下 PASS） | P5 前换成 `getAngleRates` |
 | ch4 非喷口外设 | 未识别（`id` 报 `other`） | 不影响飞控 |
@@ -82,12 +103,11 @@
 
 ## 7. 下一步（一步一上机）
 
-1. **`m4axis pitch`（v2）**：判据 `CAL g1≈g2≈g3` 同号、`CAL AXIS` 里 `dPitch` 占优、
-   `I` 在几~几百 kg·m²、`RES TRIM residual_alpha` 接近 0、`VERDICT PASS`。
-2. **`m4axis roll`（v2）**：同上，看 `dRoll` 占优。
-3. 拿到两轴 `I` 与 `c_trim` 后：**P3 偏航**（四台切向锥角，先用小幅度测 `setDirection` 符号）。
-4. **P4 共模横移**（同一套符号测试）。
-5. **P5 三轴姿态环 + 高度环**（阻尼信号一律 `getAngleRates`），再上位置/航向。
+1. ✅ P2、P3 已完成：`g_pitch/I=82.4`、`g_roll/I=34.4`、`g_yaw/I_yy=78.9`、`c_trim≈0`。
+2. **`m4trans hold`（下一步）**：纯姿态+高度环悬停 8 s。判据：后 4 s `|pitch|/|roll|<1°`、`|Δh|<0.35 m`、`VERDICT PASS`。
+   这一把同时告诉我们：实机闭环的真实抖动、**命令分辨率**（`u` 的最小有效台阶）、以及 PI 的收敛速度。
+3. 用 hold 的数据定 `FF_TAU` 后，再飞 **`m4trans`（共模锥角双峰）** 量横向加速度与线性度（黑名单 #33）。
+4. **P5**：hold 通过后加位置/航向环（阻尼一律 `getAngleRates`，带宽 ≤1 rad/s，机动后回平）。
 
 ## 8. 数据索引（`computer/2/log/`）
 
@@ -95,5 +115,9 @@
 |---|---|
 | `status_m4_geom/static/id/power.txt` | P0：力臂、质量、气压、AIC、引擎/应力 |
 | `status_m4cal.txt` + `m4cal_1795248090203.csv` | P1 基线 PASS（残余、阻尼、落地、漂移） |
-| `status_m4axis_pitch.txt` + `m4axis_pitch_1795248455796.csv` | P2 v1 pitch FAIL（传感器不可信的原始证据） |
-| `status_m4axis_roll.txt` + `m4axis_roll_1795248471963.csv` | P2 v1 roll FAIL |
+| `status_m4axis_pitch.txt` + `m4axis_pitch_1795249023512.csv` | P2 v2 pitch（假 PASS；**稳态差分 g=+6.1 / I≈84** 出自这份 CSV） |
+| `status_m4axis_roll.txt` + `m4axis_roll_1795249536472.csv` | P2 v2 roll（FAIL；**稳态差分 g=−15.1 / I≈34**） |
+| `m4axis_pitch_1795248455796.csv` / `m4axis_roll_1795248471963.csv` | P2 v1（`getAngularVelocity`，全部作废） |
+| `status_m4yaw.txt` + `m4yaw_1795251044724.csv` | P3 偏航 PASS（`I_yy=78.9`，锥角/偏航角/符号） |
+| `status_m4trans.txt` + `m4trans_<epoch>.csv` | P4/P5 姿态环（待上机） |
+
