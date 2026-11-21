@@ -62,3 +62,55 @@
 ## 不推荐路线 B（备忘）
 
 NBT 连续质量需 mixin `PhysicsBlockPropertyHelper`/`MassTracker` 调用链（Sable 无 per-instance 概念），且 Sable 只在 blockstate 变化时重算，光改 BE NBT 不生效，还得人为触发 setBlock —— 高耦合高成本，放弃。
+
+---
+
+## 补充调研（2026-11-21 14:55，Sable 2.0.5 源码逐行核对）——**方块质心到底怎么算**
+
+> 起因：用户问「Sable 是不是按方块选择框几何中心算重心」。**答案：是按「碰撞形状」，不是选择框**；而且有官方接口可以自定义。
+
+### 质量与质心的完整链路
+
+| 环节 | 事实 | 源码 |
+|---|---|---|
+| 质量来源 | **BlockState 级静态属性** `sable:mass`，数据包 `data/<ns>/physics_block_properties/*.json`（`selector` + `overrides` 按 blockstate 条件）| `physics/config/block_properties/PhysicsBlockPropertiesDefinitionLoader.java` |
+| 质量默认值 | **1.0**（任何实心方块不写 JSON 就是 1.0 kg）| `PhysicsBlockPropertyTypes.java:28` |
+| 是否计数 | `VoxelNeighborhoodState.isSolid` = **碰撞形状非空**（`getCollisionShape`；**不是** `getShape`/选择框）。非实心 ⇒ `getMass` 直接 `return 0.0` | `physics/chunk/VoxelNeighborhoodState.java:46`、`PhysicsBlockPropertyHelper.java:24-33` |
+| **质心** | `MassTracker.BLOCK_CENTER_OF_MASS`（静态、按 `BlockState.hashCode()` **memo**，每次 reload 重算）：① 空气 → (0.5,0.5,0.5)；② **方块实现 `BlockSubLevelCustomCenterOfMass` → 用方块自己给的值**；③ 碰撞形状是整块 → (0.5,0.5,0.5)；④ 否则 = **碰撞形状 AABB ∩ 单位立方 的中心**；⑤ 空碰撞形状 → (0.5,0.5,0.5)（但质量为 0，进不了累加）| `api/physics/mass/MassTracker.java:33-61` |
+| 自定义质心接口 | `BlockSubLevelCustomCenterOfMass#getCenterOfMass(BlockGetter, BlockState)` → 返回**相对方块下限角**的 Vector3dc，按 blockstate 烘焙 | `api/block/BlockSubLevelCustomCenterOfMass.java` |
+| 惯量 | `sable:inertia`（Vec3）按对角线 × 质量；不填按立方体 `m/6` | `MassTracker.addBlockInertia` |
+| 累加 | `centerOfMass += blockMass × (blockPos + BLOCK_CENTER_OF_MASS)`，再 `moveCenterOfMass` 平移惯量张量 | `MassTracker.java:197-243` |
+
+**两条容易踩的推论：**
+
+1. **模型小 ≠ 质心偏**。只有**碰撞形状**小才会偏；碰撞形状是整块时，哪怕模型只有 1/8，质心也在方块中心。
+2. **质心是 blockstate 的纯函数**（memo 按 state hash 缓存）⇒ 不能用 BE/NBT/坐标算质心，只能编码进 blockstate。
+
+### 本模组自己的数据（已完成核对）
+
+| 方块 | `sable:mass` | 碰撞形状 | 实际质心（北向基准，相对方块下限角） |
+|---|---|---|---|
+| `ccpe:my_control_desk` | **0.25** | `box(0,0,8,16,8,16)` = 1/4 块 | **(0.5, 0.25, 0.75)** = 方块中心下 0.25、+Z 0.25 |
+| `ccpe:thrust_nozzle` | 0.5 | 整块 | 方块中心 |
+| `ccpe:aic` | 0.0 | — | 不计数 |
+
+- ⇒ 用户的直觉**对了**：1/4 块形状的控制台确实把 0.25 kg 放在偏离方块中心 0.25 格的位置，单台贡献 `0.25×0.25 = 0.0625 kg·m` 的配平量（11 kg 机体 ≈ **5.7 mm** 质心位移）。
+- ⇒ 也解释了用户的抱怨：想用它配平就必须**只放一台**（两台朝向差 180° 会互相抵消），既占一个频道又难看。
+
+## 配重块定稿方向修正：**「质量档位 × 朝向」= 亚格质心微调**
+
+原方案（只调质量、质心在方块中心）只能做**1 格粒度**的配平，对 11 kg 机体是 ~9% 的质心跳变，太粗。用上面的接口即可免费升级：
+
+| 项 | 设计 |
+|---|---|
+| 方块 | `ccpe:ballast`，**碰撞形状整块**（保证 `isSolid`、且视觉对称——外观偏不偏与质心无关了） |
+| 状态 A | `level` 0..15（IntegerProperty）→ 质量 = `level × 0.25` kg（JSON `overrides`） |
+| 状态 B | `FACING` 6 向（或 4 水平向）→ **质心 = 方块中心 + facing × 0.25**（`BlockSubLevelCustomCenterOfMass`）|
+| 效果 | 一块方块同时给出「质量」和「质心方向」，配平量 = `level×0.25 × 0.25` ⇒ 步进 **0.0625 kg·m ≈ 5.7 mm 质心**，15 档 ≈ 8.5 cm 行程 |
+| 状态数 | 16 × 6 = **96**（blockstate JSON 全部指向同一 cube 模型，成本可忽略；无 BE、无外设、无频道） |
+| 为什么用接口而不是半块碰撞 | 半块碰撞会把这格变成 Sable 的 `CORNER` 邻域状态，影响碰撞/浮力判定，而且外观必然有缺口；接口只改质心，物理与外观都干净 |
+
+**结论（对「四发很难做到前后对称」的回答）**：不需要几何上造得对称。**
+四台喷口按 `±a / ±b` 精确镜像摆放（这个能做到），剩下的质量分布不对称用**一个**配重块按「档位 + 朝向」补掉即可；
+配重块是纯结构方块，**不占频道、不需要 Lua**（如要 Lua 调档再按原方案加外设）。
+

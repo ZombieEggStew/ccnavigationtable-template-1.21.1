@@ -1,6 +1,6 @@
 # memo 索引（唯一目录入口）
 
-> 43 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
+> 45 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
 > 大文件（`flight/flip-autopilot.md` 320 KB、`flight/starship15-catch.md` 126 KB）**只许按关键词/§N 定向检索**，禁止整篇读。
 
 ## 按任务找文档（阅读顺序）
@@ -12,7 +12,7 @@
 | 改任何代码前核对已知坑 | `project/ATTENTION.md` | 功能文档里的「坑」小节 |
 | **星舰 CC:T 飞行迭代（每一轮）** | `flight/starship15-ROUND.md` + `flight/starship15-constants.md` | 需要原始推导时才 grep `flight/starship15-catch.md` §N |
 | **两喷口飞行器迭代（每一轮）** | `flight/two-nozzle-ROUND.md` + `flight/two-nozzle-constants.md` | 原始数据/推导在 `flight/two-nozzle-evidence.md`；设计在 `flight/two-nozzle-vehicle.md` |
-| 换人 / 换会话 / 大阶段收尾 | `flight/starship15-handover.md` | — |
+| 换人 / 换会话 / 大阶段收尾 | `flight/starship15-handover.md`（星舰）、`flight/two-nozzle-handover.md`（两喷口） | — |
 | **写/改任何 CC:T 飞行程序（新载具开工）** | `flight/flight-program-standard.md` | `flight/two-nozzle-vehicle.md` |
 | 写 CC:T 飞行控制环（通用经验） | `flight/flip-autopilot.md`（按关键词检索） | `propulsion/advanced-thrust-nozzle.md`、`peripherals/my_aero_sensor.md` |
 | 添加控制台控件 / 表面 Monitor 模块 | `cockpit/control-desk-grid-slot.md` | `cockpit/control-desk-seat.md` |
@@ -29,7 +29,7 @@
 | `neoforge-debugging.md` | F5 启动事实：`-Dfml.modFolders=ccnavigationtable%%D:/.../build/classes/java/main` + preLaunchTask | 调 VS Code 启动配置时 |
 | `FIX-ME.md` | 未处理问题便签：Monitor 两套同步机制（`SyncGridPayload` vs `sendBlockUpdated`）边界、`PeripheralExtenderScreen` 轮询写法建议 | 接手待办或排查同步问题时 |
 
-## flight/ —— CC:T 飞行与自动驾驶（11）
+## flight/ —— CC:T 飞行与自动驾驶（12）
 
 | 文件 | 内容 | 何时读 |
 |---|---|---|
@@ -41,9 +41,10 @@
 | `flip-autopilot.md` | **飞车总账（320 KB，按关键词检索）**：落地剖面 `A_REF/KV/FF_BAND`、四元数姿态环与 `COS_MIN` 门控、**写预算与 20 Hz 不变量**、吸附/翻滚/横向制导实测常量 | 写任何 CC:T 飞行/落地控制环时的通用经验库 |
 | `flight-recorder-and-handling.md` | `FlightDataRecorder` 用法（配置、CSV 列、`flight_logs/` 落盘）+ 飞机可操纵性旧任务（phugoid、气动模型事实） | 要用 `run/flight_logs/*.csv` 交叉验证时（原名 flight.md，已改名） |
 | `two-nozzle-vehicle.md` | **两喷口（摩托式）飞行器的设计基线**：坐标系（X 左右 / Y 上下 / Z 前后，机头 −Z）、锥角=桨盘/油门=总距、`v=122·tanα` 与 p/m 无关（33 m/s 无俯角上限）、两喷口恒为秩 5 与"锁死轴"、`τ_roll=h·F_横+x·F_竖` 恒等式与 CG 偏置量化、抗干扰 ⇒ 3 发、**§12 2026-11-20 实测修订（推翻/确认清单）** | 做/飞这台新机、或判断"某轴能不能控"时 |
-| `two-nozzle-ROUND.md` | **两喷口本轮工作卡（≤60 行，每轮整篇覆写）**：状态、坐标系表、上轮结论、下一步（几何定稿 → 锥角映射 `m2cone` → 俯仰配平悬停）、只读清单、硬规矩 | 两喷口每一轮开工的**唯一入口** |
-| `two-nozzle-constants.md` | **两喷口可信常数 + 20 条黑名单（唯一真相源）**：m=11.00 kg、串列喷口 b_f=2.05 / b_r=1.95 / h=1.32、**配平比 0.9512**、**AIC 一个就够（门控表）**、**20 Hz 与写预算的真相**、姿态偏置实测、程序版本表 | 写/改两喷口控制环、判断某个数能不能信时 |
-| `two-nozzle-evidence.md` | **两喷口归档总账**：只读探针三段输出（static/power/id）、两次动态 run 的 digest 与姿态时间线、恒值偏置量级推导、`α/D` 与 `b` 的矛盾、待查清单 | 需要原始数据/推导时定向读 |
+| `two-nozzle-ROUND.md` | **两喷口本轮工作卡（≤60 行，每轮整篇覆写）**：现状（三轴姿态已可控、悬停已成立）、坐标系与控制通道表、可直接引用的结论、下一步（`m2hover` v3 上机 → 位置/航向制导）、只读清单、硬规矩 | 两喷口每一轮开工的**唯一入口** |
+| `two-nozzle-constants.md` | **两喷口可信常数 + 20 条黑名单（唯一真相源）**：m=11.00 kg、串列喷口 b_f=2.05 / b_r=1.95 / h=1.32、**配平比 r\*=0.9562（chA=前）**、**α/D=−31.7 ⇒ I_pitch≈65**、滚转/偏航权限、**欧拉-体轴符号约定**、AIC 门控表、20 Hz 与写预算、程序版本表 | 写/改两喷口控制环、判断某个数能不能信时 |
+| `two-nozzle-evidence.md` | **两喷口归档总账**：只读探针输出、首次动态测试、2026-11-21 全天七次实机（v3~v10 锥角 + hover v1/v2）的原始数据与推导、待查清单 | 需要原始数据/推导时定向读 |
+| `two-nozzle-handover.md` | **两喷口一页纸交接（2026-11-21 13:40）**：现状、必带常数、三条控制通道、程序清单与版本、硬件频道、场地与安全、工具纪律、按「下次还会再踩」排序的坑、未解决项、下一步建议、数据索引 | 换人 / 换会话 / 阶段收尾通读一次 |
 
 ## propulsion/ —— 喷管与引擎（3）
 
