@@ -22,7 +22,9 @@
 >    同一系数**也决定排气 / 进气 / 尾迹粒子**（有效油门 = 转速 × 系数；尾迹只缩发射密度，见 §14、§16）；
 > 5. **物理体作用域频道**：放置自动分配、只在物理体上生效、与 `short_range_linker` / 控制台共享频道空间；
 > 6. **CC:T 外设**：`setDeflection(方位角, 锥角)`（极坐标）/ `setDirection(x, y)`（摇杆，`-1..1`）/ `getDeflection` /
->    `getMaxTilt` / `isMoving` / `setThrustScale` / `getThrustScale` / `getChannel`，可用 `ccpe.sensor_system.getPeripheral(ch)` 寻址。
+>    `getMaxTilt` / `isMoving` / `setThrustScale` / `getThrustScale` / `setInverted` / `isInverted` / `getChannel` / `getForcePoint`；
+>    **2026-11-21 新增推力语义三件套**：`setThrustDirection(x, y, z)`（推荐控制程序用）/ `getThrustDirection(x, y)`（自检标定）/
+>    `getProfile()`（装配快照）。均可用 `ccpe.sensor_system.getPeripheral(ch)` 寻址，详见 §6.1。
 > 7. **渐变到位**：Lua 只写目标，服务端**恒速**推进、客户端本地指数逼近平滑（§6.5），插值发生在**偏转平面**上 ⇒ 轴端走**直线**。
 >
 > 母文档：`memo/propulsion/thrust-nozzle.md`（定向喷管 `ccpe:thrust_nozzle` 本体；本方块**继承**它的一切）。
@@ -248,6 +250,9 @@ flowchart LR
 | `getDeflection()` → `{azimuth, tilt, targetAzimuth, targetTilt, x, y, targetX, targetY}` | `azimuth`/`tilt` = 此刻**实际**角（由偏转点反算，渐变中与目标不同），`targetAzimuth`/`targetTilt` = 目标角；方位均已归正 0..360（**点落在直出中心时方位无意义、报 0**）；`x`/`y` = 实际偏转点（度，`锥角·(cos,sin) 方位`），`targetX`/`targetY` = 目标偏转点 |
 | `getMaxTilt()` → `15` | 钳位上限（脚本归一化用） |
 | `isMoving()` → bool | 是否还在渐变中（偏转或出力尚未到位） |
+| `getThrustDirection(x, y)` → `{x, y, z}` 或 nil | **推力语义只读对照**（2026-11-21 新增）：参数与 `setDirection` **完全同义**（同样的钳位 / 圆映射），返回**等喷口走到位后**的推力方向（plot / 机体系**单位向量**）。结果已乘上当前出力符号（`setInverted(true)` 后同一摇杆报出来的方向整体反向）。用途是**自检 / 标定**：干跑（桩）查不出的整体反号，用它和真值对表就能查。⚠️ 报的是按**目标**偏转算的稳态值，不是过渡中的此刻值。非有限值 / 不在服务端 ⇒ nil |
+| `setThrustDirection(x, y, z)` → bool | **推力语义写入**（2026-11-21 新增，**控制程序应该用这个**）：传入「我想让机体被推向哪个方向」（plot 系，不必归一化），内部反解偏转。只用**垂直于名义轴**的分量（对 `FACING=down` 喷口：`(1,0,0)`=向东、`(0,0,1)`=向南）⇒ 自动吸收 `FACING` 的横向镜像、风扇转向、`setInverted`，**换载具 / 换朝向不用重标定**。长度钳 `0..1` 后映射锥角；轴向分量被忽略（锥角不能反转轴向推力，那是 `setInverted` 的活）；零向量 ⇒ false。与 `setDirection` 共用同一条运动曲线 |
+| `getProfile()` → `{facing, inverted, speed, axisStep, thrustSign, maxTilt}` 或 nil | **装配与符号快照**（2026-11-21 新增，排障 / 记录用）：`facing` = 朝向字符串、`speed` = 背后电扇**带符号**转速（无气流源 / 未转 = 0）、`axisStep` = `FACING` 的轴步进（±1）、`thrustSign` = `κ = sign(REVERSE_SIGN·axisStep·speed·inv)`（冲量 = `−轴·κ`）。以前这些状态 Lua 完全读不到（`getFanSpeed` 当时还是 private），出问题只能靠飞行数据反推 |
 | `setThrustScale(scale)` → bool | 出力系数 0..1（越界钳位），乘在「风扇转速 × 气压」之上；**矢量喷管满出力 = 2 pN/RPM**（系数 1.0 ⇒ 2 倍额定；气压 1.0、256 RPM ⇒ 512 pN/喷管）；**同时也决定排气 / 进气 / 尾迹粒子**（有效油门 = 转速 × 系数 ⇒ 排气·进气的数量、排气速度、进气漏斗长度一起变，尾迹的**发射密度**同比例缩放；0 时三种粒子完全不出，尾迹寿命仍看高度；§14、§16）；同样按运动曲线渐变 |
 | `getThrustScale()` → 0..1 | 当前出力系数（0..1 的比例值，渐变中是此刻实际值；实际推力 = 这个数 × 2 pN/RPM × 转速 × 气压） |
 | `setInverted(enabled)` → bool | **出力反转（推力 ⇄ 吸力）**：`true` ⇒ 同一转速/出力系数下力沿轴的**符号整体翻过来**（原推力变吸力，负转速的吸力也反向）。**瞬间生效、不做渐变**（用户定稿 2026-11）；只翻符号、不动幅值与指向（大小仍由转速/气压/出力系数决定，轴朝哪仍由偏转决定）；粒子链路同步换向（**排气 ⇄ 进气**，气流永远与受力反向，见 §6.2 的 `thrustDirectionSign`）；状态进 NBT / 蓝图 |
@@ -280,6 +285,20 @@ n.setDirection(0, -1)                 -- 朝模型 −Z 满锥角（= setDeflect
 n.setDirection(0.5, 0)                -- 朝 +X、半锥角 7.5°
 n.setDirection(0, 0)                  -- 回直出
 
+-- 【推荐】推力语义：x/y/z = 我想被推向哪个方向（plot / 机体系，长度 0..1 映射锥角）
+n.setThrustDirection(1, 0, 0)         -- 向东满推力（对朝下喷口；不用管 FACING / inv / 转速）
+n.setThrustDirection(0, 0, 1)         -- 向南满推力
+n.setThrustDirection(0.5, 0, 0)       -- 向东、半锥角 7.5°
+n.setThrustDirection(0, 1, 0)         -- 朝下喷口的轴向 ⇒ 直出（轴向分量被忽略）
+
+-- 自检 / 标定：给定摇杆，看真实推力朝哪（干跑查不出的整体反号靠它查）
+local d = n.getThrustDirection(1, 0)  -- 朝下喷口 κ=+1 时应得 {x≈-0.259, y≈0.966, z≈0}
+print(d.x, d.y, d.z)
+
+-- 装配快照：排障先打这一行
+local prof = n.getProfile()           -- {facing="down", inverted=false, speed=-256, axisStep=-1, thrustSign=1, maxTilt=15}
+print(prof.facing, prof.speed, prof.thrustSign)
+
 -- 施力点（机体系，力矩用）：物理体原点≈质心 ⇒ 可直接当力臂 r
 local p = n.getForcePoint()           -- {x=…, y=…, z=…}；不在物理体上是 nil
 -- 力矩 τ = r × F：F 是该喷管的推力向量（机体系，沿倾斜轴，符号由转速 / setInverted 决定）
@@ -294,7 +313,14 @@ local p = n.getForcePoint()           -- {x=…, y=…, z=…}；不在物理体
 > 而同一发 `dy=−dirz` 的 SZ 仍翻（`sc=−0.79~−0.92`、pitch 冲到 20° abort）。
 > 幅值始终是 `F_h = F_i·sinθ`，模型准到 10%。
 > （`memo/flight/four-nozzle-constants.md` 黑名单 #37；P3 当年判成"推力跟随命令"是 yaw 读数取反漏算。）
-> **专题档案（推导链 + 7 个未决问题 + 验证实验）**：`memo/propulsion/nozzle-deflection-direction.md`。
+> **专题档案（推导链 + 未决问题 + 验证实验）**：`memo/propulsion/nozzle-deflection-direction.md`。
+>
+> ✅ **2026-11-21 新增推力语义 API**（纯增量、老方法一个字节没动）：控制代码以后写
+> `setThrustDirection(x, y, z)`，标定用 `getThrustDirection(x, y)`，排障用 `getProfile()`。
+> 这条 `(−1, +1)` 手工约定**只对「四台全部朝下 + 本机这套接线」成立**，换载具 / 换朝向就会失效；
+> 新 API 把这些符号全部搬进 Java，脚本不必再硬编码。为什么老方法**改不出来**：把轴翻过来必须用
+> 180° 旋转，它在垂直平面上的行列式恒为 −1（反射而非旋转）⇒ 摇杆与推力的横向映射**永远**含一个
+> 镜像，两分量不可能同号（证明见专题档案 §10）。
 
 ### 6.2 父类的两个钩子（**定向喷管行为不变**）
 

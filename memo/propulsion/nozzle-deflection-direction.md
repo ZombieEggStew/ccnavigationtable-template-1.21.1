@@ -15,7 +15,7 @@
 | 依赖 FACING 吗 | **是**。`DOWN` 的映射 ≠ `UP` 的映射（推导见 §3.3） |
 | 还依赖什么 | `axisStep(FACING)`、**风扇转速的符号**、`setInverted` —— 三者都会翻横向分量，但**不都翻竖直分量**（§3.4） |
 | 能从一个轴推另一个吗 | **绝对不能**。这就是两次翻车的原因 |
-| 现在的约定 | 控制代码里 `dirx/dirz` = 期望推力方向，写盘 `setDirection(−dirx, +dirz)`（**只对全部 DOWN + 本文那套接线的四台成立**） |
+| 现在的约定 | **2026-11-21 起优先用 `setThrustDirection(dirx, 0, dirz)`（推力语义，§10）**；老程序继续用 `setDirection(−dirx, +dirz)`（**只对全部 DOWN + 本文那套接线的四台成立**） |
 
 ## 1. 三次实机踩到的现象
 
@@ -124,7 +124,7 @@ z 被反了一次（帧翻 + 不翻 ⇒ 净不翻）。**这是两个独立符�
 | Q2 | 其余五个 FACING 的横向映射（§3.3 表只推了 DOWN）。`EAST/WEST/NORTH/SOUTH` 装法下摇杆 → 推力是什么矩阵？ | 以后任何"侧推/前推"的矢量喷管载具都要 | 按 §3.3/3.4 逐向推导，再用通道 C 抽验 1~2 个朝向 |
 | Q3 | 四台横向是否**真的**全部同号？现在是靠 `sc=1.02`（整体一致）反推的，没有逐台证据 | 若某台 `inv`/接线配错，症状是"只打转不平移" | 逐台单独给锥角（其余三台 0），看净横移与偏航方向；或读每台 `isInverted()` + 上游转速符号 |
 | Q4 | `m4probe geom` **没有记录 FACING 与 inv**（只有力臂）| 出问题时无法复盘"这台到底怎么装的" | 给 `geom` 加 `facing`、`inv`、`isMoving()` 三列；这是最该补的一处 |
-| Q5 | 是否应该新增只读 API，让脚本直接问"给定 (x,y) 的推力方向"（如 `getThrustBasis()` 返回两个 3D 基向量）？ | 把 §3.3/3.4 的矩阵搬进 Java，脚本就不必硬编码 `(−1, +1)`；换载具/换朝向自动对 | 提议：在 `AdvancedThrustNozzleBlockEntity.Peripheral` 加 `getThrustDirection(x,y)`，与物理同一 tick 缓存 |
+| Q5 | 是否应该新增只读 API，让脚本直接问"给定 (x,y) 的推力方向"？ | 把 §3.3/3.4 的矩阵搬进 Java，脚本就不必硬编码 `(−1, +1)`；换载具/换朝向自动对 | ✅ **已落地 2026-11-21**：`getThrustDirection(x,y)`（只读）+ `setThrustDirection(x,y,z)`（推力语义写入）+ `getProfile()`（装配快照）。实现与验证见 §10 |
 | Q6 | 这是"设计如此"还是"文档没说清"？ | 决定是改代码还是改文档 | 目前证据：实现自洽（§3.5 与实测吻合），**文档缺"帧"与"推力=反向"两句** ⇒ 倾向"改文档 + 加 Q5 的 API"，不动物理 |
 | Q7 | `setDeflection` 的方位与 `setDirection` 的摇杆是否严格同帧同向？ | 两者混用时会出现"摇杆对了、极坐标不对" | 源码看是同一条路（314–317 / 327–334 都写同一个目标点）⇒ 应该一致，但没实机验过 |
 
@@ -146,6 +146,8 @@ z 被反了一次（帧翻 + 不翻 ⇒ 净不翻）。**这是两个独立符�
 dx[i] = -dirx * len      -- len = 锥角/15
 dy[i] = +dirz * len
 ```
+- **2026-11-21 起**：同样的事可以直接写 `n.setThrustDirection(dirx, 0, dirz)`（§10）——
+  它按当前 FACING / 转速符号 / `inv` 反解，换载具不用重标定。上面这套手工映射仍对老程序有效。
 - 换载具 / 换朝向 / 换接线 ⇒ **这条约定失效**，必须重测（E1/E2）。
 - 桩（`.tmp_luatest/m4_harness.lua`）里对应 `tx,tz = −TILT_SIGN·nx, +TILT_SIGN·ny`；
   **桩和程序只差一个整体负号时，干跑永远发现不了** —— 这是本档案最重要的教训（17:35 之前正是如此）。
@@ -158,3 +160,83 @@ dy[i] = +dirz * len
 - 程序：`computer/2/m4step.lua` v4（`writeAll` 的映射）、`temp/m4step_fit.lua`（独立复算）。
 - 数据：`m4step_1795253728970/1795255256728/1795255495395.csv`（三发，见 §1）。
 - 结论位置：黑名单 #37（`four-nozzle-constants.md`）、API 警告（`advanced-thrust-nozzle.md` §6）。
+
+---
+
+## 10. 2026-11-21：推力语义 API 落地（Q5 结案）
+
+### 10.1 新增了什么（纯增量，`setDirection` / `setDeflection` 一个字节没动）
+
+全部在 `AdvancedThrustNozzleBlockEntity.Peripheral`：
+
+| 方法 | 语义 |
+|---|---|
+| `getThrustDirection(x, y)` | 给定摇杆 → **稳态推力方向**（plot 系单位向量）。钳位/圆映射与 `setDirection` 共用 `stickScale` |
+| `setThrustDirection(x, y, z)` | 给**期望推力方向**（plot 系，不必归一化）→ 反解偏转目标 |
+| `getProfile()` | `{facing, inverted, speed, axisStep, thrustSign, maxTilt}` 装配快照 |
+
+父类为了给符号，把 `getFanSpeed()`、`axisStep()` 从 `private` 放到 `protected`（各改一个词）。
+
+### 10.2 数学模型（读、写共用一套）
+
+物理链路我重抄一遍（与 §3.4 一致）：
+
+```
+m̂        = (sin t·cos a, cos t, sin t·sin a)          # 模型帧轴，t=|偏转点|，a=atan2(defY,defX)
+R        = facingRotation(FACING)                     # §3.3 那张表，抽成私有静态方法
+axis     = R·m̂                                        # nozzleAxis()
+κ        = sign(REVERSE_SIGN · axisStep · speed · inv) # 新增 thrustSign()
+T        = −κ·axis                                     # 推力方向（单位）
+```
+
+读（`getThrustDirection`）就是照上式算 T —— 与 `sable$physicsTick` 逐项对应，不存在第二套公式。
+
+写（`setThrustDirection`）是它的逆：
+```
+T⊥       = T − (T·n)n          # n = FACING 法线（名义轴）；轴向分量改不了，丢弃
+w_model  = normalize(R⁻¹·(−κ·T⊥))   # 必落在模型 XZ 平面（因为 T⊥ ⊥ n 且 R⁻¹n = (0,1,0)）
+a        = atan2(w_model.z, w_model.x)
+t        = min(1, |T⊥|) · MAX_TILT_DEG
+```
+
+### 10.3 一致性自检（纸面，对应 §8 的实测约定）
+
+`FACING=down`、κ=+1、`setThrustDirection(1,0,0)`（向东推）：
+
+- n=(0,−1,0)，T⊥=(1,0,0)，R=R_x(180)=R⁻¹；
+- w_model = R⁻¹(−1,0,0) = (−1,0,0) ⇒ a=180°、t=15° ⇒ 偏转点 **(−15, 0)**；
+- 这正是 `setDirection(−1, 0)` 写出来的点 ⇒ 与 §3.5 / §8 的 `(−dirx, +dirz)` **完全一致**。
+
+再验读：`getThrustDirection(1,0)` ⇒ 偏转点 (15,0) ⇒ axis=(sin15,−cos15,0) ⇒ T=(−sin15,+cos15,0) ✔（§3.5）。
+
+**数值自检（已跑，`temp/ThrustSolverCheck.java`，用项目同款 JOML 1.10.5）**：六个 FACING × κ=±1 ×
+24 个横向方位 = **288 组「写→读」往返**，最大横向误差 **1.7e-6 度**；四个定点全部对：
+
+```
+DOWN k=+1  push(1,0,0) -> deflection (-15.0000, 0.0000)   # == setDirection(-1,0)
+DOWN k=+1  push(0,0,1) -> deflection ( 0.0000, 15.0000)   # == setDirection(0,+1)
+DOWN k=+1  getThrustDirection(1,0) -> (-0.2588, 0.9659, 0)
+DOWN k=-1  push(1,0,0) -> deflection (15.0000, 0.0000)    # inv 后摇杆镜像，符合 §3.4
+```
+
+⇒ 新 API 与 §3.5 / §8 实测约定**同源**，且读写严格互逆。剩下的只有一条实机确认（§10.5 E7）。
+
+### 10.4 为什么不能"直接修好 `setDirection`"（结论性的坑）
+
+把 `+Y` 映到 `−Y` 的旋转 R 以 Y 为特征向量 ⇒ `det R = (−1)·det A = +1` ⇒ **A 在垂直平面上
+行列式恒为 −1，是反射**。反射必有"不动线"与"反向线"，所以摇杆与推力的横向映射里**必然**存在
+两个方向：一个同向、一个反向。`R_x(180°)` 让镜像轴落在 Z 上 ⇒ 得到 `(−x, +y)`；换成
+`R_y(90°)·R_x(180°)` 只会把镜像轴转到对角线上，仍然不是"摇杆=推力"。
+
+⇒ **任何 FACING 下都无法让 `setDirection` 天然等于推力方向**，只能另开推力语义入口。这就是 §10.1 的设计依据。
+
+### 10.5 待实机验证（建议顺序，都很便宜）
+
+| # | 做法 | 判据 |
+|---|---|---|
+| E6 | 静止悬空、四台 `setInverted` 现状不变，`n.getProfile()` 打一行 | `thrustSign` 四台应同为 **+1**（与 §3.5 的 s=+1 对应）；`facing="down"`、`speed<0`（负转速） |
+| E7 | 单轴：`setThrustDirection(1,0,0)` 走 1.5°，其余三台 `setThrustScale(0)` | roll 峰值符号应与 18:05 那次 `setDirection(-1,0)` **完全相同**（因为二者反解到同一个偏转点） |
+| E8 | 同一发里再打 `getThrustDirection(1,0)` 与 `getDeflection()` | 前者应为 `{x≈−0.259, y≈0.966, z≈0}`；后者 `targetX≈−15, targetY≈0`（两轴自洽） |
+
+E7 只要和 18:05 的 `sc=+1.02` 对上，就说明新 API 与已验证的物理链路同源。
+
