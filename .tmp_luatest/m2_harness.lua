@@ -22,10 +22,11 @@ local VT = 1794910000.0            -- virtual epoch (s)
 local DT = 0.05                    -- 20 Hz
 local G = 11.0
 local K = 256 * 2.05               -- pN per unit scale per nozzle at p=1
-local MASS = 11.25
-local IXX, IYY, IZZ = 10.0, 10.0, 10.0
-local BB = 2.0                     -- half spacing (body X: nozzles at x=-3 and x=+1, CG at -1)
-local HH = 1.36                    -- nozzles below the CG
+local MASS = 11.00
+local IXX, IYY, IZZ = 63.0, 30.0, 15.0   -- in-game estimate: pitch bias 0.098 rad/s2 at 6.2 N*m => I_pitch~63
+local BF = 2.05                    -- front nozzle 2.05 blocks AHEAD of the CG (-Z, nose side)
+local BR = 1.95                    -- rear nozzle 1.95 blocks BEHIND the CG (+Z)
+local HH = 1.32                    -- both nozzles below the CG (tandem, x=0)
 local DRAG = 0.09
 local GROUND = 64.0
 local YMAX = 320.0
@@ -99,7 +100,8 @@ local function step(dt)
   local p = pNow()
   local Fb = { 0, 0, 0 }
   local Tb = { 0, 0, 0 }
-  local r = { [0] = { -BB, -HH, 0 }, [1] = { BB, -HH, 0 } }   -- body frame
+  -- tandem layout measured 2026-11-21: ch0 = FRONT (-Z), ch1 = REAR (+Z), both x=0
+  local r = { [0] = { 0, -HH, -BF }, [1] = { 0, -HH, BR } }   -- body frame
   for ch, n in pairs(NZ) do
     local len = math.sqrt(n.dx * n.dx + n.dy * n.dy)
     if len > 1.0 then n.dx, n.dy, len = n.dx / len, n.dy / len, 1.0 end
@@ -173,12 +175,15 @@ local fs = {
 }
 
 ------------------------------------------------------------------ sensor api
+-- Mod convention, measured in game on 2026-11-21 (m2cone v10 CSV):
+--   d(pitch)/dt = -wx  and  d(roll)/dt = +wz
+-- so pitch is minus the body-X rotation angle and roll is the body-Z one.
+-- (The old standard-decomposition stub disagreed with the mod and made every
+--  attitude loop look divergent.)
 local function eulerDeg(q)
-  local roll = math.deg(math.atan(2 * (q.w * q.x + q.y * q.z), 1 - 2 * (q.x * q.x + q.y * q.y)))
-  local s = 2 * (q.w * q.y - q.z * q.x)
-  if s > 1 then s = 1 elseif s < -1 then s = -1 end
-  local pitch = math.deg(math.asin(s))
-  local yaw = math.deg(math.atan(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)))
+  local pitch = math.deg(-2 * math.asin(math.max(-1, math.min(1, q.x))))
+  local roll  = math.deg( 2 * math.asin(math.max(-1, math.min(1, q.z))))
+  local yaw   = math.deg( 2 * math.asin(math.max(-1, math.min(1, q.y))))
   return pitch, roll, yaw
 end
 
@@ -217,12 +222,19 @@ function SS.getAltitude() return W.y end
 function SS.getPressure() return pNow() end
 function SS.getPressureFromAltitude(y) return pressureAt(y) end
 function SS.getPhysicsMass() return MASS end
-function SS.getPhysicsCenterOfMassRel() return { x = 0, y = 0, z = 0 } end
+function SS.getPhysicsCenterOfMassRel() return { x = 0, y = -1.68, z = -0.95 } end
+function SS.getBodyPosition() return { x = W.x, y = W.y, z = W.z } end
 function SS.hasSpeedSensor() return true end
 function SS.hasPressureSensor() return true end
+-- mirrors SensorSystemAPI.getSensors: the AIC registers TWICE (ins + fmc) at the
+-- same block. pos is the block CORNER rel body origin, pos_rel is the corner diff
+-- to this computer (so pos_rel is already a centre-to-centre offset). Values are
+-- self-consistent with CGrel=(0,-1.68,-0.95): centre(AIC) = pos+0.5 = (0,1.68,0.95) = -CGrel.
 function SS.getSensors()
-  return { { type = 'speed_sensor', pos = { x = 0, y = 0, z = 0 } },
-           { type = 'pressure_sensor', pos = { x = 1, y = 0, z = 0 } } }
+  local pos = { x = -0.50, y = 1.18, z = 0.45 }
+  local rel = { x = 0, y = 2, z = 0 }
+  return { { type = 'ins', pos = pos, pos_rel = rel },
+           { type = 'fmc', pos = pos, pos_rel = rel } }
 end
 function SS.getAngleRates()
   return { pitchRate = math.deg(W.om.x), rollRate = math.deg(W.om.z), yawRate = math.deg(W.om.y) }
