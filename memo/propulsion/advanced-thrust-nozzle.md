@@ -285,6 +285,17 @@ local p = n.getForcePoint()           -- {x=…, y=…, z=…}；不在物理体
 -- 力矩 τ = r × F：F 是该喷管的推力向量（机体系，沿倾斜轴，符号由转速 / setInverted 决定）
 ```
 
+> ⚠️ **`setDirection` / `setDeflection` 的摇杆方位不是推力方向，而且两个分量符号不同：**
+> **`推力 = (−摇杆x, **+**摇杆y)`**。`sable$physicsTick` 施加的冲量是 `-nozzleAxis`
+> （`ThrustNozzleBlockEntity:857`），而偏转把**喷口嘴/排气**转向摇杆方向；下朝向方块的局部系转了，
+> 所以 x 分量反过来、y(z) 分量不反。要推力朝 `(dirx,dirz)` ⇒ 写 `setDirection(−dirx, +dirz)`。
+> 2026-11-21 两发四喷口实机定案：17:35 `setDirection(+x)` ⇒ 横向推力 **−x**（滚转 `sc=−1.13`、
+> `a_x` 反解 `F_hx=−6.3 N` 对模型 6.05 N）；18:01 修 x 后 SX 干净通过（`sc=+1.02`、roll 0.48°），
+> 而同一发 `dy=−dirz` 的 SZ 仍翻（`sc=−0.79~−0.92`、pitch 冲到 20° abort）。
+> 幅值始终是 `F_h = F_i·sinθ`，模型准到 10%。
+> （`memo/flight/four-nozzle-constants.md` 黑名单 #37；P3 当年判成"推力跟随命令"是 yaw 读数取反漏算。）
+> **专题档案（推导链 + 7 个未决问题 + 验证实验）**：`memo/propulsion/nozzle-deflection-direction.md`。
+
 ### 6.2 父类的两个钩子（**定向喷管行为不变**）
 
 在 `ThrustNozzleBlockEntity` 新增：

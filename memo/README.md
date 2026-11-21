@@ -1,6 +1,6 @@
 # memo 索引（唯一目录入口）
 
-> 48 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
+> 49 份文档，按主题分 7 个目录（2026-11 整理）。**先读这份索引，再只读需要的那 1~2 份** —— 别整目录浏览。
 > 大文件（`flight/flip-autopilot.md` 320 KB、`flight/starship15-catch.md` 126 KB）**只许按关键词/§N 定向检索**，禁止整篇读。
 
 ## 按任务找文档（阅读顺序）
@@ -18,6 +18,7 @@
 | 添加控制台控件 / 表面 Monitor 模块 | `cockpit/control-desk-grid-slot.md` | `cockpit/control-desk-seat.md` |
 | 动屏幕渲染 | `cockpit/record_screen_text.md`、`cockpit/record_screen_module.md` | `cockpit/screen-render-rework.md` |
 | 喷管出力/粒子/频道/GUI | `propulsion/thrust-nozzle.md`（母文档） | `propulsion/advanced-thrust-nozzle.md` |
+| **矢量喷口的偏转方向为什么反直觉 / 要调研它** | `propulsion/nozzle-deflection-direction.md` | `propulsion/advanced-thrust-nozzle.md` §6 + 黑名单 #37 |
 
 ## project/ —— 项目元信息与入口（5）
 
@@ -42,15 +43,16 @@
 | `flight-recorder-and-handling.md` | `FlightDataRecorder` 用法（配置、CSV 列、`flight_logs/` 落盘）+ 飞机可操纵性旧任务（phugoid、气动模型事实） | 要用 `run/flight_logs/*.csv` 交叉验证时（原名 flight.md，已改名） |
 | `four-nozzle-plan.md` | **四喷口矩形飞行器本轮工作卡 + 控制分配设计**：四台 `getForcePoint` 力臂 → 俯仰/滚转（推力差）、偏航（切向锥角）、平移（共模锥角）的分配公式；4 输入 3 方程的最小范数配平；P0~P5 测量阶段与判据；与两发的本质区别 | 四喷口每一轮开工的**唯一入口** |
 | `four-nozzle-constants.md` | **四喷口可信常数与黑名单（唯一真相源）**：ch0..3 与 inv 配置、四角力臂/质量/TWR（已实测）、P1 残余、四发新增 9 条黑名单、程序版本表 | 写/改四喷口控制环、判断某个数能不能信时 |
-| `four-nozzle-handover.md` | **四喷口一页纸交接（2026-11-21 16:15）**：现状（P0/P1 PASS、P2 v2 待上机）、必带常数、控制通道、程序清单、场地与安全、按「下次还会再踩」排序的坑、未解决项、下一步、数据索引 | 换人 / 换会话 / 阶段收尾通读一次 |
+| `four-nozzle-handover.md` | **四喷口一页纸交接（2026-11-21 18:10）**：现状（P0~P4a + **P4b-1 全部 PASS**）、必带常数、控制通道、程序清单、场地与安全、按「下次还会再踩」排序的坑、未解决项、下一步（P4b-2 双峰）、数据索引 | 换人 / 换会话 / 阶段收尾通读一次 |
 
-## propulsion/ —— 喷管与引擎（3）
+## propulsion/ —— 喷管与引擎（4）
 
 | 文件 | 内容 | 何时读 |
 |---|---|---|
 | `thrust-nozzle.md` | 定向喷管 `ccpe:thrust_nozzle` **母文档**：Sable 点力推力器、1 pN/RPM 标定、REVERSE_SIGN、碰撞盒、排气粒子与遮挡 | 改喷管出力/符号/粒子；它是矢量喷管的母文档 |
 | `advanced-thrust-nozzle.md` | **矢量喷管 `ccpe:advanced_thrust_nozzle`（定稿）**：枢轴 `(8,5,8)px`、15° 锥角、活塞杆 = body 子件、BER 渲染链、物理体频道、Lua `setDirection/setThrustScale/setInverted/getForcePoint`（施力点→力矩）、**2 pN/RPM** | 改矢量喷管的倾斜/活塞/频道/GUI/Lua，或为别的方块做「物理体频道 + 外设」 |
 | `engine-module.md` | 引擎模块 `aero_engine`（P0~P10）：engine_core 组网、零缓存抽储罐、燃烧室、冷却过热约束、末段 Lua 控制 | 改引擎组网/燃料/冷却/`ss.getEngine()` 行为 |
+| `nozzle-deflection-direction.md` | **喷口偏转方向专题（待调研）**：`推力 = (−摇杆x, +摇杆y)` 的完整推导（FACING 帧旋转 × `axisStep` × 转速符号 × `inv`）、三次实机踩坑数据、两种可复用实测方法、**7 个未决问题 + 5 个低成本验证实验**、临时约定与建议的 `getThrustDirection` API | 写/审任何用 `setDirection` 的控制律，或要查"为什么推错方向"时**先读它** |
 
 ## peripherals/ —— 传感器、频道、通信与机械件（9）
 
