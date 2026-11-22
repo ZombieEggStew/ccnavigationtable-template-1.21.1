@@ -7,7 +7,7 @@ description: '查阅项目 memo 文档。code-map.md 是定位 Java 源码的首
 
 ## code-map.md：定位 Java 源码的首要入口
 
-> 需要定位或修改 `src/main/java/com/zzy205/myfirstmod` 下的 Java 代码时，**第一步先读 `memo/code-map.md`，不要直接搜索源码**。
+> 需要定位或修改 `src/main/java/com/zzy205/myfirstmod` 下的 Java 代码时，**第一步先读 `memo/project/code-map.md`，不要直接搜索源码**。
 
 `code-map.md` 是一份按行为组织的 Java 代码地图，包含以下内容：
 

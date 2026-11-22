@@ -1,0 +1,19 @@
+BANNER m2dyn v1  cap u<=0.30  free=900KB
+MODE   A=ch0 B=ch1 m=11.25 p=0.996(port) u_hover=0.118 D=0.005
+GATES  ceil=+15m vy=8 up>=0.50 wmax=1.20
+PHASE  LIFT u=0.136
+PHASE  HOLD u=0.118
+PHASE  DPOS D=+0.005
+PHASE  DNEG D=-0.005
+PHASE  DPOS2 D=+0.005
+PHASE  LAND vy=-1.0
+PHASE  CUT
+VERDICT PASS  cyc=177 dt=50ms sl=0
+RES    LIFT dH=+1.82 vy=+2.28
+RES    HOLD dH=+1.08 vy=+0.37 wx=+0.002 (x bias -> free axis)
+RES    a/D: DPOS=-205 DNEG=+207 DPOS2=-206 rad/s2/D
+RES    cross rr/D=-206 / +206  wx=+0.007
+RES    I est=10.2 kg m2   (I = 2*b*K*p/(a/D), b=2.0)
+RES    LAND vy=-0.95 h=64.2
+LOG    /log/m2dyn_1794910000000.csv rows=178
+SUMMARY verdict=PASS why= m=11.25 p=0.996(port) u_hover=0.1184 D=0.0050 kv=0.0108

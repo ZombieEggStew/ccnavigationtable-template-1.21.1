@@ -202,3 +202,8 @@
 
 # 1.2.8
 - Renamed to **CCPE — Aircraft Systems** (formerly CC Peripheral Extender). The mod has outgrown "peripheral extender": it now covers the whole chain — sensors, flight computers, actuators and engines. The mod id (`ccpe`), block/item ids, NBT and every Lua API are unchanged, so existing worlds, blueprints and scripts keep working.
+
+- **NEW!** Thrust-direction Lua API for the Advanced Thrust Nozzle. `setThrustDirection(x, y, z)` takes the direction you want the craft **pushed toward** (physics-body frame, no need to normalise) and solves the deflection for you: it absorbs the FACING mirror, the fan's rotation direction and `setInverted`, so the same vector means the same push on any craft or mounting — **no re-calibration when you rebuild**. Two companions ship with it: `getThrustDirection(x, y)` reports where a given joystick input actually pushes (steady state, current sign applied) so a script can check itself, and `getProfile()` returns `{facing, inverted, speed, axisStep, thrustSign, maxTilt}` so a build can be diagnosed straight from a log. `setDirection` / `setDeflection` are **unchanged** — existing scripts behave exactly as before.
+  This exists because the joystick form is defined in the **model frame** and describes the **exhaust**, not the thrust: on a downward nozzle mounted the usual way the push comes out as `(−x, +y)`, i.e. the two horizontal components do not share a sign. Check the wiki for more details: https://zombieeggstew.github.io/ccnavigationtable-template-1.21.1/actuators/advanced-thrust-nozzle/
+
+# 1.2.9

@@ -771,7 +771,7 @@ public class ThrustNozzleBlockEntity extends BlockEntity
      * 这也意味着原先"前后两对喷管镜像取反"的接线（{@code fl/fr=-256}、{@code bl/br=+256} 才全向上）
      * 要改成四台统一取负。
      */
-    private int axisStep(final Direction facing) {
+    protected int axisStep(final Direction facing) {
         return facing.getAxisDirection().getStep();
     }
 
@@ -1631,8 +1631,13 @@ public class ThrustNozzleBlockEntity extends BlockEntity
         return source;
     }
 
-    /** 背后电扇的转速（RPM，带符号）；没有合法气流源 / 未转 → 0 */
-    private float getFanSpeed() {
+    /**
+     * 背后电扇的转速（RPM，带符号）；没有合法气流源 / 未转 → 0。
+     * <p>
+     * {@code protected} 而非 {@code private}：子类要用它的<b>符号</b>反解推力方向
+     * （见 {@code AdvancedThrustNozzleBlockEntity#thrustSign}），不能自己猜。
+     */
+    protected float getFanSpeed() {
         final IAirCurrentSource source = this.fanSource();
         return source == null ? 0.0F : source.getSpeed();
     }

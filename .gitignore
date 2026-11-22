@@ -66,3 +66,5 @@ start-mkdocs.bat
 .dsh-drop/
 
 cc_logs_archive/
+
+.tmp_luatest/

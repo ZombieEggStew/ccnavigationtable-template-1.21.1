@@ -1,9 +1,11 @@
 package com.zzy205.myfirstmod.block;
 
 import com.zzy205.myfirstmod.compat.cc.ShortRangeLinkerRegistry;
+import com.zzy205.myfirstmod.compat.sable.SableCompat;
 import com.simibubi.create.api.schematic.nbt.PartialSafeNBT;
 import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -33,13 +35,24 @@ import java.util.Map;
  *     <b>墙钟（{@link System#nanoTime()}）的纯函数</b>，因此与 tick / 渲染 / 同步包频率全都无关。</li>
  * </ol>
  *
- * <p><b>偏转的两种 Lua 写法</b>（都换算成同一个偏转点 {@code (x, y)}；插值发生在<b>偏转平面</b>上
- * ⇒ 喷口轴端走<b>直线</b>，不再沿圆锥面绕半圆）：
+ * <p><b>三套 Lua 写法要分清「帧」与「语义」</b>（都换算成同一个偏转点 {@code (x, y)}；插值发生在
+ * <b>偏转平面</b>上 ⇒ 喷口轴端走<b>直线</b>，不再沿圆锥面绕半圆）：
  * <ul>
- * <li>{@code setDeflection(方位角, 锥角)}：极坐标写法，适合脚本已经算好角度的场合；</li>
- * <li>{@code setDirection(x, y)}：摇杆写法，{@code -1..1} 的向量，<b>方向</b> = 方位角、
- *     <b>长度</b>按圆形映射到锥角（长度 1 = {@link #MAX_TILT_DEG} 满锥角）。</li>
+ * <li>{@code setDeflection(方位角, 锥角)}：<b>模型帧</b>极坐标，适合脚本已经算好角度的场合；</li>
+ * <li>{@code setDirection(x, y)}：<b>模型帧</b>摇杆（{@code -1..1}，方向 = 方位角、
+ *     <b>长度</b>按圆形映射到锥角，长度 1 = {@link #MAX_TILT_DEG} 满锥角）。它指的是
+ *     <b>喷口 / 排气</b>往哪偏，<b>不是「推力指向哪」</b>；</li>
+ * <li>{@code setThrustDirection(x, y, z)}：<b>plot / 机体系</b>的<b>推力语义</b>
+ *     （「我想让机体被推向哪个方向」），内部自动吸收 {@code FACING} 的镜像、风扇转向与
+ *     {@code setInverted} ⇒ <b>控制程序应该用这个</b>；{@code getThrustDirection(x, y)}
+ *     是它的只读对照版，用于自检 / 标定。</li>
  * </ul>
+ * ⚠️ 模型帧与 plot 系在 {@code FACING=down} 时差一个<b>镜像</b>（模型 {@code +Z} → plot
+ * {@code −Z}，模型 {@code +X} → plot {@code +X}），而「推力 = 偏转方向的反向」又再翻一次
+ * ⇒ 老写法下 plot 系的推力是 {@code (−x, +y)}，<b>两个分量符号不同</b>。这不是笔误：
+ * 把轴翻过来必须用 180° 旋转，而它在垂直平面上的行列式恒为 −1（是反射而非旋转），
+ * 所以「摇杆」与「推力」的横向映射<b>永远</b>含一个镜像。详见
+ * {@code memo/propulsion/nozzle-deflection-direction.md}。
  */
 public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity implements PartialSafeNBT {
 
@@ -325,10 +338,20 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
     public void requestDirection(final float x, final float y) {
         final float clampedX = Mth.clamp(x, -1f, 1f);
         final float clampedY = Mth.clamp(y, -1f, 1f);
-        final float length = (float) Math.sqrt(clampedX * clampedX + clampedY * clampedY);
-        final float scale = length > 1f ? 1f / length : 1f;
+        final float scale = stickScale(clampedX, clampedY);
 
         this.setDeflectionTarget(clampedX * scale * MAX_TILT_DEG, clampedY * scale * MAX_TILT_DEG);
+    }
+
+    /**
+     * 摇杆向量的<b>圆钳位系数</b>：长度 &gt; 1 时整体缩到 1，否则 1。
+     * <p>
+     * 抽出来是为了让 {@link #requestDirection}（写）与 {@link #thrustDirectionForStick}（读）
+     * 共用同一套映射，避免读写两条路悄悄走偏。
+     */
+    private static float stickScale(final float x, final float y) {
+        final float length = (float) Math.sqrt(x * x + y * y);
+        return length > 1f ? 1f / length : 1f;
     }
 
     /** 写偏转目标点 + 推一次客户端（一次命令只发一次包，见 memo §6.5） */
@@ -568,7 +591,20 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
                 ? tiltDirModel(this.visualDefX, this.visualDefY)
                 : tiltDirModel();
         final Direction facing = state.getValue(ThrustNozzleBlock.FACING);
+        dir.rotate(facingRotation(facing));
+        dir.normalize();
+        return new Vec3(dir.x, dir.y, dir.z);
+    }
 
+    /**
+     * {@code FACING} → 「模型帧 → plot 系」的旋转，与
+     * {@code blockstates/advanced_thrust_nozzle.json} 的 {@code x}/{@code y} 逐条对应，
+     * 顺序与 vanilla 一致：{@code R = Ry(−y) · Rx(−x)}（{@code Quaternionf#rotationYXZ}）。
+     * <p>
+     * <b>抽成一处</b>：推力 {@link #nozzleAxis}、推力语义的读 {@link #thrustDirectionOfDeflection}
+     * 与写 {@link #requestThrustDirection} 都从这里取表 ⇒ 改朝向只改这里，读写不会走偏。
+     */
+    private static Quaternionf facingRotation(final Direction facing) {
         float xDeg = 0f;
         float yDeg = 0f;
         switch (facing) {
@@ -581,10 +617,115 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
             default -> { }
         }
 
-        dir.rotate(new Quaternionf().rotationYXZ(
-                (float) Math.toRadians(-yDeg), (float) Math.toRadians(-xDeg), 0f));
-        dir.normalize();
-        return new Vec3(dir.x, dir.y, dir.z);
+        return new Quaternionf().rotationYXZ(
+                (float) Math.toRadians(-yDeg), (float) Math.toRadians(-xDeg), 0f);
+    }
+
+    /** 未偏转时的轴（plot 系）= {@code FACING} 的法线；推力沿它的 {@code −κ} 倍 */
+    private Vec3 nominalAxis(final BlockState state) {
+        final Direction facing = state.getValue(ThrustNozzleBlock.FACING);
+        return new Vec3(facing.getStepX(), facing.getStepY(), facing.getStepZ());
+    }
+
+    /**
+     * 推力方向系数 {@code κ}：冲量的符号 = {@code sign(REVERSE_SIGN · axisStep · 转速 · inv)}。
+     * <p>
+     * 物理层是 {@code impulse = −axis · magnitude}，而 {@code magnitude} 的符号由这一串决定 ⇒
+     * 「给定偏转，推力朝哪」<b>不只</b>看几何，还要乘上 κ。这是摇杆与推力不一致的<b>第二层</b>原因
+     * （第一层是 {@link #facingRotation} 那张表里的镜像）。
+     * <p>
+     * 转速为 0 时按 {@code +1} 处理（此刻没有推力；风扇转起来后下一次调用会重读真实符号）。
+     * 与 {@code sable$physicsTick} 的 {@code magnitude} 逐项对应，改那边必须同步改这里。
+     */
+    private double thrustSign() {
+        final Direction facing = this.getBlockState().getValue(ThrustNozzleBlock.FACING);
+        final float speed = this.getFanSpeed();
+        final double product = (REVERSE_SIGN ? -1.0D : 1.0D)
+                * this.axisStep(facing)
+                * (speed < 0f ? -1.0D : 1.0D)
+                * this.thrustDirectionSign();
+
+        return product < 0.0D ? -1.0D : 1.0D;
+    }
+
+    /**
+     * 给定偏转点 {@code (defX, defY)}（度，模型帧参数化）→ <b>稳态推力方向</b>（plot 系单位向量）。
+     * <p>
+     * 逐字照抄物理链路：{@code axis = R · tiltDirModel(偏转点)}、{@code 推力 = −axis · κ}
+     * （{@link #thrustSign()}）—— 与 {@code sable$physicsTick} 同一套符号，所以这里报的就是
+     * 「等喷口走到位之后」真实会有的推力方向。
+     */
+    private Vec3 thrustDirectionOfDeflection(final float defX, final float defY) {
+        final Direction facing = this.getBlockState().getValue(ThrustNozzleBlock.FACING);
+        final Vector3f axis = tiltDirModel(defX, defY);
+        axis.rotate(facingRotation(facing));
+        axis.normalize();
+
+        final double k = this.thrustSign();
+        return new Vec3(-axis.x * k, -axis.y * k, -axis.z * k);
+    }
+
+    /**
+     * 给定摇杆输入 → 稳态推力方向。钳位与圆映射与 {@link #requestDirection} <b>同一套</b>
+     * （共用 {@link #stickScale}），所以能和 {@code setDirection} 的结果直接对照。
+     */
+    private Vec3 thrustDirectionForStick(final float stickX, final float stickY) {
+        final float clampedX = Mth.clamp(stickX, -1f, 1f);
+        final float clampedY = Mth.clamp(stickY, -1f, 1f);
+        final float scale = stickScale(clampedX, clampedY);
+
+        return this.thrustDirectionOfDeflection(
+                clampedX * scale * MAX_TILT_DEG, clampedY * scale * MAX_TILT_DEG);
+    }
+
+    /**
+     * 反解：给<b>期望推力方向</b> {@code T}（plot / 机体系，不必归一化）→ 写偏转目标。
+     * <p>
+     * 语义与 {@link #requestDirection} 对齐，只是坐标系换成「推力」：
+     * <ul>
+     * <li>只用 {@code T} 里<b>垂直于名义轴</b>的分量 {@code T⊥ = T − (T·n)n}：轴向分量改不了
+     *     （锥角不能反转轴向推力，那要用 {@code setInverted}），{@code T⊥ ≈ 0} ⇒ 直出；</li>
+     * <li>{@code T⊥} 的<b>方向</b>决定方位角，<b>长度</b>（钳到 0..1）映射锥角，
+     *     1 = 满 {@link #MAX_TILT_DEG}；</li>
+     * <li>内部乘 {@code −κ} 反解 ⇒ {@code FACING} / 风扇转向 / {@code inv} 全部自动算对。</li>
+     * </ul>
+     *
+     * <p><b>为什么不能靠改 {@code setDirection} 做到这件事</b>：把轴翻过来必须用 180° 旋转，
+     * 而它作用在垂直平面上的行列式恒为 −1（是<b>反射</b>而非旋转）⇒「摇杆」与「推力」的横向
+     * 映射<b>永远</b>含一个镜像，两个分量不可能同号。所以只能另开一个推力语义的入口。
+     */
+    private void requestThrustDirection(final double tx, final double ty, final double tz) {
+        final BlockState state = this.getBlockState();
+        final Vec3 n = this.nominalAxis(state);
+
+        final double axial = tx * n.x + ty * n.y + tz * n.z;
+        final double px = tx - axial * n.x;
+        final double py = ty - axial * n.y;
+        final double pz = tz - axial * n.z;
+        final double perpendicular = Math.sqrt(px * px + py * py + pz * pz);
+
+        if (perpendicular < 1.0E-9D) {
+            this.requestDirection(0f, 0f);
+            return;
+        }
+
+        // w_model = R⁻¹(−κ·T⊥)：R 是纯旋转，取共轭即逆；结果必落在模型的 XZ 平面上
+        final double k = this.thrustSign();
+        final Vector3f w = new Vector3f(
+                (float) (-k * px), (float) (-k * py), (float) (-k * pz));
+        w.rotate(facingRotation(state.getValue(ThrustNozzleBlock.FACING)).conjugate());
+
+        final float lateral = (float) Math.sqrt(w.x * w.x + w.z * w.z);
+
+        if (lateral < 1.0E-6f) {
+            this.requestDirection(0f, 0f);
+            return;
+        }
+
+        final double azimuthDeg = Math.toDegrees(Math.atan2(w.z, w.x));
+        final double tiltDeg = Math.min(1.0D, perpendicular) * MAX_TILT_DEG;
+
+        this.requestDeflection((float) azimuthDeg, (float) tiltDeg);
     }
 
     /**
@@ -732,9 +873,22 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
          * <p>
          * 与 {@link #setDeflection(double, double)} 共用同一套运动曲线：都只写目标，
          * 喷口在偏转平面里沿直线恒速过去（两段行程之间也是直线，不会绕弧）。非有限值返回 false。
+         * <p>
+         * ⚠️ <b>坐标系 / 语义警告（踩过两次）</b>：两个参数都在<b>模型帧</b>里定义，指的是
+         * <b>喷口 / 排气</b>往哪偏，<b>不是「推力指向哪」</b>。
+         * <ul>
+         * <li>{@code FACING=down} 时模型 {@code +X} 恰好也映到 plot {@code +X} ——
+         *     {@code x} 的文档在两个帧里都成立，容易让人以为 {@code y} 也一样；</li>
+         * <li>但模型 {@code +Z} 映到 plot <b>{@code −Z}</b> ⇒ {@code y} 在 plot 系里是「向<b>北</b>偏」；</li>
+         * <li>再叠上「推力 = 偏转方向的反向」⇒ plot 系的推力其实是 <b>{@code (−x, +y)}</b>，
+         *     <b>两个分量符号不同</b>。这不是笔误，是 180° 旋转必然带一个横向镜像。</li>
+         * </ul>
+         * 要「往哪个方向推」请用 {@link #setThrustDirection(double, double, double)}；
+         * 只想核对一个已知摇杆会推到哪，用 {@link #getThrustDirection(double, double)}。
          *
-         * @param x -1..1，喷口向模型「东」（+X）偏；负值向西
-         * @param y -1..1，喷口向模型「南」（+Z）偏；负值向北
+         * @param x -1..1，喷口向<b>模型</b>「东」（+X）偏；负值向西
+         * @param y -1..1，喷口向<b>模型</b>「南」（+Z）偏；负值向北
+         *           （{@code FACING=down} 时 plot 系里是向北）
          */
         @LuaFunction(mainThread = true)
         public final boolean setDirection(final double x, final double y) {
@@ -759,6 +913,10 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
          * 渐变过程中实际值与目标值不同；{@code azimuth/tilt} 由偏转点反算（方位已归正 0..360，
          * 点落在直出中心时方位无意义、报 0）。{@code x/y} 是 {@code 锥角·(cos, sin) 方位}，
          * 调 {@link #setDirection(double, double)} 时可直接对照。
+         * <p>
+         * ⚠️ {@code azimuth} 是<b>模型帧</b>方位。{@code FACING=down} 时 plot 系方位 =
+         * <b>{@code −azimuth}</b>（镜像）⇒ 不要拿它当"机体往哪边喷"用；
+         * 要推力语义看 {@link #getThrustDirection(double, double)}。
          */
         @LuaFunction
         public final Map<String, Object> getDeflection() {
@@ -789,6 +947,125 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
         @LuaFunction
         public final boolean isMoving() {
             return AdvancedThrustNozzleBlockEntity.this.isMoving();
+        }
+
+        // ── 推力语义（plot / 机体系；与上面「模型帧偏转」区分开） ──
+
+        /**
+         * <b>给定摇杆输入，返回稳态推力方向</b>（plot / 物理体局部系的<b>单位向量</b>
+         * {@code {x, y, z}}），参数与 {@link #setDirection(double, double)} <b>完全相同</b>
+         * （同样的 {@code -1..1} 钳位与圆形映射）。
+         * <p>
+         * 用途是<b>自检 / 标定</b>：脚本把自己的「期望推力方向」和这里报的真值对一下，
+         * 就能发现整体反号 —— 这类错误在干跑（桩）里查不出来，只有真值能查。
+         * <p>
+         * 结果<b>已乘上当前出力符号</b>：{@link #setInverted(boolean) setInverted(true)}
+         * 之后，同一个摇杆报出来的方向会整体反向（推力变吸力）。
+         * <p>
+         * ⚠️ 报的是<b>等喷口走到位之后</b>（按<b>目标</b>偏转算）的方向，不是过渡中的此刻值。
+         * <p>
+         * 风扇不转（{@code speed = 0}）时出力符号按 {@code +1} 计 —— 此刻本来也没有推力，
+         * 风扇转起来之后下一次调用会重读真实符号（见 {@link #getProfile()} 的 {@code thrustSign}）。
+         * <p>
+         * 参数非法 / 不在服务端 ⇒ {@code nil}。
+         *
+         * @param x -1..1，与 {@link #setDirection(double, double)} 的 {@code x} 同义
+         * @param y -1..1，与 {@link #setDirection(double, double)} 的 {@code y} 同义
+         */
+        @LuaFunction(mainThread = true)
+        public final @Nullable Map<String, Double> getThrustDirection(final double x, final double y) {
+            if (!Double.isFinite(x) || !Double.isFinite(y)) {
+                return null;
+            }
+
+            final AdvancedThrustNozzleBlockEntity be = AdvancedThrustNozzleBlockEntity.this;
+            if (be.level == null || be.level.isClientSide) {
+                return null;
+            }
+
+            final Vec3 dir = be.thrustDirectionForStick((float) x, (float) y);
+            return Map.of("x", dir.x, "y", dir.y, "z", dir.z);
+        }
+
+        /**
+         * <b>按推力语义设置偏转</b>：传入「我想让机体被推向哪个方向」（plot / 物理体局部系，
+         * 不必归一化），内部反解出偏转目标。
+         * <p>
+         * 这是<b>控制程序应该用的入口</b>：它把 {@code FACING} 的横向镜像、风扇转向、
+         * {@code setInverted} 三样全部吸收掉 ⇒ 同一个三元素向量在任何装配下都表示同一个推力方向，
+         * 换载具 / 换朝向<b>不用重标定</b>。
+         * <p>
+         * 用法：
+         * <ul>
+         * <li>只用<b>垂直于名义轴</b>的分量：{@code FACING=down} 的喷口名义轴竖直，所以
+         *     {@code (1, 0, 0)} = 向东、{@code (0, 0, 1)} = 向南（满锥角）；</li>
+         * <li><b>长度</b>钳到 {@code 0..1} 后映射锥角（0 = 直出、1 = 满
+         *     {@link AdvancedThrustNozzleBlockEntity#MAX_TILT_DEG}）；</li>
+         * <li>轴向分量被忽略：锥角<b>不能</b>反转轴向推力（那是 {@link #setInverted(boolean)}
+         *     的活）⇒ 对朝下喷口 {@code (0, 1, 0)} / {@code (0, -1, 0)} 都等于直出；</li>
+         * <li>零向量没有方向 ⇒ 返回 {@code false}（"直出"请传名义轴，不要传零向量）。</li>
+         * </ul>
+         * <p>
+         * 与 {@link #setDirection(double, double)} 共用同一条运动曲线（只写目标、恒速、走直线）。
+         * 非有限值 / 零向量 / 不在服务端 ⇒ {@code false}。
+         *
+         * @param x 期望推力方向的 plot {@code X} 分量
+         * @param y 期望推力方向的 plot {@code Y} 分量
+         * @param z 期望推力方向的 plot {@code Z} 分量
+         */
+        @LuaFunction(mainThread = true)
+        public final boolean setThrustDirection(final double x, final double y, final double z) {
+            if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)) {
+                return false;
+            }
+
+            final AdvancedThrustNozzleBlockEntity be = AdvancedThrustNozzleBlockEntity.this;
+            if (be.level == null || be.level.isClientSide) {
+                return false;
+            }
+
+            if (x == 0.0D && y == 0.0D && z == 0.0D) {
+                return false;
+            }
+
+            be.requestThrustDirection(x, y, z);
+            return true;
+        }
+
+        /**
+         * <b>装配与符号快照</b>（排障 / 记录 / 标定用），返回表：
+         * <pre>{facing = "down", inverted = false, speed = -256.0,
+         *        axisStep = -1.0, thrustSign = 1.0, maxTilt = 15.0}</pre>
+         * <ul>
+         * <li>{@code facing}：本喷口朝向；</li>
+         * <li>{@code inverted}：{@link #setInverted(boolean)} 的当前值；</li>
+         * <li>{@code speed}：背后电扇转速（RPM，<b>带符号</b>；无气流源 / 未转 = 0）；</li>
+         * <li>{@code axisStep}：{@code FACING} 的轴步进（{@code ±1}）；</li>
+         * <li>{@code thrustSign}：{@code κ = sign(REVERSE_SIGN·axisStep·speed·inv)}，
+         *     冲量 = {@code −轴·κ}（{@code speed = 0} 时按 {@code +1} 计，此刻无推力）；</li>
+         * <li>{@code maxTilt}：锥角上限（度）。</li>
+         * </ul>
+         * 有了这几个数，"这台到底怎么装的、推力朝哪"就能在日志里复盘 —— 以前这些状态
+         * Lua 完全读不到（{@code getFanSpeed} 当时还是 private），只能靠飞行数据反推。
+         * <p>
+         * 不在服务端 ⇒ {@code nil}。
+         */
+        @LuaFunction(mainThread = true)
+        public final @Nullable Map<String, Object> getProfile() {
+            final AdvancedThrustNozzleBlockEntity be = AdvancedThrustNozzleBlockEntity.this;
+            if (be.level == null || be.level.isClientSide) {
+                return null;
+            }
+
+            final Direction facing = be.getBlockState().getValue(ThrustNozzleBlock.FACING);
+
+            return Map.<String, Object>of(
+                    "facing", facing.getSerializedName(),
+                    "inverted", be.inverted,
+                    "speed", (double) be.getFanSpeed(),
+                    "axisStep", (double) be.axisStep(facing),
+                    "thrustSign", be.thrustSign(),
+                    "maxTilt", (double) MAX_TILT_DEG);
         }
 
         // ── 出力 ──
@@ -861,6 +1138,48 @@ public class AdvancedThrustNozzleBlockEntity extends ThrustNozzleBlockEntity imp
         @LuaFunction
         public final int getChannel() {
             return AdvancedThrustNozzleBlockEntity.this.channel;
+        }
+
+        // ── 位置（力矩计算用） ──
+
+        /**
+         * 本喷嘴的<b>施力点</b>相对所在物理体原点（质心枢轴）的局部坐标 {@code {x, y, z}}，
+         * 供脚本计算力矩 {@code τ = r × F}（{@code r} = 施力点 − 质心）。
+         * <p>
+         * <b>取点</b> = 方块中心：父类 {@code sable$physicsTick} 正是用
+         * {@code applyAndRecordPointForce(atCenterOf(worldPosition), impulse)} 施力的，
+         * 也就是 Sable 记录的点力位置（飞行记录仪的 {@code propM*} 与之同源）。
+         * 喷口外端 = 本点 + 倾斜轴 × 0.55 格，但这段位移与力<b>共线</b>，
+         * 两种取法算出的力矩完全相同。
+         * <p>
+         * <b>坐标系</b> = 物理体局部系（plot 帧，{@code 方块plot坐标 − rotationPoint}），
+         * 与 {@code sensor_system.getSensors()} 的 {@code pos} 同一帧（那边是方块角点，
+         * 本方法已加 +0.5 半格取中心）。物理体移动/旋转时该值不变；
+         * 在物理体上增删方块会改变原点（质心），数值整体漂移。
+         * <p>
+         * 物理体原点运行时与质心同步（实测原点就落在重心上），因此本值可直接当力矩臂
+         * {@code r} 用；只有刚在物理体上增删方块的那个 tick 内，质心与原点才可能瞬时错开。
+         *
+         * @return 施力点（方块中心）相对物理体原点的局部坐标；不在物理体上返回 nil
+         */
+        @LuaFunction(mainThread = true)
+        public final @Nullable Map<String, Double> getForcePoint() {
+            final AdvancedThrustNozzleBlockEntity be = AdvancedThrustNozzleBlockEntity.this;
+            if (be.level == null || be.level.isClientSide) {
+                return null;
+            }
+
+            final SubLevel sub = SableCompat.getContainingSubLevel(be);
+            // toRelativePos = plot 角点 − rotationPoint；+0.5 半格才是方块中心（实际施力点）
+            final Vec3 rel = SableCompat.toRelativePos(sub, be.worldPosition);
+            if (rel == null) {
+                return null;
+            }
+
+            return Map.of(
+                    "x", rel.x + 0.5D,
+                    "y", rel.y + 0.5D,
+                    "z", rel.z + 0.5D);
         }
     }
 
